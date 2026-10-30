@@ -23,11 +23,12 @@ The first public release of the tools, for loot 0.20.1 on devnet (program
 - **Economy tools** (`@xgamesfun/solana`): the spec (version 2) with its JSON schema, the checker, the quick simulation,
   the setup plan, costs and a plain-words explainer.
 - **CLI and MCP server**: ten `xsolana_*` tools (`guide`, `examples`, `check`, `simulate`, `cost`, `explain`, `client`,
-  `save`, `publish`, `status`), the same from `loot <command>` and over MCP (stdio, protocol up to 2025-11-25).
+  `save`, `publish`, `status`), the same from `xsolana <command>` and over MCP (stdio, protocol up to 2025-11-25).
 - **`xsolana approve`**: a page on 127.0.0.1 where the owner connects a devnet wallet (any detected wallet) and approves
   each transaction. Requests must carry the session's token and a local Host; the page is served with a strict
-  Content-Security-Policy. The legal flags the checker raises are shown in a block of their own, and Approve stays off
-  until the owner ticks that they read them.
+  Content-Security-Policy. A notice (the program is unaudited and comes as is; the owner uses it at their own risk
+  and answers for its legality: `DISCLAIMER.md`) and the legal flags the checker raises are shown in a block of their
+  own, and Approve stays off until the owner ticks that they read them.
 - **`xsolana connect`**: registers the MCP server and the skill with Claude Code and Codex, per user or per project,
   and only ever replaces or removes its own skill folder.
 - **Skill and plugin**: the `xsolana-economy` skill and one plugin folder for Claude Code and Codex.
