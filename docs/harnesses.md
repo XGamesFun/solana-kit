@@ -39,9 +39,11 @@ Keep these in step:
 Publishing a GitHub release runs `.github/workflows/publish.yml`: the checks, then `npm publish` with provenance (the
 release's tag must be the package's version). The first publish uses an npm token (the `NPM_TOKEN` secret); after it,
 add the workflow as the package's trusted publisher on npmjs.com and delete the token, and npm publishes over OIDC.
-The same job then lists the version in the MCP Registry from `server.json`: `mcp-publisher` (pinned, its signature
-verified) signs in with the workflow's own GitHub identity, so the namespace `io.github.XGamesFun` works only from a
-repository the `XGamesFun` account owns. Actions are pinned to commit hashes, and Dependabot moves them.
+Then `.github/workflows/mcp-registry.yml` lists the version in the MCP Registry from `server.json`, once npm serves it
+(a new package can take minutes): `mcp-publisher` (pinned, its signature verified) signs in with the workflow's own
+GitHub identity, so the namespace `io.github.XGamesFun` works only from a repository the `XGamesFun` account owns. It
+can also be run by hand from the Actions tab, and a publish run that failed after npm can be run again: it skips a
+version npm has already. Actions are pinned to commit hashes, and Dependabot moves them.
 
 Then check both harnesses still load the plugin: `claude plugin validate ./plugin` and `claude plugin validate .`;
 and for Codex, in a scratch `CODEX_HOME`, `codex plugin marketplace add ./`, `codex plugin add xsolana@xgamesfun`,
