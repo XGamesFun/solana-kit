@@ -1,0 +1,115 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Partner Vault",
+  "prompt": "We hold NFTs from a partner collection and want to give them out: a paid crate with a 5% chance at one, a free daily chest for anyone, a raffle whose winner takes the rare one, a one-day expedition that brings back a chest, and an auction of a mystery lot.",
+  "currency": "sol",
+  "tokens": [
+    { "key": "sol", "source": "sol" },
+    { "key": "shards", "source": "game", "name": "Shards", "symbol": "SHRD", "decimals": 6 }
+  ],
+  "collection": { "name": "Partner Vault" },
+  "items": [
+    { "key": "pass", "name": "Expedition Pass", "price": 0.01 },
+    { "key": "trinket", "name": "Trinket", "value": 0.01 }
+  ],
+  "pools": [
+    { "key": "shard-rewards", "currency": "shards", "about": "Names the expedition's token: it pays nothing, its result is a chest." }
+  ],
+  "stashes": [
+    {
+      "key": "vault",
+      "name": "Partner vault",
+      "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw",
+      "nfts": ["4vd1uA3jK28MwhufZnbtQpyJkVMXEVpKHzDRPUH9DT3v", "E53iEjsuDnz1jP6MJbnhecvTBRWCs5MsmjusfhYNDjD4", "B53EzSitDoQ4usvMN4nKhQRUVb7BhNh9PZPwgyQobpsV"],
+      "about": "Given by the paid crate and the mystery lot."
+    },
+    {
+      "key": "chest-nfts",
+      "name": "Chest NFTs",
+      "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw",
+      "nfts": ["BZsYY7KSt66SQyd45RFAKXidLLF36oVVmqMPRBYysKT2", "26gvuDRgS6angwJyjPT2zYs49QCEZW3nweT1rUC5pM8E"],
+      "about": "Given by the daily chest and the expedition's chest."
+    },
+    {
+      "key": "rare",
+      "name": "The rare one",
+      "nfts": [{ "asset": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4", "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw" }],
+      "about": "The raffle's first prize, named by it and given when its place is paid: kept apart so no roll can take it."
+    }
+  ],
+  "boxes": [
+    {
+      "key": "partner-crate",
+      "name": "Partner Crate",
+      "price": 0.05,
+      "outcomes": [
+        { "gives": "stash", "stash": "vault", "chance": 5 },
+        { "gives": "item", "item": "trinket", "chance": 45 },
+        { "gives": "nothing", "chance": 50 }
+      ]
+    },
+    {
+      "key": "daily-chest",
+      "name": "Daily Chest",
+      "price": 0,
+      "active": false,
+      "outcomes": [
+        { "gives": "stash", "stash": "chest-nfts", "chance": 10 },
+        { "gives": "item", "item": "trinket", "chance": 90 }
+      ]
+    },
+    {
+      "key": "mystery",
+      "name": "Mystery lot",
+      "price": 0,
+      "active": false,
+      "outcomes": [
+        { "gives": "stash", "stash": "vault", "chance": 50 },
+        { "gives": "item", "item": "trinket", "chance": 50 }
+      ]
+    }
+  ],
+  "grants": [
+    {
+      "key": "daily",
+      "name": "Free daily chest",
+      "prize": { "gives": "roll", "box": "daily-chest" },
+      "limits": { "perWalletEach": { "count": 1, "every": "1d" }, "perDay": 200 },
+      "fund": 0.5
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "raffle",
+      "name": "Rare NFT raffle",
+      "price": 0.01,
+      "places": [{ "percent": 0, "prize": { "gives": "nft", "stash": "rare", "nft": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4" } }, 90],
+      "firstDraw": "publish+7d"
+    }
+  ],
+  "farms": [
+    {
+      "key": "expedition",
+      "name": "Expedition",
+      "stakes": "collectibles",
+      "item": "pass",
+      "rewards": "shard-rewards",
+      "rate": { "perDay": 0, "minted": true },
+      "tiers": [{ "lock": "1d", "multiplier": 1, "prize": { "gives": "roll", "box": "daily-chest" } }]
+    }
+  ],
+  "auctions": [
+    {
+      "key": "mystery-lot",
+      "name": "Mystery lot",
+      "lot": { "roll": "mystery" },
+      "reserve": 0.1,
+      "runs": "2d"
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": { "box:partner-crate": 10, "grant:daily": 20, "lottery:raffle": 30, "item:pass": 3, "farm:expedition": 3 }
+  }
+}

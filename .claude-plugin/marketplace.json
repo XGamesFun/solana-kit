@@ -1,0 +1,16 @@
+{
+  "name": "xgamesfun",
+  "owner": {
+    "name": "games.fun"
+  },
+  "metadata": {
+    "description": "xsolana: economies on loot, one shared Solana program, for any coding agent."
+  },
+  "plugins": [
+    {
+      "name": "xsolana",
+      "source": "./plugin",
+      "description": "Build web3 and game economies on Solana without writing a smart contract: shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, rewards and outside NFTs on loot, one shared program. Design, check, simulate and price an economy; the owner approves going live in their own wallet."
+    }
+  ]
+}

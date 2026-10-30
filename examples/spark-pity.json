@@ -1,0 +1,153 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Spark Pity Gacha",
+  "prompt": "Every pull gives a Spark token alongside the roll; 90 Sparks craft the legendary of your choice. Bad luck is capped, and Sparks are tradeable.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "pull",
+      "source": "game",
+      "name": "Banner pull",
+      "symbol": "PULL",
+      "decimals": 0
+    },
+    {
+      "key": "spark",
+      "source": "game",
+      "name": "Spark",
+      "symbol": "SPARK",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Spark Banner"
+  },
+  "items": [
+    {
+      "key": "legendary",
+      "name": "Starfall Legendary",
+      "rarity": "Legendary",
+      "value": 2
+    },
+    {
+      "key": "epic",
+      "name": "Moonlit Epic",
+      "rarity": "Epic",
+      "value": 0.2
+    },
+    {
+      "key": "rare",
+      "name": "Ember Rare",
+      "rarity": "Rare",
+      "value": 0.03
+    }
+  ],
+  "pools": [
+    {
+      "key": "bank",
+      "currency": "sol",
+      "seed": 1,
+      "about": "Takes every pull's SOL and pays the consolation prize."
+    }
+  ],
+  "recipes": [
+    {
+      "key": "pull",
+      "name": "Pull",
+      "in": [
+        {
+          "takes": "pay",
+          "amount": 0.05,
+          "currency": "sol",
+          "to": "pool:bank"
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 1,
+          "currency": "pull",
+          "from": "mint"
+        },
+        {
+          "gives": "tokens",
+          "amount": 1,
+          "currency": "spark",
+          "from": "mint"
+        }
+      ]
+    },
+    {
+      "key": "spark-legendary",
+      "name": "90 Sparks for the legendary",
+      "in": [
+        {
+          "takes": "pay",
+          "amount": 90,
+          "currency": "spark",
+          "to": "burn"
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "legendary"
+        }
+      ]
+    }
+  ],
+  "boxes": [
+    {
+      "key": "banner",
+      "name": "Starfall banner",
+      "price": 1,
+      "currency": "pull",
+      "split": [
+        {
+          "to": "burn",
+          "percent": 100
+        }
+      ],
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "legendary",
+          "chance": 1
+        },
+        {
+          "gives": "item",
+          "item": "epic",
+          "chance": 9
+        },
+        {
+          "gives": "item",
+          "item": "rare",
+          "chance": 30
+        },
+        {
+          "gives": "pay",
+          "pool": "bank",
+          "amount": 0.1,
+          "chance": 10
+        },
+        {
+          "gives": "nothing",
+          "chance": 50
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "recipe:pull": 500,
+      "box:banner": 500,
+      "recipe:spark-legendary": 5
+    }
+  }
+}

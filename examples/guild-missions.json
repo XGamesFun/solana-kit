@@ -1,0 +1,144 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Guild Missions",
+  "prompt": "Anyone can stake their NFT for 5 tokens a day and 1 level a day. Then I release a mission, only open for one week: you must be level 3 to join, and you earn an extra level a day and +2 affection a day. Once that mission is over, I release a mission that requires level 100 and 6 affection to enter, and gives +2 trust a day and +100 tokens. It must work with my pNFTs, and a pNFT with a blue background in its off-chain metadata gets a 10% boost.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "gem",
+      "source": "game",
+      "name": "Guild Gem",
+      "symbol": "GEM",
+      "decimals": 6
+    }
+  ],
+  "collection": {
+    "name": "Guild Missions"
+  },
+  "pools": [
+    {
+      "key": "gem-rewards",
+      "currency": "gem",
+      "about": "Names the guild's token: every farm here mints it, so nothing waits in this pool."
+    }
+  ],
+  "traits": [
+    {
+      "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
+      "root": "50248561001082dabb151db021b0dbb501576e06b16d539eafc8f605591c983e",
+      "about": "Each pNFT's Background, from its off-chain metadata (loot.traitsTree of every NFT of the collection). A player proves theirs into its Sheet once (app.proveTraits), and the guild's boost reads it."
+    }
+  ],
+  "farms": [
+    {
+      "key": "guild",
+      "name": "The guild",
+      "stakes": "collectibles",
+      "custody": "freeze",
+      "gate": {
+        "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR"
+      },
+      "rewards": "gem-rewards",
+      "rate": {
+        "perDay": 5,
+        "minted": true
+      },
+      "growth": {
+        "attribute": "level",
+        "perDay": 1
+      },
+      "boosts": [
+        {
+          "when": {
+            "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
+            "attribute": "Background",
+            "equals": "Blue"
+          },
+          "add": {
+            "addPercent": 10
+          }
+        }
+      ],
+      "maxBoostPercent": 10
+    },
+    {
+      "key": "mission-1",
+      "name": "Mission 1",
+      "stakes": "collectibles",
+      "custody": "watch",
+      "runs": "7d",
+      "gate": {
+        "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
+        "attribute": "level",
+        "atLeast": 3
+      },
+      "rewards": "gem-rewards",
+      "rate": {
+        "perDay": 0,
+        "minted": true
+      },
+      "growth": [
+        {
+          "attribute": "level",
+          "perDay": 1
+        },
+        {
+          "attribute": "affection",
+          "perDay": 2
+        }
+      ]
+    },
+    {
+      "key": "mission-2",
+      "name": "Mission 2",
+      "stakes": "collectibles",
+      "custody": "watch",
+      "gate": [
+        {
+          "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
+          "attribute": "level",
+          "atLeast": 100
+        },
+        {
+          "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
+          "attribute": "affection",
+          "atLeast": 6
+        }
+      ],
+      "rewards": "gem-rewards",
+      "rate": {
+        "perDay": 0,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "7d",
+          "multiplier": 1,
+          "prize": { "gives": "tokens", "amount": 100, "from": "mint", "currency": "gem" }
+        }
+      ],
+      "growth": {
+        "attribute": "trust",
+        "perDay": 2
+      }
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "farm:guild": 20,
+      "farm:mission-1": 5,
+      "farm:mission-2": 1
+    },
+    "staked": {
+      "guild": 100,
+      "mission-1": 30,
+      "mission-2": 5
+    }
+  }
+}

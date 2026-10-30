@@ -1,0 +1,168 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Trade-in Shop",
+  "prompt": "A starter pack with a sword, a shield and some SOL back, bought in one go; a founder badge only for the wallets on our list; trade any of our NFTs back for a little SOL, and sell what comes back as mystery gear; and a raffle whose tickets cost a shield.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": {
+    "name": "Trade-in Shop"
+  },
+  "items": [
+    {
+      "key": "sword",
+      "name": "Iron Sword",
+      "uri": "https://example.invalid/sword/{serial}.json"
+    },
+    {
+      "key": "shield",
+      "name": "Oak Shield"
+    },
+    {
+      "key": "badge",
+      "name": "Founder Badge",
+      "soulbound": true
+    }
+  ],
+  "pools": [
+    {
+      "key": "house",
+      "currency": "sol",
+      "seed": 0.5
+    }
+  ],
+  "stashes": [
+    {
+      "key": "returns",
+      "name": "Returned gear",
+      "nfts": []
+    }
+  ],
+  "boxes": [
+    {
+      "key": "starter-pack",
+      "name": "Starter Pack",
+      "price": 0.05,
+      "outcomes": [
+        {
+          "gives": "bundle",
+          "chance": 100,
+          "prizes": [
+            {
+              "gives": "item",
+              "item": "sword"
+            },
+            {
+              "gives": "item",
+              "item": "shield"
+            },
+            {
+              "gives": "pay",
+              "pool": "house",
+              "amount": 0.01
+            }
+          ]
+        }
+      ],
+      "split": [
+        {
+          "to": "pool:house",
+          "percent": 40
+        }
+      ]
+    },
+    {
+      "key": "founder-badge",
+      "name": "Founder Badge",
+      "price": 0.01,
+      "perWallet": 1,
+      "gate": {
+        "list": [
+          "UbsgpGnLM9y9mFqZcbmAgPYQ599XPnDaWnhZA4WdrT5",
+          "3yboyxWADP9MK7Wchffkw4wmRwvWbTAnRYqYMMyAoABz",
+          "6UbkH6jY6R8jUTmPqijkhSxFn815xeKd792vYUxkzr3P",
+          "8ybgaExuyT87dp2AykzhZmfX8YYdud82fbqLVMnwJCYJ",
+          "BUbcsPCHrV7Vo95CQQEobnkWVr9Bnz1aJ2byFpkNALud"
+        ]
+      },
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "badge",
+          "chance": 100
+        }
+      ]
+    },
+    {
+      "key": "mystery-gear",
+      "name": "Mystery Gear",
+      "price": 0.02,
+      "outcomes": [
+        {
+          "gives": "stash",
+          "stash": "returns",
+          "chance": 60
+        },
+        {
+          "gives": "pay",
+          "pool": "house",
+          "amount": 0.01,
+          "chance": 40
+        }
+      ]
+    }
+  ],
+  "recipes": [
+    {
+      "key": "trade-in",
+      "name": "Trade in gear",
+      "in": [
+        {
+          "takes": "trade",
+          "then": {
+            "stash": "returns"
+          }
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 0.002,
+          "from": "pool:house"
+        }
+      ]
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "shield-raffle",
+      "name": "Shield raffle",
+      "ticketNft": {
+        "rule": {
+          "item": "shield"
+        },
+        "then": "burn"
+      },
+      "seed": 0.1,
+      "places": [
+        100
+      ],
+      "every": "7d"
+    }
+  ],
+  "scenario": {
+    "days": 28,
+    "perDay": {
+      "box:starter-pack": 40,
+      "box:founder-badge": 1,
+      "recipe:trade-in": 20,
+      "lottery:shield-raffle": 15,
+      "box:mystery-gear": 10
+    }
+  }
+}

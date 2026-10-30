@@ -1,0 +1,33 @@
+# The programs and chain accounts the client's LiteSVM tests load (js/test/world.mjs), pinned by hash: the outside
+# programs as the Solana clusters run them, the loot program as devnet runs it (the build release.json pins), the
+# oracle's queue as it is on mainnet, and a small transfer hook made for the tests.
+#
+# The tests refuse a file whose sha256 differs from its line here. `npm run fixtures` (scripts/fetch-fixtures.mjs)
+# downloads every program that is missing or differs, read-only, and checks it; `--check` checks what is here without
+# the network. Programs read from a cluster are not committed (upstream binaries, and loot.so is the program's own
+# build): .gitignore keeps them out. The accounts (mainnet/queue.json) and test_hook.so are committed.
+#
+# Mainnet is where loot will deploy, so the outside programs are mainnet's builds. loot.so is devnet's, the only
+# cluster it runs on; its sha256 and bytes are release.json's sbfSha256 and sbfBytes, and `--check` says so when they
+# part. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
+# loot program's source, committed here as a binary. Token-2022 calls it on every transfer of a mint that names it; it
+# counts transfers in an account it owns, refuses a transfer of 13, and marks the count if any account arrives signed.
+#
+# Columns: file (under js/test/fixtures), address, cluster it was read from, loader (`upgradeable`, `v2` for
+# BPFLoader2, `account` for an account's JSON, `local` for a file made for the tests), sha256 of the file, its bytes,
+# the slot (a program's last deployment; an account's read), and the release its security.txt names (`-` when none).
+#
+# file                           address                                      cluster loader      sha256 bytes slot release
+spl_token.so                     TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA  mainnet upgradeable 8190d3f7ceb6cb7a7a8d8924bff89f9f611e15ce1f806f2b6237f3311a98f697 108600 419472000 -
+token_2022.so                    TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb  mainnet upgradeable 15a2e615a42e20f31714bbaaee43002ae6f1cda2e8d7118243117ab3c1342e2d 1382016 460497271 program@v11.1.0
+associated_token.so              ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL mainnet v2          6804554e69fd3a58caa191dc4a58f4c67223d30ca28ab8987f39fc18d2f7374d 105032 - -
+memo.so                          MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr  mainnet v2          f520eaf096361abbb9639ea4dc3e5388a87b9330e121f476607b87c46ef67954 74800 - -
+mpl_core.so                      CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d mainnet upgradeable 51d41542456639a01820c747e72b9d3b4ca258930a5bbb7e78db0cda133dc209 848320 455005931 -
+token_metadata.so                metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s  mainnet upgradeable 31f0a627dba051a938de650464e55cc5397a4be0fd496929c1f9cf02fe5e9011 793991 380725176 -
+bubblegum.so                     BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY mainnet upgradeable b3a04a9d16cf2f168ae50e13756557867b3f6805c77519546147ec4065838bab 1349808 449480576 -
+mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  mainnet upgradeable fd55664396a9589330bed7e9e0c6b579781744d53f4602d2f0cfb2eacb69fcc5 2179480 339792668 -
+mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
+vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
+loot.so                          9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ  devnet  upgradeable 358805a85fd32ba7b5b6bee9dd88e063bda6f854820d978265bca6683790aee7 1457936 516374888 -
+mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
+test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -

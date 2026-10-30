@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Artwork Raffle",
+  "prompt": "I want to raffle one of my NFTs, a 1-of-1 artwork, for 0.1 SOL a ticket over three days. If fewer than 20 tickets sell, everyone gets their money back and I keep the art. The winner should get the art before I get paid, and I shouldn't be able to pull it once people have bought.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": false,
+  "lotteries": [
+    {
+      "key": "art",
+      "name": "The artwork",
+      "price": 0.1,
+      "raffle": {
+        "nft": "ArtNFT1111111111111111111111111111111111111",
+        "collection": "ArtCoLLection111111111111111111111111111111"
+      },
+      "firstDraw": "publish+3d",
+      "minSold": 20,
+      "split": [
+        {
+          "to": "treasury",
+          "percent": 100
+        }
+      ]
+    }
+  ]
+}

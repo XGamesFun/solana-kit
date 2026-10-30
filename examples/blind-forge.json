@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Blind Forge",
+  "prompt": "A drop of mystery boxes with a 60 / 25 / 10 / 4 / 1 rarity table, priced on a curve (each box costs 0.5% more than the last); the mythic is 1-of-1 and leaves the table once pulled; each legendary's weight drops as it is minted. Priced in a Token-2022 coin with a 1% transfer fee, plus a weekly draw for buyers.",
+  "currency": "forge",
+  "tokens": [
+    {
+      "key": "forge",
+      "source": "existing",
+      "name": "Forge test coin",
+      "symbol": "FORGE",
+      "decimals": 6,
+      "program": "token-2022",
+      "mint": "7MJWx2uTWn8ZHFda1WUpW46SgWb5UyAjjFrYjjSsSYHA",
+      "venue": "other",
+      "powers": {
+        "mintAuthority": "someone else",
+        "freeze": false,
+        "transferFeePercent": 1
+      }
+    }
+  ],
+  "collection": {
+    "name": "Blind Forge",
+    "royaltyPercent": 5
+  },
+  "items": [
+    {
+      "key": "common-blade",
+      "name": "Common Blade",
+      "rarity": "Common",
+      "value": 2
+    },
+    {
+      "key": "uncommon-blade",
+      "name": "Uncommon Blade",
+      "rarity": "Uncommon",
+      "value": 5
+    },
+    {
+      "key": "rare-blade",
+      "name": "Rare Blade",
+      "rarity": "Rare",
+      "supply": 500,
+      "value": 20
+    },
+    {
+      "key": "epic-blade",
+      "name": "Epic Blade",
+      "rarity": "Epic",
+      "supply": 100,
+      "value": 60
+    },
+    {
+      "key": "mythic-blade",
+      "name": "Mythic Blade",
+      "rarity": "Mythic",
+      "supply": 1,
+      "value": 200
+    }
+  ],
+  "pools": [],
+  "boxes": [
+    {
+      "key": "forge-box",
+      "name": "Forge box",
+      "price": 10,
+      "rise": {
+        "growthPercent": 0.5
+      },
+      "stockOdds": true,
+      "split": [
+        {
+          "to": "lottery:buyers-draw",
+          "percent": 5
+        }
+      ],
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "common-blade",
+          "chance": 60
+        },
+        {
+          "gives": "item",
+          "item": "uncommon-blade",
+          "chance": 25
+        },
+        {
+          "gives": "item",
+          "item": "rare-blade",
+          "chance": 10
+        },
+        {
+          "gives": "item",
+          "item": "epic-blade",
+          "chance": 4
+        },
+        {
+          "gives": "item",
+          "item": "mythic-blade",
+          "chance": 1
+        }
+      ]
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "buyers-draw",
+      "name": "Buyers' draw",
+      "price": 1,
+      "cutPercent": 5,
+      "places": [
+        70,
+        30
+      ],
+      "every": "7d"
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "box:forge-box": 200,
+      "lottery:buyers-draw": 50
+    }
+  }
+}

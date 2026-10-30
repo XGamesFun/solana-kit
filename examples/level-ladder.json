@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Level ladder",
+  "prompt": "A level ladder: each attempt costs 0.01 SOL, most of it goes into the prize pool, and whoever clears the last level gets 0.02 SOL from the pool. My server decides who cleared it.",
+  "keys": {
+    "authority": "owner"
+  },
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "pools": [
+    {
+      "key": "prize",
+      "currency": "sol",
+      "seed": 0.5,
+      "about": "Pays whoever clears the last level. 80% of every attempt comes into it."
+    }
+  ],
+  "payments": [
+    {
+      "key": "attempt",
+      "name": "An attempt at the ladder",
+      "amount": 0.01,
+      "split": [
+        {
+          "to": "pool:prize",
+          "percent": 80
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "key": "ladder-prize",
+      "when": "a player clears the last level",
+      "does": "payout",
+      "pool": "prize",
+      "amount": 0.02,
+      "to": "the player who cleared it",
+      "signedBy": "page",
+      "perDay": 10,
+      "proof": {
+        "payment": "attempt",
+        "after": "20s",
+        "within": "1h"
+      },
+      "caps": {
+        "each": 0.02,
+        "perPlayerPerDay": 0.04,
+        "perDay": 0.2
+      }
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "payment:attempt": 200
+    }
+  }
+}

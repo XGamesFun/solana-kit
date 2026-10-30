@@ -1,0 +1,2923 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/XGamesFun/solana-kit/main/js/economy/schema.json",
+  "title": "A loot economy (spec version 2)",
+  "description": "One project's economy on the shared loot program: its currencies, collectibles, pools and the mechanics that move them. Kept as xsolana.json in a project (or as the `economy` section of a games.fun game). Amounts are in whole units of their token, percents are percents, durations are like \"7d\".",
+  "type": "object",
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 2,
+      "description": "The spec format: 2 is loot 0.7 and later."
+    },
+    "network": {
+      "const": "devnet",
+      "description": "Devnet only until the program is audited."
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "prompt": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "The creator's own words for this economy, kept as they wrote them."
+    },
+    "keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A game has two keys. The owner (the creator's wallet) signs the setup and every mechanic. The authority signs what only the game knows: who won, who cleared the level.",
+      "properties": {
+        "authority": {
+          "anyOf": [
+            {
+              "const": "owner"
+            },
+            {
+              "$ref": "#/$defs/address"
+            }
+          ],
+          "default": "owner",
+          "description": "\"owner\": the creator's wallet is both keys. Or the public address of another plain wallet (a server's key, the local keeper). Never a private key."
+        }
+      }
+    },
+    "currency": {
+      "$ref": "#/$defs/key",
+      "description": "The game's own currency: the token every shop item is priced in and the treasury holds. A key from `tokens`."
+    },
+    "treasury": {
+      "type": "string",
+      "pattern": "^wallet:[1-9A-HJ-NP-Za-km-z]{32,44}$",
+      "description": "Where what a sale's shares leave goes (and a lottery's cut): \"wallet:<address>\" for another wallet than the owner's (a charity, a team's multisig vault). Left out: the owner's own wallet. The program pays its account of whatever currency was paid, and opens it when it is not there. Set it before going live: it doesn't change through the spec once live."
+    },
+    "tokens": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/token"
+      }
+    },
+    "collection": {
+      "description": "The Core collection the setup makes, which the project's collectibles are minted into (an item can name another of the project's). `false`: none, a project of tokens only.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/collection"
+        },
+        {
+          "const": false
+        }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    },
+    "pools": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/pool"
+      }
+    },
+    "stashes": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/stash"
+      },
+      "description": "NFTs the game holds to give away as prizes: a box's outcome `{ \"gives\": \"stash\" }` gives one of a stash's at random. The owner's wallet hands each listed NFT to the game when the economy goes live, so it must hold them then."
+    },
+    "boxes": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/box"
+      }
+    },
+    "payments": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/payment"
+      }
+    },
+    "recipes": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/recipe"
+      }
+    },
+    "schedules": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/schedule"
+      }
+    },
+    "lotteries": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/lottery"
+      }
+    },
+    "farms": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/farm"
+      }
+    },
+    "contests": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/contest"
+      }
+    },
+    "auctions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/auction"
+      }
+    },
+    "holds": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/hold"
+      }
+    },
+    "grants": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/grant"
+      }
+    },
+    "traits": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Traits the game vouches for from NFTs' off-chain metadata (a background, a class), so rules can read them: the root of a Merkle tree of each NFT's traits (`loot.traitsTree`), set when the economy goes live. Anyone then writes an NFT's traits into its Sheet with its proof (`app.proveTraits`), and boosts, gates and odds read them like any attribute.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection",
+          "root"
+        ],
+        "properties": {
+          "collection": {
+            "$ref": "#/$defs/address",
+            "description": "The collection the traits are of: the tree's name on chain."
+          },
+          "root": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "The tree's root, in hex."
+          },
+          "about": {
+            "$ref": "#/$defs/words"
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    },
+    "scenario": {
+      "$ref": "#/$defs/scenario"
+    },
+    "live": {
+      "$ref": "#/$defs/live"
+    },
+    "projectNumber": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "default": 0,
+      "description": "The project's number among its owner's: its address is [\"project\", owner, number]. A wallet that runs two economies gives each its own number."
+    },
+    "collections": {
+      "type": "array",
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/address"
+      },
+      "description": "Core collections the owner already controls (their update authority) that the project takes too, besides the one it makes: up to eight in all. An NFT of any of them is the project's own: it reads and writes it as one, and an item may be minted into it (with the project as its update delegate)."
+    },
+    "compressedTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The tree the project's compressed NFTs are minted into (a Bubblegum v2 tree the setup opens, the project its only minter), when a prize gives one (`\"compressed\": true`). Its rent is paid once, at the setup: about 0.23 SOL for 16,384 NFTs, 0.43 SOL for 1,048,576.",
+      "properties": {
+        "holds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 16384,
+          "description": "How many compressed NFTs it holds in all: the tree is made for the next power of two (at least 16,384). Once full, no more are given."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}$",
+      "description": "A short name for this part, used by the other parts and by its slots: lower case, digits and dashes."
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "link": {
+      "type": "string",
+      "pattern": "^https://",
+      "maxLength": 200
+    },
+    "words": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "amount": {
+      "description": "An amount in whole units of its currency: 0.1, or \"0.1\" when it must be exact.",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{1,20}(\\.[0-9]{1,18})?$"
+        }
+      ]
+    },
+    "percent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "A percent with at most two decimals (the program counts in hundredths of a percent)."
+    },
+    "duration": {
+      "description": "Seconds, or a number and a unit: \"45s\", \"30m\", \"6h\", \"7d\", \"2w\".",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+        }
+      ]
+    },
+    "time": {
+      "type": "string",
+      "description": "\"publish\" (the moment it goes live), \"publish+7d\", or a date and time like \"2026-11-01T18:00:00Z\".",
+      "pattern": "^(publish(\\+[0-9]+(\\.[0-9]+)?(s|m|h|d|w))?|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}:[0-9]{2}))$"
+    },
+    "destination": {
+      "type": "string",
+      "description": "Where a share goes: \"burn\", \"treasury\" (the game's), \"pool:<key>\", \"wallet:<address>\" (a partner, a creator, a charity: the program pays their own account for the currency, and opens it when it is not there), \"account:<token account address>\" (an existing token account of that currency), \"holder:<collectible address>\" (whoever holds that collectible at the time), \"lottery:<key>\" (that lottery's pot), or, in a box's or a lottery's split, \"chosen\" (a wallet the buyer names when they buy: a referrer, a streamer) or \"chosen:<item key>\" (whoever holds the collectible of that item the buyer names: the plot they build on; the buyer must name one a player holds, or the purchase is refused); in a payment's split, \"chosen\" only (a wallet the payer names each time they pay, never their own). A share that can't be paid (its wallet has no account, nobody holds the collectible) goes to the treasury instead; a sale never fails over it.",
+      "pattern": "^(burn|treasury|chosen|chosen:[a-z][a-z0-9-]{0,31}|pool:[a-z][a-z0-9-]{0,31}|lottery:[a-z][a-z0-9-]{0,31}|wallet:[1-9A-HJ-NP-Za-km-z]{32,44}|account:[1-9A-HJ-NP-Za-km-z]{32,44}|holder:[1-9A-HJ-NP-Za-km-z]{32,44})$"
+    },
+    "share": {
+      "type": "object",
+      "required": [
+        "to",
+        "percent"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "$ref": "#/$defs/destination"
+        },
+        "percent": {
+          "$ref": "#/$defs/percent"
+        }
+      }
+    },
+    "split": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/share"
+      },
+      "description": "Up to four shares of each payment. What they leave goes to the game's treasury."
+    },
+    "rise": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The price rises after every sale: price + step + price × growthPercent.",
+      "properties": {
+        "step": {
+          "$ref": "#/$defs/amount"
+        },
+        "growthPercent": {
+          "$ref": "#/$defs/percent"
+        }
+      }
+    },
+    "fall": {
+      "type": "object",
+      "required": [
+        "step",
+        "every"
+      ],
+      "additionalProperties": false,
+      "description": "The price falls by `step` every `every`, from `start`, never below `floor`. A sale does not put the price back up: it stays at what was paid. By default (\"clock\": \"sale\") the next step comes `every` after that sale, so steady sales hold the price where it is. With \"clock\": \"shared\" the steps keep their own clock, sales or not: a Dutch drop that keeps falling however often it sells.",
+      "properties": {
+        "step": {
+          "$ref": "#/$defs/amount"
+        },
+        "every": {
+          "$ref": "#/$defs/duration"
+        },
+        "floor": {
+          "$ref": "#/$defs/amount"
+        },
+        "start": {
+          "$ref": "#/$defs/time"
+        },
+        "clock": {
+          "enum": [
+            "sale",
+            "shared"
+          ],
+          "default": "sale"
+        }
+      }
+    },
+    "life": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "When a recipe may take a collectible of this item. 0 switches a rule off. Fixed once one is issued.",
+      "properties": {
+        "readyAfter": {
+          "$ref": "#/$defs/duration"
+        },
+        "lasts": {
+          "$ref": "#/$defs/duration"
+        },
+        "uses": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "cooldown": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "token": {
+      "type": "object",
+      "required": [
+        "key",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (games.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep).",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "source": {
+          "enum": [
+            "sol",
+            "existing",
+            "project",
+            "game"
+          ],
+          "description": "`project` (`game` is its older spelling): a token made when the economy goes live, which the project mints. Such a token names no `mint`: the setup makes it."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18
+        },
+        "supply": {
+          "$ref": "#/$defs/amount",
+          "description": "`project` only: a fixed supply. Going live makes the token, mints all of it to the owner's wallet and turns minting off for good, so nobody (the project included) can ever make more. Pools are seeded from it. Leave it out for a token the project mints as its rules say (points, rewards, an emission)."
+        },
+        "program": {
+          "enum": [
+            "spl-token",
+            "token-2022"
+          ],
+          "default": "spl-token"
+        },
+        "mint": {
+          "$ref": "#/$defs/address"
+        },
+        "venue": {
+          "enum": [
+            "games.fun",
+            "pump.fun",
+            "meteora",
+            "other"
+          ],
+          "description": "Where the token trades, recorded for the app and not read or enforced by the tools: loot doesn't launch or trade tokens. A token launched elsewhere is `existing`, by its mint."
+        },
+        "uri": {
+          "$ref": "#/$defs/link"
+        },
+        "image": {
+          "$ref": "#/$defs/link",
+          "description": "A picture of it, recorded for the app: the tools don't read it, and the setup doesn't write it to the mint."
+        },
+        "powers": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the mint's own keys can do, as far as the creator knows. The checker warns about each one.",
+          "properties": {
+            "mintAuthority": {
+              "enum": [
+                "game",
+                "someone else",
+                "none",
+                "project"
+              ]
+            },
+            "freeze": {
+              "type": "boolean"
+            },
+            "permanentDelegate": {
+              "type": "boolean"
+            },
+            "transferHook": {
+              "type": "boolean"
+            },
+            "transferFeePercent": {
+              "$ref": "#/$defs/percent"
+            },
+            "pausable": {
+              "type": "boolean"
+            },
+            "defaultFrozen": {
+              "type": "boolean"
+            },
+            "defaultState": {
+              "type": "boolean",
+              "description": "The mint carries Token-2022's DefaultAccountState, whatever it is set to. With a freeze authority it can be switched to frozen: auctions, contests, lotteries and sealed schedules refuse it."
+            },
+            "nonTransferable": {
+              "type": "boolean"
+            },
+            "confidentialTransfers": {
+              "type": "boolean",
+              "description": "Its holders can turn plain transfers away (Token-2022 confidential transfers): lotteries, contests and auctions refuse it."
+            }
+          }
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "The Metaplex Core collection the game's collectibles are minted into.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "description": {
+          "$ref": "#/$defs/words"
+        },
+        "royaltyPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 25,
+          "default": 5
+        },
+        "uri": {
+          "$ref": "#/$defs/link"
+        },
+        "image": {
+          "$ref": "#/$defs/link",
+          "description": "A picture of it, recorded for the app: the tools don't read it, and the setup doesn't write it to the collection (its `uri` is what it gets)."
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "key",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "The program's number for it. Written when it goes live; never change it after."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "description": {
+          "$ref": "#/$defs/words"
+        },
+        "kind": {
+          "enum": [
+            "collectible",
+            "normal"
+          ],
+          "default": "collectible",
+          "description": "A collectible is minted to the player's wallet; a normal item lives in the project's own backend and the chain records the sale."
+        },
+        "rarity": {
+          "anyOf": [
+            {
+              "enum": [
+                "Common",
+                "Uncommon",
+                "Rare",
+                "Epic",
+                "Legendary",
+                "Mythic"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          ],
+          "default": "Common"
+        },
+        "soulbound": {
+          "type": "boolean",
+          "default": false
+        },
+        "burnable": {
+          "type": "boolean",
+          "default": false,
+          "description": "The authority may burn it later (a decision that unmakes)."
+        },
+        "supply": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 0,
+          "description": "0 is unlimited."
+        },
+        "price": {
+          "$ref": "#/$defs/amount",
+          "description": "In the game's currency: puts the item in the shop (a box of one entry). 0 keeps it out of the shop unless `free` is true."
+        },
+        "rise": {
+          "$ref": "#/$defs/rise"
+        },
+        "fall": {
+          "$ref": "#/$defs/fall"
+        },
+        "life": {
+          "$ref": "#/$defs/life"
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        },
+        "value": {
+          "$ref": "#/$defs/amount",
+          "description": "What the creator thinks one is worth in the game's currency, for the simulation only."
+        },
+        "uri": {
+          "$ref": "#/$defs/link",
+          "description": "Its metadata. `{serial}` in it is each unit's serial, so each unit can have its own art (`https://…/hero/{serial}.json`)."
+        },
+        "image": {
+          "$ref": "#/$defs/link",
+          "description": "A picture of it, recorded for the app: the tools don't read it, and the program keeps only `uri`."
+        },
+        "look": {
+          "type": "object",
+          "description": "What owning it changes in a game (free-form), recorded for the game to read: the tools don't read or enforce it."
+        },
+        "free": {
+          "type": "boolean",
+          "default": false,
+          "description": "List it in the shop at price 0: players pay only the network and platform fees."
+        },
+        "gate": {
+          "$ref": "#/$defs/gate"
+        },
+        "shopBox": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "The program's number for its shop listing (a box). Written when it goes live; never change it after."
+        },
+        "opens": {
+          "$ref": "#/$defs/time",
+          "description": "When it starts selling (or crafting). Default: at once."
+        },
+        "closes": {
+          "$ref": "#/$defs/time",
+          "description": "When it stops. Default: never."
+        },
+        "perWallet": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one wallet may buy (or craft) in all. 0 or absent: no limit. A wallet's first purchase pays a little rent for its count."
+        },
+        "perWalletEach": {
+          "$ref": "#/$defs/perWalletEach"
+        },
+        "collection": {
+          "$ref": "#/$defs/address",
+          "description": "A collectible's collection: one of `collections`. Default: the one the setup makes."
+        }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "required": [
+        "key",
+        "currency"
+      ],
+      "additionalProperties": false,
+      "description": "A vault only the game can spend from: a prize pool, a lottery's pot, stakers' rewards.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "The program's number for it. Written when it goes live."
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "seed": {
+          "$ref": "#/$defs/amount",
+          "description": "What the creator puts in when it goes live."
+        },
+        "about": {
+          "$ref": "#/$defs/words"
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "gives"
+      ],
+      "additionalProperties": false,
+      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), up to three of them together (`bundle`), a burn of the payment, or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle.",
+      "properties": {
+        "gives": {
+          "enum": [
+            "item",
+            "pay",
+            "share",
+            "stash",
+            "tokens",
+            "nft",
+            "roll",
+            "bundle",
+            "burn",
+            "nothing"
+          ]
+        },
+        "chance": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "weight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "pool": {
+          "$ref": "#/$defs/key"
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "percent": {
+          "$ref": "#/$defs/percent"
+        },
+        "shifts": {
+          "type": "array",
+          "maxItems": 2,
+          "description": "For a box that rolls on an NFT (`rollsOn`): numbers this outcome moves on it (+1 level, -2 affection), never below 0, and never above `upTo` when raising. Written on the NFT when the game has authority over it, in its Sheet otherwise. With `fromNow`, a time: a day in jail from now.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attribute",
+              "by"
+            ],
+            "properties": {
+              "attribute": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647,
+                    "not": {
+                      "const": 0
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                  }
+                ],
+                "description": "How much more (or, below 0, less). With `fromNow`, a duration: \"1d\"."
+              },
+              "upTo": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  {
+                    "$ref": "#/$defs/duration"
+                  }
+                ],
+                "description": "The most it reaches when raising. With `fromNow`, how far past now."
+              },
+              "fromNow": {
+                "type": "boolean",
+                "default": false,
+                "description": "The attribute is a time: moved from now when it is already past, and raised no further than `upTo` past now (a day in jail: \"by\": \"1d\", \"upTo\": \"1d\")."
+              }
+            }
+          }
+        },
+        "then": {
+          "description": "For a box that rolls on an NFT: where the NFT goes after this outcome. \"back\" (the default) to whoever brought it; \"burn\" (a Core asset burned; any other kind sent to the incinerator's address, where nobody can move it); \"treasury\" to the game's treasury wallet; { \"giveTo\": \"<wallet>\" } to that wallet. A box with any outcome that burns or gives the NFT away takes it into the game's hands when it is rolled, until the roll is settled (a custodial route). { \"stash\": \"<key>\" }: into one of the spec's stashes, a trade-in that becomes another player's prize.",
+          "anyOf": [
+            {
+              "enum": [
+                "back",
+                "burn",
+                "treasury"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "giveTo"
+              ],
+              "properties": {
+                "giveTo": {
+                  "$ref": "#/$defs/address"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stash"
+              ],
+              "properties": {
+                "stash": {
+                  "$ref": "#/$defs/key"
+                }
+              }
+            }
+          ]
+        },
+        "stash": {
+          "$ref": "#/$defs/key",
+          "description": "For stash: the stash one NFT of which this outcome gives, picked at random when the box is rolled (a box of one such outcome is still rolled by the oracle). For nft: the stash that lists `nft`."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$",
+          "description": "For tokens: \"mint\" (minted, in `currency`, a token the project mints) or \"pool:<key>\"."
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "For tokens minted: the token. Default: the project's currency."
+        },
+        "nft": {
+          "$ref": "#/$defs/address",
+          "description": "For nft: the NFT, which the stash `stash` lists."
+        },
+        "box": {
+          "$ref": "#/$defs/key",
+          "description": "For roll: the box rolled for the player when the order settles."
+        },
+        "prizes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "For bundle: what it gives together, at most three: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
+          "items": {
+            "type": "object",
+            "required": [
+              "gives"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "item": {
+                "$ref": "#/$defs/key"
+              },
+              "pool": {
+                "$ref": "#/$defs/key"
+              },
+              "amount": {
+                "$ref": "#/$defs/amount"
+              },
+              "percent": {
+                "$ref": "#/$defs/percent"
+              },
+              "stash": {
+                "$ref": "#/$defs/key",
+                "description": "For stash: the stash one NFT of which this outcome gives, picked at random when the box is rolled (a box of one such outcome is still rolled by the oracle). For nft: the stash that lists `nft`."
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$",
+                "description": "For tokens: \"mint\" (minted, in `currency`, a token the project mints) or \"pool:<key>\"."
+              },
+              "currency": {
+                "$ref": "#/$defs/key",
+                "description": "For tokens minted: the token. Default: the project's currency."
+              },
+              "nft": {
+                "$ref": "#/$defs/address",
+                "description": "For nft: the NFT, which the stash `stash` lists."
+              },
+              "box": {
+                "$ref": "#/$defs/key",
+                "description": "For roll: the box rolled for the player when the order settles."
+              },
+              "gives": {
+                "enum": [
+                  "item",
+                  "pay",
+                  "share",
+                  "stash",
+                  "tokens",
+                  "nft",
+                  "roll"
+                ]
+              }
+            }
+          }
+        },
+        "burns": {
+          "type": "boolean",
+          "default": false,
+          "description": "For bundle: the payment is burned, all of it, in place of the box's split."
+        }
+      }
+    },
+    "box": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "price",
+        "outcomes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "price": {
+          "$ref": "#/$defs/amount",
+          "description": "0 is a free box: players pay only the fees."
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "Default: the project's currency. In another one, what the split leaves goes to the treasury wallet in that currency."
+        },
+        "rise": {
+          "$ref": "#/$defs/rise"
+        },
+        "fall": {
+          "$ref": "#/$defs/fall"
+        },
+        "stockOdds": {
+          "type": "boolean",
+          "default": false,
+          "description": "Each item's chance shrinks with what is left of its supply."
+        },
+        "active": {
+          "type": "boolean",
+          "default": true,
+          "description": "Switched off, nobody opens it: a box only missions, recipes or prizes (a grant, a lottery's place, a contest, an auction) roll."
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/outcome"
+          }
+        },
+        "gate": {
+          "$ref": "#/$defs/gate",
+          "description": "Only players who show such a collectible can open it."
+        },
+        "odds": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/odds"
+          }
+        },
+        "opens": {
+          "$ref": "#/$defs/time",
+          "description": "When it starts selling (or crafting). Default: at once."
+        },
+        "closes": {
+          "$ref": "#/$defs/time",
+          "description": "When it stops. Default: never."
+        },
+        "perWallet": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one wallet may buy (or craft) in all. 0 or absent: no limit. A wallet's first purchase pays a little rent for its count."
+        },
+        "perWalletEach": {
+          "$ref": "#/$defs/perWalletEach"
+        },
+        "rollsOn": {
+          "$ref": "#/$defs/rule",
+          "description": "The NFT the box rolls on: one the player brings (when it is opened), the NFT leaving a mission (a farm tier's `roll`) or one a recipe keeps (an output `roll`), which must pass this rule. Its outcomes' `shifts` and `then` act on it, and its `odds` read it. A box only missions or recipes roll is left `active: false`, so nobody opens it directly."
+        },
+        "then": {
+          "description": "Where the NFT it rolls on goes after an outcome that names no `then` of its own: a box that takes an NFT as its price (`rollsOn` its rule, `then` \"burn\", \"treasury\", { giveTo } or { stash }).",
+          "anyOf": [
+            {
+              "enum": [
+                "back",
+                "burn",
+                "treasury"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "giveTo"
+              ],
+              "properties": {
+                "giveTo": {
+                  "$ref": "#/$defs/address"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stash"
+              ],
+              "properties": {
+                "stash": {
+                  "$ref": "#/$defs/key"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "amount"
+      ],
+      "additionalProperties": false,
+      "description": "A payment a player signs for something the game gives off chain: an entry fee, an attempt at a level, a tip.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "amount": {
+          "$ref": "#/$defs/amount",
+          "description": "What a player pays; with `any`, the least they may pay."
+        },
+        "any": {
+          "type": "boolean",
+          "description": "The player chooses the amount, at least `amount` (a tip, a donation, pay what you want). The page keeps the least; the chain takes any amount the player signs."
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "takes"
+      ],
+      "additionalProperties": false,
+      "description": "burn: `count` collectibles of `item`, burned. use: one collectible of `item`, kept (counts a use). renew: one kept, its uses counted from zero again. staked: one collectible of `item`, kept as `use` keeps it, that must be staked in `farm`: on its own seat in that farm of this spec, which escrows or freezes it (a watched one could be sold). A set bound into a badge takes its pieces this way and moves that farm's `lockAttribute` far ahead, so they stay staked while the badge exists; a recipe that raises anything on a staked piece must raise its farm's `lockAttribute` (to raise a stat and leave the lock alone, use `use`). show: one NFT of `collection` the player holds, kept (any Core NFT, or a Token Metadata NFT verified in it; the game's own collection when left out), read with what the game wrote in its Sheet. pay: `amount` of `currency`, sent `to` a destination. trade: one NFT of `collection` the player holds, any kind, traded in: burned, given on, or put in a stash (`then`).",
+      "properties": {
+        "takes": {
+          "enum": [
+            "burn",
+            "use",
+            "renew",
+            "show",
+            "staked",
+            "pay",
+            "trade"
+          ]
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "farm": {
+          "$ref": "#/$defs/key",
+          "description": "staked: the farm (its key) the collectible is staked in, a farm of collectibles that escrows or freezes it. Needed for a staked line."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "to": {
+          "$ref": "#/$defs/destination"
+        },
+        "collection": {
+          "$ref": "#/$defs/address",
+          "description": "show, trade: the collection the NFT is of (a Core collection, or a Token Metadata collection's mint). Default: the project's own."
+        },
+        "then": {
+          "$ref": "#/$defs/spend",
+          "description": "trade: where the NFT traded in goes (default \"burn\")."
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "gives"
+      ],
+      "additionalProperties": false,
+      "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; anyone asks the oracle and settles it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
+      "properties": {
+        "gives": {
+          "enum": [
+            "item",
+            "tokens",
+            "share",
+            "nft",
+            "roll"
+          ]
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "compressed": {
+          "type": "boolean",
+          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound, and not in a box's outcomes. Once the tree is full, no more are given."
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "For tokens minted: the token. Default: the game's."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$"
+        },
+        "pool": {
+          "$ref": "#/$defs/key"
+        },
+        "percent": {
+          "$ref": "#/$defs/percent"
+        },
+        "box": {
+          "$ref": "#/$defs/key",
+          "description": "For `roll`: the box rolled, free, for the player."
+        },
+        "on": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "For `roll`: the collectible handed in and kept (its place, the first is 0) the box rolls on (a risky upgrade); left out, it rolls on nothing (a merge whose result is left to chance). One a recipe."
+        },
+        "stash": {
+          "$ref": "#/$defs/key",
+          "description": "For nft: the stash that lists it."
+        },
+        "nft": {
+          "$ref": "#/$defs/address",
+          "description": "For nft: the NFT's address (a Core asset, a Token Metadata NFT's mint)."
+        }
+      }
+    },
+    "recipe": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "in"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        },
+        "in": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/input"
+          }
+        },
+        "out": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/output"
+          }
+        },
+        "needs": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "place",
+              "key",
+              "atLeast"
+            ],
+            "additionalProperties": false,
+            "description": "The collectible handed in at `place` (the first is 0) must carry a number `key` the authority wrote of at least `atLeast`.",
+            "properties": {
+              "place": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "atLeast": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        "keeps": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "description": "The new collectible `to` (the first made is 0) takes attribute `key` from the one handed in at `from`.",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "from": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "to": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              }
+            }
+          }
+        },
+        "raises": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "Numbers the recipe moves on collectibles handed in and kept (use, renew, show): a level or a stat bought with the recipe's own payment, or one it costs (a negative `by`: a merge that costs a level, never below 0). Written on the NFT when the game has authority over it, in its Sheet otherwise. One already at `upTo` is refused (MaxedOut) when raising. With `fromNow`, it moves a time: fuel for a day more (\"by\": \"1d\", \"upTo\": \"3d\"), a day off a lock (\"by\": \"-1d\").",
+          "items": {
+            "type": "object",
+            "required": [
+              "place",
+              "key",
+              "by"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "place": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7,
+                "description": "Which collectible handed in (the first is 0); one that is kept."
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647,
+                    "not": {
+                      "const": 0
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(\\.[0-9]+)?(s|m|h|d|w)$"
+                  }
+                ],
+                "description": "How much more (or, below 0, less). A duration (\"1d\", \"-6h\") on a time: with `fromNow`, or on a farm's `lockAttribute` or `upkeepAttribute`."
+              },
+              "upTo": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  {
+                    "$ref": "#/$defs/duration"
+                  }
+                ],
+                "description": "The most it reaches; needed when raising. With `fromNow`, how far past now: \"3d\". On a farm's `lockAttribute` or `upkeepAttribute` moved without `fromNow` (by a duration, from the time as written: a bound set's \"20000d\"), left out: no cap."
+              },
+              "fromNow": {
+                "type": "boolean",
+                "default": false,
+                "description": "The attribute is a time (Unix seconds: a lock's end, fuel that lasts until then): moved from now when it is already past (a dry tank fills from now, not from when it ran out), and raised no further than `upTo` past now."
+              }
+            }
+          }
+        },
+        "opens": {
+          "$ref": "#/$defs/time",
+          "description": "When it starts selling (or crafting). Default: at once."
+        },
+        "closes": {
+          "$ref": "#/$defs/time",
+          "description": "When it stops. Default: never."
+        },
+        "perWallet": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one wallet may buy (or craft) in all. 0 or absent: no limit. A wallet's first purchase pays a little rent for its count."
+        },
+        "perWalletEach": {
+          "$ref": "#/$defs/perWalletEach"
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "required": [
+        "key",
+        "does",
+        "every"
+      ],
+      "additionalProperties": false,
+      "description": "issue: mint `amount` of a game token into `pool`, halving every `halveEvery` runs. burn: burn `percent` (or `amount`) of what `pool` holds. move: move `percent` (or `amount`) of what pool `from` holds into pool `to`. pay: pay `amount` (or `percent`) from pool `from` `to` a wallet (\"wallet:<address>\"), a token account (\"account:<token account>\") or a collectible's holder (\"holder:<asset>\") on each run: a payroll, a vesting drip, a landlord's rent. Anyone may run it when it is due.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "does": {
+          "enum": [
+            "issue",
+            "burn",
+            "move",
+            "pay"
+          ]
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "pool": {
+          "$ref": "#/$defs/key"
+        },
+        "from": {
+          "$ref": "#/$defs/key"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/key"
+            },
+            {
+              "$ref": "#/$defs/destination"
+            }
+          ],
+          "description": "move: the pool it fills. pay: \"wallet:<address>\", \"account:<token account address>\" or \"holder:<asset address>\", or \"lottery:<key>\" (that lottery's pot: a sponsored or no-loss prize stream)."
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "halveEvery": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "The amount (or the percent) halves after every this many runs (0: never): with `every: \"7d\"`, 52 halves it each year. With `maxRuns`, the total it can ever move or mint is fixed in advance (a capped emission)."
+        },
+        "percent": {
+          "$ref": "#/$defs/percent"
+        },
+        "every": {
+          "$ref": "#/$defs/duration"
+        },
+        "start": {
+          "$ref": "#/$defs/time",
+          "description": "When the first run is due (\"publish+365d\": a one-year cliff); left out, one `every` after it goes live."
+        },
+        "maxRuns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 0,
+          "description": "It stops after this many runs (0: never): 12 monthly runs is a year of vesting; with `halveEvery`, a cap on the total."
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        },
+        "sealed": {
+          "type": "boolean",
+          "description": "A sealed schedule (does \"pay\", in `currency`): it pays from a vault of its own that nothing else can touch, and once written nobody, the owner included, can change it, switch it off or take its tokens back. It needs `maxRuns`; its last run pays whatever is left. Vesting, an unlock, a sponsored prize stream with a real guarantee."
+        },
+        "fund": {
+          "$ref": "#/$defs/amount",
+          "description": "For a sealed schedule: what goes into its vault at go-live (anyone may add more later)."
+        },
+        "fundFrom": {
+          "type": "string",
+          "pattern": "^(wallet|mint|pool:[a-z][a-z0-9-]{0,31})$",
+          "default": "wallet",
+          "description": "Where `fund` comes from: the owner's wallet (default), minted (a token the project mints), or a pool (\"pool:<key>\")."
+        }
+      }
+    },
+    "lottery": {
+      "type": "object",
+      "required": [
+        "key",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "price": {
+          "$ref": "#/$defs/amount",
+          "description": "One ticket, in the pot's currency (or in `ticketCurrency`). Leave it out for a lottery whose tickets cost an NFT (`ticketNft`)."
+        },
+        "ticketCurrency": {
+          "$ref": "#/$defs/key",
+          "description": "Tickets paid in another token are burned, and the pot is filled from elsewhere."
+        },
+        "cutPercent": {
+          "$ref": "#/$defs/percent",
+          "description": "The share of ticket money that goes to the treasury instead of the pot (the same as a split share to \"treasury\")."
+        },
+        "places": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "percent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "prize": {
+                    "$ref": "#/$defs/prize",
+                    "description": "What its winner gets besides its share of the pot: a raffled NFT, a collectible, tokens, a roll of a box."
+                  }
+                }
+              }
+            ]
+          },
+          "description": "What each place wins, first place first: a percent of the pot, or { \"percent\", \"prize\" }: a share of the pot and a prize for its winner (either, or both). Default: one winner takes all."
+        },
+        "every": {
+          "$ref": "#/$defs/duration",
+          "description": "How often it draws. Leave it out for a lottery that draws once, at `firstDraw`, and ends."
+        },
+        "firstDraw": {
+          "$ref": "#/$defs/time"
+        },
+        "gate": {
+          "$ref": "#/$defs/gate"
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "The pot's token. Default: the game's currency."
+        },
+        "seed": {
+          "$ref": "#/$defs/amount",
+          "description": "What the owner puts in the pot at go-live."
+        },
+        "split": {
+          "$ref": "#/$defs/split",
+          "description": "Where ticket money goes before the pot (the rest goes into the pot): a charity, a referrer the buyer names (\"chosen\"), the treasury."
+        },
+        "perWallet": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "The most tickets one wallet holds in a round (0 or absent: no limit)."
+        },
+        "ticketNft": {
+          "$ref": "#/$defs/nftPrice",
+          "description": "A ticket costs one NFT that passes the rule, in place of tokens: held until the draw, then burned, given on or stashed; back to its buyer if the draw is cancelled. Such a lottery has no price and no split; its pot is what the owner and its places' prizes put in."
+        },
+        "noLoss": {
+          "type": "boolean",
+          "description": "A no-loss lottery: every ticket goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales: \"lottery:<key>\"). No split, no cut and no `ticketCurrency`; NFT tickets come back too."
+        },
+        "minSold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "The least tickets a round must sell: a round that sold fewer is cancelled at its draw (no oracle) and every ticket refunded. 0 or absent: none. A raffle of a 1-of-1 sets it so the NFT isn't given away for a few tickets."
+        },
+        "raffle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nft"
+              ],
+              "properties": {
+                "nft": {
+                  "$ref": "#/$defs/address"
+                },
+                "collection": {
+                  "$ref": "#/$defs/address",
+                  "description": "Its Core collection, when it is not the game's own."
+                }
+              }
+            }
+          ],
+          "description": "A raffle: this NFT (one the owner holds, put in the lottery's own stash at go-live) is first place's prize, held so that nothing but the draw can give it, and the lottery draws once. The same as a first place { \"prize\": { \"gives\": \"nft\", \"nft\": <address>, \"held\": true } }. An NFT of another collection is { \"nft\", \"collection\" }."
+        }
+      },
+      "description": "Tickets into a pot of the lottery's own, one random draw, the winners paid. Nothing but its winners' payouts takes from the pot: not the authority, a schedule, a farm or a recipe. Anything sold or paid can send it a share (\"lottery:<key>\" in a split); a schedule can't pay a lottery."
+    },
+    "contest": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "sides"
+      ],
+      "additionalProperties": false,
+      "description": "Players put money on a side; the side that wins shares the pot. The authority opens each one while the game runs, and the authority or one of its `deciders` (a results server's key) names the side that won. One side and a `minPot` is an all-or-nothing crowdfund; a wallet gate and a `stake` is a duel.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "sides": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "sideNames": {
+          "type": "array",
+          "maxItems": 255,
+          "items": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "entriesClose": {
+          "$ref": "#/$defs/duration",
+          "description": "How long after opening entries stop."
+        },
+        "resultDue": {
+          "$ref": "#/$defs/duration",
+          "description": "How long after opening the result must be named. After it anyone can call the contest off and every entry gets its money back."
+        },
+        "every": {
+          "$ref": "#/$defs/duration",
+          "description": "How often the authority opens one, for the simulation."
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        },
+        "decidedBy": {
+          "$ref": "#/$defs/words",
+          "description": "Who or what decides it, in words, recorded for the app and the server: the tools don't read or enforce it."
+        },
+        "gate": {
+          "$ref": "#/$defs/gate"
+        },
+        "deciders": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/address"
+          },
+          "description": "Up to three public keys whose signed verdict decides it (a results server), so the authority's key never sits on a server."
+        },
+        "minPot": {
+          "$ref": "#/$defs/amount",
+          "description": "The least its sides must hold when entries close; below it the contest is off and everyone takes their money back."
+        },
+        "stake": {
+          "$ref": "#/$defs/amount",
+          "description": "Every entry puts in exactly this, once per player and side (an equal-stakes wager)."
+        },
+        "prize": {
+          "$ref": "#/$defs/prize",
+          "description": "What each winning entry gets when it is claimed, besides its part of the pot. Something scarce (one NFT, an item's last units, a pool's tokens) goes to the entries claimed first."
+        },
+        "stakeNft": {
+          "$ref": "#/$defs/rule",
+          "description": "Each entry stakes one NFT that passes this rule, in place of tokens, and the NFTs are the pot: each winning entry takes its own back and one of the losers', in the order they are claimed; what the winners leave goes to whoever opened it. Called off, each takes its own back. No split and no stake."
+        }
+      }
+    },
+    "auction": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "lot",
+        "runs"
+      ],
+      "additionalProperties": false,
+      "description": "An English auction, opened when the economy goes live: the highest bid when the time runs out wins the lot. Each bid must reach the reserve and top the last by the least raise; a bid that is topped goes back to its bidder at once. A late bid moves the end. With no bid the lot goes home.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "The program's number for it. Written when it goes live; never change it after."
+        },
+        "seller": {
+          "type": "string",
+          "description": "Who put it up, and so is named in its address: the owner for a collectible it holds, the authority for a new unit of an item. Written when it goes live; never change it after."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "The token bids are in. Default: the game's currency. In another token, what the split leaves goes to the treasury wallet in that token."
+        },
+        "lot": {
+          "description": "What is sold: one new unit of an item (minted to the winner at the end), any Core NFT the owner's wallet holds, or a roll of one of the game's boxes ({ \"roll\": key }, a mystery lot).",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "item"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/key"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "asset"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "asset": {
+                  "$ref": "#/$defs/address"
+                },
+                "collection": {
+                  "$ref": "#/$defs/address",
+                  "description": "Its Core collection. Default: the game's, the one it has authority over."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "roll"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "roll": {
+                  "$ref": "#/$defs/key",
+                  "description": "A mystery lot: a roll of this box for the winner, made at the end. The price goes to the treasury."
+                }
+              }
+            }
+          ]
+        },
+        "reserve": {
+          "$ref": "#/$defs/amount",
+          "description": "The least first bid. Default: the smallest unit."
+        },
+        "minRaise": {
+          "$ref": "#/$defs/percent",
+          "description": "How much each bid must top the last by, in percent (always at least the smallest unit). Default 5."
+        },
+        "start": {
+          "$ref": "#/$defs/time",
+          "description": "When bids open. Default: the moment it goes live."
+        },
+        "runs": {
+          "$ref": "#/$defs/duration",
+          "description": "How long bids stay open from the start, before any extension."
+        },
+        "extendBy": {
+          "$ref": "#/$defs/duration",
+          "description": "A bid in the last part of this long moves the end to this long after it. 0: no extension. Default \"10m\"."
+        },
+        "split": {
+          "$ref": "#/$defs/split",
+          "description": "Up to four shares of the winning bid (the seller's own account, a creator's, a pool, a burn). What they leave goes to the treasury."
+        },
+        "gate": {
+          "$ref": "#/$defs/gate"
+        },
+        "bidNfts": {
+          "$ref": "#/$defs/rule",
+          "description": "A bid is a bundle of NFTs that pass this rule (up to four), in place of tokens: the bundle with the most NFTs wins, and `reserve` counts NFTs. A bundle that is topped goes back to its bidder at once; the winning NFTs go to the seller (the treasury, for the project's item or roll). No split."
+        }
+      }
+    },
+    "hold": {
+      "type": "object",
+      "required": [
+        "key",
+        "name",
+        "item"
+      ],
+      "additionalProperties": false,
+      "description": "A player hands a collectible to the game for a time they choose; until it is up the authority says where it goes, after it anyone can send it home.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "for": {
+          "$ref": "#/$defs/duration",
+          "description": "The time the game asks the player to choose."
+        },
+        "decidedBy": {
+          "$ref": "#/$defs/words",
+          "description": "Who or what decides it, in words, recorded for the app and the server: the tools don't read or enforce it."
+        },
+        "until": {
+          "$ref": "#/$defs/time",
+          "description": "When each hold ends, for holds that end at one time (a raid at 18:00): a hold's address names its end. Default: `for` from the moment it is made."
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "key",
+        "when",
+        "does"
+      ],
+      "additionalProperties": false,
+      "description": "A rule only the game can carry out, signed by the authority while the game runs.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "when": {
+          "$ref": "#/$defs/words"
+        },
+        "does": {
+          "enum": [
+            "payout",
+            "burn",
+            "issue",
+            "make",
+            "unmake",
+            "set",
+            "award",
+            "decide",
+            "roll",
+            "open_contest"
+          ]
+        },
+        "pool": {
+          "$ref": "#/$defs/key"
+        },
+        "currency": {
+          "$ref": "#/$defs/key"
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "percent": {
+          "$ref": "#/$defs/percent",
+          "description": "For a payout or a burn: a share of what the pool holds, instead of an amount."
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "contest": {
+          "$ref": "#/$defs/key"
+        },
+        "hold": {
+          "$ref": "#/$defs/key"
+        },
+        "to": {
+          "$ref": "#/$defs/words"
+        },
+        "perDay": {
+          "type": "number",
+          "minimum": 0,
+          "description": "How often it happens, for the simulation."
+        },
+        "signedBy": {
+          "enum": [
+            "page",
+            "server"
+          ],
+          "default": "page",
+          "description": "page: the authority approves each one in its own wallet. server: a server you run holds the authority key (keys.authority is its public address)."
+        },
+        "proof": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "payment"
+          ],
+          "description": "What a claim must show before the keeper or the page acts on it: a payment the receiver made on chain (an attempt), not claimed before, at least `after` and at most `within` before the claim. The game's word alone is never proof: it runs in the player's browser. The checker only checks that `payment` is one of the economy's payments; `after` and `within` are recorded for the server that acts on claims, and neither the tools nor the program enforce them.",
+          "properties": {
+            "payment": {
+              "$ref": "#/$defs/key",
+              "description": "The payment (one of \"payments\") a claim must name, paid by the receiver."
+            },
+            "after": {
+              "$ref": "#/$defs/duration",
+              "description": "The least time between that payment and the claim (no one clears it in less). Recorded for the server: not enforced by the tools."
+            },
+            "within": {
+              "$ref": "#/$defs/duration",
+              "description": "The most time between that payment and the claim. Recorded for the server: not enforced by the tools."
+            }
+          }
+        },
+        "caps": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Limits for the keeper and the page to keep, in whole units of the pool's (or the token's) currency. Recorded for the server that acts on decisions: neither the tools nor the program enforce them (the program trusts the authority).",
+          "properties": {
+            "each": {
+              "$ref": "#/$defs/amount",
+              "description": "The most one decision moves."
+            },
+            "perPlayerPerDay": {
+              "$ref": "#/$defs/amount",
+              "description": "The most one receiver gets in 24 hours."
+            },
+            "perDay": {
+              "$ref": "#/$defs/amount",
+              "description": "The most everyone together gets in 24 hours."
+            }
+          }
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the quick simulation assumes: how often players do each thing.",
+      "properties": {
+        "days": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3650,
+          "default": 30
+        },
+        "perDay": {
+          "type": "object",
+          "description": "Keys are \"<kind>:<key>\" (box:<key>, item:<key>, lottery:<key>, recipe:<key>, payment:<key>, farm:<key>, contest:<key>, auction:<key> (bids), hold:<key>, grant:<key>); values how many a day.",
+          "propertyNames": {
+            "pattern": "^(box|item|payment|recipe|lottery|farm|contest|auction|hold|grant):[a-z][a-z0-9-]{0,31}$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "players": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "staked": {
+          "type": "object",
+          "description": "Farm key → how much is staked (tokens, or a number of collectibles), for rewards per unit.",
+          "additionalProperties": {
+            "$ref": "#/$defs/amount"
+          }
+        }
+      }
+    },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Written when the economy goes live: public addresses and signatures only.",
+      "properties": {
+        "program": {
+          "$ref": "#/$defs/address",
+          "description": "The loot program it runs on."
+        },
+        "project": {
+          "$ref": "#/$defs/address",
+          "description": "The project on it: [\"project\", owner, projectNumber]."
+        },
+        "collection": {
+          "$ref": "#/$defs/address"
+        },
+        "tree": {
+          "$ref": "#/$defs/address",
+          "description": "The project's tree of compressed NFTs, once the setup opened it."
+        },
+        "treasury": {
+          "$ref": "#/$defs/address"
+        },
+        "authority": {
+          "$ref": "#/$defs/address"
+        },
+        "at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "When it went live. \"publish\" in the spec means this moment."
+        },
+        "published": {
+          "type": "object",
+          "description": "The spec as it is on chain: each part as it was when it landed. A change publishes only what differs from it."
+        },
+        "transactions": {
+          "type": "array",
+          "maxItems": 60,
+          "description": "The latest transactions that set it up, newest last.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "signature": {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{64,90}$"
+              },
+              "parts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 80
+                }
+              }
+            }
+          }
+        },
+        "mints": {
+          "type": "object",
+          "description": "Token key → the mint made for it when it went live.",
+          "additionalProperties": {
+            "$ref": "#/$defs/address"
+          }
+        },
+        "landed": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "description": "The setup steps that have landed (a setup cut short goes on from here)."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "True while a setup has landed only some of its steps."
+        },
+        "changing": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "description": "While a change to a live economy is landing: the parts it changes."
+        },
+        "pending": {
+          "type": "array",
+          "maxItems": 60,
+          "description": "Transactions sent whose landing was not yet seen (a confirmation that timed out). Before anything is sent again, each is looked up on chain: recorded as landed when it did, dropped when it failed or expired.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "signature",
+              "steps"
+            ],
+            "properties": {
+              "signature": {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{64,90}$"
+              },
+              "steps": {
+                "type": "array",
+                "maxItems": 512,
+                "items": {
+                  "type": "string",
+                  "maxLength": 80
+                }
+              },
+              "made": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "What its steps make, to record when it landed.",
+                "properties": {
+                  "project": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "treasury": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "authority": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "collection": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "tree": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "mints": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/$defs/address"
+                    }
+                  }
+                }
+              },
+              "lastValidBlockHeight": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Past this block height it can no longer land."
+              }
+            }
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "description": "What an NFT the player shows must be: of an `item` the game mints, or of a `collection` (a Core collection, or a Token Metadata collection mint it is verified in; with neither, the game's own collection, the one it has authority over); and, when `attribute` is given, its attribute at least `atLeast`, equal to `equals`, a time still `ahead` or `passed` (`time`), or present. `{ \"item\": \"pass\" }` alone means \"holds a Member Pass\". An NFT's attributes are read as they are; for one the game has no authority over, what the game wrote about it in its Sheet counts over them.",
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/key",
+          "description": "Which item the game mints it must be."
+        },
+        "collection": {
+          "$ref": "#/$defs/address",
+          "description": "Any NFT of this collection: a Metaplex Core collection, or the mint of a Token Metadata collection its NFTs are verified in. Leave it and `item` out for the game's own collection."
+        },
+        "attribute": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "atLeast": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "equals": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "time": {
+          "enum": [
+            "ahead",
+            "passed"
+          ],
+          "description": "The attribute is a time (Unix seconds) still to come (\"ahead\": fuel left, a pass still good) or past, or missing (\"passed\": out of jail, no cooldown). In a farm's gate it is read as an NFT comes in; after that, the farm's `upkeepAttribute` says how long it earns."
+        }
+      }
+    },
+    "boost": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000,
+      "description": "A percent added to a weight: 100 doubles it. At most 10,000 (101 times): enough for a stat that scales a rate, such as +100% a point of power up to 100."
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How much a collectible that passes the rule adds: a flat percent, or a percent per point of its attribute (up to `upTo` points).",
+      "properties": {
+        "addPercent": {
+          "$ref": "#/$defs/boost"
+        },
+        "perPointPercent": {
+          "$ref": "#/$defs/boost"
+        },
+        "upTo": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "odds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "when",
+        "add"
+      ],
+      "description": "A box outcome that grows more likely for a player who shows a collectible.",
+      "properties": {
+        "outcome": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "Which outcome (0 is the first)."
+        },
+        "when": {
+          "$ref": "#/$defs/rule"
+        },
+        "add": {
+          "$ref": "#/$defs/effect"
+        }
+      }
+    },
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lock"
+      ],
+      "properties": {
+        "lock": {
+          "$ref": "#/$defs/duration",
+          "description": "How long a stake at this tier is locked."
+        },
+        "multiplier": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 11,
+          "default": 1,
+          "description": "Its weight: above 0 and up to 11 times what it stakes (below 1: a flexible tier that earns less)."
+        },
+        "prize": {
+          "$ref": "#/$defs/prize",
+          "description": "A mission's prize: what a collectible that leaves after this tier's lock has run (topped up, not forfeited) takes with it; tokens are grown by its boosts. A chest is { \"gives\": \"roll\", \"box\": key }. Only in a farm of collectibles, with a lock."
+        },
+        "roll": {
+          "$ref": "#/$defs/key",
+          "description": "A mission's result: a box with `rollsOn` the collectible leaving after this tier's lock is rolled on (success, failure, a stat lost, the NFT lost; its odds read the NFT's stats). Growth stops at the lock's end. Anyone asks for the roll and settles it; it is never refunded while it waits. A chest it brings back is its `prize` instead. Only in a farm of collectibles, with a lock."
+        },
+        "exitFee": {
+          "$ref": "#/$defs/percent",
+          "description": "A farm of tokens: a stake may leave before this tier's lock has run by leaving this percent of what it takes out (to the farm's `exitFeeTo`). Absent: no early exit. A farm of collectibles leaves early by a recipe that lowers its `lockAttribute`."
+        }
+      }
+    },
+    "farm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "name",
+        "stakes"
+      ],
+      "description": "Players stake a token or collectibles. Rewards are whatever arrives in the rewards pool, shared by weight (what they stake, times their lock tier, plus boosts from what a collectible says), or a fixed `rate` for each seat. A farm can also write points and levels on what is staked (`growth`), and pay a mission's `prize` to a collectible that stays its tier's lock. It cannot be edited once open. A farm of collectibles can keep two times on the NFT itself: its lock (`lockAttribute`) and an upkeep (`upkeepAttribute`), which recipes and rolls move like any number.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "stakes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/key"
+            },
+            {
+              "const": "collectibles"
+            }
+          ],
+          "description": "A token key, or \"collectibles\" for NFTs: the game's own, or, with a `gate` naming a `collection`, any Core or Token Metadata (legacy or pNFT) NFT of it."
+        },
+        "item": {
+          "$ref": "#/$defs/key",
+          "description": "For a farm of collectibles: only this item (leave out for any)."
+        },
+        "rewards": {
+          "$ref": "#/$defs/key",
+          "description": "The pool rewards come from, and whose token they are in. Without a `rate`, the farm takes all of it, so it must be this farm's alone; with a `rate` that isn't minted, it pays from it while it lasts. Leave it out for a farm that pays nothing (staking only to qualify, for a stake gate): the setup opens an empty pool for it."
+        },
+        "rewardsIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "For a farm that names no `rewards`: the program's number for the empty pool made for it. Written when it goes live; never change it after."
+        },
+        "rate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "perDay"
+          ],
+          "description": "A fixed rate instead of sharing what arrives: the same for each seat whoever else is in, times its tier and boosts (most Solana NFT staking paid this way).",
+          "properties": {
+            "perDay": {
+              "$ref": "#/$defs/amount",
+              "description": "Reward tokens a day for each collectible at x1; for a farm of tokens, for each whole token staked. 0 pays nothing: a farm that only grows what is staked, or gives mission prizes (its \"rewards\" pool is then never touched)."
+            },
+            "minted": {
+              "type": "boolean",
+              "default": false,
+              "description": "Minted (the rewards' token must be one the game mints), or paid from the rewards pool while it lasts (what it can't cover is not owed later)."
+            }
+          }
+        },
+        "custody": {
+          "enum": [
+            "freeze",
+            "escrow",
+            "watch"
+          ],
+          "default": "escrow",
+          "description": "For staked NFTs and token-seat boosters. escrow (default): the game holds them (Core NFTs only; issuer-controlled transfer rules can block return). freeze: they stay in the wallet, frozen (Core) or locked by Token Metadata (legacy NFTs and pNFTs), the game their delegate; Core's unfreeze can fail if the issuer later enlarges metadata or plugins. Select freeze explicitly for soulbound collectibles, which need no extra freeze. watch (a farm of collectibles only): they stay in the wallet, free: an NFT can be sold while staked, and its seat earns only while its staker holds it (a staker who no longer does collects nothing, their due going back to the farm, and the next holder can take the seat over). A Token Metadata NFT is frozen or watched, never escrowed. Staked tokens always go to the farm's vault."
+        },
+        "tiers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/tier"
+          },
+          "description": "Lock tiers, at least one. One tier at multiplier 1 is plain staking."
+        },
+        "boosts": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "add"
+            ],
+            "properties": {
+              "when": {
+                "$ref": "#/$defs/rule"
+              },
+              "add": {
+                "$ref": "#/$defs/effect"
+              }
+            }
+          }
+        },
+        "maxBoostPercent": {
+          "$ref": "#/$defs/boost",
+          "description": "The most the boosts add together."
+        },
+        "gate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/rule"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          ],
+          "description": "For a farm of collectibles: which NFTs it takes. One rule, or up to 4 that the NFT must all pass (\"level\" at least 100 and \"affection\" at least 6)."
+        },
+        "growth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/growth"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/growth"
+              }
+            }
+          ],
+          "description": "What staying in grows on a collectible: one growth, or up to 4 (+1 \"level\" and +2 \"affection\" a day), each under names of its own. Points a collectible earns by staying in, written on it with the level they reach: on the NFT itself when the game has authority over it (its own collection, or a Core NFT whose Attributes plugin names the game), and in the game's Sheet of it otherwise. Anything that reads attributes reads them: this farm's boosts, a box's odds, a gate, a recipe's need, a grant's gate."
+        },
+        "runs": {
+          "$ref": "#/$defs/duration",
+          "description": "How long the farm runs from when it goes live (a mission open for a week: \"7d\"). It takes no seat whose lock would run past its end, and pays and grows nothing after it; seats leave as before. Left out: for good."
+        },
+        "lockAttribute": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "For a farm of collectibles: the attribute the farm writes each staked collectible's lock under, as the time it ends (Unix seconds), and reads when it leaves. Whatever moves a number moves it: a recipe `raises` it by \"-1d\" with `fromNow` for a price (a way out early; the price can be burned, or paid into this farm's rewards pool, shared by the seats there at the next move), a roll's `shifts` add a day (jail). A mission's prize still needs the tier's own lock to have run, and a tier that rolls rolls whenever the collectible leaves. A recipe reaches a collectible staked in escrow (the default) on its seat."
+        },
+        "upkeepAttribute": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "For a farm of collectibles: an upkeep. The attribute that says until when (Unix seconds) a staked collectible earns and grows: fuel, food, a license. A recipe sells it (`raises` with `fromNow`: \"+1d\" for 10 FUEL, up to \"3d\" ahead), and it runs out by itself. Run dry, the seat earns and grows nothing more, and what it was credited after it ran out goes back to the farm (split by time), shared by the seats there. Fuel bought counts once the seat is refreshed (anyone sends `refresh`; the play page sends it with the recipe). A mission's prize needs the upkeep to last its tier's lock."
+        },
+        "exitFeeTo": {
+          "type": "string",
+          "pattern": "^(burn|pool:[a-z][a-z0-9-]{0,31})$",
+          "description": "Where early-exit fees go: \"burn\", or \"pool:<key>\" (the farm's own rewards pool shares them with the stakers who stay). Needed when a tier has `exitFee`."
+        },
+        "unbond": {
+          "$ref": "#/$defs/duration",
+          "description": "A farm of tokens: what a player takes out waits this long first, earning nothing (an unbonding wait), then any later unstake takes it out."
+        },
+        "toll": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "percent",
+            "to"
+          ],
+          "description": "A share of every payout of rewards (harvest, compound, unstake), burned or sent to a pool. Not on mission prizes.",
+          "properties": {
+            "percent": {
+              "$ref": "#/$defs/percent"
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^(burn|pool:[a-z][a-z0-9-]{0,31})$"
+            }
+          }
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "name"
+      ],
+      "description": "A reward handed out to wallets that earned it: one collectible of an item, a fixed amount from a pool, or a roll of a box (any random prize). A voucher key signs who earned it (one of `vouchers`, or of `keys`), or the wallet is on an approved list. With none of them the grant is open: any wallet claims, within its limits (with a gate, a collectible shown claims once too). The program keeps every claim within the limits. Each wallet can receive at most 256 distinct voucher rounds per grant incarnation, retained permanently; open claims do not consume round slots, and a list written in xsolana.json pays each wallet once. Closing and recreating starts a new incarnation with separate vouchers and receipts.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "gives": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/key"
+            },
+            "pool": {
+              "$ref": "#/$defs/key"
+            },
+            "amount": {
+              "$ref": "#/$defs/amount"
+            },
+            "roll": {
+              "$ref": "#/$defs/key",
+              "description": "A box the wallet gets a roll of: whatever it gives, at random (a quest chest, a daily spin, a stash's NFT). The grant's funds pay its order."
+            }
+          },
+          "description": "An older way to write the prize: {\"item\": key}, {\"pool\": key, \"amount\": n} or {\"roll\": box key}. Prefer \"prize\"."
+        },
+        "vouchers": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/address"
+          },
+          "description": "Up to three public keys whose signature says a wallet earned it (a server you run, a play host). Never a private key."
+        },
+        "list": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/address"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "wallet"
+                ],
+                "properties": {
+                  "wallet": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "amount": {
+                    "$ref": "#/$defs/amount",
+                    "description": "What this wallet claims (tokens, up to the grant's own amount); absent: the grant's amount."
+                  },
+                  "round": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295,
+                    "description": "A round of its own: the same wallet listed again under another round claims again (monthly vesting, a season's airdrop)."
+                  }
+                }
+              }
+            ]
+          },
+          "description": "Wallets approved in advance (an allow list): an address, or { \"wallet\", \"amount\", \"round\" } for an amount of its own and a round. Kept in this file; only its Merkle root goes on chain."
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "perWallet": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "perPerson": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "perDay": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "until": {
+              "$ref": "#/$defs/time"
+            },
+            "perKey": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295,
+              "description": "Claims one voucher key may sign (a promo code's key: 1)."
+            },
+            "perWalletEach": {
+              "$ref": "#/$defs/perWalletEach"
+            },
+            "opens": {
+              "$ref": "#/$defs/time"
+            }
+          },
+          "description": "0 or left out is no limit."
+        },
+        "gate": {
+          "$ref": "#/$defs/gate",
+          "description": "The receiving wallet must hold such a collectible."
+        },
+        "fund": {
+          "$ref": "#/$defs/amount",
+          "description": "SOL put in the grant's funds when it goes live: every claim's rent and fee is paid from them."
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        },
+        "keys": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/address"
+          },
+          "description": "More voucher keys, any number: one per promo code, event host or door scanner. Kept in this file; only their Merkle root goes on chain. Set limits.perKey to 1 for codes that pay once each."
+        },
+        "prize": {
+          "$ref": "#/$defs/prize",
+          "description": "What each claim gives (a prize). The grant's funds pay what it opens."
+        }
+      }
+    },
+    "gate": {
+      "description": "Who may use it: players who show an NFT that passes a rule (`{ \"item\": \"pass\" }`, or `{ \"collection\": address }` for any NFT of a collection, with an attribute test if you like), or a list of wallets (`{ \"wallets\": [address, …] }`, at most 16: a duel's two players, a tournament's entrants). Or a list of any size (`{ \"list\": [address, …] }`: an allowlist, a snapshot of holders): the program keeps its root, and each player passes their proof. Or a stake (`{ \"staked\": { \"farm\": key, \"atLeast\": n } }`): the wallet holds at least that much of the farm token staked in that farm of tokens, staked before the second it is used.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/rule"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wallets"
+          ],
+          "properties": {
+            "wallets": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/address"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "list"
+          ],
+          "properties": {
+            "list": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1048576,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/address"
+              },
+              "description": "The wallets that may: an allowlist of any size. The program keeps only its root; each player passes their proof."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "staked"
+          ],
+          "properties": {
+            "staked": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "farm",
+                "atLeast"
+              ],
+              "description": "A stake to enter: the wallet’s seat in `farm` (a farm of a token in this spec) holds at least `atLeast` of its token, staked before this second (launchpad tiers, stake to play).",
+              "properties": {
+                "farm": {
+                  "$ref": "#/$defs/key"
+                },
+                "atLeast": {
+                  "$ref": "#/$defs/amount",
+                  "description": "The least stake, in whole units of the farm’s token; above 0."
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "perWalletEach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count"
+      ],
+      "description": "How many one wallet may do in each window of time: `{ \"count\": 1, \"every\": \"1d\" }` is once a day (windows counted from the Unix epoch, a UTC day for \"1d\").",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "every": {
+          "$ref": "#/$defs/duration",
+          "default": "1d"
+        }
+      }
+    },
+    "growth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "perDay"
+      ],
+      "description": "Points a collectible earns by staying in, written under `attribute`, with the level they reach under `level` when there are `levels`. Without `levels` the points themselves can be the level: { \"attribute\": \"level\", \"perDay\": 1 } is a level a day.",
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "default": "xp",
+          "description": "The attribute the points are written under."
+        },
+        "perDay": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Points a day at x1; the seat's tier and boosts scale it."
+        },
+        "level": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "default": "level",
+          "description": "The attribute the level is written under, when there are `levels`."
+        },
+        "levels": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "description": "The points each level needs, rising: [100, 300, 600] reaches level 1 at 100 points and level 3 at 600. Left out: points only."
+        },
+        "streak": {
+          "type": "boolean",
+          "default": false,
+          "description": "The points go back to 0 when the collectible leaves this farm: a streak, not a lifetime. Not in a farm that watches (custody \"watch\")."
+        }
+      }
+    },
+    "stash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "name",
+        "nfts"
+      ],
+      "description": "A stash: NFTs of any collection the game holds until a prize names one or a roll gives one away. Any kind: a Core asset (with or without the game's authority), a Token Metadata NFT, a compressed NFT. A roll takes the one it picks out of the stash at once, so two winners never get the same one, and an empty stash can't be won. The game's owner or authority can put more in, or take one out, at any time (`loot.stashIx`).",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "The program's number for it. Written when it goes live; never change it after."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "collection": {
+          "$ref": "#/$defs/address",
+          "description": "The Core collection its Core NFTs listed as plain addresses are in. Default: the game's own collection (which exists only once the economy is live)."
+        },
+        "nfts": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/address"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "asset"
+                ],
+                "properties": {
+                  "asset": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "collection": {
+                    "$ref": "#/$defs/address",
+                    "description": "Its Core collection, when it is not the stash's."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mint"
+                ],
+                "properties": {
+                  "mint": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "programmable": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "A pNFT."
+                  },
+                  "ruleSet": {
+                    "$ref": "#/$defs/address",
+                    "description": "A pNFT's rule set, when it has one."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "compressed"
+                ],
+                "properties": {
+                  "compressed": {
+                    "$ref": "#/$defs/address",
+                    "description": "A compressed NFT's asset id."
+                  }
+                }
+              }
+            ],
+            "description": "A Core asset's address (in the stash's `collection`), { \"asset\", \"collection\" }, a Token Metadata NFT { \"mint\", \"programmable\", \"ruleSet\" }, or a compressed NFT { \"compressed\": asset id }."
+          },
+          "description": "The NFTs the owner's wallet puts in when the economy goes live (it must hold them then). Empty: a stash filled later with `loot.stashIx`."
+        },
+        "about": {
+          "$ref": "#/$defs/words"
+        }
+      }
+    },
+    "prize": {
+      "type": "object",
+      "required": [
+        "gives"
+      ],
+      "additionalProperties": false,
+      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random).",
+      "properties": {
+        "gives": {
+          "enum": [
+            "item",
+            "tokens",
+            "share",
+            "nft",
+            "roll"
+          ]
+        },
+        "item": {
+          "$ref": "#/$defs/key"
+        },
+        "compressed": {
+          "type": "boolean",
+          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound, and not in a box's outcomes. Once the tree is full, no more are given."
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "currency": {
+          "$ref": "#/$defs/key",
+          "description": "For tokens minted: the token. Default: the game's."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$"
+        },
+        "pool": {
+          "$ref": "#/$defs/key"
+        },
+        "percent": {
+          "$ref": "#/$defs/percent"
+        },
+        "stash": {
+          "$ref": "#/$defs/key",
+          "description": "For nft: the stash that lists it."
+        },
+        "nft": {
+          "$ref": "#/$defs/address",
+          "description": "For nft: the NFT's address (a Core asset, a Token Metadata NFT's mint)."
+        },
+        "box": {
+          "$ref": "#/$defs/key",
+          "description": "For roll: the box rolled for the winner."
+        },
+        "held": {
+          "type": "boolean",
+          "description": "For nft, in a lottery's place only: the NFT waits in the lottery's own stash (no `stash`), which nothing but that place's prize can take out while the lottery runs; the winner gets it before any ticket money moves. The lottery draws once."
+        },
+        "split": {
+          "type": "boolean",
+          "description": "For tokens, as a contest's prize only: the whole amount is set aside when the contest is decided (or the decision is refused), and each winning entry takes its part in proportion to what it put in: a presale, a fair launch, a crowdfund that rewards backers by amount."
+        },
+        "collection": {
+          "$ref": "#/$defs/address",
+          "description": "For a held nft (a raffle's): the Core collection it is in. Default: the game's own."
+        }
+      }
+    },
+    "spend": {
+      "description": "Where an NFT paid goes: \"burn\" (a Core asset burned, any other kind sent to the incinerator's address), \"treasury\" (the treasury wallet), { \"giveTo\": \"<wallet>\" }, or { \"stash\": \"<key>\" } (into one of this spec's stashes, to be given away as a prize).",
+      "anyOf": [
+        {
+          "enum": [
+            "burn",
+            "treasury"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "giveTo"
+          ],
+          "properties": {
+            "giveTo": {
+              "$ref": "#/$defs/address"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stash"
+          ],
+          "properties": {
+            "stash": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        }
+      ]
+    },
+    "nftPrice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule"
+      ],
+      "description": "An NFT as the price: one the player holds that passes `rule`, sent where `then` says (default \"burn\").",
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/rule"
+        },
+        "then": {
+          "$ref": "#/$defs/spend"
+        }
+      }
+    }
+  }
+}

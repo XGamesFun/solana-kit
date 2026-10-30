@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Stakers' Draw",
+  "prompt": "A weekly race pays its top players in GEM by rank: 500 to the winner, less down the ladder, from one reward. Players who keep at least 100 GEM locked in the vault for a week may enter a weekly draw where nobody loses: every ticket comes back after the draw, and the winners share the pot, which a sponsor seeds and supporter badges top up. Locked stakers can also buy the supporter badge.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "gem",
+      "source": "game",
+      "name": "Gem",
+      "symbol": "GEM",
+      "decimals": 6
+    }
+  ],
+  "collection": {
+    "name": "Stakers' Draw"
+  },
+  "items": [
+    {
+      "key": "badge",
+      "name": "Supporter Badge",
+      "price": 0.02,
+      "soulbound": true,
+      "split": [
+        {
+          "to": "lottery:draw",
+          "percent": 50
+        }
+      ],
+      "gate": {
+        "staked": {
+          "farm": "vault",
+          "atLeast": 100
+        }
+      }
+    }
+  ],
+  "pools": [
+    {
+      "key": "vault-rewards",
+      "currency": "gem",
+      "about": "Names the vault's token: its rate is minted, so nothing is paid from here."
+    }
+  ],
+  "farms": [
+    {
+      "key": "vault",
+      "name": "The vault",
+      "stakes": "gem",
+      "rewards": "vault-rewards",
+      "rate": {
+        "perDay": 0.001,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "7d",
+          "multiplier": 1
+        },
+        {
+          "lock": "30d",
+          "multiplier": 2
+        }
+      ]
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "draw",
+      "name": "The stakers' draw",
+      "price": 0.01,
+      "noLoss": true,
+      "seed": 0.1,
+      "places": [
+        60,
+        40
+      ],
+      "every": "7d",
+      "perWallet": 20,
+      "gate": {
+        "staked": {
+          "farm": "vault",
+          "atLeast": 100
+        }
+      }
+    }
+  ],
+  "grants": [
+    {
+      "key": "race",
+      "name": "Weekly race rewards",
+      "prize": {
+        "gives": "tokens",
+        "amount": 500,
+        "currency": "gem",
+        "from": "mint"
+      },
+      "vouchers": [
+        "AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9"
+      ],
+      "limits": {
+        "perWallet": 52,
+        "perDay": 10
+      },
+      "fund": 0.2
+    }
+  ],
+  "scenario": {
+    "days": 28,
+    "perDay": {
+      "grant:race": 1,
+      "farm:vault": 5,
+      "lottery:draw": 40,
+      "item:badge": 2
+    },
+    "staked": {
+      "vault": 5000
+    }
+  }
+}

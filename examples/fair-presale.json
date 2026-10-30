@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Fair Presale",
+  "prompt": "A fair launch: backers put in SOL for a week, and if we raise at least 50 SOL, 10% of the new SPARK supply is split between them by how much each put in. If we miss the goal, everyone gets their SOL back.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "spark",
+      "source": "game",
+      "name": "Spark",
+      "symbol": "SPARK",
+      "decimals": 6
+    }
+  ],
+  "collection": false,
+  "contests": [
+    {
+      "key": "raise",
+      "name": "The raise",
+      "currency": "sol",
+      "sides": 1,
+      "sideNames": [
+        "Back it"
+      ],
+      "entriesClose": "7d",
+      "resultDue": "8d",
+      "minPot": 50,
+      "split": [
+        {
+          "to": "treasury",
+          "percent": 100
+        }
+      ],
+      "prize": {
+        "gives": "tokens",
+        "amount": 1000000,
+        "from": "mint",
+        "currency": "spark",
+        "split": true
+      }
+    }
+  ]
+}

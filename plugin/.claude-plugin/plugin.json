@@ -1,0 +1,20 @@
+{
+  "name": "xsolana",
+  "version": "0.20.1",
+  "description": "Build web3 and game economies on Solana without writing a smart contract: shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, rewards and perks for any NFT on loot, one shared program. Design, check, simulate and price an economy; the owner approves going live in their own wallet.",
+  "author": {
+    "name": "games.fun"
+  },
+  "homepage": "https://github.com/XGamesFun/solana-kit",
+  "repository": "https://github.com/XGamesFun/solana-kit",
+  "license": "Apache-2.0",
+  "keywords": [
+    "solana",
+    "web3",
+    "economy",
+    "loot-box",
+    "staking",
+    "nft",
+    "game"
+  ]
+}

@@ -1,0 +1,789 @@
+{
+ "about": "100 real Solana economies and 12 patterns of 2025–2026, rated against loot 0.20.1 with no contract change. great: maps directly (what stays off chain is only what the game itself knows, such as who finished a quest); some: works, with a defining part off chain; a-lot: a recognizable adaptation; cannot: a defining piece is missing. \"how\" says what carries it, what stays off chain, or what is missing. The parts in xsolana_guide decide.",
+ "ideas": [
+  {
+   "n": 1,
+   "name": "Star Atlas",
+   "fit": "great",
+   "how": "Ships are collectibles. Fleet staking is a farm of collectibles with fuel (`upkeepAttribute`, sold by a recipe `fromNow`), missions (a tier’s `prize` or `roll`) and `growth`; crafting is recipes; the player market is listings and bids made from the game’s page. A recipe takes at most 8 lines a side, so a bigger blueprint is two crafts; fleet movement and mining rates are the game’s.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 2,
+   "name": "Aurory",
+   "fit": "great",
+   "how": "Recipes burn the sacrifices and `raise` XP on the kept creature (`raises`, `upTo`); `show` lines take creatures of other collections, their stats in the project’s Sheet.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 3,
+   "name": "Genopets",
+   "fit": "great",
+   "how": "Rentals are native: a holder lists a Genopet or a habitat for rent (`app.listForRent`: a price per period, up to `maxPeriods`); the renter pays and is its user until the end, and the game reads who that is (`app.rentedTo`). Crafting is recipes that `use` the habitat with a `cooldown`; steps are vouched by a voucher grant the app’s server signs. On-chain gates and farms don’t read rentals: the game checks them.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 4,
+   "name": "STEPN",
+   "fit": "great",
+   "how": "A recipe whose `out` is a roll of a box (`{ \"gives\": \"roll\", \"box\" }`, or `on` a kept sneaker to roll on it): one step from shoe and GST to a random result. Steps are vouched by a voucher grant the app’s server signs. Shoe rentals are listings for rent (`app.listForRent`), read by the game (`app.rentedTo`).",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 5,
+   "name": "DeFi Land",
+   "fit": "great",
+   "how": "Tools and crops are collectibles with a number of uses and a cooldown (`life.uses`, `cooldown`), used by recipes that give the harvest; a recipe with a `pay` line renews them for a price.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 6,
+   "name": "Honeyland",
+   "fit": "great",
+   "how": "Breeding keeps both parents (recipe lines that `use` them, with a cooldown), and a split share to the holder of a named collectible (`holder:<address>`, or `chosen:<item>` for the one the buyer picks) pays the parent’s owner on each breed.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 7,
+   "name": "Photo Finish LIVE",
+   "fit": "some",
+   "how": "Breeding is a recipe that `use`s both parents and `keeps` named attributes onto the foal. Random trait inheritance is not built: nearest, breed with `keeps`, then a box that `rollsOn` the foal with `shifts` (random changes to its numbers), or a recipe whose `out` rolls a box of weighted foal variants (`keeps` can’t copy onto a rolled item). Races are the game’s, paid by contests or decisions.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 8,
+   "name": "MixMob",
+   "fit": "great",
+   "how": "Matches and wagers are contests (sides, a rake split; a 1v1 with a `stake` and a wallet gate); staking is a farm with one tier at ×1.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 9,
+   "name": "Mini Royale",
+   "fit": "great",
+   "how": "Burn recipes, pools funded by sale splits, and payouts by contests, lotteries or decisions.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 10,
+   "name": "BR1",
+   "fit": "great",
+   "how": "Entries are payments split into a prize pool; kills and wins are paid from it by the authority (`move_tokens`, or a payout decision). The match result is the game’s.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 11,
+   "name": "ev.io",
+   "fit": "great",
+   "how": "Skin lending is a listing for rent (`app.listForRent`): the scholar pays by the period and is the skin’s user until the end, and the game reads who that is (`app.rentedTo`). Skins are collectibles sold in the shop or in boxes; tournaments are contests or grants. A share of a scholar’s earnings to the lender is paid by the game (a voucher grant), not by the rental.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 12,
+   "name": "The Heist",
+   "fit": "great",
+   "how": "A raid is a hold (`for` a time, or `until` a set time) whose outcome the authority awards, or a box that `rollsOn` the NFT (loot, a stat lost, the NFT lost); once a hold ends, anyone sends the NFT home.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 13,
+   "name": "LadderCaster",
+   "fit": "great",
+   "how": "A season is a contest with one side whose split burns the whole pot (`\"to\": \"burn\"`) and whose token prize has `\"split\": true`: each player’s share of the season prize is what they burned over all that was burned, worked out on chain; the authority decides the one side when the season ends. A soulbound season badge that each burn recipe `raises` keeps a running total that gates and odds read.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 14,
+   "name": "Nyan Heroes",
+   "fit": "great",
+   "how": "Campaign claims are grants: a voucher the game’s server signs, or a list, each claim within limits per wallet, per person, per day and in total.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 15,
+   "name": "SolaJump",
+   "fit": "great",
+   "how": "A season pass is a collectible sold in the shop; a gate on a box, contest or grant requires it (an attribute at least N for tiers).",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 16,
+   "name": "BitBrawl",
+   "fit": "great",
+   "how": "Characters from other collections come in through `show` lines and rules naming their `collection` (their stats in the project’s Sheet of it), which contest gates and recipes read. Matches are contests.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 17,
+   "name": "Degen Coin Flip",
+   "fit": "great",
+   "how": "A flip is a box of two outcomes (a prize from the house pool, or nothing). The holder fee share is a farm of the collection with Freeze or Watch custody, the house cut paid into its rewards pool by the box’s split; holders opt in by staking. A box sells only while its pool holds every fixed prize, so the house keeps the pool funded.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 18,
+   "name": "SolCasino",
+   "fit": "great",
+   "how": "NFT-staking weights are farm boosts on rank or rarity attributes. The operator computes net profit, as the original did, and pays it into the farm pool. Rakeback is a voucher grant (each claim its own amount) or `move_tokens`.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 19,
+   "name": "BetDEX",
+   "fit": "cannot",
+   "how": "Contests are pooled: the winning side shares the pot by stake. Missing: matched or fixed-odds betting. Nearest: a 1v1 wager (a contest with a `stake` and a wallet gate) at even odds.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 20,
+   "name": "Divvy",
+   "fit": "a-lot",
+   "how": "A pool can be the house bankroll boxes pay from and their splits refill, but depositors get no share of it. Missing: a share vault or LP token with a NAV that bears the house’s losses.",
+   "section": "Games, competitions and wagering"
+  },
+  {
+   "n": 21,
+   "name": "DeGods",
+   "fit": "great",
+   "how": "NFT staking is a farm of collectibles: one seat per NFT, trait boosts, lock tiers, or a fixed `rate` a day each. The player market is listings and bids made from the game’s page; a resale tax is the collection’s royalty, not loot’s.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 22,
+   "name": "Famous Fox Federation",
+   "fit": "great",
+   "how": "Holder accrual is a farm (a fixed `rate` a day each); NFT auctions are `auctions` (escrowed bids, the outbid refunded at once, a late bid extends); an NFT raffle is a lottery with `raffle` (the NFT waits in the lottery’s own stash, the winner gets it before any ticket money moves, `minSold` refunds a round that sold too few).",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 23,
+   "name": "Blocksmith Labs",
+   "fit": "great",
+   "how": "A mint whose price rises after each sale, or falls with time to a floor (`rise`, `fall`).",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 24,
+   "name": "Taiyo Robotics",
+   "fit": "great",
+   "how": "Farm `growth` with `streak: true` (points by time held, back to 0 on unstake), lock tiers and attribute boosts; an Oil boost is a recipe that `raises` an attribute on the robot.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 25,
+   "name": "Claynosaurz",
+   "fit": "great",
+   "how": "Recipes that use or burn collectibles, with `needs` on their attributes; gates can require a class (`equals`).",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 26,
+   "name": "Mad Lads",
+   "fit": "great",
+   "how": "A Freeze farm stakes the NFT in the wallet, and leaves a soulbound one as it is; rewards are shared pro rata by weight.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 27,
+   "name": "SMB / MonkeDAO",
+   "fit": "a-lot",
+   "how": "Member perks are gates, farms and grants, and the treasury can be a Squads vault (`treasury`, `keys.authority`). Missing: governance (proposals and votes).",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 28,
+   "name": "Okay Bears",
+   "fit": "great",
+   "how": "Holder perks: gates on drops, boxes and grants; a farm for staking; trade through listings and bids made from the game’s page.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 29,
+   "name": "Solana Monke Rejects",
+   "fit": "great",
+   "how": "A monthly schedule into a farm’s rewards pool, shared by weight across changing participation, is exactly the farm.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 30,
+   "name": "Portals",
+   "fit": "great",
+   "how": "The player market is made from the game’s page: a listing at a fixed price, or a bid for any NFT that passes a rule, both escrowed by the program. A named reserve NFT swaps against the game by a recipe `trade` line and an `out` `{ gives: nft, stash, nft }`. An NFT-for-NFT swap between two players goes by an auction of NFT bids (`bidNfts`).",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 31,
+   "name": "Sol Incinerator",
+   "fit": "cannot",
+   "how": "Burning NFTs of any collection works (a recipe `trade` with `then: burn`, or `loot.payNftIx`). Missing, and defining: reclaiming rent and closing a wallet’s accounts.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 32,
+   "name": "DRiP",
+   "fit": "some",
+   "how": "Compressed drops are native: a grant whose prize is `{ \"gives\": \"item\", \"item\", \"compressed\": true }` mints a compressed NFT to each claimer, no rent each (one tree opened at setup, about 0.23 SOL for 16,384). But each collector’s own wallet signs a claim (anyone may pay its 0.002 SOL fee); pushing drops to wallets that never act is missing.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 33,
+   "name": "Access Protocol",
+   "fit": "some",
+   "how": "Per-creator farms of the token; the subscription is a pass with a time attribute renewed by a recipe (`raises` `fromNow`) and gated with `time: \"ahead\"`. Splitting inflation across pools by stake share is the operator’s work.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 34,
+   "name": "Collector Crypt",
+   "fit": "some",
+   "how": "Stashes give the real graded NFTs; more than 8 outcomes by rolls into inactive tier boxes (8×8); buyback is a recipe per tier (`trade` with `needs` on the tier, tokens from a pool); players resell cards to each other through listings and bids. A quote per individual card is still missing.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 35,
+   "name": "Metaplex",
+   "fit": "a-lot",
+   "how": "Candy Machine-style drops are shop items: a price, `{serial}` art, `opens`/`closes`, `perWallet`, an allowlist (`list` gate), compressed NFTs as prizes. loot is not a token standard and takes no protocol fee for others.",
+   "section": "NFTs, membership, equipment and inventory"
+  },
+  {
+   "n": 36,
+   "name": "Helium",
+   "fit": "some",
+   "how": "Coverage proofs and the data-credit price stay off chain (loot reads no price): rewards are a voucher grant a server signs, each hotspot its own amount; burning for credits is a recipe that burns the token for a credit token at a fixed rate.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 37,
+   "name": "Hivemapper",
+   "fit": "some",
+   "how": "Map contributions are proven off chain: weekly rewards are a voucher grant, each contributor its own amount; map credits are a recipe that burns the token for a credit token.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 38,
+   "name": "Render",
+   "fit": "some",
+   "how": "Jobs are matched and proven off chain: a payment or a burn recipe pays for a job, and node operators are paid by voucher grants, each its own amount.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 39,
+   "name": "Nosana",
+   "fit": "some",
+   "how": "Farm tiers give an xNOS-like duration multiplier, and `unbond` a wait before unstaked tokens come out. Job matching stays off chain, and the stake isn’t a liquid receipt.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 40,
+   "name": "io.net",
+   "fit": "great",
+   "how": "A grant gated on a locked stake (`gate: { staked: { farm, atLeast } }`) and paid by vouchers, each worker’s claim its own amount; the proof of work stays the server’s.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 41,
+   "name": "Grass",
+   "fit": "great",
+   "how": "Bandwidth rewards are a grant paid by vouchers the network’s server signs, each claim its own amount, capped per wallet, per person and per day.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 42,
+   "name": "Dabba",
+   "fit": "some",
+   "how": "Hotspot rewards are voucher grants (proofs off chain), and a split can burn a share of revenue paid in the token. Missing: a market buyback.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 43,
+   "name": "XNET",
+   "fit": "some",
+   "how": "As Dabba (#42): rewards by voucher grants, burns by splits; no market buyback.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 44,
+   "name": "Teleport",
+   "fit": "some",
+   "how": "Rides are proven off chain: riders and drivers are paid by voucher grants, each its own amount, and ride badges can be compressed NFTs (`\"compressed\": true` on the grant’s prize). Ride matching is the app’s.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 45,
+   "name": "Shadow Drive",
+   "fit": "some",
+   "how": "Storage is off chain: a payment buys space (split to a burn or a pool), operators are paid by voucher grants, and staking for capacity is a farm. Proofs of storage stay off chain.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 46,
+   "name": "Parcl",
+   "fit": "cannot",
+   "how": "Perpetuals on real-estate prices: loot has no perps and no price oracle.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 47,
+   "name": "Homebase",
+   "fit": "some",
+   "how": "A `watch` farm pays holders who opt in once without moving the NFT; a voucher grant pays each holder its own amount from a snapshot. Paying holders who never act is missing.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 48,
+   "name": "Credix",
+   "fit": "a-lot",
+   "how": "Deposits can be payments and yield paid back by voucher grants or schedules, but the credit is off chain and depositors get no share token with tranches or transfer limits.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 49,
+   "name": "Ondo USDY",
+   "fit": "a-lot",
+   "how": "The treasury yield is off chain: a schedule or voucher grants can pay holders from a pool, but loot mints no yield-bearing token with transfer limits.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 50,
+   "name": "BAXUS",
+   "fit": "great",
+   "how": "Each bottle is a collectible; the player market is listings and bids made from the game’s page; redeeming is a recipe that burns the NFT, which the backend reads to ship the bottle. The vault of real bottles is outside.",
+   "section": "Physical work, services and external assets"
+  },
+  {
+   "n": 51,
+   "name": "BONK",
+   "fit": "some",
+   "how": "BonkRewards-style tiered locks are a farm (tiers up to ×11), and a burn share in splits burns the token on use. Market buybacks and bots stay outside.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 52,
+   "name": "Samoyedcoin",
+   "fit": "great",
+   "how": "A community token (an existing mint): tips are payments with `any`, rewards by grants, staking in a farm.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 53,
+   "name": "WEN",
+   "fit": "some",
+   "how": "Mass claims are a grant’s `list`, each entry its own amount (`{ wallet, amount, round }`). Fractional art rights and buy-and-burn stay outside.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 54,
+   "name": "ORE",
+   "fit": "cannot",
+   "how": "No proof-of-work verifier. Nearest: a lottery drawn every few minutes whose pot a halving schedule fills (`lottery:<key>`): chance in place of work.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 55,
+   "name": "pump.fun",
+   "fit": "cannot",
+   "how": "No bonding curve with sell-back. Nearest: launch on pump.fun and name the mint; or a `rise` listing plus a fixed-price buyback recipe from a reserve pool fed by sales (a floor, not a curve).",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 56,
+   "name": "Solanium",
+   "fit": "some",
+   "how": "Sales gated on a locked stake (`gate.staked`) and lock-weighted farms (×1–×11); a fair sale split by what each put in is a one-sided contest with a `minPot` and a token prize with `\"split\": true`. Continuous decay and more than 4 tiers stay off chain.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 57,
+   "name": "Pyth",
+   "fit": "cannot",
+   "how": "Farm principal can’t be slashed, and loot runs no price oracle.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 58,
+   "name": "Solana Mobile",
+   "fit": "great",
+   "how": "Credential claims are grants gated by a collectible or a list, with per-person limits; the badges can be compressed NFTs.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 59,
+   "name": "Audius",
+   "fit": "some",
+   "how": "Tips are payments with `any` (the listener picks the amount, split up to four ways), but each carries loot’s 0.002 SOL player fee, heavy for micro-payments. Streaming rewards are voucher grants; play counts stay off chain.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 60,
+   "name": "Dialect",
+   "fit": "great",
+   "how": "Collectible stickers and drops are shop items and grants, and any loot action runs from a link or a page; the messaging stays the app’s.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 61,
+   "name": "SNS",
+   "fit": "cannot",
+   "how": "No name registry.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 62,
+   "name": "Streamflow",
+   "fit": "great",
+   "how": "Vesting nobody can take back is a sealed schedule (`sealed`, `fund`, `start` as the cliff, `every`, `maxRuns`): a vault of its own that nobody, the owner included, can change, stop or empty; the recipient runs it and catches up every run due. It pays per run, not per second, one schedule per recipient, and can’t be cancelled.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 63,
+   "name": "TipLink",
+   "fit": "some",
+   "how": "A claim link is a grant with `keys` (one keypair per link, `perKey: 1`): the page derives the key from the link and the claimer’s own wallet takes the prize. The link as a wallet stays the app’s.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 64,
+   "name": "Squads",
+   "fit": "some",
+   "how": "loot isn’t a multisig, but works beside one: a Squads vault can be the treasury (`\"treasury\": \"wallet:<vault>\"`) or take any share (`wallet:<vault>`), and can be the spending key (`keys.authority`), so moving pools needs its approvals in Squads. Missing: multisig itself.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 65,
+   "name": "Realms",
+   "fit": "cannot",
+   "how": "No governance (proposals and votes).",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 66,
+   "name": "Grape",
+   "fit": "great",
+   "how": "Gates on collectibles of any collection, on a list, or on a locked stake (`gate.staked`) all work as credentials.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 67,
+   "name": "Helio",
+   "fit": "some",
+   "how": "No recurring pull. A renewal in one step is on chain: a pass with a time attribute a recipe raises for the price, gated with `time: \"ahead\"`; the page reminds.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 68,
+   "name": "Switchboard",
+   "fit": "cannot",
+   "how": "No oracle network: loot uses MagicBlock’s randomness and reads no prices.",
+   "section": "Distribution, access, coordination and payments"
+  },
+  {
+   "n": 69,
+   "name": "Sanctum",
+   "fit": "cannot",
+   "how": "No LST basket valuation.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 70,
+   "name": "Jito",
+   "fit": "cannot",
+   "how": "A farm is not validator delegation.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 71,
+   "name": "Marinade",
+   "fit": "cannot",
+   "how": "Same as 70.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 72,
+   "name": "BlazeStake",
+   "fit": "cannot",
+   "how": "Same as 70.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 73,
+   "name": "Raydium",
+   "fit": "cannot",
+   "how": "No AMM.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 74,
+   "name": "Orca",
+   "fit": "cannot",
+   "how": "No CLMM.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 75,
+   "name": "Phoenix",
+   "fit": "cannot",
+   "how": "No CLOB.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 76,
+   "name": "Jupiter JLP",
+   "fit": "cannot",
+   "how": "No perps.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 77,
+   "name": "Meteora DLMM",
+   "fit": "cannot",
+   "how": "loot doesn’t run a DLMM or any AMM; name the pool’s token as an existing mint and use it in shops, farms and gates.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 78,
+   "name": "Lifinity",
+   "fit": "cannot",
+   "how": "No AMM. A farm alone isn't veLFNTY plus protocol-owned market making.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 79,
+   "name": "Kamino",
+   "fit": "cannot",
+   "how": "No strategy vaults.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 80,
+   "name": "Solend/Save",
+   "fit": "cannot",
+   "how": "No debt or liquidation by price: loot’s only loan is a fixed-term loan against an NFT.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 81,
+   "name": "marginfi",
+   "fit": "cannot",
+   "how": "Same as 80.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 82,
+   "name": "Mango",
+   "fit": "cannot",
+   "how": "Same as 80.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 83,
+   "name": "Drift insurance fund",
+   "fit": "cannot",
+   "how": "Farm principal can't be slashed, and there are no perps.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 84,
+   "name": "Zeta (ZEX staking)",
+   "fit": "some",
+   "how": "Lock-tier-weighted rewards are farm tiers, and `unbond` a wait before unstaked tokens come out. Gradual unlock and weighted governance stay off chain.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 85,
+   "name": "PsyOptions",
+   "fit": "cannot",
+   "how": "No writer-claim collateral.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 86,
+   "name": "Friktion",
+   "fit": "cannot",
+   "how": "No strategy execution.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 87,
+   "name": "Hubble",
+   "fit": "cannot",
+   "how": "No CDP.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 88,
+   "name": "UXD",
+   "fit": "cannot",
+   "how": "No hedges.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 89,
+   "name": "Saber",
+   "fit": "cannot",
+   "how": "No stable-swap.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 90,
+   "name": "Dual Finance",
+   "fit": "great",
+   "how": "An option is a collectible that expires (`life.lasts`); exercising it is a recipe that burns it with a `pay` line at the strike and gives tokens from a pool.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 91,
+   "name": "Tulip",
+   "fit": "cannot",
+   "how": "No auto-compounding strategies.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 92,
+   "name": "Francium",
+   "fit": "cannot",
+   "how": "No leverage.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 93,
+   "name": "MetaDAO",
+   "fit": "cannot",
+   "how": "No conditional markets.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 94,
+   "name": "Invictus",
+   "fit": "a-lot",
+   "how": "Staking rewards are a farm a schedule fills, and a bond’s vesting can be a sealed schedule the owner sets up. Rebasing and bonds a player buys from the protocol are missing.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 95,
+   "name": "Step Finance",
+   "fit": "a-lot",
+   "how": "Compounding is a farm of the token whose rewards are the token (`app.compound`), but a seat belongs to its wallet: there is no transferable xSTEP. Missing: a liquid share receipt.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 96,
+   "name": "Solvent",
+   "fit": "some",
+   "how": "Deposit: a recipe `trade`s the NFT into a stash and mints DROP tokens. Redeem at random: a box priced in DROP (burned) giving `stash`. Redeem a named one: a recipe per NFT with `out` `{ gives: nft }`. The owner can take stash NFTs out, so it isn’t trustless against the project.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 97,
+   "name": "Hadeswap",
+   "fit": "cannot",
+   "how": "No two-sided pool on a price curve. Nearest: a standing bid for N NFTs that pass a rule at one price (an offer with `left`) and listings at fixed prices, made by players from the game’s page.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 98,
+   "name": "Sharky",
+   "fit": "great",
+   "how": "Loans between players are offers: a lender puts up a loan for any NFT that passes a rule (`deal: { Lend: { amount, repay, lasts } }`); a holder borrows, the NFT held by the project; anyone repays before it is due and the NFT goes home, else anyone sends it to the lender. No trust in the game; no grace period or partial repayment. Made from the game’s page, not in xsolana.json.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 99,
+   "name": "Lulo",
+   "fit": "cannot",
+   "how": "No tranche waterfall.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 100,
+   "name": "Banx",
+   "fit": "a-lot",
+   "how": "Fixed-term loans between players are native (as Sharky, #98), with no trust in the game. Perpetual loans and refinancing are missing: a loan ends at its term.",
+   "section": "Capital markets, lending and financial claims"
+  },
+  {
+   "n": 101,
+   "name": "Card packs that fund a prize pool",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A box sells packs of collectibles; its split sends a share to a pool that a contest or lottery pays out. The checker flags it as chance that pays money."
+  },
+  {
+   "n": 102,
+   "name": "Quests and achievements that pay rewards",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A grant per quest: the project's server signs a voucher when a player completes it; limits per wallet, per person and per day keep it bounded."
+  },
+  {
+   "n": 103,
+   "name": "Points that become tokens or items",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A token the game mints is the points; a recipe exchanges points for a collectible or a pool payout; a grant pays each wallet its own amount, from a voucher or from a `list` of `{ wallet, amount, round }`, up to the grant’s."
+  },
+  {
+   "n": 104,
+   "name": "Holder-gated drops and raffles",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A gate on a box, lottery or grant: only wallets showing one of the game’s collectibles (an attribute at least N) get in. A raffle of one NFT is a lottery with `raffle`."
+  },
+  {
+   "n": 105,
+   "name": "Creator revenue split to collaborators",
+   "section": "Trending (2025–2026)",
+   "fit": "some",
+   "how": "A payment or box splits up to four ways, one of them to whoever holds a named collectible. More than four recipients needs a pool and a schedule or decisions."
+  },
+  {
+   "n": 106,
+   "name": "NFT staking with level boosts",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A farm of collectibles with boosts per point of an attribute and lock tiers up to x11."
+  },
+  {
+   "n": 107,
+   "name": "Bring-your-own-NFT game characters",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "An outside collection: players bring any NFT of it, which recipes (`show` lines), gates, contests and farms read, its stats in the project’s Sheet."
+  },
+  {
+   "n": 108,
+   "name": "Pari-mutuel prediction pool",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A contest: sides, a close time, a result deadline (off by the clock if overdue), a rake split. Order-book markets with tradable shares are not built."
+  },
+  {
+   "n": 109,
+   "name": "Gacha with pity",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "A box plus a pity token: each pull mints a spark (a recipe output), and a recipe exchanges sparks for the top item."
+  },
+  {
+   "n": 110,
+   "name": "Creator coin that pays the creator on every trade",
+   "section": "Trending (2025–2026)",
+   "fit": "cannot",
+   "how": "Trading fees come from the launch venue (pump.fun, Meteora), not from loot. Launch there, then attach the token to the game."
+  },
+  {
+   "n": 111,
+   "name": "Card pack with instant cash buyback",
+   "section": "Trending (2025–2026)",
+   "fit": "some",
+   "how": "One recipe per card tier: `trade` the card (`needs` its tier) into a stash the packs draw from, `out` tokens from a buyback pool; a time-limited window by the card item’s `life.lasts` with a `burn` line, or the recipe’s `opens`/`closes`. A quote per individual card needs one recipe per price. Highest legal risk here: say W-CHANCE-ITEMS."
+  },
+  {
+   "n": 112,
+   "name": "Auctions",
+   "section": "Trending (2025–2026)",
+   "fit": "great",
+   "how": "English auctions are native (`auctions`): any token, a reserve and a least raise, the bid that is topped pushed back at once, a late bid moving the end, a new item, a held collectible or a box roll as the lot; a player can auction a collectible they hold. Sealed-bid and second-price auctions are not built; a Dutch auction is a falling price (`fall`)."
+  }
+ ]
+}

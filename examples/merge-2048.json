@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "2048 Collection",
+  "prompt": "Two of tier N merge into one of tier N+1. The single top piece also claims a huge pool prize, so the whole collection races to merge. Priced in a coin launched on pump.fun.",
+  "currency": "tile",
+  "tokens": [
+    {
+      "key": "tile",
+      "source": "existing",
+      "name": "Tile (pump.fun-style mint)",
+      "symbol": "TILE",
+      "decimals": 6,
+      "program": "spl-token",
+      "mint": "CywvsJBuGbL31ajSfM5cQw1k9JQWYTTwYBRo1zuYZRDs",
+      "venue": "other",
+      "powers": {
+        "mintAuthority": "none",
+        "freeze": false
+      }
+    }
+  ],
+  "collection": {
+    "name": "2048 Collection"
+  },
+  "items": [
+    {
+      "key": "tier-1",
+      "name": "Tile 2",
+      "price": 10,
+      "split": [
+        {
+          "to": "pool:grand",
+          "percent": 20
+        }
+      ]
+    },
+    {
+      "key": "tier-2",
+      "name": "Tile 4"
+    },
+    {
+      "key": "tier-3",
+      "name": "Tile 8",
+      "rarity": "Rare"
+    },
+    {
+      "key": "tier-4",
+      "name": "Tile 16",
+      "rarity": "Legendary",
+      "supply": 1
+    }
+  ],
+  "pools": [
+    {
+      "key": "grand",
+      "currency": "tile",
+      "about": "20% of every tile sold; half of it goes to whoever makes the top tile."
+    }
+  ],
+  "recipes": [
+    {
+      "key": "merge-2",
+      "name": "Merge to 4",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "tier-1",
+          "count": 2
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "tier-2"
+        }
+      ]
+    },
+    {
+      "key": "merge-4",
+      "name": "Merge to 8",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "tier-2",
+          "count": 2
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "tier-3"
+        }
+      ]
+    },
+    {
+      "key": "merge-8",
+      "name": "Merge to 16",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "tier-3",
+          "count": 2
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "tier-4"
+        },
+        {
+          "gives": "share",
+          "pool": "grand",
+          "percent": 50
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:tier-1": 400,
+      "recipe:merge-2": 150,
+      "recipe:merge-4": 50,
+      "recipe:merge-8": 0
+    }
+  }
+}

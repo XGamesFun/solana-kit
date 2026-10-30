@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Halving Seasons",
+  "prompt": "Rewards mint into the play pool on a schedule that halves every 30 days; a soulbound season pass claims 10 PLAY a day from it; 10% of the play pool drips into the vault's interest every day, shared by everyone who stakes PLAY.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "play",
+      "source": "game",
+      "name": "Play",
+      "symbol": "PLAY",
+      "decimals": 6
+    }
+  ],
+  "collection": {
+    "name": "Halving Seasons"
+  },
+  "items": [
+    {
+      "key": "season-pass",
+      "name": "Season Pass",
+      "price": 0.05,
+      "soulbound": true,
+      "life": {
+        "cooldown": "1d"
+      }
+    }
+  ],
+  "pools": [
+    {
+      "key": "season",
+      "currency": "play",
+      "about": "What the season mints, before it is claimed."
+    },
+    {
+      "key": "interest",
+      "currency": "play",
+      "about": "The vault's interest."
+    }
+  ],
+  "schedules": [
+    {
+      "key": "season-mint",
+      "name": "Season mint",
+      "does": "issue",
+      "pool": "season",
+      "amount": 1000,
+      "halveEvery": 30,
+      "every": "1d",
+      "maxRuns": 360
+    },
+    {
+      "key": "drip",
+      "name": "Interest drip",
+      "does": "move",
+      "from": "season",
+      "to": "interest",
+      "percent": 10,
+      "every": "1d"
+    }
+  ],
+  "recipes": [
+    {
+      "key": "daily-claim",
+      "name": "Daily claim",
+      "in": [
+        {
+          "takes": "use",
+          "item": "season-pass"
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 10,
+          "currency": "play",
+          "from": "pool:season"
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "recipe:daily-claim": 50,
+      "item:season-pass": 5,
+      "farm:vault": 20
+    },
+    "staked": {
+      "vault": 100000
+    }
+  },
+  "farms": [
+    {
+      "key": "vault",
+      "name": "The vault",
+      "stakes": "play",
+      "rewards": "interest",
+      "tiers": [
+        {
+          "lock": "1d",
+          "multiplier": 1
+        }
+      ]
+    }
+  ]
+}

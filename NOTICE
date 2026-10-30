@@ -1,0 +1,13 @@
+loot
+Copyright 2026 games.fun
+
+This product includes software developed at games.fun.
+
+Parts of the JavaScript client and tools (js/) are adapted from the games.fun kit,
+MIT License, Copyright (c) 2026 games.fun.
+
+The tests run upstream Solana programs (SPL Token, Token-2022, Associated Token, Memo,
+Metaplex Core, Token Metadata, Bubblegum, Account Compression, Noop, MagicBlock VRF) as
+the clusters run them. Those binaries are downloaded by scripts/fetch-fixtures.mjs, checked
+against the hashes in js/test/fixtures/pinned.txt, and are not part of this repository or
+of the npm package. Each is licensed by its own authors.

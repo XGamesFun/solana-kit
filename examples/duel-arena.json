@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Duel Arena",
+  "prompt": "Two players each put up a stake and fight; the winner takes it, less a rake that goes to the arena's holder. Ships go on 6-hour missions held by the game: they come home with loot, or the authority sends them to the wreck yard; if it does not answer in time, anyone can send them home.",
+  "currency": "usdc",
+  "keys": {
+    "authority": "Hby5BFRb3qfaDyY2Fza4UtjfRn4aFmvdnMAouigMurAs"
+  },
+  "tokens": [
+    {
+      "key": "usdc",
+      "source": "existing",
+      "name": "USDC (devnet)",
+      "symbol": "USDC",
+      "decimals": 6,
+      "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "venue": "other",
+      "powers": {
+        "mintAuthority": "someone else",
+        "freeze": true
+      }
+    }
+  ],
+  "collection": {
+    "name": "Duel Arena"
+  },
+  "items": [
+    {
+      "key": "arena-deed",
+      "name": "Arena Deed",
+      "price": 100,
+      "supply": 1,
+      "rarity": "Legendary"
+    },
+    {
+      "key": "ship",
+      "name": "Scout Ship",
+      "price": 5,
+      "split": [
+        {
+          "to": "pool:mission-rewards",
+          "percent": 90
+        }
+      ]
+    }
+  ],
+  "pools": [
+    {
+      "key": "mission-rewards",
+      "currency": "usdc",
+      "seed": 100,
+      "about": "Pays missions that succeed; 90% of every ship sold fills it."
+    }
+  ],
+  "contests": [
+    {
+      "key": "duel",
+      "name": "Duel",
+      "currency": "usdc",
+      "sides": 2,
+      "sideNames": [
+        "Red",
+        "Blue"
+      ],
+      "entriesClose": "10m",
+      "resultDue": "1h",
+      "every": "1h",
+      "split": [
+        {
+          "to": "holder:9rAE9ZjQBaR7Gwqoh1nnbJMqNjJJYVnuptjQ8p4sV7VW",
+          "percent": 3
+        },
+        {
+          "to": "burn",
+          "percent": 2
+        }
+      ],
+      "decidedBy": "the game server, from the duel's result"
+    }
+  ],
+  "holds": [
+    {
+      "key": "mission",
+      "name": "Fleet mission",
+      "item": "ship",
+      "for": "6h",
+      "decidedBy": "the game server: home with loot, or the wreck yard"
+    }
+  ],
+  "decisions": [
+    {
+      "key": "open-duel",
+      "when": "two players queue for a duel",
+      "does": "open_contest",
+      "contest": "duel",
+      "signedBy": "server",
+      "perDay": 24
+    },
+    {
+      "key": "duel-result",
+      "when": "a duel ends",
+      "does": "decide",
+      "contest": "duel",
+      "signedBy": "server",
+      "perDay": 24
+    },
+    {
+      "key": "mission-end",
+      "when": "a mission ends",
+      "does": "award",
+      "hold": "mission",
+      "to": "the player, or the wreck yard",
+      "signedBy": "server",
+      "perDay": 40
+    },
+    {
+      "key": "mission-loot",
+      "when": "a mission succeeds",
+      "does": "payout",
+      "pool": "mission-rewards",
+      "amount": 2,
+      "to": "the ship's player",
+      "signedBy": "server",
+      "perDay": 20
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:arena-deed": 0,
+      "item:ship": 10,
+      "hold:mission": 40,
+      "contest:duel": 48
+    }
+  }
+}

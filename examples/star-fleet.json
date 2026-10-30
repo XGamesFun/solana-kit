@@ -1,0 +1,157 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Star Fleet",
+  "prompt": "Ships mine 100 ORE a day while staked, three times as much on a 7-day deployment, and gain XP, but only while they have fuel: a day of fuel costs 10 FUEL, up to 3 days ahead, and a ship that runs dry mines nothing until it is refuelled. A refinery turns 5 ORE into 1 FUEL. A ship can leave a deployment early: each day off its lock costs 200 ORE, burned.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "ore",
+      "source": "game",
+      "name": "Ore",
+      "symbol": "ORE",
+      "decimals": 0
+    },
+    {
+      "key": "fuel",
+      "source": "game",
+      "name": "Fuel",
+      "symbol": "FUEL",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Star Fleet"
+  },
+  "items": [
+    {
+      "key": "ship",
+      "name": "Ship",
+      "price": 0.05
+    }
+  ],
+  "pools": [
+    {
+      "key": "ore-rewards",
+      "currency": "ore",
+      "about": "Names the fleet's reward token: the mine mints ORE at its rate, so nothing waits here."
+    }
+  ],
+  "recipes": [
+    {
+      "key": "refuel",
+      "name": "Refuel a ship",
+      "in": [
+        {
+          "takes": "use",
+          "item": "ship"
+        },
+        {
+          "takes": "pay",
+          "amount": 10,
+          "currency": "fuel",
+          "to": "burn"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "fuel_until",
+          "by": "1d",
+          "upTo": "3d",
+          "fromNow": true
+        }
+      ]
+    },
+    {
+      "key": "recall",
+      "name": "Recall a day early",
+      "in": [
+        {
+          "takes": "use",
+          "item": "ship"
+        },
+        {
+          "takes": "pay",
+          "amount": 200,
+          "currency": "ore",
+          "to": "burn"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "free_at",
+          "by": "-1d",
+          "fromNow": true
+        }
+      ]
+    },
+    {
+      "key": "refinery",
+      "name": "Refinery",
+      "in": [
+        {
+          "takes": "pay",
+          "amount": 5,
+          "currency": "ore",
+          "to": "burn"
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 1,
+          "currency": "fuel",
+          "from": "mint"
+        }
+      ]
+    }
+  ],
+  "farms": [
+    {
+      "key": "mine",
+      "name": "The mine",
+      "stakes": "collectibles",
+      "item": "ship",
+      "rewards": "ore-rewards",
+      "rate": {
+        "perDay": 100,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1d",
+          "multiplier": 1
+        },
+        {
+          "lock": "7d",
+          "multiplier": 3
+        }
+      ],
+      "lockAttribute": "free_at",
+      "upkeepAttribute": "fuel_until",
+      "growth": {
+        "attribute": "xp",
+        "perDay": 10
+      }
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:ship": 5,
+      "farm:mine": 20,
+      "recipe:refuel": 60,
+      "recipe:recall": 2,
+      "recipe:refinery": 100
+    },
+    "staked": {
+      "mine": 100
+    }
+  }
+}

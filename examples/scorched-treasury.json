@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Scorched Treasury",
+  "prompt": "A schedule burns 1% of the treasury pool every day. Players can slow it down by depositing tokens into the flame guard pool, which the next season pays back with a bonus. Doing nothing costs something.",
+  "currency": "main",
+  "tokens": [
+    {
+      "key": "main",
+      "source": "existing",
+      "name": "MAIN-dev (a devnet test token)",
+      "symbol": "MAIN",
+      "decimals": 6,
+      "mint": "4ikj24Byduo7WZGhnxNYkqstpm9xUVeZH7eLQbjGDL7N",
+      "venue": "games.fun",
+      "powers": {
+        "mintAuthority": "someone else",
+        "freeze": false
+      }
+    }
+  ],
+  "pools": [
+    {
+      "key": "embers",
+      "currency": "main",
+      "seed": 100000,
+      "about": "The treasury that burns."
+    },
+    {
+      "key": "flame-guard",
+      "currency": "main",
+      "about": "What players deposit to guard it; paid back next season."
+    }
+  ],
+  "payments": [
+    {
+      "key": "guard",
+      "name": "Guard the flame",
+      "amount": 100,
+      "split": [
+        {
+          "to": "pool:flame-guard",
+          "percent": 100
+        }
+      ]
+    }
+  ],
+  "schedules": [
+    {
+      "key": "scorch",
+      "name": "Scorch",
+      "does": "burn",
+      "pool": "embers",
+      "percent": 1,
+      "every": "1d"
+    }
+  ],
+  "decisions": [
+    {
+      "key": "payback",
+      "when": "the season ends",
+      "does": "payout",
+      "pool": "flame-guard",
+      "percent": 100,
+      "to": "each guard, by what they deposited",
+      "signedBy": "page"
+    },
+    {
+      "key": "bonus",
+      "when": "the season ends",
+      "does": "payout",
+      "pool": "embers",
+      "amount": 1000,
+      "to": "the guards, as a bonus",
+      "signedBy": "page"
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "payment:guard": 20
+    }
+  }
+}

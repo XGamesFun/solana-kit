@@ -1,0 +1,450 @@
+{
+  "about": "Live cards from rated lists of real Solana economies. `split` is dev or holdout, as in evals/composition-prompts.json. `judge` is for the reviewers and the composition judge only: the simulated person and the agent never see it. Run with: node evals/live/run.mjs --cards evals/live/composition-cards.json.",
+  "cards": [
+    {
+      "id": "r-referral-kits",
+      "split": "dev",
+      "kind": "plain",
+      "source": "an earlier live card",
+      "persona": "Growth marketer at a web3 game studio. Not technical, uses Phantom. Loves referral programs and will not accept a version without them.",
+      "opening": "Sell 'Starter Kit' NFTs for 0.01 SOL, 1,000 of them. Every buyer should be able to come through someone's referral link, and whoever referred them gets 10% of that sale automatically.",
+      "facts": {
+        "who can refer": "anyone with a wallet; I don't want to approve referrers one by one"
+      },
+      "beats": [],
+      "app": [
+        "Open the page through a referral link for the wallet 11111111111111111111111111111112 (the page should explain how links work) and connect your wallet",
+        "Buy a Starter Kit",
+        "Check the page shows you own it"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "items"
+        ],
+        "intent": [
+          {
+            "type": "chosenShare"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A shop item whose split has a `chosen` 10% share; the page reads ?ref= and passes it. No server."
+      }
+    },
+    {
+      "id": "r-plot-rent",
+      "split": "dev",
+      "kind": "plain",
+      "source": "an earlier live card",
+      "persona": "Builder of a city-building game. Comfortable with JS, new to Solana.",
+      "opening": "Players own Plot NFTs (I'll sell 100 at 0.01 SOL). When anyone buys a House for 0.003 SOL on a plot, 10% of that goes to whoever owns that plot right now, even if it was resold.",
+      "facts": {
+        "houses": "no limit"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy a Plot",
+        "Buy a House on your plot"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "items"
+        ],
+        "intent": [
+          {
+            "type": "chosenShare"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "The house listing's split has a `chosen:<plot>` 10% share: the buyer names the plot and its current holder is paid."
+      }
+    },
+    {
+      "id": "r-pay-per-message",
+      "split": "dev",
+      "kind": "plain",
+      "source": "historic JailbreakMe",
+      "persona": "Runs a small AI-challenge site; comfortable with JavaScript, new to Solana. Wants the rising price, it's the hook.",
+      "opening": "Pay-per-message AI challenge: each message to our AI costs SOL, starting at 0.001 SOL, and the price goes up a little with every message sent. 70% of every message goes into a prize pot. Whoever gets the AI to break its rule takes the pot; I'll judge that myself for now.",
+      "facts": {
+        "how much the price rises": "about 2% per message",
+        "starting pot": "0.02 SOL from me"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Pay for one message",
+        "Check the page shows the next message costs more than the one you paid for"
+      ],
+      "checks": {
+        "expect": "build",
+        "intent": [
+          {
+            "type": "boxRise"
+          },
+          {
+            "type": "seedAtMost",
+            "sol": 0.03
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A one-outcome box (gives nothing) with `rise` and a 70% split to a pool; the winner paid from the pool by the owner (a grant/voucher or owner page)."
+      }
+    },
+    {
+      "id": "r-launchpad-tiers",
+      "split": "dev",
+      "kind": "plain",
+      "source": "historic Solstarter",
+      "persona": "Runs a small launchpad community; knows tokens and staking, never written code.",
+      "opening": "We're making our SOS token and a launchpad: people stake SOS to reach a tier, and only stakers of at least 1,000 SOS can buy into our first sale, a 'Founder Pass' NFT for 0.01 SOL, one per wallet. Can you set that up, with a page for staking and buying?",
+      "facts": {
+        "token supply": "1,000,000 SOS, we keep it all to start",
+        "testing": "give my tester's wallet {PLAYER} 2,000 SOS so they can try it",
+        "how long a stake must stay locked": "7 days"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Try to buy a Founder Pass before staking and report what happens",
+        "Stake 1,000 SOS",
+        "Buy a Founder Pass"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "farms",
+          "items"
+        ],
+        "intent": [
+          {
+            "type": "stakedGate"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A farm of SOS with a 7-day lock tier; the pass listing gated by `{ staked: { farm, atLeast: 1000 } }`, perWallet 1; the tester's SOS by a list grant or the owner's transfer."
+      }
+    },
+    {
+      "id": "r-no-loss",
+      "split": "dev",
+      "kind": "plain",
+      "source": "historic Zelo",
+      "persona": "Community lead for a Solana token project. Uses Phantom, no code. Hates anything that feels like gambling people's money away.",
+      "opening": "A no-loss prize game: people put in SOL, nobody ever loses what they put in, and each round one person wins a prize pot that I fund.",
+      "facts": {
+        "entry": "0.01 SOL a ticket",
+        "prize": "I'll put in 0.02 SOL",
+        "how often": "weekly, but for this test draw it 10 minutes from now"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy one ticket",
+        "Check the page says your SOL comes back after the draw and shows when the draw is"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "lotteries"
+        ],
+        "intent": [
+          {
+            "type": "noLoss"
+          },
+          {
+            "type": "seedAtMost",
+            "sol": 0.03
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A no-loss lottery seeded with 0.02 SOL drawing in 10 minutes."
+      }
+    },
+    {
+      "id": "r-horse-breeding",
+      "split": "dev",
+      "kind": "plain",
+      "source": "historic DarleyGo",
+      "persona": "Designer of a horse-racing game; comfortable with JavaScript, new to Solana. Cares most about stud fees going to stallion owners.",
+      "opening": "Horse breeding: I sell Horse NFTs (mares and stallions) for 0.01 SOL. A mare's owner can breed her with any stallion by paying a 0.005 SOL stud fee that goes to whoever owns that stallion, and gets a random foal (70% common, 25% fast, 5% champion). Each mare can breed 3 times.",
+      "facts": {
+        "how many horses": "200 mares and 50 stallions",
+        "testing": "my tester will buy one mare and use a stallion I own"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy a mare",
+        "Breed your mare with any stallion the page offers",
+        "Check the page shows your foal"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "items",
+          "boxes"
+        ],
+        "flags": [
+          "chance"
+        ],
+        "intent": [
+          {
+            "type": "chosenShare"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A recipe uses the mare (`life.uses: 3`) giving a Permit; a breeding box `rollsOn` the permit (burned) with a `chosen:<stallion>` share = the stud fee, outcomes giving foals by chance."
+      }
+    },
+    {
+      "id": "r-dragon-eggs",
+      "split": "holdout",
+      "kind": "plain",
+      "source": "historic Bōryoku Dragonz",
+      "persona": "Founder of a dragon NFT project; crypto-native, no code.",
+      "opening": "Dragon NFTs (I sell 100 at 0.01 SOL) earn 7 BOKU a day when staked. Two dragons plus 972 BOKU, burned, make an egg that hatches into a Baby Dragon after 21 days.",
+      "facts": {
+        "BOKU": "our own token, no cap",
+        "testing": "make the hatch take 5 minutes for the test"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy a dragon",
+        "Stake it and check the page shows what it earns"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "farms",
+          "recipes"
+        ]
+      },
+      "judge": {
+        "compose": "A farm at a 7/day rate; a recipe of two dragons + 972 BOKU burned giving an egg with `readyAfter`; a hatch recipe."
+      }
+    },
+    {
+      "id": "r-retreat-reroll",
+      "split": "holdout",
+      "kind": "plain",
+      "source": "historic Stoned Ape Crew",
+      "persona": "Runs an ape NFT community; knows NFTs, no code.",
+      "opening": "Apes (I sell 300 at 0.005 SOL, each with a role: none, or one of three roles) earn 15 PUFF a day staked, 30 if the ape has a role. A retreat costs 333 PUFF for a 60% chance at a new role, or 666 PUFF for 80%.",
+      "facts": {
+        "PUFF": "our own token",
+        "testing": "give my tester's wallet {PLAYER} 1,000 PUFF"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy an ape",
+        "Send your ape on a 333 PUFF retreat and report the result"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "farms",
+          "boxes"
+        ],
+        "flags": [
+          "chance"
+        ],
+        "intent": [
+          {
+            "type": "farmBoost"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A farm with a boost on a numeric role; two boxes rolling on the ape (`rollsOn`; watch/freeze custody so the box reads it) whose outcomes shift role (60/40, 80/20)."
+      }
+    },
+    {
+      "id": "r-cafe-loyalty",
+      "split": "holdout",
+      "kind": "plain",
+      "source": "historic Boba Guys",
+      "persona": "Owns two cafés; uses Phantom a little, no code.",
+      "opening": "Café loyalty: a QR code at the register gives a customer a point per visit, 10 points unlock a 'Regular' badge that gets a secret menu item, and the first 1,000 members get a free welcome collectible.",
+      "facts": {
+        "visits": "one point per visit, at most one a day",
+        "testing": "give me a way to test one visit with my tester's wallet {PLAYER}"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Claim the free welcome collectible",
+        "Record one visit the way the page says a customer would"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "grants"
+        ],
+        "serverKeyOk": true
+      },
+      "judge": {
+        "compose": "Points per visit signed by a results server (voucher per visit, perWalletEach 1/day) or a rotating code; a recipe burning 10 points for a soulbound Regular badge; an open grant (perWallet 1, total 1,000) giving the welcome collectible."
+      }
+    },
+    {
+      "id": "h-card-packs",
+      "kind": "plain",
+      "source": "historic Mudwater",
+      "persona": "Lead dev at a small studio making a collectible card game for the browser. Comfortable with JavaScript, has used Phantom, new to building on Solana.",
+      "opening": "Our card game launches with sealed boxes: a box holds packs, a pack opens into cards, and a few 1-of-1 grail cards hide among them. Wallets on our snapshot list each claim one free Totem, which they trade in for a box. Anyone else can just buy packs.",
+      "facts": {
+        "sizes": "a box holds 4 packs, a pack gives 5 cards (smaller than launch, fine for the test)",
+        "cards": "5 commons, 3 rares, 2 epics, and 3 grails that exist exactly once each",
+        "pack price": "0.002 SOL a pack",
+        "snapshot": "for the test the list is just my tester's wallet {PLAYER}"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Claim the free Totem",
+        "Trade the Totem in for a box, or open a pack",
+        "Find where the page shows the cards you own"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "boxes",
+          "grants",
+          "items"
+        ],
+        "intent": [
+          {
+            "type": "grantList",
+            "includes": "{PLAYER}"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A grant on a list (the snapshot) giving a Totem; a box priced in the Totem (burned) giving packs; a pack box rolling cards; grails items of maxSupply 1; or a recipe turning the Totem into packs."
+      },
+      "split": "dev"
+    },
+    {
+      "id": "h-slug-burn",
+      "kind": "plain",
+      "source": "historic Solana Slugs",
+      "persona": "Runs an NFT community on Discord. Crypto-native, uses Phantom daily, does not code.",
+      "opening": "Free mint of slugs, 10,000 total. Burn two Gen 1 slugs to get a Gen 2, three Gen 2 to get a Gen 3. Every slug you burn counts toward your burner rank: 1, 5, 10, 25 and 50 burns unlock ranks, and our Discord bot gives roles by rank.",
+      "facts": {
+        "per wallet": "up to 5 free slugs a wallet",
+        "discord": "the bot just needs to read a wallet's burn count or rank from the chain",
+        "rank": "the rank should stay with the wallet, not be sellable"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Mint two free slugs",
+        "Burn them into a Gen 2",
+        "Say what the page shows as your burn count or rank"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "boxes",
+          "recipes"
+        ],
+        "intent": [
+          {
+            "type": "hasRecipe"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A free box or grant (5 per wallet, 10,000 total) giving Gen 1; two recipes burning 2 Gen 1 / 3 Gen 2; each burn raises `burned` on a soulbound badge (or the recipe gives one), which the bot reads."
+      },
+      "split": "dev"
+    },
+    {
+      "id": "h-frog-fusion",
+      "kind": "plain",
+      "source": "historic Cyber Frogs",
+      "persona": "Solo indie dev making a pixel frog game. Writes JavaScript, has a Phantom wallet, has never written a smart contract.",
+      "opening": "Frog NFTs with a rarity and traits (hat, eyes, color). I sell common frogs for 0.005 SOL. The Frog Machine fuses two frogs of the same rarity into one frog of the next rarity, and the owner picks which parent's traits it keeps. Our FLYZ token, earned by staking frogs, buys trait rerolls.",
+      "facts": {
+        "rarities": "common, rare, epic",
+        "FLYZ": "our own token; a staked frog earns 10 FLYZ a day",
+        "reroll": "50 FLYZ rerolls the hat at random",
+        "supply": "1,000 common frogs for sale"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy two common frogs",
+        "Fuse them in the Frog Machine",
+        "Say what the page shows you got"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "recipes",
+          "farms",
+          "items"
+        ],
+        "intent": [
+          {
+            "type": "hasRecipe"
+          },
+          {
+            "type": "farmOfCollectibles"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A shop of commons; fusion recipes per rarity (two burned, one made, `keeps` the chosen parent's traits); a farm of frogs paying FLYZ; a reroll a box rolled on the frog (`shifts` the hat) priced in FLYZ."
+      },
+      "split": "dev"
+    },
+    {
+      "id": "h-cet-pairs",
+      "kind": "plain",
+      "source": "historic Cets on Creck",
+      "persona": "Founder of a cat NFT project, crypto-native, no code. Wants it simple for holders.",
+      "opening": "Cets earn 4 CRECK a day staked. Pair a Cet with one of our Milk Bottles and the pair earns 5.25 a day instead. CRECK buys tickets to our weekly raffles, where we give away NFTs from our vault.",
+      "facts": {
+        "sale": "Cets 0.005 SOL and Milk Bottles 0.003 SOL, 200 of each",
+        "CRECK": "our own token, no cap",
+        "raffle": "a ticket costs 10 CRECK; three NFTs from our vault each raffle",
+        "testing": "make the raffle run every 15 minutes for the test, and give my tester {PLAYER} some CRECK so they can buy a ticket"
+      },
+      "beats": [],
+      "app": [
+        "Connect your wallet",
+        "Buy a Cet and a Milk Bottle",
+        "Stake them as a pair",
+        "Check the page shows what the pair earns"
+      ],
+      "checks": {
+        "expect": "build",
+        "parts": [
+          "farms",
+          "lotteries"
+        ],
+        "intent": [
+          {
+            "type": "farmOfCollectibles"
+          }
+        ]
+      },
+      "judge": {
+        "compose": "A farm of collectibles at 4/day; the pair a set (Cet + Bottle bound into a badge via `staked` lines) earning 5.25; lotteries priced in CRECK whose places are stash NFTs; a grant to the tester for CRECK."
+      },
+      "split": "dev"
+    }
+  ]
+}

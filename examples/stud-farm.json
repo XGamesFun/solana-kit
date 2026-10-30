@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Stud Farm",
+  "prompt": "Studs earn a cover fee for their holder, foals are ready 7 days after breeding, mares have 6 foals in their life, hay rots in 3 days, and a mare can be rested to breed again.",
+  "currency": "usdc",
+  "tokens": [
+    {
+      "key": "usdc",
+      "source": "existing",
+      "name": "USDC (devnet)",
+      "symbol": "USDC",
+      "decimals": 6,
+      "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "venue": "other",
+      "powers": {
+        "mintAuthority": "someone else",
+        "freeze": true
+      }
+    }
+  ],
+  "collection": {
+    "name": "Stud Farm"
+  },
+  "items": [
+    {
+      "key": "mare",
+      "name": "Mare",
+      "price": 50,
+      "life": {
+        "uses": 6,
+        "cooldown": "30d"
+      }
+    },
+    {
+      "key": "stud",
+      "name": "Stud",
+      "price": 500,
+      "supply": 1,
+      "rarity": "Legendary"
+    },
+    {
+      "key": "hay",
+      "name": "Hay bale",
+      "price": 1,
+      "life": {
+        "lasts": "3d"
+      }
+    },
+    {
+      "key": "foal",
+      "name": "Foal",
+      "life": {
+        "readyAfter": "7d"
+      }
+    }
+  ],
+  "recipes": [
+    {
+      "key": "breed",
+      "name": "Breed",
+      "in": [
+        {
+          "takes": "use",
+          "item": "mare"
+        },
+        {
+          "takes": "burn",
+          "item": "hay",
+          "count": 1
+        },
+        {
+          "takes": "pay",
+          "amount": 5,
+          "currency": "usdc",
+          "to": "holder:3rzrHLNCpMjZ1eNTKr5p6cg3byL3UwRzBePEVDJ1RQ4R"
+        },
+        {
+          "takes": "pay",
+          "amount": 1,
+          "currency": "usdc",
+          "to": "burn"
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "foal"
+        }
+      ],
+      "needs": [
+        {
+          "place": 0,
+          "key": "age",
+          "atLeast": 2
+        }
+      ],
+      "keeps": [
+        {
+          "key": "coat",
+          "from": 0,
+          "to": 0
+        }
+      ]
+    },
+    {
+      "key": "rest",
+      "name": "Rest a mare",
+      "in": [
+        {
+          "takes": "renew",
+          "item": "mare"
+        },
+        {
+          "takes": "pay",
+          "amount": 10,
+          "currency": "usdc",
+          "to": "burn"
+        }
+      ],
+      "out": []
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:mare": 10,
+      "item:stud": 0,
+      "item:hay": 40,
+      "recipe:breed": 20,
+      "recipe:rest": 2
+    }
+  }
+}

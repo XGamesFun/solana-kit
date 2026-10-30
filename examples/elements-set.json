@@ -1,0 +1,281 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Elements",
+  "prompt": "Four elements, Fire, Water, Earth and Air, each earn 10 SPARK a day staked at the altar. A player who has all four staked binds them into an Elemental Badge, which earns 100 SPARK a day in the sanctum; while the badge exists the four stay staked, and a set makes one badge. Unbinding burns the badge and lets the four go.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "spark",
+      "source": "game",
+      "name": "Spark",
+      "symbol": "SPARK",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Elements"
+  },
+  "items": [
+    {
+      "key": "fire",
+      "name": "Fire",
+      "price": 0.02
+    },
+    {
+      "key": "water",
+      "name": "Water",
+      "price": 0.02
+    },
+    {
+      "key": "earth",
+      "name": "Earth",
+      "price": 0.02
+    },
+    {
+      "key": "air",
+      "name": "Air",
+      "price": 0.02
+    },
+    {
+      "key": "badge",
+      "name": "Elemental Badge"
+    }
+  ],
+  "pools": [
+    {
+      "key": "spark-rewards",
+      "currency": "spark",
+      "about": "Names the reward token: both farms mint SPARK at their rates, so nothing waits here."
+    }
+  ],
+  "recipes": [
+    {
+      "key": "bind",
+      "name": "Bind the four",
+      "in": [
+        {
+          "takes": "staked",
+          "item": "fire",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "water",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "earth",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "air",
+          "farm": "altar"
+        }
+      ],
+      "out": [
+        {
+          "gives": "item",
+          "item": "badge"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "bound",
+          "by": 1,
+          "upTo": 1
+        },
+        {
+          "place": 0,
+          "key": "free_at",
+          "by": "20000d"
+        },
+        {
+          "place": 1,
+          "key": "bound",
+          "by": 1,
+          "upTo": 1
+        },
+        {
+          "place": 1,
+          "key": "free_at",
+          "by": "20000d"
+        },
+        {
+          "place": 2,
+          "key": "bound",
+          "by": 1,
+          "upTo": 1
+        },
+        {
+          "place": 2,
+          "key": "free_at",
+          "by": "20000d"
+        },
+        {
+          "place": 3,
+          "key": "bound",
+          "by": 1,
+          "upTo": 1
+        },
+        {
+          "place": 3,
+          "key": "free_at",
+          "by": "20000d"
+        }
+      ]
+    },
+    {
+      "key": "unbind",
+      "name": "Unbind",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "badge"
+        },
+        {
+          "takes": "staked",
+          "item": "fire",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "water",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "earth",
+          "farm": "altar"
+        },
+        {
+          "takes": "staked",
+          "item": "air",
+          "farm": "altar"
+        }
+      ],
+      "needs": [
+        {
+          "place": 1,
+          "key": "bound",
+          "atLeast": 1
+        },
+        {
+          "place": 2,
+          "key": "bound",
+          "atLeast": 1
+        },
+        {
+          "place": 3,
+          "key": "bound",
+          "atLeast": 1
+        },
+        {
+          "place": 4,
+          "key": "bound",
+          "atLeast": 1
+        }
+      ],
+      "raises": [
+        {
+          "place": 1,
+          "key": "bound",
+          "by": -1
+        },
+        {
+          "place": 1,
+          "key": "free_at",
+          "by": "-20000d"
+        },
+        {
+          "place": 2,
+          "key": "bound",
+          "by": -1
+        },
+        {
+          "place": 2,
+          "key": "free_at",
+          "by": "-20000d"
+        },
+        {
+          "place": 3,
+          "key": "bound",
+          "by": -1
+        },
+        {
+          "place": 3,
+          "key": "free_at",
+          "by": "-20000d"
+        },
+        {
+          "place": 4,
+          "key": "bound",
+          "by": -1
+        },
+        {
+          "place": 4,
+          "key": "free_at",
+          "by": "-20000d"
+        }
+      ]
+    }
+  ],
+  "farms": [
+    {
+      "key": "altar",
+      "name": "The altar",
+      "stakes": "collectibles",
+      "rewards": "spark-rewards",
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1d"
+        }
+      ],
+      "lockAttribute": "free_at"
+    },
+    {
+      "key": "sanctum",
+      "name": "The sanctum",
+      "stakes": "collectibles",
+      "item": "badge",
+      "rewards": "spark-rewards",
+      "rate": {
+        "perDay": 100,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1d"
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:fire": 5,
+      "item:water": 5,
+      "item:earth": 5,
+      "item:air": 5,
+      "farm:altar": 20,
+      "farm:sanctum": 5,
+      "recipe:bind": 2,
+      "recipe:unbind": 1
+    },
+    "staked": {
+      "altar": 200,
+      "sanctum": 20
+    }
+  }
+}

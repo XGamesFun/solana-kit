@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="xsolana-token" content="__TOKEN__">
+<title>Approve going live · loot</title>
+<style>
+  :root { --bg: #f4f5f7; --panel: #ffffff; --ink: #14171f; --muted: #5b6372; --line: #dfe2e8; --accent: #3446d6; --ok: #1d7f4a; --bad: #b42318; --warn: #8a5a00; --mono: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1218; --panel: #171b23; --ink: #e8ebf2; --muted: #9aa3b5; --line: #2a303c; --accent: #8394ff; --ok: #4cc47f; --bad: #ff7a6b; --warn: #e8b04a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 32px max(16px, env(safe-area-inset-left)); }
+  main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font-size: 1.5rem; margin: 0; }
+  .muted { color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+  li.done { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--ok); }
+  li .who { font-size: .8rem; color: var(--warn); margin-left: 6px; }
+  li .details { margin: 4px 0 2px; padding-left: 18px; font-size: .85rem; overflow-wrap: anywhere; }
+  code, .mono { font-family: var(--mono); font-size: .85em; overflow-wrap: anywhere; }
+  #log { font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; margin: 0; max-height: 220px; overflow: auto; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  ul.warn { margin: 0; padding-left: 18px; color: var(--warn); font-size: .9rem; }
+  .flush { margin: 0; } .note { margin: 10px 0 0; } .spread { justify-content: space-between; } .gap { margin-top: 12px; }
+  #wallets { margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="muted mono flush">loot · devnet · runs on your computer only</p>
+    <h1 id="title">Approve going live</h1>
+    <p class="muted" id="sub">Loading…</p>
+  </header>
+
+  <section class="panel">
+    <div class="row">
+      <button id="connect">Connect a wallet</button>
+      <span id="wallet" class="mono muted"></span>
+    </div>
+    <div class="row" id="wallets" hidden></div>
+    <p class="muted note">Set the wallet to <b>devnet</b>. Each approval shows you the transactions before you sign; nothing leaves your wallet without it. Nobody else ever sees your key.</p>
+  </section>
+
+  <section class="panel">
+    <div class="row spread">
+      <b>What going live does</b>
+      <span class="muted" id="cost"></span>
+    </div>
+    <ol id="steps" class="gap"></ol>
+  </section>
+
+  <section class="panel" id="legalbox">
+    <b>Read this first</b>
+    <ul class="gap" id="terms">
+      <li>The loot program has not been independently audited. It and these tools come as is, with no warranty and no guarantee that they are safe: what is sent to the program can be lost. You use them at your own risk.</li>
+      <li>Transactions can't be undone. You are responsible for every one you approve.</li>
+      <li>Making sure your economy is legal everywhere it is offered is up to you. Nothing here is legal or financial advice.</li>
+    </ul>
+    <ul class="warn gap" id="legal" hidden></ul>
+    <p class="muted note">The full text is in DISCLAIMER.md, in the package.</p>
+    <label class="row gap"><input type="checkbox" id="legalok"> I have read this and accept it. Devnet is not real money; real money needs every point above answered first.</label>
+  </section>
+
+  <section class="panel" id="warnbox" hidden>
+    <b>Before you approve</b>
+    <ul class="warn" id="warnings"></ul>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <button id="approve" disabled>Approve the next batch</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script type="module" src="/js/approve/page.js"></script>
+</body>
+</html>

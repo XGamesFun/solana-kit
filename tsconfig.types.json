@@ -1,0 +1,17 @@
+{
+  "//": "Type declarations for the package's entry points, generated from the JavaScript (`npm run types`, run by prepack). Not committed.",
+  "compilerOptions": {
+    "allowJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "skipLibCheck": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "resolveJsonModule": true,
+    "rootDir": "js",
+    "outDir": "types"
+  },
+  "files": ["js/index.js", "js/client/index.js", "js/play/index.js", "js/results/index.js"],
+  "include": ["js/chain/*.js"]
+}

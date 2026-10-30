@@ -1,0 +1,22 @@
+.DS_Store
+node_modules
+*.tgz
+
+# Local keys, environment and generated client artifacts
+*.keypair.json
+*-keypair.json
+.keys/
+.env
+.env.*
+!.env.example
+/artifacts/
+
+# Local notes and settings (deploy keys, machine details)
+*.local.md
+.claude/settings.local.json
+
+# Fresh-session eval results
+/evals/results/
+
+# Type declarations, generated at pack time (npm run types)
+/types/

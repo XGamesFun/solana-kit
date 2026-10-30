@@ -1,0 +1,116 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Starforce",
+  "prompt": "Each try burns the sword and pays a fee; the roll goes up a level, stays (the same sword, minted again) or destroys it, with a tiny lucky chance at a tenth of the jackpot the fees fill.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "attempt",
+      "source": "game",
+      "name": "Starforce attempt",
+      "symbol": "TRY",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Starforce"
+  },
+  "items": [
+    {
+      "key": "sword-1",
+      "name": "Sword +1",
+      "price": 0.05,
+      "value": 0.05
+    },
+    {
+      "key": "sword-2",
+      "name": "Sword +2",
+      "rarity": "Rare",
+      "value": 0.15
+    }
+  ],
+  "pools": [
+    {
+      "key": "jackpot",
+      "currency": "sol",
+      "seed": 2,
+      "about": "Every try's fee; the lucky roll takes a tenth."
+    }
+  ],
+  "recipes": [
+    {
+      "key": "try",
+      "name": "Try for +2",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "sword-1",
+          "count": 1
+        },
+        {
+          "takes": "pay",
+          "amount": 0.02,
+          "currency": "sol",
+          "to": "pool:jackpot"
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 1,
+          "currency": "attempt",
+          "from": "mint"
+        }
+      ]
+    }
+  ],
+  "boxes": [
+    {
+      "key": "star-1",
+      "name": "Starforce +1 to +2",
+      "price": 1,
+      "currency": "attempt",
+      "split": [
+        {
+          "to": "burn",
+          "percent": 100
+        }
+      ],
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "sword-2",
+          "chance": 40
+        },
+        {
+          "gives": "item",
+          "item": "sword-1",
+          "chance": 45
+        },
+        {
+          "gives": "burn",
+          "chance": 14.5
+        },
+        {
+          "gives": "share",
+          "pool": "jackpot",
+          "percent": 10,
+          "chance": 0.5
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:sword-1": 100,
+      "recipe:try": 100,
+      "box:star-1": 100
+    }
+  }
+}

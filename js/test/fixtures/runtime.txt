@@ -1,0 +1,68 @@
+# The runtime the client's LiteSVM tests model, as each cluster runs it: rent, and every feature gate that is off on
+# mainnet or devnet (every other feature LiteSVM knows is on, on both). Read on 2026-10-29 from the Rent sysvar and from
+# each feature account (mainnet slot 463,001,707, Agave 4.3.2; devnet slot 516,522,585, Agave 4.4), read-only.
+# js/test/world.mjs reads the mainnet column (the devnet one with XSOLANA_TEST_CLUSTER=devnet) and turns off, in LiteSVM
+# 1.5, each feature listed off there. Some rows name one feature under an old and a new id, as different Agave
+# versions know it.
+#
+# rent    cluster  lamports-per-byte  exemption-threshold  burn-percent
+rent      mainnet  5080               1.0                  50
+rent      devnet   5080               1.0                  50
+#
+# feature id                                    mainnet devnet  name
+feature 55oikhjJ2LUi1xdgJ17ueRyHFURZEw32asT3iAKfh7gg off     off     -
+feature B1ockRevenueSharing111111111111111111111111  off     off     -
+feature FLHoAWBDjNh6zwmJ5i1NKK4KyD8otAiv7XxvmnFnVnKH off     off     -
+feature 6f2qai82RU7Dutj1WJfRzLJKYA36QWvTa89CR1imgj7N off     off     account_data_direct_mapping
+feature CR3dVN2Yoo95Y96kLSTaziWDAQT2MNEpiWh5cqVq2pNE off     on      account_data_direct_mapping
+feature mustRekeyVm2QHYB3JPefBiU4BY3Z6JkW2k3Scw5GWP  off     off     alpenglow
+feature FastLeaderHandover11111111111111111111111111 off     off     alpenglow_fast_leader_handover
+feature HTW2pSyErTj4BV6KBM9NZ9VBUJVxt7sacNWcf76wtzb3 off     off     blake3_syscall_enabled
+feature Crbnc267wkJvFhYakqwWWX57sx5bkrftJLekzy6yWKLT off     off     block_revenue_sharing
+feature 4EBQBjw1kqF1dqUBb6fc5Ji4tCEQgNf9ESGGX3smwXwh off     off     buffer
+feature chaie9S2zVfuxJKNRGkyTDokLwWxx6kD2ZLsqQHaDD8  off     off     chained_merkle_conflict_duplicate_proofs
+feature depVvnQ2UysGrhwdiwU42tCadZL8GcBb1i2GYhMopQv  off     off     deprecate_legacy_vote_ixs
+feature ptr9umikaeAS7ZBBp2fsfRhie16F1V2jCKA2y6gXNAK  off     on      direct_account_pointers_in_program_input
+feature TestFeature11111111111111111111111111111111  off     off     disable_sbpf_v0_execution
+feature B8JJXCy5amZyWG9r7EnUYLwzXSXTxG7GZ1qZ1qggo83g off     off     disable_sbpf_v0_v1_v2_deployment
+feature dcomRRWHXP1FVWPqi9Mm4oxJhF4ehC795SvAtUdA9os  off     off     discard_unexpected_data_complete_shreds
+feature ddibiks7RHZR69QXYMCmk4EZNt6WckspTqEEWv6cS38  off     off     double_disinflation_rate
+feature EBq48m8irRKuE7ZnMTLvLg2UuGSqhe8s8oMqnmja1fJw off     off     enable_big_mod_exp_syscall
+feature expH2ppKPW2ANEdEmAjfhSEcnBQJfmoX4FjuNpe9ttg  off     off     enable_big_mod_exp_syscall
+feature 2oMRZEDWT2tqtYMofhmmfQ8SsjqUFzT6sYXppQDavxwz off     off     enable_extend_program_checked
+feature ExtendProgCheckedWi11BeDe1eted11111111111111 off     off     enable_extend_program_checked
+feature 2aQJYqER2aKyb3cZw22v4SL2xMX7vwXBRWfvS4pTrtED off     off     enable_loader_v4
+feature LoaderV4WasAbandoned11111111111111111111111  off     off     enable_loader_v4
+feature BUwGLeF3Lxyfv1J1wY8biFHBB2hrk2QhbNftQf3VV3cC off     off     enable_sbpf_v3_deployment_and_execution
+feature s512oDwgx8hjMnaQjXfqqrZroVj4HvC6TkN3iSSWXCh  off     on      enable_sha512_syscall
+feature turbRpTzBzDU6PJmWvRTbcJXXGxUs19CvQamUrRD9bN  off     off     enable_turbine_extended_fanout_experiments
+feature zkiTNuzBKxrCLMKehzuQeKZyLtX2yvFcEKMML8nExU8  off     off     enable_zk_proof_from_account
+feature zkNLP7EQALfC1TYeB3biDU7akDckj8iPkvh9y2Mt2K3  off     off     enable_zk_transfer_with_fee
+feature turbzzBJLGMJJikLvgCCJu9e1hTmfxwarrbLndYAsK5  off     off     enforce_correct_proof_size
+feature sProgVaNWkYdP2eTRAy1CPrgb3b9p8yXCASrPEqo6VJ  off     off     enshrine_slashing_program
+feature DT4n6ABDqs6w4bnfwrXT9rsprcPf6cdDga1egctaPkLC off     off     full_inflation_devnet_and_testnet
+feature 7XRJcS5Ud5vxGB54JbK9N2vBZVwnwdBNeJW1ibRgD9gx on      off     full_inflation_mainnet_certusone_enable
+feature EaQpmC6GtRssaZ3PCUM5YksGqUdMLeZ46BQXYtHYakDS off     off     include_loaded_accounts_data_size_in_fee_calculation
+feature 9LZdXeKGeBV6hRLdxS1rHbHoEUsKqesCC2ZAPTPKJAbK off     off     increase_tx_account_lock_limit
+feature 8aXvSuopd1PUj7UhehfXJRg6619RHp8ZvwTyyJHdUYsj off     off     libsecp256k1_fail_on_bad_count
+feature EhisBfVtGvEA8bVCVN5VMaYEaX6iTfoUrmcDi8LY7Kxy off     off     loader_v3_set_program_data_to_elf_length
+feature 6TkHkRmP7JZy1fdM6fg5uXn76wChQBWGokHBJzrLB3mj off     off     raise_cpi_nesting_limit_to_8
+feature TestFeature21111111111111111111111111111111  off     off     reenable_sbpf_v0_execution
+feature zkesAyFB19sTkX8i9ReoKaMNDA4YNTPYJpZKPDt7FMW  off     off     reenable_zk_elgamal_proof_program
+feature FEEXbxUuKobtrt1qNK5pjtzbPQhsppBTrNNG74xu4mai off     off     relax_fee_payer_constraint
+feature 5TuppMutoyzhUSfuYdhgzD47F92GL1g89KpCZQKqedxP off     off     remaining_compute_units_syscall_enabled
+feature RMsTKfD6hZnBhhNvgGBeKNrqCNkeoP3DYYxNtcuWtRg  off     off     remove_inactive_stakes
+feature rntD7invRBswCAdKtRsh1G4psKjrPdS3BKqtnA78C7N  off     off     set_lamports_per_byte_to_1322
+feature rntCigrTppP5JdZz7K8TyN9sMzLdAcXp8SejYpVpX6D  off     off     set_lamports_per_byte_to_2575
+feature rntTjNZ9boq8owDxjGVFHPfWNQPDaKiM5JcjxmDGg47  off     off     set_lamports_per_byte_to_696
+feature rnt8ZQpz2HYhX3DkYBDGjJS1a36mYq69oXka7JrhEdi  off     off     set_lamports_per_byte_to_6960
+feature G6ANXD6ptCSyNd9znZm7j4dEczAJCfx7Cy43oBx3rKHJ off     off     stake_minimum_delegation_for_rewards
+feature BM11F4hqrpinQs28sEZfzQ2fYddivYs4NEAHF6QMjkJF off     off     stake_program_buffer
+feature 9onWzzvCzNC2jfhxxeqRgs5q7nFAAKpCUvkj6T6GJK9i off     off     stake_raise_minimum_delegation_to_1_sol
+feature Eoh7e1sDqtyPtuiWAhBNSJinvtJWTTDgeUMRi3RF8zWS off     off     stricter_abi_and_runtime_constraints
+feature 51VCKU5eV6mcTc9q9ArfWELU2CqDoi13hdAjr6fHMdtv off     off     verify_retransmitter_signature
+feature 7VgiehxNxu53KdxgLspGQY8myE6f7UokaWa4jsGcaSz  off     on      virtual_address_space_adjustments
+feature VoteAccount1nitia1izeV211111111111111111111  off     off     vote_account_initialize_v2
+feature RfEcA95xnhuwooVAhUUksEJLZBF7xKCLuqrJoqk4Zph  off     off     vote_only_retransmitter_signed_fec_sets
+feature GvDsGDkH5gyzwpDhxNixx8vtx1kwYHH13RiNAPw27zXb on      off     warp_timestamp_again
+feature zk1snxsc6Fh3wsGNbbHAJNHiJoYgF29mMnTSusGx5EJ  off     off     zk_token_sdk_enabled

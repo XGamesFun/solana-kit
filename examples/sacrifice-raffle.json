@@ -1,0 +1,118 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Sacrifice Raffle",
+  "prompt": "Burn an NFT for raffle tickets (more for rarer ones); the pot is a share of the collection's sales, drawn weekly, with one grand prize and seven minor ones.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "ticket",
+      "source": "game",
+      "name": "Raffle ticket",
+      "symbol": "TICKET",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Sacrifice Raffle"
+  },
+  "items": [
+    {
+      "key": "junk-sword",
+      "name": "Rusty Sword",
+      "price": 0.01,
+      "split": [
+        {
+          "to": "lottery:weekly",
+          "percent": 10
+        }
+      ]
+    },
+    {
+      "key": "relic",
+      "name": "Old Relic",
+      "rarity": "Rare",
+      "price": 0.1,
+      "split": [
+        {
+          "to": "lottery:weekly",
+          "percent": 10
+        }
+      ]
+    }
+  ],
+  "pools": [],
+  "recipes": [
+    {
+      "key": "sacrifice-sword",
+      "name": "Sacrifice a sword",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "junk-sword",
+          "count": 1
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 1,
+          "currency": "ticket",
+          "from": "mint"
+        }
+      ]
+    },
+    {
+      "key": "sacrifice-relic",
+      "name": "Sacrifice a relic",
+      "in": [
+        {
+          "takes": "burn",
+          "item": "relic",
+          "count": 1
+        }
+      ],
+      "out": [
+        {
+          "gives": "tokens",
+          "amount": 12,
+          "currency": "ticket",
+          "from": "mint"
+        }
+      ]
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "weekly",
+      "name": "Grand and minors",
+      "price": 1,
+      "ticketCurrency": "ticket",
+      "places": [
+        50,
+        10,
+        10,
+        10,
+        5,
+        5,
+        5,
+        5
+      ],
+      "every": "7d"
+    }
+  ],
+  "scenario": {
+    "days": 28,
+    "perDay": {
+      "item:junk-sword": 300,
+      "item:relic": 30,
+      "recipe:sacrifice-sword": 250,
+      "recipe:sacrifice-relic": 25,
+      "lottery:weekly": 500
+    }
+  }
+}

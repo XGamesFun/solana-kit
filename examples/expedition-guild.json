@@ -1,0 +1,161 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Expedition Guild",
+  "prompt": "Heroes earn 10 DUST a day while staked and gain XP, written on the hero: 100, 300, 600 and 1000 XP are levels 1 to 4, and each level adds 10% to what a hero earns. A 3-day expedition brings back 2 relic tickets (more for a higher level); a ticket opens a relic chest, where a higher-level hero finds the rare relic more often. A hero can also be trained: 50 DUST burned for a level, up to level 4.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "dust",
+      "source": "game",
+      "name": "Dust",
+      "symbol": "DUST",
+      "decimals": 6
+    },
+    {
+      "key": "ticket",
+      "source": "game",
+      "name": "Relic Ticket",
+      "symbol": "TICKET",
+      "decimals": 0
+    }
+  ],
+  "collection": {
+    "name": "Expedition Guild"
+  },
+  "items": [
+    {
+      "key": "hero",
+      "name": "Hero",
+      "price": 0.05
+    },
+    {
+      "key": "relic",
+      "name": "Rare Relic"
+    }
+  ],
+  "pools": [
+    {
+      "key": "dust-rewards",
+      "currency": "dust",
+      "about": "Names the guild's reward token: the guild mints DUST at its rate, so nothing waits here."
+    }
+  ],
+  "boxes": [
+    {
+      "key": "chest",
+      "name": "Relic chest",
+      "price": 1,
+      "currency": "ticket",
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "relic",
+          "chance": 20
+        },
+        {
+          "gives": "nothing",
+          "chance": 80
+        }
+      ],
+      "odds": [
+        {
+          "outcome": 0,
+          "when": {
+            "item": "hero",
+            "attribute": "level",
+            "atLeast": 1
+          },
+          "add": {
+            "perPointPercent": 25,
+            "upTo": 4
+          }
+        }
+      ]
+    }
+  ],
+  "recipes": [
+    {
+      "key": "train",
+      "name": "Train a hero",
+      "in": [
+        {
+          "takes": "use",
+          "item": "hero"
+        },
+        {
+          "takes": "pay",
+          "amount": 50,
+          "currency": "dust",
+          "to": "burn"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "level",
+          "by": 1,
+          "upTo": 4
+        }
+      ]
+    }
+  ],
+  "farms": [
+    {
+      "key": "guild",
+      "name": "The guild",
+      "stakes": "collectibles",
+      "item": "hero",
+      "rewards": "dust-rewards",
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1d",
+          "multiplier": 1
+        },
+        {
+          "lock": "3d",
+          "multiplier": 1.5,
+          "prize": { "gives": "tokens", "amount": 2, "from": "mint", "currency": "ticket" }
+        }
+      ],
+      "growth": {
+        "perDay": 100,
+        "levels": [100, 300, 600, 1000]
+      },
+      "boosts": [
+        {
+          "when": {
+            "item": "hero",
+            "attribute": "level",
+            "atLeast": 0
+          },
+          "add": {
+            "perPointPercent": 10,
+            "upTo": 4
+          }
+        }
+      ],
+      "maxBoostPercent": 40
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:hero": 5,
+      "box:chest": 10,
+      "farm:guild": 20,
+      "recipe:train": 5
+    },
+    "staked": {
+      "guild": 100
+    }
+  }
+}

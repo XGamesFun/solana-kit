@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Sunset Auction",
+  "prompt": "I'm an artist selling a 1 of 1 piece. Highest bid after 24 hours wins it, in SOL, and anyone who is outbid gets their money back automatically. A late bid should give others ten more minutes. Each bid at least 5% over the last, and 10% of the sale goes to my collaborator.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": {
+    "name": "Sunset Studio",
+    "royaltyPercent": 5
+  },
+  "items": [
+    {
+      "key": "sunset",
+      "name": "Sunset, 1 of 1",
+      "rarity": "Mythic",
+      "supply": 1,
+      "uri": "https://example.invalid/sunset.json"
+    }
+  ],
+  "auctions": [
+    {
+      "key": "sunset",
+      "name": "Sunset, 1 of 1",
+      "lot": {
+        "item": "sunset"
+      },
+      "reserve": 0.5,
+      "minRaise": 5,
+      "runs": "24h",
+      "extendBy": "10m",
+      "split": [
+        {
+          "to": "account:6U3XnmrzuZ5sDujScii8SmzwtRZ4skfKcH2TLiz1rmES",
+          "percent": 10
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 1,
+    "perDay": {
+      "auction:sunset": 12
+    }
+  }
+}

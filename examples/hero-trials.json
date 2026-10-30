@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Hero Trials",
+  "prompt": "Heroes can be enchanted for 20 GEM: 70% a level up, 25% a level down, 5% the hero is destroyed, better odds the higher its level. A 1-day expedition can fail: 60% it brings back a relic, 30% the hero comes back hurt (-2 affection), 10% the hero is captured and goes to the treasury. A risky forge: 50 GEM burned for a 70% chance at a level, or the hero breaks. Merging two heroes costs the kept one a level.",
+  "currency": "sol",
+  "tokens": [
+    { "key": "sol", "source": "sol" },
+    { "key": "gem", "source": "game", "name": "Gem", "symbol": "GEM", "decimals": 6 }
+  ],
+  "collection": { "name": "Hero Trials" },
+  "items": [
+    { "key": "hero", "name": "Hero", "price": 0.05 },
+    { "key": "relic", "name": "Relic" }
+  ],
+  "pools": [
+    { "key": "gem-rewards", "currency": "gem", "about": "Names the expedition's token: it pays nothing, its result is a roll." }
+  ],
+  "boxes": [
+    {
+      "key": "enchant",
+      "name": "Enchant",
+      "price": 20,
+      "currency": "gem",
+      "split": [{ "to": "burn", "percent": 100 }],
+      "rollsOn": { "item": "hero" },
+      "outcomes": [
+        { "gives": "nothing", "chance": 70, "shifts": [{ "attribute": "level", "by": 1, "upTo": 10 }] },
+        { "gives": "nothing", "chance": 25, "shifts": [{ "attribute": "level", "by": -1 }] },
+        { "gives": "nothing", "chance": 5, "then": "burn" }
+      ],
+      "odds": [{ "outcome": 0, "when": { "item": "hero", "attribute": "level", "atLeast": 0 }, "add": { "perPointPercent": 10, "upTo": 10 } }]
+    },
+    {
+      "key": "expedition-result",
+      "name": "Expedition result",
+      "price": 0,
+      "active": false,
+      "rollsOn": { "item": "hero" },
+      "outcomes": [
+        { "gives": "item", "item": "relic", "chance": 60 },
+        { "gives": "nothing", "chance": 30, "shifts": [{ "attribute": "affection", "by": -2 }] },
+        { "gives": "nothing", "chance": 10, "then": "treasury" }
+      ],
+      "odds": [{ "outcome": 0, "when": { "item": "hero", "attribute": "level", "atLeast": 0 }, "add": { "perPointPercent": 20, "upTo": 10 } }]
+    },
+    {
+      "key": "forge",
+      "name": "Forge",
+      "price": 0,
+      "active": false,
+      "rollsOn": { "item": "hero" },
+      "outcomes": [
+        { "gives": "nothing", "chance": 70, "shifts": [{ "attribute": "level", "by": 1, "upTo": 10 }] },
+        { "gives": "nothing", "chance": 30, "then": "burn" }
+      ]
+    }
+  ],
+  "recipes": [
+    {
+      "key": "risky-forge",
+      "name": "Risky forge",
+      "in": [
+        { "takes": "use", "item": "hero" },
+        { "takes": "pay", "amount": 50, "currency": "gem", "to": "burn" }
+      ],
+      "out": [{ "gives": "roll", "box": "forge", "on": 0 }]
+    },
+    {
+      "key": "merge",
+      "name": "Merge two heroes",
+      "in": [
+        { "takes": "use", "item": "hero" },
+        { "takes": "burn", "item": "hero" }
+      ],
+      "raises": [{ "place": 0, "key": "level", "by": -1 }],
+      "out": []
+    }
+  ],
+  "farms": [
+    {
+      "key": "expedition",
+      "name": "Expedition",
+      "stakes": "collectibles",
+      "item": "hero",
+      "custody": "freeze",
+      "rewards": "gem-rewards",
+      "rate": { "perDay": 0, "minted": true },
+      "tiers": [{ "lock": "1d", "multiplier": 1, "roll": "expedition-result" }]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": { "item:hero": 5, "box:enchant": 10, "farm:expedition": 5, "recipe:risky-forge": 2, "recipe:merge": 1 }
+  }
+}

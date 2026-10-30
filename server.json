@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.XGamesFun/solana-kit",
+  "title": "xsolana",
+  "description": "Design, check, simulate and launch Solana game economies on loot, one shared program, no contract.",
+  "version": "0.20.1",
+  "repository": {
+    "url": "https://github.com/XGamesFun/solana-kit",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/XGamesFun/solana-kit#readme",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@xgamesfun/solana",
+      "version": "0.20.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

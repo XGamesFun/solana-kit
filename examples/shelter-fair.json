@@ -1,0 +1,164 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Shelter Fair",
+  "prompt": "A fair for an animal shelter. One ticket per wallet gets you in, sold for a month. Supply crates pay rent to whoever owns the plot the buyer builds on. A one-off raffle pays the shelter a fifth of every ticket straight away, and a little to whoever referred the buyer. Ticket holders claim a free badge once each, and promo codes on flyers give a badge once per code. A roof fund only counts if it reaches its goal.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": {
+    "name": "Shelter Fair"
+  },
+  "items": [
+    {
+      "key": "ticket",
+      "name": "Fair Ticket",
+      "price": 0.01,
+      "supply": 100,
+      "soulbound": true,
+      "perWallet": 1,
+      "closes": "publish+30d"
+    },
+    {
+      "key": "plot",
+      "name": "Fair Plot",
+      "price": 0.02,
+      "supply": 50
+    },
+    {
+      "key": "badge",
+      "name": "Shelter Badge"
+    }
+  ],
+  "pools": [
+    {
+      "key": "prizes",
+      "currency": "sol",
+      "seed": 0.1,
+      "about": "Pays the crates' prizes; 60% of every crate comes back into it."
+    }
+  ],
+  "boxes": [
+    {
+      "key": "crate",
+      "name": "Supply Crate",
+      "price": 0.005,
+      "split": [
+        {
+          "to": "pool:prizes",
+          "percent": 60
+        },
+        {
+          "to": "chosen:plot",
+          "percent": 10
+        }
+      ],
+      "outcomes": [
+        {
+          "gives": "pay",
+          "pool": "prizes",
+          "amount": 0.02,
+          "chance": 10
+        },
+        {
+          "gives": "nothing",
+          "chance": 90
+        }
+      ],
+      "perWalletEach": {
+        "count": 5,
+        "every": "1d"
+      }
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "raffle",
+      "name": "Shelter Raffle",
+      "price": 0.002,
+      "seed": 0.05,
+      "split": [
+        {
+          "to": "wallet:9F8NQski3wBvLykJTJEj896jDHXtHMUde8KGGN2sdqQa",
+          "percent": 20
+        },
+        {
+          "to": "chosen",
+          "percent": 5
+        }
+      ],
+      "places": [70, 30],
+      "firstDraw": "publish+7d",
+      "perWallet": 10
+    }
+  ],
+  "contests": [
+    {
+      "key": "roof-fund",
+      "name": "Roof Fund",
+      "sides": 1,
+      "sideNames": ["Fix the roof"],
+      "minPot": 1,
+      "entriesClose": "14d",
+      "resultDue": "15d",
+      "split": [
+        {
+          "to": "wallet:9F8NQski3wBvLykJTJEj896jDHXtHMUde8KGGN2sdqQa",
+          "percent": 100
+        }
+      ],
+      "deciders": ["4jM7nD287NUa6yFDpcDvPq25YqqqyRFQCjJkkSPdopwa"]
+    }
+  ],
+  "grants": [
+    {
+      "key": "early-bird",
+      "name": "Early Bird Badge",
+      "prize": {
+        "gives": "item",
+        "item": "badge"
+      },
+      "gate": {
+        "item": "ticket"
+      },
+      "limits": {
+        "perWallet": 1,
+        "total": 100
+      },
+      "fund": 0.05
+    },
+    {
+      "key": "flyer-codes",
+      "name": "Flyer Codes",
+      "prize": {
+        "gives": "item",
+        "item": "badge"
+      },
+      "keys": [
+        "H6kDt47WNDdMLainm7bbMkGt5TmzvGszi2uzxub8DYgT",
+        "D9dWBeEDtRUY1pUaGWU2uMyhFrBHXnubkLDRgfQQAuZN",
+        "213K1dQHqaPzfKoWS5zHfoB6qhZeLZg3AK91UwjdTTP3"
+      ],
+      "limits": {
+        "perKey": 1,
+        "perWallet": 1
+      },
+      "fund": 0.02
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:ticket": 3,
+      "item:plot": 1,
+      "box:crate": 20,
+      "lottery:raffle": 15,
+      "grant:early-bird": 3,
+      "grant:flyer-codes": 1
+    }
+  }
+}

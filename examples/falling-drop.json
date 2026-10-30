@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Falling Drop",
+  "prompt": "A hero whose price drops every minute until it sells; clones that cost 5% more each time; a new player's entry pays 10% to the friend who brought them; tips in the cursed coin burn 10% of every one.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "cursed",
+      "source": "existing",
+      "name": "MAIN-dev (a devnet test token)",
+      "symbol": "MAIN",
+      "decimals": 6,
+      "mint": "4ikj24Byduo7WZGhnxNYkqstpm9xUVeZH7eLQbjGDL7N",
+      "venue": "games.fun",
+      "powers": {
+        "mintAuthority": "someone else",
+        "freeze": false
+      }
+    }
+  ],
+  "collection": {
+    "name": "Falling Drop"
+  },
+  "items": [
+    {
+      "key": "drop-hero",
+      "name": "Drop Hero",
+      "price": 2,
+      "supply": 100,
+      "fall": {
+        "step": 0.05,
+        "every": "1m",
+        "floor": 0.2,
+        "start": "publish"
+      }
+    },
+    {
+      "key": "clone",
+      "name": "Clone",
+      "price": 0.1,
+      "rise": {
+        "step": 0,
+        "growthPercent": 5
+      }
+    }
+  ],
+  "payments": [
+    {
+      "key": "entry",
+      "name": "Entry, with a friend's cut",
+      "amount": 0.05,
+      "split": [
+        {
+          "to": "account:6U3XnmrzuZ5sDujScii8SmzwtRZ4skfKcH2TLiz1rmES",
+          "percent": 10
+        }
+      ]
+    },
+    {
+      "key": "cursed-tip",
+      "name": "Cursed tip",
+      "amount": 10,
+      "currency": "cursed",
+      "split": [
+        {
+          "to": "burn",
+          "percent": 10
+        },
+        {
+          "to": "account:3pVhH23EoBG5yYgkYq6bSu22itPrvrtaLofqgqGxw2GP",
+          "percent": 90
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "item:drop-hero": 3,
+      "item:clone": 20,
+      "payment:entry": 50,
+      "payment:cursed-tip": 30
+    }
+  }
+}

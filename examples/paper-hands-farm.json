@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Paper Hands Farm",
+  "prompt": "Stake GEM for 30 days to earn more GEM. Leave early and 10% of what you take out goes to the stakers who stay. Unstaking takes 7 days, earning nothing meanwhile. 2% of every harvest is burned. Holders can compound their rewards without restarting the lock.",
+  "currency": "gem",
+  "tokens": [
+    {
+      "key": "gem",
+      "source": "game",
+      "name": "Gem",
+      "symbol": "GEM",
+      "decimals": 6
+    }
+  ],
+  "collection": false,
+  "pools": [
+    {
+      "key": "farm-rewards",
+      "currency": "gem",
+      "about": "What the farm shares: a daily emission, and early-exit fees."
+    }
+  ],
+  "schedules": [
+    {
+      "key": "emission",
+      "name": "Daily emission",
+      "does": "issue",
+      "currency": "gem",
+      "pool": "farm-rewards",
+      "amount": 1000,
+      "every": "1d"
+    }
+  ],
+  "farms": [
+    {
+      "key": "farm",
+      "name": "The farm",
+      "stakes": "gem",
+      "rewards": "farm-rewards",
+      "tiers": [
+        {
+          "lock": "30d",
+          "multiplier": 1,
+          "exitFee": 10
+        }
+      ],
+      "exitFeeTo": "pool:farm-rewards",
+      "unbond": "7d",
+      "toll": {
+        "percent": 2,
+        "to": "burn"
+      }
+    }
+  ]
+}

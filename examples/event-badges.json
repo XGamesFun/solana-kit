@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Event Badges",
+  "prompt": "A community gives everyone who comes to its weekly events a badge NFT, vouched for by its server, thousands of them, without paying rent for each one (compressed). The top three of each season's leaderboard get a Season Medal, a Core NFT.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": {
+    "name": "Event Badges"
+  },
+  "compressedTree": {
+    "holds": 100000
+  },
+  "items": [
+    {
+      "key": "badge",
+      "name": "Event Badge",
+      "uri": "https://example.invalid/badges/{serial}.json"
+    },
+    {
+      "key": "medal",
+      "name": "Season Medal",
+      "uri": "https://example.invalid/medals/{serial}.json"
+    }
+  ],
+  "grants": [
+    {
+      "key": "attended",
+      "name": "Attended",
+      "prize": {
+        "gives": "item",
+        "item": "badge",
+        "compressed": true
+      },
+      "keys": ["H6kDt47WNDdMLainm7bbMkGt5TmzvGszi2uzxub8DYgT"],
+      "limits": {
+        "perWallet": 52
+      },
+      "fund": 0.01
+    },
+    {
+      "key": "season-top",
+      "name": "Season Top Three",
+      "prize": {
+        "gives": "item",
+        "item": "medal"
+      },
+      "keys": ["H6kDt47WNDdMLainm7bbMkGt5TmzvGszi2uzxub8DYgT"],
+      "limits": {
+        "perWallet": 4
+      },
+      "fund": 0.05
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "grant:attended": 200,
+      "grant:season-top": 0.1
+    }
+  }
+}

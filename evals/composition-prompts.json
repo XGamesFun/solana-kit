@@ -1,0 +1,822 @@
+{
+  "about": "Single-turn prompts taken from rated lists of real Solana economies (historic projects, staking setups, and examples/ideas.json), in a person's words; `source` names the economy. `split` is dev (iterate on these), holdout (run at baseline and at the end only, never used to tune the skill or tools) or holdout2 (a second holdout, written from ordinary asks rather than the rated lists, for what changes after the first holdout was used). `judge` is for the judge only, never shown to the agent: `asks` are the core pieces of the idea, `compose` one known way loot carries it (other valid ways count as well), `truly` what loot really cannot do. Run with: node evals/run.mjs --prompts evals/composition-prompts.json, then node evals/judge.mjs <run dir>.",
+  "prompts": [
+    {
+      "id": "walk-to-earn",
+      "split": "dev",
+      "source": "historic Walken",
+      "expect": "build",
+      "prompt": "I'm making a walk-to-earn app. Our phone app counts steps: every 1,000 steps earns a Gem. Players spend Gems to upgrade their Cat NFT's speed and stamina, and cats race each other, with the entry fees going to the top finishers in our STRIDE token. Can you set up the onchain side?",
+      "judge": {
+        "asks": [
+          "steps earn Gems",
+          "Gems upgrade a cat NFT's stats",
+          "races with entry fees paid out to top finishers",
+          "a STRIDE token"
+        ],
+        "compose": "Gems as a game token granted by a voucher grant the app's server signs (amount per claim from the voucher); recipes with `raises` that burn Gems to raise speed/stamina on the cat collectible; races as contests (sides per runner, decided by a deciders key) or entry payments into a pool plus a voucher grant paying ranks; STRIDE a game token.",
+        "truly": "step counting happens off chain: a server's signature vouches for it (that is normal, not a gap)."
+      }
+    },
+    {
+      "id": "pay-per-message",
+      "split": "dev",
+      "source": "historic JailbreakMe",
+      "expect": "build",
+      "prompt": "Pay-per-message AI challenge: each message to our AI costs SOL, 70% of it goes into a prize pot, and whoever gets the AI to break its one rule takes the pot. The message price should go up as more people try.",
+      "judge": {
+        "asks": [
+          "pay per message",
+          "70% into a pot",
+          "the winner takes the pot",
+          "the price rises with attempts"
+        ],
+        "compose": "Each message a one-outcome box bought in one step (gives nothing) with `rise` (price goes up each sale) and a split of 70% to a pool; the winner claims via a voucher grant whose prize is a share of the pool, signed by the game's server/judge. (A plain payment has a fixed amount, so the rising price comes from a box with `rise`.)",
+        "truly": "judging whether the AI broke its rule is off chain (the server signs)."
+      }
+    },
+    {
+      "id": "step-challenge",
+      "split": "dev",
+      "source": "historic Moonwalk",
+      "expect": "build",
+      "prompt": "A fitness challenge: everyone deposits 0.05 SOL to join, then has to walk 5,000 steps a day for 30 days. Everyone who makes every single day gets their deposit back plus an equal share of the deposits from people who failed. Our app tracks the steps.",
+      "judge": {
+        "asks": [
+          "deposit to join",
+          "finishers get their deposit back",
+          "plus a share of the failed deposits"
+        ],
+        "compose": "Entries paid into a pool (payment with a 100% split to a pool, or a contest of one side), then a voucher grant (the app's results server signs who finished) whose per-claim amount the voucher names (deposit + share); or a contest with sides 'finished'/'failed' doesn't fit per-person verdicts. Honest note: the pool is the authority's to pay from, so players trust the app's server.",
+        "truly": "a trustless per-person verdict: each player passes or fails alone, and the chain can't see steps; the server vouches."
+      }
+    },
+    {
+      "id": "no-loss-savings",
+      "split": "dev",
+      "source": "historic Zelo",
+      "expect": "build",
+      "prompt": "I want a no-loss prize game for our community token: people put tokens in, nobody ever loses what they put in, and every week one person wins a prize pot that we top up from the treasury.",
+      "judge": {
+        "asks": [
+          "deposits are never lost",
+          "a weekly winner",
+          "the prize comes from a treasury top-up"
+        ],
+        "compose": "A no-loss lottery (`noLoss: true`, `every: 7d`) in the token: every ticket goes back after the draw, the winner takes the pot, filled by a seed plus the owner's payments or sale shares split to `lottery:<key>` (a schedule can't pay into a lottery pot).",
+        "truly": "withdrawing at any moment mid-round (tickets come back after each draw), and weighting by time held."
+      }
+    },
+    {
+      "id": "launchpad-tiers",
+      "split": "dev",
+      "source": "historic Solstarter",
+      "expect": "build",
+      "prompt": "Launchpad for our SOS token: people stake SOS to reach a tier (5k, 9k, 16k or 25k SOS), and each tier can buy a bigger allocation of a new project's token in the sale. Higher tiers should get in first.",
+      "judge": {
+        "asks": [
+          "stake SOS for tiers",
+          "tiered allocation sizes",
+          "higher tiers go first"
+        ],
+        "compose": "A farm of SOS with a lock tier; one sale listing (box/shop) per tier gated by `{ staked: { farm, atLeast: 5000|9000|16000|25000 } }`, each with its own perWallet cap (allocation) and its own `opens` time (higher tiers earlier).",
+        "truly": "nothing essential; a stake counts only while locked."
+      }
+    },
+    {
+      "id": "referral-kits",
+      "split": "dev",
+      "source": "an earlier live card",
+      "expect": "build",
+      "prompt": "Sell 'Starter Kit' NFTs for 0.01 SOL, 1,000 of them. Every buyer can come through someone's referral link, and whoever referred them gets 10% of that sale automatically.",
+      "judge": {
+        "asks": [
+          "1,000 kits at 0.01 SOL",
+          "a referral link per referrer",
+          "10% of each sale to that referrer automatically"
+        ],
+        "compose": "A shop item whose split has a `chosen` share of 10%: the buyer's page passes the referrer from the link, paid in the same transaction. No server needed.",
+        "truly": "nothing."
+      }
+    },
+    {
+      "id": "plot-rent",
+      "split": "dev",
+      "source": "an earlier live card",
+      "expect": "build",
+      "prompt": "Players own Plot NFTs (I'll sell 100 at 0.01 SOL). When anyone buys a House for 0.003 SOL on a plot, 10% of that goes to whoever owns that plot right now, even if it was resold.",
+      "judge": {
+        "asks": [
+          "100 plots at 0.01 SOL",
+          "houses at 0.003 SOL on a plot",
+          "10% to the plot's current holder"
+        ],
+        "compose": "The house listing's split has a `chosen:<plot item>` share of 10%: the buyer names the plot, and the program pays whoever holds that plot collectible at that moment.",
+        "truly": "nothing."
+      }
+    },
+    {
+      "id": "crowdfund",
+      "split": "dev",
+      "source": "an earlier live card",
+      "expect": "build",
+      "prompt": "All-or-nothing crowdfund for our album: fans pledge SOL, and if we reach 50 SOL by Friday we get the money and every backer gets a Backer badge NFT. If we miss it, everyone gets their SOL back.",
+      "judge": {
+        "asks": [
+          "pledges in SOL",
+          "the goal is checked: all or nothing",
+          "backers get a badge",
+          "refunds if missed"
+        ],
+        "compose": "A contest of one side with `minPot` 50 and a split sending the pot to the creator; `prize` a Backer badge item to each winning entry; short of the minimum, or overdue, everyone claims back.",
+        "truly": "nothing essential (the owner names the side when it closes)."
+      }
+    },
+    {
+      "id": "graded-packs",
+      "split": "dev",
+      "source": "historic Phygitals / ideas #111",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "Mystery packs of graded Pokémon card NFTs that we hold in our vault. A pack costs 0.5 SOL and gives one card, with rarer cards less likely. Anyone who doesn't like their card can sell it straight back to us for 85% of its listed value, and that card goes back into the packs.",
+      "judge": {
+        "asks": [
+          "packs giving one vaulted card NFT by rarity",
+          "instant sell-back at 85%",
+          "sold-back cards return to the packs"
+        ],
+        "compose": "Stashes per rarity tier holding the card NFTs, a box whose outcomes give `stash` by weight; a recipe per value tier with a `trade` line taking the card into the stash (`then: { stash }`) with `needs` on its tier, and an `out` paying tokens from a pool (85%).",
+        "truly": "a different buyback price per individual card needs one recipe per price tier."
+      }
+    },
+    {
+      "id": "case-site",
+      "split": "dev",
+      "source": "historic Flip.gg",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "A case opening site: cases from 0.01 SOL that can drop SOL or NFTs from our vault, case battles where two players open the same case and whoever pulls the higher total takes everything, and an upgrader where you risk an item you own for a chance at a better one.",
+      "judge": {
+        "asks": [
+          "cases with SOL and vault NFT prizes",
+          "case battles: higher total takes all",
+          "an upgrader: risk an item for a better one"
+        ],
+        "compose": "Boxes with pool prizes and `stash` outcomes; the upgrader a box that `rollsOn` the item (a win gives a better item/shifts its tier, a loss burns it via `then`); battles as a 2-side contest with `stakeNft` and a `wallets` gate (each stakes the NFT they pulled; the decider reading both pulls names the winner, who takes both).",
+        "truly": "the battle's comparison is read off chain by a decider (two opens settle separately)."
+      }
+    },
+    {
+      "id": "horse-breeding",
+      "split": "dev",
+      "source": "historic DarleyGo",
+      "expect": "build",
+      "prompt": "Horse racing game: a mare's owner can breed her with any stallion by paying a stud fee that goes to whoever owns that stallion, and gets a random foal. Each horse can only breed a few times. Race winners get 250, 150 and 100 of our token for 1st, 2nd and 3rd, and our server runs the races.",
+      "judge": {
+        "asks": [
+          "stud fee to the stallion's current owner",
+          "a random foal",
+          "limited breeding per horse",
+          "rank payouts 250/150/100"
+        ],
+        "compose": "A recipe `use`s the mare (`life.uses: 3`, a `cooldown`) and gives a Permit item; the breeding box `rollsOn` the permit (`then: burn`) with a `chosen:<stallion item>` share paying whoever holds that stallion, and outcomes giving foals by chance (a box's rollsOn doesn't count uses itself). Races: one voucher grant whose per-claim amount the server's voucher names (up to 250), or contests.",
+        "truly": "the race itself is off chain (the server signs)."
+      }
+    },
+    {
+      "id": "house-stakers",
+      "split": "dev",
+      "source": "historic Zeebit",
+      "expect": "build",
+      "flags": [
+        "chance",
+        "revenue"
+      ],
+      "prompt": "Dice and plinko paid from our house bankroll. People who stake our Zeebro NFTs should earn 10% of the house's edge, and unstaking a Zeebro early costs a 3% fee.",
+      "judge": {
+        "asks": [
+          "dice/plinko from a house pool",
+          "NFT stakers earn 10% of the edge",
+          "an early-unstake fee"
+        ],
+        "compose": "Boxes paying multipliers from a house pool, each sale's split sending a share to the farm's rewards pool (10% of the edge expressed as a percent of each bet); a farm of Zeebros with a lock (`lockAttribute`) that a recipe lifts for a price (`raises -1d fromNow`), i.e. an exit fee.",
+        "truly": "an exact '10% of net house profit' needs the share set as a percent of each bet."
+      }
+    },
+    {
+      "id": "lp-bankroll",
+      "split": "dev",
+      "source": "historic Gamba",
+      "expect": "partial",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "I want anyone to be able to deposit SOL into our casino's bankroll and share in its profits and losses, like being the house.",
+      "judge": {
+        "asks": [
+          "outside depositors fund the bankroll",
+          "they share profits",
+          "they share losses"
+        ],
+        "compose": "Nearest: a farm of SOL (or the game token) whose rewards pool is fed by a share of every bet: depositors earn from volume but never bear losses, and the house pool stays the project's own.",
+        "truly": "outside depositors bearing losses: a pool is only the project's, and a farm's principal can't be spent by the game."
+      }
+    },
+    {
+      "id": "nft-loans",
+      "split": "dev",
+      "source": "historic Yawww",
+      "expect": "partial",
+      "prompt": "Peer-to-peer NFT loans: a lender offers SOL against an NFT, the borrower gets the SOL, and if they don't repay within 7 days the lender gets the NFT.",
+      "judge": {
+        "asks": [
+          "a lender's SOL goes to the borrower",
+          "the NFT is collateral",
+          "default sends the NFT to the lender"
+        ],
+        "compose": "Nearest: a hold whose `for` outlasts the loan term (after it ends anyone can send the NFT home), the loan paid out by the authority, repayment as a payment; on default the authority sends the NFT to the lender before the hold ends. Gives up trustlessness: the project decides.",
+        "truly": "a trustless loan: lenders' offers in escrow and automatic foreclosure."
+      }
+    },
+    {
+      "id": "club-membership",
+      "split": "dev",
+      "source": "historic GolfN / vip-subscription",
+      "expect": "build",
+      "prompt": "Golf app: Club NFT holders earn rewards per round played. People without a club pay a 0.02 SOL monthly membership that renews automatically. Club holders should also be able to rent their club out to someone for a week.",
+      "judge": {
+        "asks": [
+          "club holders earn per round",
+          "a monthly membership",
+          "auto-renewal",
+          "renting a club for a week"
+        ],
+        "compose": "Round rewards via a voucher grant (server vouches rounds; gated on holding a Club). Membership: a pass with a `paid_until` time attribute that a renew recipe raises 30d `fromNow` for 0.02 SOL, gates reading `time: ahead` (gates don't read `life.lasts`); no auto-pull, the page reminds. Rental: a one-outcome box with a `chosen:club` share that `rollsOn` the renter's card with `shifts` adding `club_until` 7d `fromNow` (the owner keeps using the club too).",
+        "truly": "pulling money from a wallet automatically each month; transferring the right to use someone else's NFT trustlessly."
+      }
+    },
+    {
+      "id": "quadratic-funding",
+      "split": "dev",
+      "source": "historic Cubik",
+      "expect": "build",
+      "prompt": "A quadratic funding round: donors give USDC to the projects they like, and a 5,000 USDC matching pool gets split among projects by how many people backed each one, not how much.",
+      "judge": {
+        "asks": [
+          "donations to projects",
+          "a matching pool",
+          "match by number of backers"
+        ],
+        "compose": "Donations as payments (`any` amount, 100% to the project's wallet) leave public receipts; a script/results server computes the quadratic match and signs vouchers whose per-claim amount pays each project from the matching pool.",
+        "truly": "the chain doesn't compute the match itself (a script reads the receipts)."
+      }
+    },
+    {
+      "id": "pro-rata-presale",
+      "split": "dev",
+      "source": "historic Book of Meme",
+      "expect": "build",
+      "prompt": "A 24-hour presale: people send SOL, and when it ends everyone gets our token in proportion to how much SOL they sent.",
+      "judge": {
+        "asks": [
+          "SOL contributions over 24h",
+          "tokens pro rata to contribution"
+        ],
+        "compose": "A one-side contest with `entriesClose` 24h holds the SOL behind an on-chain deadline (or a box with opens/closes); after it closes a script computes each wallet's share from the public entries and a voucher grant pays each claim its own amount (a list written in xsolana.json can't carry amounts).",
+        "truly": "the pro-rata computation happens off chain from public receipts."
+      }
+    },
+    {
+      "id": "action-tickets",
+      "split": "dev",
+      "source": "historic Torque",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "Players earn raffle tickets by doing things in our game. Tickets enter weekly raffles for NFTs from our treasury. Also, anyone who refers a friend gets 5% of what that friend spends in our shop.",
+      "judge": {
+        "asks": [
+          "tickets earned by in-game actions",
+          "weekly raffles for treasury NFTs",
+          "5% to the referrer of the friend's shop spend"
+        ],
+        "compose": "Ticket token minted by a voucher grant the game server signs; a weekly lottery priced in the ticket token whose places win stash NFTs; shop listings with a `chosen` 5% share (the page remembers the friend's referrer and passes it on each purchase).",
+        "truly": "the chain can't remember who referred whom: the page/server passes the referrer each time."
+      }
+    },
+    {
+      "id": "team-vesting",
+      "split": "dev",
+      "source": "ideas #62 Streamflow",
+      "expect": "build",
+      "prompt": "Team token vesting: 1,000,000 of our tokens for 5 team members, a 1-year cliff, then monthly unlocks over the next year. Each member claims their own unlocked tokens.",
+      "judge": {
+        "asks": [
+          "allocations per member",
+          "a 1-year cliff",
+          "monthly unlocks",
+          "members claim themselves"
+        ],
+        "compose": "One `pay` schedule per member from a pool (`start: publish+365d`, `every: 30d`, `maxRuns: 12`) paying each member's wallet; anyone runs them when due. Honest note: the pool is the authority's (not a segregated escrow). (A list grant written in xsolana.json pays each wallet only once, so monthly list claims need roots built outside xsolana.json, or vouchers with a round per month.)",
+        "truly": "a segregated escrow the owner can't touch."
+      }
+    },
+    {
+      "id": "jackpot-and-boss",
+      "split": "dev",
+      "source": "historic SolSlay",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "A jackpot that draws every 90 seconds: people buy in with SOL, one winner takes the pot minus a 5% fee. Separately, boss fights cost energy that players buy, and after each boss the top 10 damage dealers get paid by rank from a prize pool. Our server tracks damage.",
+      "judge": {
+        "asks": [
+          "a jackpot every 90s",
+          "5% fee",
+          "buyable energy",
+          "rank payouts after each boss"
+        ],
+        "compose": "A lottery `every: 90s` with one place and a 5% cut or split; energy as a game token bought in the shop (or a recipe burning it per fight); rank payouts one voucher grant with per-claim amounts per boss round, from a pool.",
+        "truly": "damage is tracked off chain (the server signs)."
+      }
+    },
+    {
+      "id": "holders-daily",
+      "split": "dev",
+      "source": "a common ask",
+      "expect": "build",
+      "prompt": "Pay every holder of my NFT collection 5 of our tokens a day, without making them lock up or send their NFTs anywhere.",
+      "judge": {
+        "asks": [
+          "holders paid daily",
+          "no lock-up, NFTs stay in wallets"
+        ],
+        "compose": "A farm of the collection with `custody: watch` (the NFT stays free in the wallet, earning only while held) at a fixed `rate` of 5 a day; holders opt in once. Or a voucher grant signed daily (a round per day) from a snapshot.",
+        "truly": "paying holders who never opt in or claim (the program pays accounts it is given)."
+      }
+    },
+    {
+      "id": "creator-coin-fees",
+      "split": "dev",
+      "source": "ideas #110",
+      "expect": "partial",
+      "prompt": "I want a creator coin that pays me 1% of every trade, forever, and that fans can buy and sell anytime.",
+      "judge": {
+        "asks": [
+          "a tradeable coin, buy and sell any time",
+          "1% of every trade to the creator"
+        ],
+        "compose": "Launch on pump.fun or Meteora (their creator-fee programs pay on trades), then name the mint in loot as an existing token for shops, boxes, farms, gates around it; or a `rise` listing as a one-way curve.",
+        "truly": "a market/bonding curve with sell-back and fees on trades made elsewhere."
+      }
+    },
+    {
+      "id": "mining-rounds",
+      "split": "dev",
+      "source": "ideas #54 ORE",
+      "expect": "build",
+      "prompt": "Like ORE: people 'mine' our token in one-minute rounds. Miners pay SOL to join a round, and each round one miner wins that round's emission. Total supply is capped at 21 million and emission halves every year.",
+      "judge": {
+        "asks": [
+          "one-minute rounds",
+          "pay to join",
+          "one winner per round takes the emission",
+          "capped supply, yearly halving"
+        ],
+        "compose": "A lottery `every: 1m` priced in SOL whose place wins a prize `{ percent: 0, prize: { gives: share, pool: emission, percent: p } }`, an `issue` schedule minting into the `emission` pool with `halveEvery`, capped by `maxRuns`; ticket SOL split out to the treasury (or it piles up in the pot).",
+        "truly": "proof-of-work: winners are drawn by ticket weight, not by hashing."
+      }
+    },
+    {
+      "id": "dao-treasury-vote",
+      "split": "dev",
+      "source": "an earlier live card / ideas #65 Realms",
+      "expect": "partial",
+      "prompt": "Members pay 0.01 SOL a week into a guild treasury, and the 5 officers vote on how to spend it; spending needs 3 of 5.",
+      "judge": {
+        "asks": [
+          "weekly dues",
+          "a guild treasury",
+          "3-of-5 officer approval to spend"
+        ],
+        "compose": "A payment for dues whose treasury (`treasury: wallet:<Squads vault>`) is a Squads 3-of-5 vault; spending happens in Squads. Dues can't be pulled weekly: members pay each week (the page reminds).",
+        "truly": "governance/voting in loot itself; pulling weekly dues automatically."
+      }
+    },
+    {
+      "id": "mindfolk-cabins",
+      "split": "holdout",
+      "source": "historic Mindfolk",
+      "expect": "build",
+      "prompt": "Stake Lumberjack NFTs to earn 10 WOOD a day, 13 if the jack is trained. WOOD builds Cabins; jacks staked with a cabin earn double, and cabin owners can rent spare spots to others. Boats go on voyages that find Spores, which grow into WOOD after a few days. And we raffle stuff for WOOD.",
+      "judge": {
+        "asks": [
+          "10/13 WOOD a day by trained",
+          "cabins double earnings",
+          "renting spare spots",
+          "voyages find spores",
+          "spores grow into WOOD",
+          "WOOD raffles"
+        ],
+        "compose": "A farm at a rate with a boost on `trained`; a cabin boost needs something to write a cabin attribute on the jack (a recipe binding them with `takes: staked`, as in the elements-set example); renting spare spots a one-outcome box with a `chosen:cabin` share; voyages a mission tier with a chest prize; spores items with `readyAfter` that a recipe turns into WOOD; lotteries in WOOD.",
+        "truly": "a rented place in someone else's cabin as a trustless right."
+      }
+    },
+    {
+      "id": "bounty-escrow",
+      "split": "holdout",
+      "source": "historic Gibwork",
+      "expect": "build",
+      "prompt": "Bounty board: a poster funds a bounty upfront, the money sits in escrow, and it's paid to the worker once the poster approves the work. If nobody delivers by the deadline, the poster gets it back. We take a 10% fee.",
+      "judge": {
+        "asks": [
+          "funded upfront into escrow",
+          "paid to the worker on approval",
+          "refund on deadline",
+          "10% fee"
+        ],
+        "compose": "A contest of one side the poster backs, its split a 90% share to the worker's wallet and 10% treasury, decided by the poster as decider; overdue → refund. Or a pool + voucher grant. The worker must be known when it opens (or paid from a pool by the project).",
+        "truly": "naming the worker after funding inside a contest (shares fixed when it opens)."
+      }
+    },
+    {
+      "id": "fantasy-lineups",
+      "split": "holdout",
+      "source": "historic Sorare",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "Fantasy sports with athlete card NFTs: holders enter lineups for daily contests, lineups are scored on real games, and the top 10 each day win SOL by rank from the entry fees. Only people holding at least one card can enter.",
+      "judge": {
+        "asks": [
+          "card holders only",
+          "daily entry fees",
+          "top 10 paid by rank",
+          "scored on real games"
+        ],
+        "compose": "Entry as a one-outcome box (gives nothing) gated on the card collection with a split to a pool (payments take no gate), or a gated contest; one voucher grant per day with per-claim amounts (a results server signs each rank's amount).",
+        "truly": "real-world scores are reported off chain (a signer)."
+      }
+    },
+    {
+      "id": "paid-dms",
+      "split": "holdout",
+      "source": "historic time.fun",
+      "expect": "build",
+      "prompt": "Fans pay me 0.1 SOL to send a DM. The payment is held until I answer; if I don't answer within 48 hours they get it back automatically.",
+      "judge": {
+        "asks": [
+          "pay to DM",
+          "held until answered",
+          "refund after 48h"
+        ],
+        "compose": "A contest of one side per DM (or a small batch) with a 100% share to the creator, decided when the creator answers; overdue pays everyone back. Opening one per DM costs the authority a call; or vouchers.",
+        "truly": "nothing essential; each held DM is its own contest the creator's key opens."
+      }
+    },
+    {
+      "id": "raffle-your-nft",
+      "split": "holdout",
+      "source": "historic Rafffle",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "Let sellers raffle off their own NFTs on our site: they pick the ticket price, how many tickets and how long it runs, and keep 95% of ticket sales; we keep 5%.",
+      "judge": {
+        "asks": [
+          "any seller's NFT as the prize",
+          "seller sets price/supply/length",
+          "95% to seller, 5% to us"
+        ],
+        "compose": "A lottery per raffle (published by the project) with one place winning the NFT from a stash and a 95% `wallet:<seller>` split; the seller hands the NFT to the project to put in the stash.",
+        "truly": "a seller opening a raffle on their own without the project's keys."
+      }
+    },
+    {
+      "id": "dragon-eggs",
+      "split": "holdout",
+      "source": "historic Bōryoku Dragonz",
+      "expect": "build",
+      "prompt": "Genesis Dragon NFTs earn 7 BOKU a day when staked. Two dragons plus 972 BOKU (burned) make an egg that hatches into a Baby Dragon after 21 days; each dragon can breed once a week.",
+      "judge": {
+        "asks": [
+          "7 BOKU a day staked",
+          "two dragons + 972 BOKU burned make an egg",
+          "hatches after 21 days",
+          "breeding cooldown"
+        ],
+        "compose": "A farm at a fixed rate; a recipe of two dragons (kept, with a `cooldown`) plus 972 BOKU burned giving an egg item with `readyAfter` 21d; a second recipe hatches it.",
+        "truly": "nothing."
+      }
+    },
+    {
+      "id": "retreat-reroll",
+      "split": "holdout",
+      "source": "historic Stoned Ape Crew",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "Staked apes earn 15 PUFF a day, 30 if the ape has a role. A retreat costs 333 PUFF for a 60% chance at getting a new role, or 666 PUFF for an 80% chance.",
+      "judge": {
+        "asks": [
+          "15/30 PUFF by role",
+          "333 PUFF 60% retreat",
+          "666 PUFF 80% retreat"
+        ],
+        "compose": "A farm with a boost on a numeric `role` attribute (0 = none); two boxes that roll on the ape (`rollsOn`, staked with watch/freeze so the box can read it), priced 333/666 PUFF, whose winning outcome shifts the role (weights 60/40 and 80/20).",
+        "truly": "nothing."
+      }
+    },
+    {
+      "id": "points-airdrop",
+      "split": "holdout",
+      "source": "historic Backpack points",
+      "expect": "build",
+      "prompt": "We ran four seasons of points off-chain. Now each wallet should claim our token in proportion to its points, and every Mad Lads NFT holder also gets a flat 1,000 tokens, once per NFT.",
+      "judge": {
+        "asks": [
+          "claims in proportion to points",
+          "a flat claim per Mad Lads NFT, once per NFT"
+        ],
+        "compose": "A voucher grant whose per-claim amount pays each wallet its share (a results server or script signs; a list written in xsolana.json can't carry amounts); a second open grant gated on holding a Mad Lad (each collectible shown claims once) paying 1,000.",
+        "truly": "nothing essential (the points snapshot is the owner's)."
+      }
+    },
+    {
+      "id": "true-dutch",
+      "split": "holdout",
+      "source": "an earlier live card",
+      "expect": "build",
+      "prompt": "Dutch auction drop: 100 'Moon Shard' NFTs. Price starts at 0.02 SOL and drops every 10 minutes by 0.002 until it hits 0.004 SOL, no matter how many have sold.",
+      "judge": {
+        "asks": [
+          "starts 0.02",
+          "drops every 10 min",
+          "floor 0.004",
+          "the clock ignores sales"
+        ],
+        "compose": "A shop listing with `fall` (step 0.002, every 10m, floor 0.004) and `\"clock\": \"shared\"`: it keeps falling on its own clock however many sell (a Dutch drop of many units).",
+        "truly": "nothing."
+      }
+    },
+    {
+      "id": "leverage",
+      "split": "holdout",
+      "source": "ideas #46 Parcl / #76",
+      "expect": "partial",
+      "prompt": "Let people trade SOL's price with 10x leverage, long or short, with liquidations.",
+      "judge": {
+        "asks": [
+          "leveraged long/short",
+          "liquidations"
+        ],
+        "compose": "Nothing in loot does leverage; the honest answer says so. A prediction contest on SOL's price (pooled, not leveraged) is a far-off alternative, offered only as such.",
+        "truly": "leverage, perpetuals, price oracles, liquidations."
+      }
+    },
+    {
+      "id": "depin-stations",
+      "split": "holdout",
+      "source": "historic GEODNET",
+      "expect": "build",
+      "prompt": "GPS stations earn up to 48 of our tokens a day for uptime, halving every year. Stations with a Location NFT earn 50% more. 80% of customer subscription revenue buys back and burns the token.",
+      "judge": {
+        "asks": [
+          "uptime rewards up to 48/day",
+          "yearly halving",
+          "Location NFT boost",
+          "80% of subscriptions buy back and burn"
+        ],
+        "compose": "A schedule minting into a rewards pool, halving yearly; a voucher grant (the network's server signs uptime) capped at 48 a day per wallet, with a second grant or higher amount gated on the Location NFT; subscriptions paid in the token with an 80% burn share (a swap buyback is outside loot; burning the token paid is the nearest).",
+        "truly": "a market buyback (a swap)."
+      }
+    },
+    {
+      "id": "cafe-loyalty",
+      "split": "holdout",
+      "source": "historic Boba Guys",
+      "expect": "build",
+      "prompt": "Café loyalty: a QR code at the register gives a point per visit, enough points unlock secret-menu tiers, and the first 10,000 members get a welcome collectible.",
+      "judge": {
+        "asks": [
+          "a point per visit by QR",
+          "tiers unlock a secret menu",
+          "first 10,000 get a welcome collectible"
+        ],
+        "compose": "Points minted per visit by a signer (a results server signing a voucher per visit with `perWalletEach` 1/day; a static QR with `perKey: 1` pays only once ever); recipes burning 10 points for a soulbound Regular badge that gates the secret-menu item; an open grant with `perWallet: 1`, capped at 1,000 total, giving the welcome collectible.",
+        "truly": "the visit is the shop's word (signed)."
+      }
+    },
+    {
+      "id": "login-streak",
+      "split": "holdout2",
+      "source": "a common game pattern",
+      "expect": "build",
+      "prompt": "Daily login rewards for my game: day 1 gives 10 coins, rising to 70 coins on day 7, and the streak resets if a player misses a day. Our server knows when they log in.",
+      "judge": {
+        "asks": [
+          "daily claim",
+          "amount rises with the streak",
+          "resets on a missed day"
+        ],
+        "compose": "A voucher grant of the coin token whose voucher (signed by the game server, a round per day) names each claim's amount by streak day, up to 70; perWalletEach 1/day; the server tracks the streak. (On chain only: a recipe raising a streak attribute with a time cooldown is possible but the reset needs the server.)",
+        "truly": "the chain can't see logins: a signer vouches."
+      }
+    },
+    {
+      "id": "season-pass-tracks",
+      "split": "holdout2",
+      "source": "a common game pattern",
+      "expect": "build",
+      "prompt": "A season pass with a free track and a premium track. Premium costs 0.02 SOL. Each level a player reaches (our server knows levels) unlocks a reward on the free track, and premium holders also get a better reward at the same level.",
+      "judge": {
+        "asks": [
+          "premium pass for 0.02 SOL",
+          "free-track rewards per level",
+          "extra premium rewards per level"
+        ],
+        "compose": "A premium pass item (soulbound) in the shop; per-level rewards as voucher grants (server signs a round per level); premium rewards a second grant gated on holding the pass.",
+        "truly": "levels are off chain (a signer vouches)."
+      }
+    },
+    {
+      "id": "puzzle-pot",
+      "split": "holdout2",
+      "source": "a common daily-puzzle pattern",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "A daily puzzle: players pay 0.005 SOL to enter, everyone who solves it splits the pot, and I keep 5%. Our server checks the answers.",
+      "judge": {
+        "asks": [
+          "entry fee",
+          "solvers split the pot",
+          "5% fee"
+        ],
+        "compose": "Entries into a pool (a one-outcome box or a payment whose split sends 95% to a pool and 5% to the treasury), then a voucher grant per day whose per-claim amount the server names (the pot ÷ the solvers); an honest note that until it is paid out the pool is the authority's to move.",
+        "truly": "a per-entry verdict on chain (who solved it is the server’s word, signed)."
+      }
+    },
+    {
+      "id": "charity-bake-sale",
+      "split": "holdout2",
+      "source": "a community fundraiser",
+      "expect": "build",
+      "prompt": "A charity bake sale: people buy cookie NFTs for 0.01 SOL, all of the money goes to the charity's wallet, and anyone who buys 5 or more cookies gets a thank-you badge.",
+      "judge": {
+        "asks": [
+          "cookie NFTs at 0.01",
+          "100% to the charity wallet",
+          "a badge for 5+ cookies"
+        ],
+        "compose": "A shop item whose split sends 100% to wallet:<charity> (or `\"treasury\": \"wallet:<charity>\"`); the badge a recipe that takes 5 cookies (five `use` lines, kept, or a `burn` line of 5) and gives a soulbound badge, `perWallet` 1; or a list or voucher grant from the receipts.",
+        "truly": "nothing essential."
+      }
+    },
+    {
+      "id": "pet-upkeep",
+      "split": "holdout2",
+      "source": "a virtual pet pattern",
+      "expect": "build",
+      "prompt": "A virtual pet game: you adopt an egg for 0.005 SOL, it hatches after a day, and you have to feed your pet (costs FOOD tokens) or it stops earning its daily HEARTS. Well-fed pets level up over time.",
+      "judge": {
+        "asks": [
+          "adopt an egg",
+          "hatch after a day",
+          "feeding with FOOD or it stops earning",
+          "earns HEARTS daily",
+          "levels up over time"
+        ],
+        "compose": "An egg item with `life.readyAfter` 1d and a hatch recipe; a farm of pets with an `upkeepAttribute` (food) that a feed recipe raises `fromNow` for FOOD, a rate of HEARTS, and a `growth` writing the level while fed.",
+        "truly": "nothing essential."
+      }
+    },
+    {
+      "id": "ticket-resale-cap",
+      "split": "holdout2",
+      "source": "ticketing",
+      "expect": "partial",
+      "prompt": "Concert tickets as NFTs: 200 tickets at 0.05 SOL. Fans can resell them, but never for more than 0.06 SOL, and the artist gets 10% of every resale.",
+      "judge": {
+        "asks": [
+          "200 tickets at 0.05",
+          "resale allowed",
+          "resale price capped at 0.06",
+          "10% to the artist on resale"
+        ],
+        "compose": "Tickets as a shop item (supply 200). Fans resell with a listing the game's page builds (`app.listForSale`) with a 10% share to the artist's wallet, or on marketplaces with the collection's royalty: neither caps the price (a listing's price and shares are the seller's). Nearest capped version: a buyback recipe that trades a ticket into a stash for 0.05 SOL from a pool, and a one-outcome box at up to 0.06 SOL that gives a ticket from that stash.",
+        "truly": "capping a resale price on markets loot doesn't run; enforced royalties on outside markets."
+      }
+    },
+    {
+      "id": "lend-items-weekend",
+      "split": "holdout2",
+      "source": "item rentals",
+      "expect": "partial",
+      "prompt": "Let players lend their sword NFTs to friends for a weekend: the friend can use the sword in the game for 48 hours, then it automatically comes back.",
+      "judge": {
+        "asks": [
+          "lend a sword NFT",
+          "the borrower can use it for 48h",
+          "automatic return"
+        ],
+        "compose": "Nearest: a rental listing (`app.listForRent(asset, { price, lasts: 48h, maxPeriods: 1 })` at the least price above 0): the friend takes it and is the sword's `user` for 48 hours, which the game reads (`app.rentedTo`); the sword stays with the project meanwhile, and once the rental ends the owner's close sends it home. Any wallet can take a listing, not only the friend, and gates don't read rentals (the game checks the renter).",
+        "truly": "a free loan to one named friend (a listing is priced above 0 and open to any taker), returned without the owner’s close."
+      }
+    },
+    {
+      "id": "moving-odds-market",
+      "split": "holdout2",
+      "source": "prediction markets",
+      "expect": "partial",
+      "prompt": "A prediction market on our tournament final where the odds move as people bet, and people can sell their position before the match.",
+      "judge": {
+        "asks": [
+          "bets on the final",
+          "odds that move with bets",
+          "selling a position early"
+        ],
+        "compose": "Nearest: a pooled contest (parimutuel): the payout per unit is set by the pools when it is decided, which is a kind of moving odds; no selling before the result.",
+        "truly": "fixed/live odds and trading positions (a market)."
+      }
+    },
+    {
+      "id": "monthly-mystery-box",
+      "split": "holdout2",
+      "source": "subscription commerce",
+      "expect": "build",
+      "prompt": "A monthly mystery box club: members pay 0.03 SOL a month, and each month every paid-up member opens one box with a random collectible; we ship a matching physical item.",
+      "judge": {
+        "asks": [
+          "monthly membership",
+          "one box per paid month",
+          "random collectible",
+          "physical item shipped"
+        ],
+        "compose": "A membership pass with a paid_until time raised by a renew recipe (0.03 SOL, fromNow 30d), a box gated on the pass with time ahead and perWalletEach 1 per 30d giving collectibles by chance; the backend ships from the box receipts. No auto-charge.",
+        "truly": "pulling the monthly fee automatically."
+      }
+    },
+    {
+      "id": "bracket-buyin",
+      "split": "holdout2",
+      "source": "esports",
+      "expect": "build",
+      "flags": [
+        "chance"
+      ],
+      "prompt": "An 8-player tournament: each player buys in for 0.05 SOL, the winner gets 70% of the pot, the runner-up 20%, and the house keeps 10%. Our server reports the results.",
+      "judge": {
+        "asks": [
+          "8 buy-ins of 0.05",
+          "70% to the winner",
+          "20% to the runner-up",
+          "10% house"
+        ],
+        "compose": "Buy-ins into a pool (a payment or a one-outcome box whose split sends 90% to the pool and 10% to the treasury, gated to the 8 wallets or `perWallet` 1), then one voucher grant whose per-claim amounts the server names (winner, runner-up), up to the winner's; a contest pays only one side, so it can't pay a runner-up.",
+        "truly": "results are off chain (a signer)."
+      }
+    },
+    {
+      "id": "fan-token-perks",
+      "split": "holdout2",
+      "source": "fan engagement",
+      "expect": "build",
+      "prompt": "A fan token for our esports team: fans who stake at least 500 tokens for a month get into a monthly raffle for signed jerseys, and the top 3 stakers get a meet-and-greet.",
+      "judge": {
+        "asks": [
+          "stake 500+ for a month",
+          "a monthly raffle for stakers",
+          "top 3 stakers get a meet-and-greet"
+        ],
+        "compose": "A token farm with a 30d lock tier; a monthly lottery gated by staked{farm, atLeast 500} whose places win jersey NFTs from a stash (or items); top 3 by stake via a list/voucher grant from a snapshot of seats (the chain doesn't rank).",
+        "truly": "ranking stakers on chain."
+      }
+    },
+    {
+      "id": "referral-ladder",
+      "split": "holdout2",
+      "source": "growth programs",
+      "expect": "build",
+      "prompt": "Every referral link pays the referrer 5% of each sale, and anyone who brings in 10 buyers gets an Ambassador NFT.",
+      "judge": {
+        "asks": [
+          "5% to the referrer per sale",
+          "an Ambassador NFT at 10 referrals"
+        ],
+        "compose": "A chosen 5% share on the sale (the page passes ?ref=); the Ambassador badge a voucher/list grant a script signs after counting referrals from the public receipts.",
+        "truly": "counting referrals on chain (a script reads receipts)."
+      }
+    }
+  ]
+}

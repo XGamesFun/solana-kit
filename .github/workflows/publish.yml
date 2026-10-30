@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing and provenance, and the MCP Registry's GitHub sign-in
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      # The MCP Registry's publisher, pinned: change it on purpose, never to the mutable "latest".
+      MCP_PUBLISHER_VERSION: v1.8.6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Node 24 ships npm 11, which publishes through npm's trusted publishing (OIDC).
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run fixtures
+      - run: npm run check
+      # The release's tag must be the package's version.
+      - run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
+      - run: npm publish
+        env:
+          # Only needed until the package has a trusted publisher on npmjs.com; with one, npm uses OIDC instead.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The same version in the MCP Registry, from server.json (its name's namespace, io.github.XGamesFun, signs in as
+      # this repository's owner).
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "xsolana": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@xgamesfun/solana@0.20.1",
+        "xsolana",
+        "mcp"
+      ]
+    }
+  }
+}

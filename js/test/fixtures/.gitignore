@@ -1,0 +1,5 @@
+# Programs read from a cluster are downloaded by `npm run fixtures`, not committed. test_hook.so is made for the
+# tests and committed.
+*.so
+!test_hook.so
+*.download

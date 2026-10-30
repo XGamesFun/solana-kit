@@ -1,0 +1,20 @@
+{
+  "name": "xgamesfun",
+  "interface": {
+    "displayName": "xsolana by games.fun"
+  },
+  "plugins": [
+    {
+      "name": "xsolana",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

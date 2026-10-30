@@ -1,0 +1,102 @@
+{
+  "name": "@xgamesfun/solana",
+  "version": "0.20.1",
+  "mcpName": "io.github.XGamesFun/solana-kit",
+  "description": "One shared Solana program for game and community economies, its JS client, and the tools that let an AI agent design, check, simulate and launch an economy on it.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XGamesFun/solana-kit.git"
+  },
+  "homepage": "https://github.com/XGamesFun/solana-kit#readme",
+  "bugs": {
+    "url": "https://github.com/XGamesFun/solana-kit/issues"
+  },
+  "keywords": [
+    "solana",
+    "economy",
+    "loot-box",
+    "staking",
+    "nft",
+    "game",
+    "mcp",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./js/index.js"
+    },
+    "./client": {
+      "types": "./types/client/index.d.ts",
+      "default": "./js/client/index.js"
+    },
+    "./chain/*": {
+      "types": "./types/chain/*.d.ts",
+      "default": "./js/chain/*.js"
+    },
+    "./play": {
+      "types": "./types/play/index.d.ts",
+      "default": "./js/play/index.js"
+    },
+    "./results": {
+      "types": "./types/results/index.d.ts",
+      "default": "./js/results/index.js"
+    },
+    "./idl.json": "./js/client/idl/loot.json",
+    "./package.json": "./package.json",
+    "./release.json": "./release.json"
+  },
+  "sideEffects": [
+    "./bin/xsolana.mjs",
+    "./js/approve/page.js"
+  ],
+  "files": [
+    "js/",
+    "!js/test/",
+    "!js/sim/",
+    "types/",
+    "release.json",
+    "bin/",
+    "skills/",
+    "examples/*.json",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "DISCLAIMER.md"
+  ],
+  "scripts": {
+    "test": "node --test \"js/test/**/*.test.mjs\"",
+    "lint": "eslint .",
+    "types": "tsc -p tsconfig.types.json",
+    "fixtures": "node scripts/fetch-fixtures.mjs",
+    "check": "node scripts/fetch-fixtures.mjs --check && node scripts/sync-skills.mjs --check && node scripts/release-manifest.mjs --check && eslint . && npm test",
+    "check:idl": "node scripts/sync-idl.mjs --check",
+    "sync-idl": "node scripts/sync-idl.mjs",
+    "sync-skills": "node scripts/sync-skills.mjs",
+    "release:manifest": "node scripts/release-manifest.mjs",
+    "prepack": "node scripts/release-manifest.mjs --check && tsc -p tsconfig.types.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "ajv": "8.20.0",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "litesvm": "1.6.1",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2"
+  },
+  "bin": {
+    "xsolana": "bin/xsolana.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "types": "./types/index.d.ts"
+}

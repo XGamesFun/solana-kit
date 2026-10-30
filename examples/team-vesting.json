@@ -1,0 +1,70 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Team Vesting",
+  "prompt": "Vest 1,200,000 SHARE to our lead developer: nothing for three months, then 100,000 a month for a year. Nobody, me included, should be able to take it back or stop it. Also pay our two advisors their monthly allocations from a list.",
+  "currency": "share",
+  "tokens": [
+    {
+      "key": "share",
+      "source": "game",
+      "name": "Share",
+      "symbol": "SHARE",
+      "decimals": 6
+    }
+  ],
+  "collection": false,
+  "schedules": [
+    {
+      "key": "lead",
+      "name": "Lead developer",
+      "does": "pay",
+      "sealed": true,
+      "currency": "share",
+      "to": "wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T",
+      "amount": 100000,
+      "start": "publish+90d",
+      "every": "30d",
+      "maxRuns": 12,
+      "fund": 1200000,
+      "fundFrom": "mint"
+    }
+  ],
+  "grants": [
+    {
+      "key": "advisors",
+      "name": "Advisor allocations",
+      "prize": {
+        "gives": "tokens",
+        "amount": 20000,
+        "from": "mint",
+        "currency": "share"
+      },
+      "list": [
+        {
+          "wallet": "Adv1111111111111111111111111111111111111111",
+          "amount": 20000,
+          "round": 1
+        },
+        {
+          "wallet": "Adv1111111111111111111111111111111111111111",
+          "amount": 20000,
+          "round": 2
+        },
+        {
+          "wallet": "Adv2222222222222222222222222222222222222222",
+          "amount": 10000,
+          "round": 1
+        },
+        {
+          "wallet": "Adv2222222222222222222222222222222222222222",
+          "amount": 10000,
+          "round": 2
+        }
+      ],
+      "limits": {
+        "total": 4
+      }
+    }
+  ]
+}
