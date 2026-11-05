@@ -1191,7 +1191,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const value = units(amount, decimalsOf(f.stakes));
       const mints = [...(value > 0n ? [farm.farmed.Tokens.mint] : []), ...(!forfeit ? [farm.rewards_mint] : [])];
       const token = await farmTokens(mints, mints, { extra, transfers });
-      return send([...token.before, loot.unstakeTokensIx({ player: wallet.address, project, id: f.id, farm, amount: value, forfeit, ...token })]);
+      // An exit that would lose what the seat grew since its last refresh writes it first, in the same transaction.
+      const by = wallet.address;
+      const seat = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
+      const first = [];
+      if (seat && loot.refreshFirst(farm, seat, value, forfeit)) {
+        const { before, ...nft } = seat.asset !== NOBODY ? await nftOf(seat.asset) : { before: [] };
+        first.push(...before, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by, seat, ...nft, extra: token.extra }));
+      }
+      return send([...token.before, ...first, loot.unstakeTokensIx({ player: wallet.address, project, id: f.id, farm, amount: value, forfeit, ...token })]);
     },
 
     /**

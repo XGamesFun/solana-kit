@@ -1501,6 +1501,11 @@ const farmSide = (project, id, farm) => ({
   rewards_pool: pda.pool(project, farm.rewards_pool),
   rewards_mint: farm.rewards_mint,
 });
+/** Whether a farm reads or writes its seats' players' profiles (`Farm::uses_profile`): a gate or a boost on a profile,
+ * or a growth written on one. Its moves then pass the player's profile. */
+const usesProfile = (farm) => [...(farm.gates ?? []), ...(farm.boosts ?? []).map((b) => b.rule)].some((r) => r?.of === 'Profile') || (farm.growth ?? []).some((g) => g.profile);
+const profileOf = (project, farm, player) => (usesProfile(farm) ? pda.profile(project, player) : null);
+
 /** What every move of a farm writes: its rewards' mint when it mints at a fixed rate, its rewards pool otherwise. */
 const farmWrites = (farm) => (farm.rate?.mints ? ['rewards_mint'] : ['rewards_pool']);
 
@@ -1517,6 +1522,7 @@ function tokenSeat({ player, project, id, farm, programs, paid = false }) {
     player_tokens: ata(player, mint, tokenProgramOf(programs, mint)),
     player_rewards: paid ? ata(player, farm.rewards_mint, tokenProgramOf(programs, farm.rewards_mint)) : null,
     ...farmSinks(project, farm),
+    profile: profileOf(project, farm, player),
   };
 }
 
@@ -1539,6 +1545,17 @@ export const unstakeTokensIx = ({ player, project, id, farm, amount, forfeit = f
     remaining: tailOf(extra),
     // An exit fee that burns writes the staked mint; a toll that burns, the rewards' mint.
     writable: [...farmWrites(farm), ...tollWrites(farm), ...(farm.exit_to === 'Burn' ? ['mint'] : [])],
+  });
+
+/**
+ * Whether taking `amount` out of a token seat (decoded `seat`) needs a `refreshSeatIx` of it first, in the same
+ * transaction (`RefreshFirst`): the farm grows, and the exit closes the seat or drops it below a growth's least stake, so
+ * what it grew since its last refresh is written before it goes. Never under `forfeit`.
+ */
+export const refreshFirst = (farm, seat, amount, forfeit = false) =>
+  !forfeit && BigInt(amount) > 0n && (farm.growth ?? []).some((g) => {
+    const least = BigInt(g.at_least ?? 0) > 0n ? BigInt(g.at_least) : 1n;
+    return BigInt(seat.amount) >= least && BigInt(seat.amount) - BigInt(amount) < least;
   });
 
 /** What a token seat may take out now (Unix seconds `now`): its unbonded tokens once their wait is over, else 0. */
@@ -1842,6 +1859,7 @@ function nftSeat({ player, project, id, farm, asset, collection, hasAuthority = 
       seat: pda.seat(farmAddress, farm.farmed.Tokens ? player : key),
       // Rewards are paid only as an NFT's own seat leaves.
       player_rewards: leaving && !farm.farmed.Tokens ? ata(player, farm.rewards_mint, tokenProgramOf(programs, farm.rewards_mint)) : null,
+      profile: profileOf(project, farm, player),
     },
     proof: p.proof,
     writable: p.writable,
@@ -1949,7 +1967,7 @@ export const refreshSeatIx = ({ signer, project, id, farm, by, seat, collection,
   const p = seat.asset === NO_ADDRESS
     ? standIn(address)
     : piece({ project, asset: seat.asset, wallet: holder, collection, hasAuthority, tokenMetadata: tm, compressed, ...farmKeeps(farm, { writes: Boolean(farm.growth?.length) }), moves: false, locks: false });
-  return lootIx('refresh_seat', {}, { signer, ...farmSide(project, id, farm), seat: address, ...p.accounts }, { remaining: tailOf(extra), writable: [...farmWrites(farm), ...p.writable] });
+  return lootIx('refresh_seat', {}, { signer, ...farmSide(project, id, farm), seat: address, ...p.accounts, profile: profileOf(project, farm, seat.player) }, { remaining: tailOf(extra), writable: [...farmWrites(farm), ...p.writable] });
 };
 
 // ---------------------------------------------------------------- recipes and holds
