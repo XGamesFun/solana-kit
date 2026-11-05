@@ -4,6 +4,41 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.23.0 (not released; the program is not deployed yet)
+
+For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no account of 0.22.0 carries over.
+
+### The program, as the tools see it
+
+- **Lists of records** (tag 26, `decodeList`): a wallet's counts (`["counts", project, wallet]`) replace the receipts
+  of boxes, recipes and lotteries; a grant keeps its limit records and the rounds it paid in `2^shard_bits` shards
+  (`["claims" | "rounds", grant, incarnation, shard]`), closed by anyone once the grant is gone (`close_shard`).
+- **Vouchers** sign `"loot-grant-v5" | sha256(body)` and name several rounds, each paid once (`voucherBytes` with
+  `rounds`, `claimGrantIx` with `rounds`/`proofs`/`paidRounds`); a claim may need 400,000 compute units.
+  **Verdicts** sign `"loot-verdict-v4" | sha256(body)`, a side a `u16` (65,535 calls it off).
+- **A lottery round is its own record** (`["round", lottery, incarnation, round]`, `decodeRound`), holding its money in
+  accounts of its own: `settle_round` gives its places' prizes and sweeps, `pull` pays one part of one entry
+  (`partsOwed`), the last closes it. Places are runs (`times`); `Prize::Raffled` draws an NFT of the lottery's own
+  stash at random. `finish_lottery_contribution` is gone.
+- **A contest's entries are one list** (`decodeEntries`); `claim(entry, nonce, forgo, end, give_up, nfts)`; winners
+  share the losers' NFTs (`cap`), losers send nothing.
+- **The tail**: every route's extra accounts (hook accounts, Core's checks) come from the Memo program's account on
+  (`tailOf`).
+- **Several a call**: `stake_nft`, `unstake_nft`, `harvest`, `stash` (`weights`), `hold`, `release` and `Make { item,
+  tree, attributes }` (`makeIx`) take several NFTs, seats or owners (`more`).
+- **Smaller**: u16 pool indexes; a hold names `payer` and `rent_to`; a burn names the holder, who gets its rent; anyone
+  closes a burned NFT's Sheet (`closeSheetIx`); `run_schedule(upto)` catches up in one call, sealed schedules up to
+  100,000 runs; an order's reserve counts every unit its settle may open (`orderEscrow`); a token exit that would lose
+  its seat's growth refreshes first (`refreshFirst`); a watched farm refuses an NFT it can't read (`NotProven`).
+
+### The tools
+
+- The spec: a lottery place's `times`, a lottery's `nfts` and a `raffled` prize, a contest's `losersEach`, a grant's
+  `wallets` and `rounds` (its shard bits). The plan puts several stash NFTs in a call; the cost and the simulation
+  count entries' bytes that never come back and the reserve's units.
+- js/play: lotteries read their rounds; `claims()` lists `settle-round`, `pull` and `payout`; a contest's claim picks a
+  winner's share; grant claims read the shards.
+
 ## 0.22.0 (not released; the program is not deployed yet)
 
 For loot 0.22.0, the release that launches. The IDL, the client, the spec and the docs follow it; no account of 0.20.1

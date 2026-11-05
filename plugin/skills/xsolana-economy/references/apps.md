@@ -125,8 +125,11 @@ await app.balances();                     // what they hold of each of the econo
   power of two as the plan's root does), or takes it from a server that keeps a long list. A stake gate
   (`{ "staked": … }`) needs nothing from the page: js/play passes the player's seat and the farm, and says plainly when
   the stake is too small or its lock is over (show the farm's locked tiers next to the gate).
-- **A no-loss lottery** (`noLoss`): completing the draw sends every ticket back to its buyer (anyone may complete
-  it, so say "your tickets come back after the draw"), and the winners then collect the pot.
+- **A no-loss lottery** (`noLoss`): once the round is drawn every ticket is owed back to its buyer (a pull, which
+  anyone may send, so say "your tickets come back after the draw"), and the winners then collect the pot.
+- **A lottery round** moves on in a few steps whatever its size: `app.claims()` lists the draw (`reveal`), moving a
+  drawn round on (`settle-round`: its places' prizes, then its sweep), what this player is owed (`pull`) and paying
+  everyone else (`payout`); `app.claim(c)` sends one. The last pull closes the round.
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

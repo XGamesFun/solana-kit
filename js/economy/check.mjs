@@ -643,8 +643,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       else if (st && !stashNfts(st).some((n) => n.asset === line.nft))
         refuse(code, `${at}.nft`, `${what} gives the NFT ${line.nft}, which ${label(st)} does not list: a prize gives only an NFT a stash of the game holds, so it would never be given.`, `List it in ${label(st)}'s "nfts", which puts it in when the economy goes live.`);
     } else if (line.gives === 'roll') prizeBox(line.box, `${at}.box`, what, code);
-    else if (line.gives === 'raffled' && code !== 'E-LOTTERY') refuse(code, `${at}.gives`, `${what} gives an NFT drawn from a lottery's own stash: only a lottery's place does (BadPrize).`, 'Give an NFT of a stash through a box\'s roll ("gives": "stash"), or raffle them in a lottery.');
-    else refuse(code, `${at}.gives`, `${what} gives “${line.gives}”, which no prize is.`, 'Use "item", "tokens", "share", "nft" or "roll".');
+    else if (line.gives === 'raffled') {
+      if (code !== 'E-LOTTERY') refuse(code, `${at}.gives`, `${what} gives an NFT drawn from a lottery's own stash: only a lottery's place does (BadPrize).`, 'Give an NFT of a stash through a box\'s roll ("gives": "stash"), or raffle them in a lottery.');
+    } else refuse(code, `${at}.gives`, `${what} gives “${line.gives}”, which no prize is.`, 'Use "item", "tokens", "share", "nft", "roll" or, in a lottery\'s place, "raffled".');
     return line;
   };
   /**
@@ -1712,7 +1713,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (sharesOf(c.split).length) refuse('E-CONTEST', `${where}.split`, `${label(c)}’s entries stake NFTs: there is no money to take shares of (BadContest).`, 'Remove the split.');
       if (c.stake !== undefined) refuse('E-CONTEST', `${where}.stake`, `${label(c)}’s entries stake one NFT each, not tokens (BadContest).`, 'Remove "stake".');
       rule(c.stakeNft, `${where}.stakeNft`, `${label(c)}’s stake`);
-      warn('W-NFT-PRICE', `${where}.stakeNft`, `${label(c)}’s entries each stake one NFT, and the NFTs are the pot: each winning entry takes its own back and one loser’s, in the order the entries are claimed (anyone may claim them), and the losers’ NFTs the winners leave go to whoever opened it. The project holds every NFT until its entry is claimed.`);
+      warn('W-NFT-PRICE', `${where}.stakeNft`, `${label(c)}’s entries each stake one NFT, and the NFTs are the pot: each winner takes its own back and its share of the losers’ (${c.losersEach ? `at most ${c.losersEach}` : 'all of them, shared'}; the first to enter on the winning side take one more when they don’t divide evenly), each picking which, and the losers’ NFTs the winners leave go to whoever opened it. Losers send nothing. The project holds every NFT until it is claimed.`);
     }
     const deciders = c.deciders ?? [];
     deciders.forEach((k, i) => isAddress(k) || refuse('E-REF', `${where}.deciders[${i}]`, `${label(c)}’s decider “${k}” is not a public address.`, 'Write the results server’s public key (never its private key).'));

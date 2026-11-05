@@ -419,6 +419,7 @@ export function prizeWords(p, m) {
   const sym = (key) => m.tokens.get(key)?.symbol ?? key;
   if (line.gives === 'item') return `one ${m.item.get(line.item)?.name ?? line.item}${line.compressed ? ' (compressed)' : ''}`;
   if (line.gives === 'share') return `${line.percent}% of “${line.pool}”`;
+  if (line.gives === 'raffled') return 'an NFT drawn at random from the lottery’s own stash';
   if (line.gives === 'nft' && line.held) return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} (held in the lottery’s own stash until it is won)`;
   if (line.gives === 'nft') return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} of “${m.stash.get(line.stash)?.name ?? line.stash}”`;
   if (line.gives === 'roll') return `a roll of “${m.box.get(line.box)?.name ?? line.box}”`;

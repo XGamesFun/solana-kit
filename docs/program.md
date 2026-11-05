@@ -1,14 +1,17 @@
 # The loot program: how it behaves
 
-**Version 0.22.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**, and not deployed
-yet: devnet runs 0.20.1 until it is. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
+**Version 0.23.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**, and not deployed
+yet: devnet runs 0.22.0 until it is. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
 accounts carry over from older versions: make fresh economies for this one.
 
-What 0.22 changed, in short: the program caps no count or size of its own, only the chain does ([Limits](#limits));
-a box draws **packs** (several draws an open, several opens a purchase, one oracle answer) and its order is
-**settled in parts**; **tables** of weighted rows; **fresh items** whose traits are drawn per unit; **compressed
-items** as box prizes; **stashes drawn by weight**; and a **player's profile**, numbers the project keeps about a
-wallet. Measured costs below that were not measured again on 0.22 are marked as 0.20's.
+What 0.23 changed, in short: who claimed what is kept in **lists of records** (a wallet's counts, a grant's claims and
+rounds in shards), so one claim pays **several rounds**; a **lottery round is a record of its own** that moves on in a
+few steps whatever its size (`settle_round`, then a `pull` a part), with **places as runs** and a **raffle of many
+NFTs**; a **contest's entries are one list**, its winners sharing the losers' NFTs and its losers sending nothing; a
+route's extra accounts are its **tail**, from the Memo program on; **several NFTs a call** on stakes, harvests,
+stashes, holds, releases and makes; a **schedule catches up in one call**; an order's reserve covers everything its
+settle may open. 0.22 made packs, tables, fresh and compressed items, stashes drawn by weight and profiles. Measured
+costs below that were not measured again are marked as 0.20's.
 
 This page says what the program does, who signs what, what it holds and what it costs, for anyone building on it
 with `js/client` or the `xsolana_*` tools. **The IDL in `js/client/idl/loot.json` is the authority for every account
@@ -60,7 +63,7 @@ The owner writes a mechanic once (`upsert`, or `open_farm`); players and anyone 
 
 **Incarnations.** A project numbers its contests, grants and lotteries with ever-increasing incarnations. A record
 written again at an old address is a new identity: entries, verdicts and vouchers name the incarnation they were
-signed for, and grant and lottery receipts carry it in their address. A box purchase names the box's `version`; a
+signed for, and a grant's records and a lottery's rounds carry it in their addresses. A box purchase names the box's `version`; a
 ticket purchase names the lottery's incarnation and `revision`.
 
 **The project's vault for a mint** (its associated token account of the mint) holds open orders' payments, prizes set
@@ -130,7 +133,8 @@ winner or bypass the program's checks.
 ## Accounts and addresses
 
 Every address is a PDA of the program (`pda.*` in `js/client/pda.js`). Seed integers are little endian: a project's
-`id` and an order's `nonce` u64, a pool's `index` u8, a grant's `id` u16, a hold's `free_at` i64, every other id u32.
+`id` and an order's `nonce` u64, a pool's `index` u16, a grant's `id` u16, a hold's `free_at` i64, a shard and a page
+u8, every other id u32.
 Each loot account starts with a one-byte tag (`TAGS`, `decodeAny`). A record that must be new (farm, contest, auction,
 order, offer) is created, never written over.
 
@@ -142,25 +146,24 @@ order, offer) is created, never written over.
 | 4 | `LootBox` | `["box", project, id]` | varies | owner; never closed |
 | 5 | `Order` | `["order", project, player, nonce]` | sized to its box at the purchase (`orderBytes`) | player (or a prize's maker), back at settle or refund |
 | 6 | `Schedule` | `["schedule", project, id]`; sealed vault `["vest", schedule]` | varies | owner |
-| 7 | `Lottery` | `["lottery", project, id]`; pot `["pot", lottery]`; tickets `["lottery_funds", lottery]`; own stash `["lottery_stash", lottery]` | varies | owner; stash growth by whoever puts an NFT in |
+| 7 | `Lottery` | `["lottery", project, id]`; pot `["pot", lottery]`; own stash `["lottery_stash", lottery]` | varies | owner; stash growth by whoever puts an NFT in |
 | 8 | `Recipe` | `["recipe", project, id]` | varies | owner; never closed |
-| 9 | `Hold` | `["hold", asset, free_at]` | 179 | player or borrower, back on release |
+| 9 | `Hold` | `["hold", asset, free_at]` | 170 (a loan's 243) | player or borrower (`payer`), back on release |
 | 10 | `Contest` | `["contest", project, id]`; pot `["pot", contest]`; split prize `["prize", contest]` | varies | the opening authority, back on close |
-| 11 | `Entry` | `["entry", contest, player]` | 106 | player, back on claim |
-| 12 | `Sheet` | `["sheet", project, nft]` | 69 + attributes | whoever's write grows it; never closed |
+| 12 | `Sheet` | `["sheet", project, nft]` | 69 + attributes | whoever's write grows it; anyone closes it once its NFT is burned (rent to the treasury) |
 | 13 | `Traits` | `["traits", project, key]` | 97 | owner or authority; never closed |
-| 14 | `Grant` | `["grant", project, id]` | varies | owner, back with funds on close |
-| 15 | `Receipt` | box/recipe `["receipt", record, wallet]`; lottery/grant `["receipt", record, incarnation, wallet]`; `["person", grant, incarnation, person_hash]`; `["badge", grant, incarnation, asset]`; `["code", grant, incarnation, key]` | 17 + 8 a grant round | the one counted (a grant's funds for a claim); never closed |
-| 16 | `LotteryContribution` | `["contribution", lottery, player, nonce]` | sized to its lottery's shares (`contributionBytes`) | buyer, back when finished |
+| 16 | `LotteryRound` | `["round", lottery, incarnation, round]`; its token accounts `["round-tokens", round, mint]` | a header sized once at its first purchase, then an entry a purchase (`entryWidth`: 40 + 8 for a fee mint + 32 a recipient share + 32 an NFT ticket) | first buyer the header (back at the close), each buyer its entry (to the treasury at the close) |
 | 17 | `Farm` | `["farm", project, id]`; vaults `["staked", farm]`, `["rewards", farm]` | varies | owner; never closed |
 | 18 | `Seat` | `["seat", farm, player]` (tokens), `["seat", farm, asset]` (an NFT) | 232 | player, back on last exit |
 | 19 | `Proven` | `["leaf", asset]` | 299 (331 with asset data) | first prover, back via `close_leaf` |
 | 20 | `Auction` | `["auction", project, seller, id]` | varies, + 32 an NFT bid | seller, back at the end |
 | 22 | `Offer` | `["offer", project, maker, id]` | varies | maker, back on close |
 | 23 | `Listing` | `["listing", project, asset]` | 183 sale / 189 rental, + 3–35 a share | maker, back on close |
-| 24 | `Profile` | `["profile", project, wallet]` | 69 + attributes | whoever's write grows it; never closed |
+| 24 | `Grant` | `["grant", project, id]` | varies | owner, back with funds on close |
+| 24 | `Profile` | `["profile", project, wallet]` (the same tag as a grant; `decodeAny` tells them apart) | 69 + attributes | whoever's write grows it; never closed |
 | 25 | `Table` | `["table", project, id]` | 51 + 8 a row of numbers / 40 a row of labels; a committed table 1,107 | owner, as it writes rows; never closed |
 | 25 | `Table` (a stash) | `["stash", project, id]`; a lottery's own `["lottery_stash", lottery]` | 103 with one NFT, + 36 an NFT | whoever puts an NFT in; never closed |
+| 26 | a list (`decodeList`) | a wallet's counts `["counts", project, wallet]`; a grant's claims `["claims", grant, incarnation, shard]` and rounds `["rounds", grant, incarnation, shard]`; a contest's entries `["entries", contest, incarnation, 0]` | 7, + 28 a limit record, 16 a round paid, 43 or 83 an entry | the one counted (a grant's funds for a claim), never closed; a grant's shards close once it is gone (rent to the owner); a contest's with it |
 
 Also: a **pool** is a plain token account at `["pool", project, index]` that only the project spends, opened by the
 owner (`open_pool`), never closed. Every collectible loot mints of its own accord (an order's, a prize's, a craft's,
@@ -176,7 +179,8 @@ rows' transactions, and a draw reads a few hundred numbers even at a million row
 ## Every instruction
 
 Arguments are in the IDL. An instruction's own accounts come first, then remaining accounts in the order the builders
-produce, a transfer hook's always last. An optional account left out is passed as the program's own address. A
+produce, then its **tail**: from the Memo program's account on, the accounts a transfer hook or a Core collection's
+check reads (`tailOf`); with no Memo account, the tail is empty. An optional account left out is passed as the program's own address. A
 player passes a **gate** with the first remaining accounts (after a box's prize accounts): a collectible shown
 (`Gate::Holds`), the list proof's nodes as accounts (`Gate::List`), or the wallet's seat then the farm
 (`Gate::Staked`). Fees: **P** player fee, **J** project fee, **free**.
@@ -203,25 +207,26 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `refund` (`refundIx`) | anyone | free | a failed order at once, a pending one after 1,500 slots (`orderRefundSlot`); never a rolled or waiting one |
 | | `ask_roll` (`askRollIx`) | anyone, paying the oracle | free | asks for a waiting roll; again after `STALE_SLOTS` (`rollAskable`) |
 | Project moves | `move_tokens` (`moveTokensIx`) | authority | J | from a pool or minted, to any `To`, fixed or a share of a pool |
-| | `collectible` (`collectibleIx`) | authority (and a new asset key for `Make`) | J | `Make`, `Set` (or a Sheet), `Burn`, `Profile` (a wallet's profile) |
+| | `collectible` (`collectibleIx`, `makeIx`) | authority | J | `Make { item, tree, attributes }` for several owners at the item's next serials (or compressed into `tree`), `Set` (or a Sheet), `Burn` (rent to its holder), `Profile` (a wallet's profile) |
 | | `roll` / `callback_random` (`rollIx`, `callbackRandomIx`) | authority / oracle | J / — | a random number for the project's own use |
-| | `stash` (`stashIx`) | owner or authority | J | an NFT into a stash (or a lottery's own) with its `weight` in the draws (above 0), or out to a wallet |
-| | `run_schedule` (`runScheduleIx`) | anyone | free | one due run (`runsDue`) |
-| Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | a contribution, naming `incarnation` and `revision` (`TermsChanged`) |
-| | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | asks for a due draw (again after `STALE_SLOTS`), lands it |
+| | `stash` (`stashIx`) | owner or authority | J | NFTs into a stash (or a lottery's own), each with its weight in the draws (above 0), or out to a wallet |
+| | `run_schedule` (`runScheduleIx`) | anyone | free | every due run up to `upto` (`runsDue`), one transfer |
+| Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | an entry in the current round (its first purchase opens it), naming `incarnation` and the round's `revision` (`TermsChanged`) |
+| | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | asks for a due draw (again after `STALE_SLOTS`), lands it on the round's record |
 | | `cancel_lottery` (`cancelLotteryIx`) | anyone | free | a draw unanswered 7 days after its first ask (`lotteryCancellable`) |
-| | `finish_lottery_contribution` (`finishLotteryContributionIx`) | anyone; its payer opens accounts | free | the contribution's next step (prize, shares, pot) |
+| | `settle_round` (`settleRoundIx`) | anyone; its payer opens accounts | free | a drawn round's places' prizes by a cursor, then its sweep; closes a finished round |
+| | `pull` (`pullIx`) | anyone; its payer opens accounts | free | one part of one entry (`partsOwed`): its own, a recipient's, a run's places |
 | Farms | `stake_tokens` / `unstake_tokens` (`stakeTokensIx`, `unstakeTokensIx`) | player | P | stake into a tier / take out (0 harvests and withdraws what unbonded) |
 | | `stake_nft` / `unstake_nft` (`stakeNftIx`, `unstakeNftIx`) | player | P | an NFT on its own seat or as a booster / out after the lock, with a mission's prize or roll |
 | | `harvest` (`harvestIx`) | player | P | rewards out, or `compound`ed |
 | | `refresh_seat` (`refreshSeatIx`) | anyone (pays what growth adds) | free | re-reads boosts, the NFT, upkeep, the player's profile; writes growth |
 | Recipes, holds | `craft` (`craftIx`) | player alone | P | all lines in and out, or nothing (`profile`, the player's, when a need or a raise names it) |
-| | `hold` (`holdIx`) | player | P | an NFT handed to the project until `free_at` |
-| | `release` (`releaseIx`) | authority while it runs (J); anyone after (free); loans below | J / free | sends a held NFT on |
+| | `hold` (`holdIx`) | player | P | NFTs handed to the project until `free_at`, a hold each |
+| | `release` (`releaseIx`) | authority while it runs (J); anyone after (free); loans below | J / free | sends held NFTs on, one `to` |
 | Contests | `open_contest` (`openContestIx`) | authority | J | terms fixed for good |
-| | `enter` (`enterIx`) | player | P | one entry a wallet, one side (`OtherSide`) |
+| | `enter` (`enterIx`) | player | P | a record in the contest's list, one side a wallet (`OtherSide`) |
 | | `decide` (`decideIx`) | authority, or anyone with a verdict; anyone for an overdue contest | J; free when overdue | names a side, or `None` calls it off |
-| | `claim` (`claimIx`) | anyone (the winner alone while losers' NFTs are left) | free | an entry's part of the pot, prize and NFTs |
+| | `claim` (`claimIx`) | anyone (only the winner picks losers' NFTs, `WinnerPicks`) | free | an entry's part of the pot, prize and the NFTs it names |
 | Auctions | `open_auction` (`openAuctionIx`) | seller alone | P for a player's NFT, J for the project's lot | an auction |
 | | `bid` (`bidIx`) | player | P | tops the high bid; the topped one goes back at once |
 | | `end_auction` (`endAuctionIx`) | anyone once over; seller to call off one with no bid | free (J for the project calling off its own) | pays out, hands the lot over, closes |
@@ -234,9 +239,10 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `take_listing` (`takeListingIx`) | taker | P, or J | buys, or rents for 1 to `max_periods` periods |
 | | `close_listing` (`closeListingIx`) | maker | free | NFT home; during a rental only stops it |
 | Proofs | `prove_leaf` (`proveLeafIx`) | anyone (pays the record's rent once) | free | records a compressed NFT proven against its tree |
-| | `close_leaf` (`closeLeafIx`) | anyone | free | closes a record that no longer reads (`StillProven` otherwise) |
+| | `close_leaf` (`closeLeafIx`, `closeSheetIx`) | anyone | free | closes a record that no longer reads (`StillProven` otherwise), or a burned NFT's Sheet (`NotBurned` otherwise) |
 | | `prove_traits` (`proveTraitsIx`) | anyone (pays the Sheet's growth) | free | writes vouched traits into a Sheet |
-| Grants | `claim_grant` (`claimGrantIx`, `js/client/grant.js`) | the wallet always, plus a `signer` who pays (may be the wallet) | P, from the signer | gives the grant's prize; a voucher is an Ed25519 instruction right before (`ed25519Ix`) |
+| Grants | `claim_grant` (`claimGrantIx`, `js/client/grant.js`) | the wallet always, plus a `signer` who pays (may be the wallet) | P, from the signer | gives the grant's prize for each round not paid yet; a voucher is an Ed25519 instruction right before (`ed25519Ix`) |
+| | `close_shard` (`closeShardIx`) | anyone | free | a shard of a grant gone or made again, rent to the owner (`GrantLive` before) |
 
 ## Money in, and where it goes
 
@@ -277,7 +283,7 @@ project's own fee box (`["fees", project]`); only the platform takes them out.
 | --- | --- | --- |
 | **Player** | 0.002 SOL | a player signs for something of their own: `pay`, `pay_nft`, `buy`, `open_box` (held in the order; back on refund), `craft`, `buy_tickets`, stake, unstake, harvest, `hold`, `enter`, `bid`, `open_auction` of their NFT, `open_offer`, `sell_to_offer`, `borrow`, `open_listing`, `take_listing`, a grant claim (from the signer, never the grant's funds) |
 | **Project** | 0.00001 SOL | the owner or authority acts as the project: `create_project`, `update_project`, `open_pool`, `upsert`, `open_farm`, `open_tree`, `set_traits`, `stash`, `move_tokens`, `collectible`, `roll`, a running hold's `release`, `open_contest`, `decide` (a verdict too), the project's `open_auction` or its call-off, and `pay`, `pay_nft`, offers and listings by the project's keys |
-| **Free** | — | what follows from a paid step (claims, finishing contributions, auction ends, settles, refunds, repayments, closes), rolls other steps make, and the cranks: callbacks, `ask_roll`, `draw_lottery`, `run_schedule`, `prove_leaf`, `prove_traits`, writing down an overdue contest |
+| **Free** | — | what follows from a paid step (claims, a round's `settle_round` and pulls, auction ends, settles, refunds, repayments, closes), rolls other steps make, and the cranks: callbacks, `ask_roll`, `draw_lottery`, `run_schedule`, `prove_leaf`, `prove_traits`, writing down an overdue contest |
 
 On routes a player's signature asks for, the project's keys pay the player fee when they sign. A signer with too
 little SOL is refused (`NoSolForFee`).
@@ -311,8 +317,9 @@ a mint, the next sale reopens it.
 
 Pass a mint writable only when its supply changes (a burn or a mint), so transactions in one token don't queue: `pay`,
 `buy`, `settle` and a sale's `end_auction` when something burns; `move_tokens`, `run_schedule` when minting or
-burning; `decide` when a share burns or it calls off an empty contest; `claim` for the last entry;
-`finish_lottery_contribution` when it burns tickets; a recipe's `Pay` lines always. The builders do this.
+burning; `decide` when a share burns or it calls off an empty contest; `claim` when it leaves nothing owed; a minted
+token prize's `pull`, and a round's close (its mints with the accounts it closes); a recipe's `Pay` lines always. The
+builders do this.
 
 ### Token-2022
 
@@ -458,7 +465,7 @@ price never breaks a purchase. A price of 0 is a free box: the player still pays
 whose change comes back).
 
 **Window and limits**: `window { opens_at, closes_at }` (0 is no bound; `NotOpenYet`, `WindowClosed`) and
-`per_wallet { total, per_window, window }` in the buyer's receipt; a refund gives its count back. `active` stops sales.
+`per_wallet { total, per_window, window }` in the buyer's counts; a refund gives its count back. `active` stops sales.
 **Odds**: entries raised for a player who shows a collectible (or whose profile says so), fixed in the order at
 purchase.
 
@@ -536,11 +543,13 @@ written again.
 
 Every `every` seconds, one run of its `action` (`{ from, to, amount, halve_every }`): the move `move_tokens` makes,
 from a pool or a mint the project controls, fixed or a share of the pool, halving every N runs if asked. It starts no
-earlier than now and catches up one run a call; send as many calls in one transaction as runs are due (`runsDue`; one
-too many fails them all). It stops after `max_runs`. A move that can't be made only fails its runs.
+earlier than now. One `run_schedule` makes every run due, up to `upto` runs made (the client passes the runs it has
+plus those due, `runsDue`) and a step cap a call, each run paying what it would alone, in one transfer and one
+`ScheduleRan` (`from`, `run`); a backlog of 35,040 runs takes a few calls. It stops after `max_runs`. A move that can't
+be made fails the call. A schedule that moves a pool into itself is refused when written.
 
 **Sealed** (`TokenSource::Vest(mint)`): it pays from its own vault `["vest", schedule]`, opened when written and funded
-by anyone at any time. Nothing else pays out of it, and it is written once (`Sealed`). It must be on, have 1 to 10,000
+by anyone at any time. Nothing else pays out of it, and it is written once (`Sealed`). It must be on, have 1 to 100,000
 runs ending within 10 years, no share above the whole vault, and a destination every run can always pay: a burn (not
 wrapped SOL), a wallet someone holds (on the curve), a pool or associated token account of the vault's mint, a
 lottery's pot (passed with its lottery), or the treasury; never a collectible's holder or a chosen share. Its mint
@@ -552,42 +561,50 @@ as safe as where it pays: into a pool, tokens are the authority's once they land
 ## Lotteries
 
 `LotteryArgs { price, mint, shares, places, ticket_mint, every, draws_at, gate, per_wallet, nft_ticket, returns,
-min_sold }`. The prize pot is `["pot", lottery]`; ticket money waits apart in `["lottery_funds", lottery]`. Each
-purchase is its own `LotteryContribution`, naming the incarnation and `revision` it saw, so one sent as a round moves
-on joins the next on the same terms. No cap on buyers. A draw more than 5 years off sells nothing (`SalesClosed`).
+min_sold }`. The prize pot is `["pot", lottery]`. The lottery keeps its terms, its incarnation, its round number and
+its next draw; each **round is a record of its own**, `["round", lottery, incarnation, round]` (`decodeRound`), opened
+by its first purchase, which copies the terms (later purchases name the round's `revision`; the gate and `per_wallet`
+are read live). The round holds its money in token accounts of its own, `["round-tokens", round, mint]`, so a cancel
+moves nothing and the pot holds only what nobody is owed. A draw more than 5 years off sells nothing (`SalesClosed`).
 
-**Draw.** Anyone sends `draw_lottery` once due. Any number of places, each a share of the pot (`bps`), a prize, or both,
-drawn by evenly spaced tickets with rejection sampling. A round nobody draws waits, with no deadline. An unanswered draw
-is asked again after `STALE_SLOTS`, and the first answer draws it. Only a draw unanswered **7 days after its first ask**
-lets anyone cancel the round.
+**A purchase** appends an entry (`entryWidth`): its buyer, where its tickets end, what arrived (a fee mint), a wallet for
+each buyer-chosen or holder share (fixed now; one nobody can pay joins the pot's part), its NFT ticket. The buyer pays
+its bytes (not refunded: they go to the treasury at the close); the round's first buyer fronts its header, back at the
+close. A round holds about 70,000 to 260,000 purchases, by its entries' width.
 
-**Prizes first, money after** — each step is a `finish_lottery_contribution` anyone sends (`lotteryStep`):
+**Draw.** Anyone sends `draw_lottery` once due, with the round's record, the oracle request's only account. Places are
+runs: `{ bps, prize, times }`, `times` places alike (a named NFT, a roll or a share of a pool is one place's), drawn by
+evenly spaced tickets with rejection sampling. A round nobody bought into has no record: a repeating one moves its
+date, one that draws once ends. An unanswered draw is asked again after `STALE_SLOTS`; only a draw unanswered **7 days
+after its first ask** lets anyone cancel the round. A short round (`min_sold`) is cancelled at its draw.
 
-1. **Each place's prize**, one place a call, in place order across the round (`PlacesInOrder`). A prize not there to
-   give is passed over (`Lottery.given` marks it), so the round goes on; one that refuses to move holds the round
-   until it can. A chest is given when its order is made, so chests that share a pool pay in the order rolls land.
-2. **Each contribution**: its shares and rest to the pot, burning a burn-ticket mint, or sending an NFT ticket where
-   its price says. Refused while a place's prize is pending (`PrizesFirst`) unless it goes back to its buyer. It closes
-   to its buyer unless it holds a winning ticket.
-3. **The places' share of the pot**, once every contribution is finished: the final pot is fixed at the first payout,
-   and finishing a winning contribution again pays every place it won (`LotteryPaid` each) and closes it.
+**A drawn round moves on in a few steps** (`settle_round`, anyone): a cursor gives the places' prizes in place order,
+an NFT or a collectible to its winner, a run of token prizes in one step into the round's account (minted ones at the
+pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
+and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
+winner (`hold`); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise).
+
+**Then each part is pulled** (`pull`, anyone, `partsOwed`): an entry's own (a refund, a no-loss ticket's price, its NFT
+ticket back or where its price sends it), each recipient's share, its places' pot parts and token prizes in one run.
+Each part waits under its own bit, holding up nobody else; the pull (or step) that leaves nothing owed closes the round,
+burning what nobody is owed and returning each account's rent to its opener.
 
 **Variants:**
 
-- **Raffle**: draws once; a place gives `Prize::Held(nft)` from the lottery's own stash, filled with `stash`
-  (`StashOf::Lottery`). The write refuses an NFT not there (`NotInStash`), one NFT on two places, or a repeating
-  lottery. It leaves only as the prize, or back to the owner once the place is edited away with nothing sold, the
-  lottery closes, or it ends (`Promised`).
+- **Raffle**: draws once; a place gives `Prize::Held(nft)` from the lottery's own stash, or `Prize::Raffled` (a run of
+  places, each an NFT drawn at random from it), never both. The stash is filled with `stash` (`StashOf::Lottery`, several
+  NFTs a call); the write refuses an NFT not there or fewer NFTs than raffled places (`NotInStash`). Nothing comes out
+  but a place's prize while the lottery runs (`Promised`).
 - **Least sale** (`min_sold`): a due round that sold fewer is cancelled at its draw, no oracle, everyone refunded.
 - **Free tickets** (`price` 0): only the player fee; `per_wallet` keeps one wallet from most tickets.
 - **NFT ticket** (`nft_ticket: { rule, then }`): one ticket for one NFT (`OneTicket`), held until the draw, then
-  burned, given or stashed; home if cancelled. No price, shares or ticket mint.
-- **No-loss** (`returns`): after the draw every ticket goes back whole; winners take only what was paid into the pot.
-  No shares or ticket mint. Tickets aren't weighted by time held.
+  burned, given or stashed by its pull; home if cancelled. No price, shares or ticket mint.
+- **No-loss** (`returns`): after the draw every ticket is owed back whole; winners take only what was paid into the pot.
 
-Pot and payment mints can't be non-transferable, default-frozen or switchable to it, or confidential (`BadLottery`).
-Configuration edits need an idle round; changing a mint needs close and recreate. `every = 0` ends after one round.
-`per_wallet` counts tickets per round. A cancellation refunds what arrived; fees aren't refunded.
+Pot and payment mints can't be non-transferable, default-frozen or switchable to it, or confidential (`BadLottery`); at
+most 15 shares and 8 mints. Edits apply to the next round (the gate and `per_wallet` at once); closing or making a
+draw-once lottery again waits while its current round has a record (`RoundRunning`). `per_wallet` counts tickets per
+round in the wallet's counts.
 
 ## Recipes
 
@@ -619,40 +636,44 @@ them back. Give the unbind no `Pay` line.
 
 ## Holds
 
-`hold(free_at)` hands any NFT to the project at `["hold", asset, free_at]`. Until then the authority may `release` it
-to any wallet (never a loot account, `ToTheProject`); after, anyone releases it home. A release names its hold by
-address, so one signed for an earlier hold never lands on a later one. A Token Metadata NFT waits in the project's
-token account (closed on the way out, rent to the player); a compressed one becomes the project's leaf.
+`hold(free_at)` hands NFTs to the project, each at `["hold", asset, free_at]` (several a call, one fee). Until then the
+authority may `release` them to any wallet (never a loot account, `ToTheProject`); after, anyone releases them home. A
+release names its holds by address, so one signed for an earlier hold never lands on a later one; holds of one player
+with one end go together. A hold names its `player`, who made it (`payer`, back its rent) and who paid its NFT's
+account (`rent_to`). A Token Metadata NFT waits in the project's token account (closed on the way out); a compressed one
+becomes the project's leaf.
 
 ## Contests
 
-`ContestArgs { sides, closes_at, result_by, shares, gate, deciders, min_pot, stake, prize, nft, prize_split }`, fixed
-at `open_contest` for good. `result_by` is at most 5 years out (after `closes_at` when there are deciders). Entries and
-decisions name the incarnation (`TermsChanged`).
+`ContestArgs { sides, closes_at, result_by, shares, gate, deciders, min_pot, stake, prize, nft, prize_split, cap }`,
+fixed at `open_contest` for good. `result_by` is at most 5 years out (after `closes_at` when there are deciders).
+Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 
-- **One side a wallet** (`["entry", contest, player]`; `OtherSide`). With `stake`, every entry exactly that, once
-  (`BadStake`): a wager. With `min_pot`, no side wins below it (`BelowMinPot`) and a contest short of it when entries
-  close is off: a crowdfund.
-- **Verdicts**: a decider signs `"loot-verdict-v3" | program | contest | incarnation (u64 LE) | side (255 is off) |
-  expires (i64 LE)`, plus `| recipient` for a contest with a chosen share (`verdictBytes`), checked by the Ed25519
-  precompile right before `decide`. A side is taken only once entries close (`EntriesOpen`); a call-off any time.
-- **Payout**: `decide` takes the shares; winners split the rest by stake, the last claim taking the remainder. The one
-  chosen share pays the `recipient` `decide` names (a bounty, back to its poster if nobody approves by `result_by`).
-- **A prize per winning entry** (`prize`), given at each claim (a roll at the claim's `nonce`), passed over when it
-  can't be. A scarce one goes to the first claim.
+- **One list of entries** (`["entries", contest, incarnation, 0]`, `decodeEntries`): a record a player, one side a
+  wallet (`OtherSide`), its bytes the player's (not refunded). With `stake`, every entry exactly that, once (`BadStake`):
+  a wager. With `min_pot`, no side wins below it (`BelowMinPot`) and a contest short of it when entries close is off: a
+  crowdfund.
+- **Verdicts**: a decider signs `"loot-verdict-v4" | sha256(program | contest | incarnation (u64 LE) | side (u16 LE,
+  65,535 is off) | expires (i64 LE))`, the body ending `| recipient` for a contest with a chosen share (`verdictBytes`),
+  checked by the Ed25519 precompile right before `decide`. A side is taken only once entries close (`EntriesOpen`); a
+  call-off any time.
+- **Payout**: `decide` takes the shares; winners split the rest by stake, the last claim taking the remainder. A loser
+  of a contest of tokens sends nothing. The one chosen share pays the `recipient` `decide` names.
+- **A prize per winning entry** (`prize`), given with its first claim (a roll at the claim's `nonce`); the player may
+  `forgo` it.
 - **A prize split by stake** (`prize_split`, tokens only): its vault `["prize", contest]` opens with the contest;
-  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake, or
-  `forgo`es it and takes only its part of the pot. A split from a pool needs the vault in the pool's mint, or every
-  `decide` fails and the contest refunds at `result_by`.
+  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake.
 - **A contest of NFTs** (`nft`, a rule): each entry stakes one NFT (not compressed); sides count NFTs and the NFTs are
-  the pot. Each winning claim takes its own NFT back and one loser's, picked by the winner (`WinnerPicks`); leftovers
-  go to the opener after every winner has claimed (`WinnersFirst`). No shares or stake. One person may hold many
-  wallets, so price it with a rule of NFTs of like worth and a gate of one person a side.
+  the pot. At the decision each winner's share of the losers' NFTs is fixed, `min(cap, losers ÷ winners)`, the first
+  winners to enter taking one more when they don't divide evenly. A claim names the entries whose NFTs it moves by
+  their place in the list: its own back (anyone sends it), losers' picked by the winner (`WinnerPicks`), and once no
+  winner has picks left, what they left to the opener (anyone). `end` leaves the rest of a winner's share to the
+  opener; `give_up` turns an NFT that can't move into a hold for whoever it goes to.
 - **Off**: `decide(None)` calls it off; a contest past `result_by` undecided is off by the clock (`contestOff`), and
   every entry takes its own back.
-- The pot and prize vault close with the last claim, burning what is left (wrapped SOL to the opener); if the issuer
-  froze or paused it, or a burn authority blocks the burn, the account is left behind and that id can't open again.
-  Mints can't be confidential or start frozen (`BadContest`); an entry a fee eats whole is refused (`ZeroAmount`).
+- The claim that leaves nothing owed closes the contest, its list (its bytes to the treasury) and its pot and prize
+  vault, burning what is left (wrapped SOL to the opener); an account the issuer froze, or a burn authority blocks, is
+  left behind and that id can't open again. Mints can't be confidential or start frozen (`BadContest`).
 
 ## Auctions
 
@@ -710,10 +731,12 @@ signs `terms` (`listingTerms`).
 
 ## Making collectibles
 
-`collectible` `Make` mints one of an item to anyone, attributes set at creation (supply holds; a new asset key signs).
-`Set` rewrites attributes but never `item_id`, `rarity` or `serial`, and keeps `made`, `used`, `used_at` unless named;
-on an NFT the project has no authority over it writes the Sheet. `Burn` burns a burnable one the project doesn't hold.
-`Profile` writes a wallet's profile (below).
+`collectible` `Make { item, tree, attributes }` mints one of an item to each owner the instruction names, in serial
+order, at `["asset", item, serial]` (`makeIx`, `madeAssets`), or with `tree` a compressed NFT into that tree of the
+project's; a sold-out item refuses the whole call (`PrizeNotCovered`), a switched-off one still makes. `Set` rewrites
+attributes but never `item_id`, `rarity` or `serial`, and keeps `made`, `used`, `used_at` unless named; on an NFT the
+project has no authority over it writes the Sheet. `Burn` burns a burnable one the project doesn't hold, naming its
+holder, who gets its rent. `Profile` writes a wallet's profile (below).
 
 ## Profiles
 
@@ -926,45 +949,44 @@ never empty values, never a key a Core NFT carries itself. To retire a trait, se
 
 ## Grants
 
-`GrantArgs { gives, vouchers, list_root, key_root, open, limits, active, gate }`. A grant gives its `Prize` to a wallet
+`GrantArgs { gives, vouchers, list_root, key_root, open, limits, active, gate, shard_bits }`. A grant gives its `Prize` to a wallet
 that a **voucher key** signs for (up to 3 in `vouchers`, or any number under `key_root`, proven with a Merkle proof of
-`sha256("loot-key-v1" | key)` and limited by `per_key` at `["code", grant, incarnation, key]`: a promo code), that is on
+`sha256("loot-key-v1" | key)` and limited by `per_key`: a promo code), that is on
 the **list** (`list_root`), or that comes to an **open** grant. A claim with no voucher goes by the list when there is
 one, otherwise only an open grant takes it; with none of these the grant pays nobody. An open grant gated on a
-collectible counts the collectible too (`["badge", grant, incarnation, asset]`), so moving it claims nothing more.
+collectible counts the collectible too (a badge), so moving it claims nothing more.
 
 **Every claim is signed by its wallet** (`WalletMustSign`): only the winner chooses when it lands. A results server
 hands out the voucher; the winner's page sends the claim. So a grant pays only wallets that can sign (a person, or a
 program that signs by CPI such as a Squads vault), not an exchange deposit address.
 
-**Limits** (`{ wallet, per_person, per_key, per_day, total, window }`): per wallet in all and per window, per person
-(`["person", grant, incarnation, person_hash]`), per key, per UTC day, in all, and a time window (`OverWallet`,
-`OverWindow`, `OverPerson`, `OverKey`, `OverDay`, `OverTotal`).
+**Limits** (`{ wallet, per_person, per_key, per_day, total, window }`): per wallet in all and per window, per person,
+per key, per UTC day, in all, and a time window (`OverWallet`, `OverWindow`, `OverPerson`, `OverKey`, `OverDay`,
+`OverTotal`). Each limit record (28 bytes) is keyed `sha256(kind | subject)[..16]` (`limitKey`: a wallet, a person, a
+badge, a key) in the grant's claims, `["claims", grant, incarnation, shard]`; one claim touches at most four shards.
 
-**Rounds.** A wallet's receipt keeps 8 bytes of every round it was paid, so a round pays a wallet once per
-incarnation: replays, re-signs, other keys and clocks set back are all refused, and a voucher may live as long as its
-signer says. The receipt grows 8 bytes a round, its rent from the grant's funds, with no cap of the program's own.
-List claims name rounds too, so a new root never pays a round twice.
+**Rounds.** A claim names its rounds (a voucher or a list proof each); each pays a wallet once per incarnation, its
+record `sha256(round | wallet)[..16]` (`roundKey`, 16 bytes) in the wallet's shard of the grant's rounds, `["rounds",
+grant, incarnation, shard]`: replays, re-signs, other keys and clocks set back are all refused, a round named twice is
+paid once, and the same voucher sent again later pays the rounds a full limit held back. A grant's records are in
+`2^shard_bits` shards (0 to 8, fixed for its incarnation, `ShardsFixed`): a record's shard is its key's top bits
+(`shardOf`), the fewest that keep each under ~100,000 records (`shardBitsFor`). Once the grant is closed or made again,
+anyone closes its shards (`close_shard`), their rent to the owner. A claim may need 400,000 compute units
+(`CLAIM_COMPUTE_UNITS`).
 
 **A claim's own amount**: a voucher or list leaf may name `amount` for a prize of `Tokens { amount: Fixed(most) }`: at
 most `most` (rewards by rank). 0 gives the prize as written. Anything else nonzero is refused (`OverPrize`).
 
-**Funds**: the SOL a grant holds beyond its rent; anyone adds with a plain transfer. They pay receipts and what a prize
-opens or makes, lent to the claim's `signer`, who covers any shortfall. The signer pays the player fee from its own
-SOL, never the funds. Closing returns the rest to the owner. A prize that can't be given refuses the claim, keeping
-its round.
+**Funds**: the SOL a grant holds beyond its rent; anyone adds with a plain transfer. They pay its records and what a
+prize opens or makes, lent to the claim's `signer`, who covers any shortfall. The signer pays the player fee and a
+roll's order from its own SOL, never the funds. Closing returns the rest to the owner. A prize that can't be given
+refuses the claim, keeping its rounds.
 
-**The voucher** (181 bytes, Ed25519, checked by the precompile right before `claim_grant`, or before the instruction
-that calls loot): `"loot-grant-v4" | program id | grant | incarnation (u64 LE) | wallet | person_hash (32) | round (16)
-| expires (i64 LE) | amount (u64 LE)` (`voucherBytes`, `readVoucher`). Use a different voucher key on each cluster:
-the bytes don't name the cluster. Vector: grant 32 × `0x22`, incarnation 7, wallet `0x33`, person `0x44`, round
-`0x55`, expires 1,767,225,600, amount 0:
-
-```
-message   6c6f6f742d6772616e742d763402354a42305cb625d57a3039efafbd8b8fe0ac361da56671aefbbad058d158e722222222222222222222222222222222222222222222222222222222222222220700000000000000333333333333333333333333333333333333333333333333333333333333333344444444444444444444444444444444444444444444444444444444444444445555555555555555555555555555555500b95569000000000000000000000000
-signature 809021b02d5a442f72eb63de9acf0fc7fb5256f78987684e7130b51248455e2c831a54a39b303cd49dbc0b9f7faa7861e2530645cbf8cda9b81c5269bc01f505
-key       AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9
-```
+**The voucher** (45 bytes, Ed25519, checked by the precompile right before `claim_grant`, or before the instruction
+that calls loot): `"loot-grant-v5" | sha256(program id | grant | incarnation (u64 LE) | wallet | person_hash (32) |
+expires (i64 LE) | count (u32 LE) | (round (16) | amount (u64 LE)) × count)` (`voucherBytes`, `voucherBody`,
+`readVoucher`), so a voucher of many rounds is as short to check as one of one. Use a different voucher key on each
+cluster: the bytes don't name the cluster. `js/test/client.test.mjs` holds a vector.
 
 **The list**: leaf `sha256("loot-list-v3" | wallet | person_hash | round (16) | amount (u64 LE))` (`listLeaf`), node
 `sha256(min(a, b) | max(a, b))`, odd last node sent up, leaves in the order given (`merkleRoot`, `merkleProof`).
@@ -978,13 +1000,14 @@ pays its own claim, 2^13 when another signer pays.
 
 ## Counts
 
-One `Receipt` counts every limit on a wallet, person, code or badge (17 bytes, plus 8 a grant round; `decodeReceipt`,
-`receiptAllows`): `count` in all, `in_window` for its last window, and a grant's rounds. Boxes, recipes and grants use
+A wallet's counts are one list, `["counts", project, wallet]` (`decodeList`, `readLimit`, `countKey`): a 28-byte limit
+record for each box, recipe or lottery that limits it, keyed `sha256(record | incarnation)[..16]` (a box's and a
+recipe's incarnation is 0): `count` in all, the window it counts in and `in_window`. Boxes, recipes and grants use
 `PerWallet { total, per_window, window }` (`window` in seconds from the Unix epoch, 86,400 a UTC day; 0 off; a
-`per_window` with no `window` is a limit in all); lotteries `per_wallet` tickets a round. The receipt is an optional
-account; past a limit the instruction is refused. The one counted pays its rent once and it is kept for good, so an
-edit can't reset limits. A refunded order gives its count back. `Window { opens_at, closes_at }` bounds boxes, recipes
-and grants (`NotOpenYet`, `WindowClosed`).
+`per_window` with no `window` is a limit in all); lotteries `per_wallet` tickets a round (its window the round). The
+list is an optional account; past a limit the instruction is refused (`countAllows` says so first). The one counted
+pays its record's bytes once and it is kept for good, so an edit can't reset limits. A refunded order gives its count
+back. `Window { opens_at, closes_at }` bounds boxes, recipes and grants (`NotOpenYet`, `WindowClosed`).
 
 ## Receipts and errors
 
@@ -1006,14 +1029,14 @@ still carry the receipts. If a log is truncated, read the transaction again.
 | `OfferOpened`, `OfferClosed`, `SoldToOffer`, `Borrowed`, `Repaid` | offers and loans |
 | `Entered`, `Decided` (`side: None` when off), `Claimed` | contests |
 | `AuctionOpened`, `BidPlaced` (`ends_at` after extension), `BidRefunded`, `AuctionEnded` (`winner: None` unsold, `remainder`) | auctions |
-| `ScheduleRan`, `TicketsBought`, `LotteryDrawn`, `LotteryCancelled` (`short`), `LotteryContributionFinished` (`refunded`), `LotteryPaid`, `Crafted`, `Rolled` | mechanics |
+| `ScheduleRan` (`from`, `run`: a range of runs), `TicketsBought` (`entry`), `LotteryDrawn`, `LotteryCancelled` (`short`), `LotteryPulled` (`entry`, `part`), `LotteryPaid`, `RoundClosed`, `Crafted`, `Rolled` | mechanics |
 | `Seated`, `Unseated` (`fee`, `leaving`, `toll`), `Harvested` (`toll`, `compounded`), `Withdrawn`, `Reweighed`, `Grown` | farms |
 | `PrizeGiven` (`winner`, `prize`, `asset`, `serial`, `amount`, `order`) | every prize given at once |
 | `TraitsSet`, `TraitsProven`, `GrantClaimed`, `RecordWritten`, `RecordClosed`, `TreeOpened` | traits, grants, `upsert`, `open_tree` |
 | `FeeChanged`, `ProjectSuspended` | the platform |
 
 **Errors**: `AnchorError occurred. Error Code: <name>. Error Number: <n>. Error Message: <text>.` (or `AnchorError
-caused by account: <account>. …`). The IDL lists all 147; `lootError` and `ERRORS` name them.
+caused by account: <account>. …`). The IDL lists all of them; `lootError` and `ERRORS` name them.
 
 ## Limits
 
@@ -1143,17 +1166,18 @@ real allocation. Rent is separate from token amounts, loot's fees, the oracle's 
 | Order, a box of one draw and two entries | 373 | 2,545,080 | player, at settle or refund; up to 41 bytes more a prize its draws can set aside (`orderBytes`) |
 | Stash, one NFT / four | 103 / 211 | 1,173,480 / 1,722,120 | +182,880 an NFT (36 bytes); to whoever takes NFTs out by hand |
 | Table: header / a row of numbers / a row of labels | 51 / 8 / 40 | 909,320 / +40,640 / +203,200 | never (the owner, as it writes rows) |
-| Committed table | 1,107 | 6,273,800 | never, whatever its rows |
+| Committed table, sealed | 83 | 1,072,120 | never, whatever its rows (its root only, once sealed) |
 | Profile, `xp` and `level` | 98 | 1,148,080 | never; 69 bytes empty, an attribute 8 bytes plus key and value |
 | Seat | 232 | 1,828,800 | player, last exit |
-| Hold | 179 | 1,559,560 | player, release |
+| Hold (a loan's 243) | 170 | 1,513,840 | whoever made it, at release |
 | Sheet, empty / one attribute | 69 / 83 | 1,000,760 / 1,071,880 | never; an attribute is 8 bytes plus key and value |
 | `Proven` | 299 | 2,169,160 | prover, via `close_leaf` |
 | Traits root | 97 | 1,143,000 | never |
-| Contest entry | 106 | 1,188,720 | player, claim |
-| Lottery contribution (measured on 0.20; now sized to its lottery's shares, `contributionBytes`) | 254 | 1,940,560 | buyer, finished |
+| Contest entry (in its list): tokens / an NFT | 43 / 83 bytes | 218,440 / 421,640 | never: to the treasury at the contest's close |
+| Lottery entry (in its round): plain, + a recipient, + an NFT ticket | 40, +32, +32 bytes | 203,200 a plain one | never: to the treasury at the round's close; the round's header is its first buyer's, back at the close |
 | Listing, sale / rental (no shares) | 183 / 189 | 1,579,880 / 1,610,360 | maker, close |
-| Receipt: empty / 1 round | 17 / 25 | 736,600 / 777,240 | never; +40,640 a grant round |
+| A wallet's counts: header / a record | 7 / 28 | 685,840 / +142,240 | never |
+| A grant's shard: header / a wallet's record / a round paid | 7 / 28 / 16 | 685,840 / +142,240 / +81,280 | to the owner when the shards close after the grant |
 | Token account / Token-2022 ATA / with transfer fee | 165 / 170 / 182 | 1,488,440 / 1,513,840 / 1,574,800 | on close |
 
 Variable records (items, boxes, lotteries, grants, farms, contests, auctions, offers) are sized to their fields;
@@ -1163,10 +1187,12 @@ project's vault for a mint never closes either.
 **Other costs:**
 
 - **Fees**: 0.002 SOL player, 0.00001 SOL project (defaults).
-- **An order** holds its rent, the player fee and 0.006 SOL per collectible (or fresh compressed item) of the box's
-  richest entry, for each draw of each open: a pack of five Core cards holds 0.03 SOL until it is settled. It is lent
-  to whoever settles for Core's rent (about 0.0031 SOL a card, which stays in the card); the player gets the rest
-  back. A plain compressed card holds none. Asking a waiting roll costs the oracle's fee.
+- **An order** holds its rent, the player fee and 0.006 SOL a unit (`orderEscrow`): each collectible, fresh compressed
+  item or stash NFT of the box's richest entry, for each draw of each open; once an order, each source of tokens it may
+  pay and the NFT it rolls on. A pack of five Core cards holds 0.03 SOL until it is settled. Each settle part lends it
+  to whoever settles for what the player's own outcome opens (about 0.0031 SOL a Core card, which stays in the card),
+  less what later parts need; the signer is never left richer, and the player gets the rest back. Asking a waiting
+  roll costs the oracle's fee.
 - **A `buy`** costs the price, the fee and what its prizes open or make; no order.
 - **Prizes** cost what they make, paid by the sender (a grant's funds for a grant): the winner's token account if
   missing (1,488,440 lamports), a new Core asset (about 0.004 SOL), a roll's order (sized to its box, plus escrow,
@@ -1194,7 +1220,7 @@ where token moves cost less: `pay` with 4 shares 41,065, a collectible's settle 
 | `refund` | 28,072 |
 | `roll` / `callback_random` | 24,292 / 3,313 |
 | `draw_lottery` / `callback_lottery` (3 places, 60 contributions) | 25,763 / 11,503 |
-| `buy_tickets` / `finish_lottery_contribution` / a winner's place | 43,079 / 45,819 / about 38,500 |
+| `buy_tickets` / `finish_lottery_contribution` / a winner's place (0.20's; 0.23 has `settle_round` and `pull` instead, not measured here) | 43,079 / 45,819 / about 38,500 |
 | `open_farm`: tokens / NFTs | 58,817 / 48,293 |
 | `stake_tokens` / `stake_nft` frozen / escrowed | about 51,500–54,400 / 74,846 / 68,765 |
 | `open_contest` / `decide` (2 shares) | 54,098 / 43,869 |

@@ -9,8 +9,8 @@ winner nobody pays.
 | Step | Who can send it | If nobody does |
 | --- | --- | --- |
 | A box's roll and settle, a shop buy | the player, in their own purchase (`js/play` does both in one prompt) | anyone can settle a rolled order, a normal item too (the app's backend delivers it from the `OrderSettled` receipt of a finalized transaction whose `meta.err` is null, once per order: `loot.receipts(tx)` gives none for a transaction with an error, whose logs can still read as all-success; it reads the transaction again when its log is truncated); a roll that failed or never came refunds (`app.refund`) |
-| A lottery draw, completing its contributions, paying its places | **anyone**: the page (`app.claims()` lists each available step), or a sweep. Paying a winner with no prize account opens it in the same transaction (the sender pays its rent) | selling stops at draw time. A result must be followed by completion of its contributions and payment of every place before the next round. A round nobody draws waits, with no deadline. If the oracle never answers a draw (7 days after it was asked for), anyone can cancel and refund each recorded buyer. An empty round moves on with the next ticket. A one-time lottery ends after its round |
-| A schedule that is due (an emission, rent, a drip) | **anyone**: the page (`app.runSchedule`), a player, a sweep | it waits, and catches up one run at a time |
+| A lottery draw, its round moved on (its places' prizes, then its sweep), each part pulled | **anyone**: the page (`app.claims()` lists each available step), or a sweep. A pull pays one entry one part (a refund, a ticket back, a place's part of the pot or token prize, a referrer's share) into its owner's account, opened in the same transaction when it is not there (the sender pays its rent) | selling stops at draw time. A round nobody draws waits, with no deadline. Once drawn, anyone moves it on: each place's prize (an NFT, a collectible, tokens, a roll) by a cursor, then the sweep, which pays the common shares and splits the pot among the places; the next round opens then. Each part waits in the round for its own pull, holding up nobody else; the pull that leaves nothing owed closes the round, and its first buyer's deposit for the round's record comes back. If the oracle never answers a draw (7 days after it was asked for), anyone can cancel it, and every buyer's refund is pulled. An empty round moves on with the next ticket. A one-time lottery ends after its round |
+| A schedule that is due (an emission, rent, a drip) | **anyone**: the page (`app.runSchedule`), a player, a sweep | it waits, and one call catches up every run due (a backlog of years takes a few) |
 | Ending an auction | **anyone**: usually the winner, from the page | it waits: whenever it is ended, the lot goes to the highest bidder |
 | A contest's entries back when it is off, or its winners' claims | **anyone** (each entry's money goes only to its player) | they wait; nothing is lost |
 | Opening a contest | the **authority** (the owner's wallet by default) | nothing happens |
@@ -27,13 +27,14 @@ auction to end), and `app.claim(c)` sends one. A **sweep** is a server that send
 projects it watches. One may or may not be running for the person's project, so never rely on it: the page's buttons
 are what finish them. A sweep never needs anyone's key but its own fee payer.
 
-A lottery's ticket payments stay separate from the prize pot until the draw succeeds: cuts, referrals and burns run
-after it. The buyer's share recipients are fixed when they buy; completing a successful contribution sends its shares
-and its prize funding. Cancelling instead (only for a draw the oracle never answered) returns its entire ticket
-payment and record rent to the recorded buyer, with no ticket split or burn; network and oracle fees stay spent. Prizes and
-outside donations already in the prize pot stay there for the lottery; they are not ticket refunds. Each purchase is
-a record of its own whose rent goes back to its buyer once it is completed (a winning one once its places are paid),
-so a round has no limit on buyers.
+A round of a lottery is a record of its own, opened by its first purchase (its buyer fronts its header, about 0.003
+SOL, back when the round closes), and it holds its ticket money in accounts of its own until its sweep: cuts and burns
+run after the draw, and the pot holds only what nobody is owed. Each purchase adds an entry (its bytes, about 0.0002
+SOL, never come back; they go to the treasury when the round closes). The buyer's share recipients are fixed when they
+buy. Cancelling (only for a draw the oracle never answered, or a round short of its least sale) owes every entry its
+whole ticket payment back, with no split or burn; network and oracle fees stay spent. Prizes and outside donations
+already in the pot stay there for the lottery; they are not ticket refunds. A round holds about 70,000 to 260,000
+purchases, by how wide its entries are.
 
 Every account a payment goes to is opened by the transaction that pays it, and whoever sends it pays the rent: the
 treasury's or a payee's account at a settle, a winner's at a payout, an outbid bidder's at the next bid. Nothing waits
@@ -101,10 +102,12 @@ total, between two dates) are the most anything can ever pay out, whatever happe
 - **A random draw nobody can rig** (a free draw for members): a results server's computed draws (drand), or a lottery.
 
 Per wallet per day ("2 wins a day each") uses `limits.perWalletEach: { "count": 2, "every": "1d" }`;
-`perDay` separately counts all wallets together. A wallet's receipt keeps every voucher round it was paid within one
-grant incarnation, in any order, and grows 8 bytes a round (its rent from the grant's funds); changing limits or
-voucher keys does not clear its history. Closing and recreating a grant starts a new campaign with new receipts and
-invalidates old vouchers. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
+`perDay` separately counts all wallets together. A grant keeps every round it paid each wallet within one incarnation,
+16 bytes a round (from the grant's funds), and each wallet's count in 28: one voucher may name several rounds, each
+paid once, and the same voucher sent again later pays what a limit held back. Changing limits or voucher keys does not
+clear its history. Closing and recreating a grant starts a new campaign with new records and invalidates old vouchers;
+anyone may then close the old records (`loot.closeShardIx`), their rent to the owner. A grant for more than about
+100,000 wallet-rounds names `wallets` (and `rounds`) so its records are kept in enough lists. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
 claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A results server must read the current grant incarnation when accepting
 a result and include it in the voucher it signs.
 

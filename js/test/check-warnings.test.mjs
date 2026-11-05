@@ -157,3 +157,20 @@ test('every claim is signed by its winning wallet, whatever proves it; anyone ma
     assert.ok(ix.keys.some((k) => k.pubkey === other && k.isSigner), 'the payer signs and pays');
   }
 });
+
+test('a lottery’s places as runs and a raffle of many NFTs are checked as the program writes them', () => {
+  const raffle = example('nft-raffle');
+  const nfts = [WALLET, pda.platform(), pda.identity()];
+  // Its own NFT (`raffle`) left out: a raffle names its NFTs or draws them, never both.
+  const many = (s, more = {}) => {
+    delete s.lotteries[0].raffle;
+    return Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'raffled' }, times: 3 }], nfts }, more);
+  };
+  const ok = edit(raffle, (s) => many(s));
+  assert.ok(!ok.refused.some((r) => r.startsWith('E-LOTTERY')), ok.refused.join());
+  assert.ok(edit(raffle, (s) => many(s, { nfts: nfts.slice(0, 2) })).refused.includes('E-LOTTERY economy.lotteries.art.nfts'), 'fewer NFTs than raffled places');
+  assert.ok(edit(raffle, (s) => many(s, { every: '1d' })).refused.includes('E-LOTTERY economy.lotteries.art.every'), 'a raffle draws once');
+  const runs = edit(raffle, (s) => Object.assign(s.lotteries[0], { places: [{ percent: 1, times: 101 }] }));
+  assert.ok(runs.refused.includes('E-LOTTERY economy.lotteries.art.places'), 'a run of 101 places at 1% is more than the pot');
+  assert.ok(edit(raffle, (s) => Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'roll', box: 'x' }, times: 2 }] })).refused.includes('E-LOTTERY economy.lotteries.art.places[1].times'), 'a roll is one place’s (after the raffle’s own NFT)');
+});
