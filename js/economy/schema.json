@@ -717,7 +717,7 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), up to three of them together (`bundle`), a burn of the payment, or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle.",
+      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), a burn of the payment, or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle.",
       "properties": {
         "gives": {
           "enum": [
@@ -868,7 +868,7 @@
         "prizes": {
           "type": "array",
           "minItems": 1,
-          "description": "For bundle: what it gives together, at most three: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
+          "description": "For bundle: what it gives together, any number: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
           "items": {
             "type": "object",
             "required": [
@@ -919,6 +919,10 @@
                   "nft",
                   "roll"
                 ]
+              },
+              "compressed": {
+                "type": "boolean",
+                "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted at the settle into the project's tree (`compressedTree`) instead of a Core asset. A plain one holds no collectible's rent; a fresh one's drawn traits are written in the project's Sheet for it, its rent held by the order until the settle."
               }
             }
           }
@@ -927,6 +931,10 @@
           "type": "boolean",
           "default": false,
           "description": "For bundle: the payment is burned, all of it, in place of the box's split."
+        },
+        "compressed": {
+          "type": "boolean",
+          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted at the settle into the project's tree (`compressedTree`) instead of a Core asset. A plain one holds no collectible's rent; a fresh one's drawn traits are written in the project's Sheet for it, its rent held by the order until the settle."
         }
       }
     },

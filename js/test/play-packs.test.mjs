@@ -127,3 +127,21 @@ test('a pack of fresh heroes: each one’s color from the table, its power in it
     assert.ok(c.name.startsWith(`${color} Hero`), c.name);
   }
 });
+
+test('a purchase of more cards than one answer holds is several orders in one transaction: still one prompt', { skip }, async () => {
+  const w = world({ project: false, seed: 'packs-many' });
+  w.chain.warp(NOW);
+  const owner = freshKeypair();
+  const player = freshKeypair();
+  w.chain.airdrop(owner.address, 100_000_000_000n);
+  w.chain.airdrop(player.address, 100_000_000_000n);
+  const spec = await live(w, owner);
+  const wallet = counting(player);
+  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+  const listing = (await app.boxes()).find((l) => l.key === 'booster');
+  const got = await app.openBox('booster', { listing, count: 10 });
+  assert.equal(wallet.prompts, 1, 'one wallet prompt for ten packs');
+  assert.equal(got.orders.length, 2, 'fifty cards: two orders of thirty at most');
+  assert.equal(got.won.length, 50);
+  assert.equal((await app.collectibles()).length, 50);
+});

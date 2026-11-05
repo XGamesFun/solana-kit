@@ -66,6 +66,11 @@ await app.balances();                     // what they hold of each of the econo
   Tell the person the one command that starts it, and that it serves on devnet.
 - **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
   waits for it. Show the player that it is rolling.
+- **Packs**: `app.openBox(key, { listing, count: 10 })` opens ten packs in one purchase: one wallet prompt, one oracle
+  answer, `maxPrice` a pack's. It returns `won` (every card) and `assets`; a pack too big for one transaction is
+  settled in parts, each its own transaction (`parts`: their signatures), sent by the throwaway key the purchase funds (`oneSignature`, the default),
+  so the player signs once. A compressed card's id is not in `assets` (it is the tree's count when minted): read it
+  from `claims()` or the player's assets. Show each card as it lands.
 - **What an auction looks like**: show the high bid, the least next bid (`nextBid`) and a countdown (`secondsLeft`;
   a late bid moves the end, so read `auctions()` again after every bid). A player who was outbid has their bid back
   already, nothing to claim: in SOL it waits in their wrapped-SOL account (`waiting`), so say "You were outbid:

@@ -482,7 +482,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    * move); the player signs that settle.
    */
   async function collect(orderAddress, options = {}) {
-    only(options, ['timeoutMs', 'burner', 'putBack', 'opened', 'landed'], 'collect');
+    only(options, ['timeoutMs', 'burner', 'putBack', 'opened', 'landed', 'keepBurner'], 'collect');
     try {
       return await collectOnce(orderAddress, options);
     } catch (e) {
@@ -502,7 +502,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     }
   }
 
-  async function collectOnce(orderAddress, { timeoutMs = 60_000, burner = null, putBack = [], opened = false, landed = null } = {}) {
+  async function collectOnce(orderAddress, { timeoutMs = 60_000, burner = null, putBack = [], opened = false, landed = null, keepBurner = false } = {}) {
     const started = Date.now();
     // `landed`: the slot one's own open landed in; the order is read from a node that has seen it.
     const current = async () => {
@@ -527,7 +527,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       order = await current();
     }
     if (!order) {
-      if (burner) await sendAs(burner, [giveBack(burner, BigInt(await client.balance(burner.address).catch(() => BURNER_LAMPORTS)))]);
+      if (burner && !keepBurner) await sendAs(burner, [giveBack(burner, BigInt(await client.balance(burner.address).catch(() => BURNER_LAMPORTS)))]);
       // One's own open still not seen after that: say so plainly, never that it was settled (claims() lists it).
       if (opened) return { order: orderAddress, settled: null, says: 'The network doesn’t show this order yet: collect it again in a moment (claims() lists it).' };
       return { order: orderAddress, settled: 'elsewhere', says: 'The order was settled already.' };
@@ -607,7 +607,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const byBurner = burner && !putBack.length ? await settleBy(burner.address) : null;
     const paysRent = (built) => order.won.some((w) => w.Roll || (w.Nft && built.nfts[w.Nft.nft]?.tokenMetadata));
     const left = burner ? BigInt(await client.balance(burner.address).catch(() => BURNER_LAMPORTS)) : 0n;
-    const alone = byBurner && !paysRent(byBurner) && !byBurner.before.length ? [...budget, byBurner.ix, giveBack(burner, left)] : null;
+    // The burner gives back what it holds with its last settle (a purchase of several orders: after the last order's).
+    const alone = byBurner && !paysRent(byBurner) && !byBurner.before.length ? [...budget, byBurner.ix, ...(keepBurner ? [] : [giveBack(burner, left)])] : null;
     // The burner's transaction counts its compute limit: a settle within about 40 bytes of the legacy limit goes from the
     // wallet (one prompt) rather than without one, as a settle with the default limit can run out (205,794 units on
     // devnet) and the burner holds the fee of one try only.
@@ -616,7 +617,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // The wallet's settle: as a v0 transaction with a lookup table when it doesn't fit a legacy one (`send`).
       const { ix, before } = await settleBy(wallet.address);
       signature = await send([...budget, ...before, ix]);
-      if (burner) await sendAs(burner, [giveBack(burner, left)]);
+      if (burner && !keepBurner) await sendAs(burner, [giveBack(burner, left)]);
     }
     const assets = wonAssets(orderAddress, order).map((a) => (putBack.includes(a) ? null : a));
     return { order: orderAddress, won: order.won, assets, settled: signature, ...(signatures.length ? { parts: [...signatures, signature] } : {}), ...(assets.find(Boolean) ? { asset: assets.find(Boolean) } : {}) };
@@ -757,7 +758,14 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const prizeMints = [...new Set([...Object.values(poolMints).filter(Boolean), ...minted])];
     const choosesHolder = box.shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
     const chosen = chosenRecipient && choosesHolder ? chosenRecipient : null;
-    const ix = loot.openBoxIx({ player: wallet.address, project, box, nonce, maxPrice: bound, count, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs });
+    // A purchase of more cards than one oracle answer holds (`loot.CARDS_AN_ORDER`) is several orders, each its own
+    // answer, all in this one transaction: one wallet prompt.
+    const each = Math.max(1, Math.floor(loot.CARDS_AN_ORDER / loot.boxDraws(box)));
+    const orders = [];
+    for (let left = count, k = 0n; left > 0; left -= each, k++) {
+      const n = Math.min(each, left);
+      orders.push({ nonce: nonce + k, n, ix: loot.openBoxIx({ player: wallet.address, project, box, nonce: nonce + k, maxPrice: (bound / BigInt(count)) * BigInt(n), count: n, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs }) });
+    }
     const before = [...proving, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint))];
     // (A compressed NFT's proof brings its own compute limit, the transaction's only one.)
     let burner = null;
@@ -780,16 +788,18 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       solPrize ||= mint === NATIVE_MINT && paid.has(wallet.address);
     }
     // The burner holds the fee of each settle part the pack may take (`settleParts`), and gives back what it doesn't use.
-    const after = burner ? [transferLamports(wallet.address, burner.address, BURNER_LAMPORTS + SIGNATURE_FEE * BigInt(loot.settleParts(box, count) - 1))] : [];
+    const parts = orders.reduce((n, o) => n + loot.settleParts(box, o.n), 0);
+    const after = burner ? [transferLamports(wallet.address, burner.address, BURNER_LAMPORTS + SIGNATURE_FEE * BigInt(parts - 1))] : [];
     // A SOL prize, or a share of the sale, lands in the player's wrapped-SOL account, which the prompt-less settle
     // can't open: it stays open, and the player's next transaction unwraps it.
-    let instructions = withSolWrap(wallet.address, mint, BigInt(box.price) * BigInt(count), [...before, ix, ...after]);
+    let instructions = withSolWrap(wallet.address, mint, BigInt(box.price) * BigInt(count), [...before, ...orders.map((o) => o.ix), ...after]);
     if (solPrize) instructions = instructions.filter((x) => !(x.programId === TOKEN_PROGRAM && x.data?.[0] === 9 && x.keys[0]?.pubkey === associatedTokenAddress(wallet.address, NATIVE_MINT)));
     const signature = await send(instructions, [], { keepWrapped: solPrize });
     // The slot it landed in: the order is read from a node that has seen it (a load-balanced RPC's node lagging
     // behind answers nothing for an order just opened).
     const landed = (await client.signatureStatus?.(signature).catch(() => null))?.slot ?? null;
-    return { signature, orderAddress: loot.pda.order(project, wallet.address, nonce), burner, landed };
+    const addresses = orders.map((o) => loot.pda.order(project, wallet.address, o.nonce));
+    return { signature, orderAddress: addresses[0], orderAddresses: addresses, burner, landed };
   }
 
   /**
@@ -836,8 +846,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       await poolShareGiven(box.entries.flatMap((e) => e.prizes ?? []));
       return buyBox(boxId, part, options);
     }
-    const { orderAddress, burner, landed } = await open(boxId, part, options);
-    return collect(orderAddress, { burner, opened: true, landed });
+    const { orderAddresses, burner, landed } = await open(boxId, part, options);
+    if (orderAddresses.length === 1) return collect(orderAddresses[0], { burner, opened: true, landed });
+    // Several orders of one purchase: each collected in turn, the burner's leftover given back after the last.
+    const got = [];
+    for (const [k, address] of orderAddresses.entries()) got.push(await collect(address, { burner, opened: true, landed, keepBurner: k < orderAddresses.length - 1 }));
+    return { ...got.at(-1), orders: got, won: got.flatMap((g) => g.won ?? []), assets: got.flatMap((g) => g.assets ?? []), parts: got.flatMap((g) => g.parts ?? [g.settled]) };
   }
 
   /** The current slot (an order's deadlines count in slots). */

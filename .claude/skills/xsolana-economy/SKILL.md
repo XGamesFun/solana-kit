@@ -74,8 +74,13 @@ or `npx -y @xgamesfun/solana@0.20.1 tool <name> '<json>'` for any tool (always w
    sends each step while it runs (a draw, a payout, a contest's result) and what happens if nobody does:
    `references/after-launch.md`.
    Prizes: give a known prize directly on whatever route wins it (a grant, a lottery place, a contest, a mission, a
-   recipe): one step, no oracle. Use a roll of a box only for chance. Every other shape (bundles, an NFT as the price,
-   stashes, gates, no-loss lotteries, amounts by rank) is in `references/sentence-to-spec.md` and `xsolana_guide`.
+   recipe): one step, no oracle. Use a roll of a box only for chance. A pack of cards is one box with `slots` (five
+   draws an open, a guaranteed rare), opened several at once from the page; cards whose traits differ are a fresh
+   item drawing from `tables`. Every other shape (bundles, an NFT as the price, stashes, gates, no-loss lotteries,
+   amounts by rank) is in `references/sentence-to-spec.md` and `xsolana_guide`.
+   Then say what stays the project's job (`references/telling-the-person.md`): the files behind every item's link
+   (every value of a fresh item's `{attribute}`), a committed table's rows and proofs, a table's rent, and the
+   collectible rent a pack's cards hold until settled.
 6. **Iterate on what they say.** "Make legendaries 0.5%", "a bigger seed": change, check, simulate, explain again.
 7. **Save it**: `xsolana_save {"spec": …}` writes `xsolana.json`, only if it checks. A live file keeps its program numbers.
 8. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
@@ -100,6 +105,6 @@ For staking an NFT of another collection, show what custody means and get explic
 ## More
 
 - From a sentence to a spec, with a worked example: `references/sentence-to-spec.md`
-- Telling the person what they get: `references/telling-the-person.md`
+- Telling the person what they get, and what stays the project's job: `references/telling-the-person.md`
 - Building the app for a live economy: `references/apps.md`
 - After it goes live (who sends each step, owner pages, results from a game, a results server): `references/after-launch.md`

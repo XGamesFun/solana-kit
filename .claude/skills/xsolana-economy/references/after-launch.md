@@ -101,10 +101,10 @@ total, between two dates) are the most anything can ever pay out, whatever happe
 - **A random draw nobody can rig** (a free draw for members): a results server's computed draws (drand), or a lottery.
 
 Per wallet per day ("2 wins a day each") uses `limits.perWalletEach: { "count": 2, "every": "1d" }`;
-`perDay` separately counts all wallets together. A wallet can claim at most 256 distinct signed voucher rounds
-within one grant incarnation, in any order. Plan a new campaign when that bound would be exceeded; changing
-limits or voucher keys does not clear its history. Closing and recreating a grant starts a new campaign with new
-receipts and invalidates old vouchers. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
+`perDay` separately counts all wallets together. A wallet's receipt keeps every voucher round it was paid within one
+grant incarnation, in any order, and grows 8 bytes a round (its rent from the grant's funds); changing limits or
+voucher keys does not clear its history. Closing and recreating a grant starts a new campaign with new receipts and
+invalidates old vouchers. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
 claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A results server must read the current grant incarnation when accepting
 a result and include it in the voucher it signs.
 

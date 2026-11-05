@@ -4,6 +4,55 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.22.0 (not released; the program is not deployed yet)
+
+For loot 0.22.0, the release that launches. The IDL, the client, the spec and the docs follow it; no account of 0.20.1
+carries over.
+
+### The program, as the tools see it
+
+- **Only the chain's limits.** The program caps no count or size of its own: box entries, prizes an entry, odds,
+  shares, lottery places, farm boosts, gates, growths and level steps, recipe lines, gate wallets, list depth,
+  contest deciders, NFTs a bid, collections a project, grant receipt rounds and the lengths of names, keys, texts and
+  URIs are bounded only by the transaction, the heap, an account's 10 MiB and the oracle's answer (21 accounts). Farm
+  tiers go up to 256 and collectibles a craft to 255 (a byte names each). Kept: a tier's ×11 and a boost's ×101, the
+  platform's fee cap, the time guards, three named voucher keys, and Bubblegum's 32-byte names and 200-byte URIs for
+  compressed NFTs.
+- **Packs**: `open_box` takes `count` (several opens in one purchase, one oracle answer, never shared between
+  players), and a box's `slots` say what one open draws (`{ count, only, distinct }`). Orders are sized to their box.
+- **Settle in parts**: `settle(upto, prize_accounts, rows)`; receipts `OrderPartSettled` and `OrderSettled.from` (no
+  `assets`). One settle mints about 14 Core cards, 10 compressed or 8 fresh compressed (a 64-call instruction trace).
+- **Tables** (`["table", project, id]`, tag 25): weighted rows of labels or numbers with stock, written in batches and
+  sealed; a committed table keeps only a Merkle root, proven at the settle (`rows`).
+- **Fresh items** (`Item.traits`): each unit's traits drawn from a table or a range, its name and URI taking the
+  values (`{key}`); given only by a box's roll (`NeedsRoll`).
+- **Compressed items as box prizes** (`Prize::Compressed` in an entry), minted at the settle.
+- **Stashes are tables of NFTs**, each with a weight (`stash`'s `weight`), drawn by weight; the `Stash` account (tag
+  21) is gone.
+- **Player profiles** (`["profile", project, wallet]`, tag 24): `Of::Profile` rules, `Change::Profile`, growth on the
+  profile, a recipe's need or raise at `PROFILE_PLACE`.
+- New errors `WrongProfile`, `WrongTable`, `BadTable`, `BadItem`, `NeedsRoll`, `WrongRow`; `ReceiptFull` and
+  `StringTooLong` are gone.
+
+### The tools
+
+- **Client**: `openBoxIx` takes `count` and `items` (a fresh item's tables); `settleIx` takes `upto`, `rows` and the
+  tree a compressed prize is minted into; `settlePartEnd`, `settleParts`, `prizeCalls` and `TRACE_LIMIT` size a
+  settle's parts; `stashIx` takes `weight`; `upsertIx` writes `Def::Table`; `decodeTable`, `decodeProfile`,
+  `tableRowAt`, `placeBit`, `pda.table`, `pda.profile`; `orderBytes` and `contributionBytes` size orders and lottery
+  purchases to their record; `random`, a mirror of the program's rolling module held to its vectors, shows what each
+  draw of an answer gave. `MAX_RECEIPT_ROUNDS` is gone.
+- **Player module**: `openBox(key, { listing, count })` opens several packs with one wallet prompt; a pack too big for
+  one transaction is settled in parts by the throwaway key the purchase funds (`parts` in what it returns).
+- **Spec**: a box's `slots`, an item's `drawn` traits, top-level `tables` (rows on chain; the tools write no committed
+  table), and a stash NFT's `weight`. Every `maxItems` and `maxLength` that stated a removed cap is gone, and so are
+  the checker's refusals of them; the checker refuses what the chain can't carry (`E-TX-SIZE`, `E-ODDS` past the
+  oracle's 21 accounts) and checks tables (`E-TABLE`, `W-TABLE`) and fresh items (`E-ITEM`).
+- **Guide**: packs are a way (slots), no longer a limit with a workaround (a bundle whose third prize is a roll).
+- **Docs and skill**: `docs/program.md` describes 0.22 (numbers not measured again on 0.22 are marked as 0.20's); the
+  skill maps packs, a guaranteed rare, multi-opens, random traits and large decks to the new fields, and says what
+  stays the project's job (files behind every link, a committed table's proofs, a table's rent, a pack's held rent).
+
 ## 0.20.1
 
 The first public release of the tools, for loot 0.20.1 on devnet (program

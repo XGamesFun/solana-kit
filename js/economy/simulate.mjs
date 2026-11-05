@@ -8,7 +8,7 @@
 // It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { contributionBytes, receiptBytes } from '../client/index.js';
 import { boxOrderBytes } from './plan.mjs';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, holdsRent, outcomeBurns, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
+import { boxBuys, boxRolls, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, holdsRent, outcomeBurns, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
@@ -327,14 +327,14 @@ export function simulate(economy, { now = 0 } = {}) {
     const signatures = bought ? 1 : 2;
     playerAction(opens, signatures);
     if (rolled) players.oracle += opens * ORACLE;
-    const collectibles = partsOf.filter((o) => holdsRent(o, m) && m.item.get(o.item)?.kind !== 'normal').reduce((n, o) => n + o.chance / 100, 0);
+    const collectibles = drawsOf(b) * partsOf.filter((o) => holdsRent(o, m) && m.item.get(o.item)?.kind !== 'normal').reduce((n, o) => n + o.chance / 100, 0);
     players.rent += opens * collectibles * COLLECTIBLE_RENT;
     const known = !unpriced.length && !shares.length && !Object.keys(other).length;
     // What one open really takes from the player's wallet: the price, the platform's fee, the oracle's and the network's.
     const isSol = Boolean(m.tokens.get(token)?.wsol);
     const oracle = rolled ? ORACLE : 0;
     // A collectible's rent comes out of the SOL the order holds when it settles: on average, the chance of one.
-    const items = Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((x) => holdsRent(x, m)).length));
+    const items = drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((x) => holdsRent(x, m)).length));
     const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(ESCROW_LAMPORTS) * items + orderRent(b, m) });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);

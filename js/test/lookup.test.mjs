@@ -237,7 +237,7 @@ describe('xsolana_check sizes every box’s settle', async () => {
     return { refused: r.refusals.filter((x) => x.code === 'E-TX-SIZE'), v0: r.warnings.find((x) => x.code === 'W-SETTLE-V0') };
   };
 
-  test('the estimate is the settle the client builds, byte for byte: three Core NFTs of a stash and four holders’ shares, 1,281 bytes', () => {
+  test('the estimate is the settle the client builds, byte for byte: three Core NFTs of a stash and four holders’ shares, 1,282 bytes', () => {
     const m = model(shape({ core: 3, holders: 4 }));
     const est = settleSize(m.boxes[0], m.boxes[0].outcomes[0], m);
     const k = (n) => key(2000 + n);
@@ -247,7 +247,7 @@ describe('xsolana_check sizes every box’s settle', async () => {
     const ix = loot.settleIx({ signer: k(12), orderAddress: k(13), order, projectState: { treasury: k(14) }, items: {}, nfts: Object.fromEntries(order.won.map((w) => [w.Nft.nft, { collection: k(15) }])), putBack: [], subject: {}, holders: Object.fromEntries(assets.map((a, i) => [a, k(20 + i)])), programs: { [k(7)]: TOKEN_PROGRAM } });
     const real = transactionSize(compileMessage({ payer: k(12), blockhash: BLOCKHASH, instructions: [computeUnitLimit(1_400_000), requestHeapFrame(loot.settleHeapFrame(order)), ix] }));
     assert.equal(est.legacy, real);
-    assert.equal(real, 1281);
+    assert.equal(real, 1282);
   });
 
   test('a settle too big for a legacy transaction, NFTs or not, is warned of as v0 with a table’s rent; one that fits is not', () => {

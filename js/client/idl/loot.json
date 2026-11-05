@@ -6294,6 +6294,14 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "player_token",
+          "docs": [
+            "part of an order whose roll didn't make every draw: their share of the payment comes back to it."
+          ],
+          "writable": true,
+          "optional": true
         }
       ],
       "args": [
@@ -8815,12 +8823,12 @@
     {
       "code": 6006,
       "name": "BadEntries",
-      "msg": "Box needs 1 to 8 entries with non-zero weights and non-zero prizes (none that burns in wrapped SOL)"
+      "msg": "A box needs an entry or more, each of a weight above 0 and prizes above 0 (none that burns in wrapped SOL); its slots draw among its entries, each named once; and several draws an open, or several opens, need a box that rolls (or one entry of items), with no entry that burns and no NFT it rolls on"
     },
     {
       "code": 6007,
       "name": "BadShares",
-      "msg": "A split takes at most 4 shares (a payment: any number) that add up to 100% or less, none that burns in wrapped SOL, and only the destinations its route can pay"
+      "msg": "A split takes shares that add up to 100% or less, none that burns in wrapped SOL, and only the destinations its route can pay"
     },
     {
       "code": 6008,
@@ -8915,7 +8923,7 @@
     {
       "code": 6026,
       "name": "BadLottery",
-      "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, at most 8 places that each take something and together 100% or less, and a held prize in its own stash, once, on a lottery that draws once"
+      "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, places that each take something and together 100% or less, and a held prize in its own stash, once, on a lottery that draws once"
     },
     {
       "code": 6027,
@@ -8940,7 +8948,7 @@
     {
       "code": 6031,
       "name": "BadRecipe",
-      "msg": "A recipe has up to 8 lines a side, takes up to 8 collectibles, no line of it is zero, and its needs and keeps name collectibles it has"
+      "msg": "A recipe takes up to 255 collectibles (a place is a byte), no line of it is zero, and its needs and keeps name collectibles it has"
     },
     {
       "code": 6032,
@@ -9135,7 +9143,7 @@
     {
       "code": 6070,
       "name": "BadRule",
-      "msg": "A rule or a boost the program can't keep: a key or text over 32 bytes, a number test with no key, a boost over +10,000%, or more than 4"
+      "msg": "A rule or a boost the program can't keep: a number test with no key, or a boost over +10,000%"
     },
     {
       "code": 6071,
@@ -9145,7 +9153,7 @@
     {
       "code": 6072,
       "name": "BadFarm",
-      "msg": "A farm this program can't keep: 1 to 4 lock tiers each above x0 and at most x11, at most 4 boosts, and exits, unbonding, tolls and missions only where its kind takes them"
+      "msg": "A farm this program can't keep: 1 to 256 lock tiers each above x0 and at most x11, boosts of at most +10,000% in all, and exits, unbonding, tolls and missions only where its kind takes them"
     },
     {
       "code": 6073,
@@ -9350,7 +9358,7 @@
     {
       "code": 6113,
       "name": "Rolls",
-      "msg": "This box rolls (more than one entry, an NFT at random, or an NFT it rolls on): open it with open_box"
+      "msg": "This box rolls (more than one entry, an NFT at random, a fresh item, several draws an open, or an NFT it rolls on): open it with open_box"
     },
     {
       "code": 6114,
@@ -9505,7 +9513,7 @@
     {
       "code": 6144,
       "name": "BadItem",
-      "msg": "A trait's key is the project's own (not item_id, rarity, serial, made, used or used_at), and each item names each key once"
+      "msg": "A trait's key is the project's own (not item_id, rarity, serial, made, used or used_at), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
     },
     {
       "code": 6145,
@@ -11091,8 +11099,8 @@
           {
             "name": "prizes",
             "docs": [
-              "What it gives, at most `MAX_PRIZES` (`prize.rs`): items, tokens, NFTs of a stash (a given one,",
-              "or one at random), a roll of another box. None is nothing: the payment is split as usual."
+              "What it gives, any number (`prize.rs`): items (compressed or not), tokens, NFTs of a stash (a given",
+              "one, or one at random by weight), a roll of another box. None is nothing: the payment is split as usual."
             ],
             "type": {
               "vec": {
@@ -13180,8 +13188,7 @@
           {
             "name": "odds",
             "docs": [
-              "Entries whose weight grows for a player who shows a collectible that passes (at most",
-              "`MAX_BOOSTS`). The purchase fixes what the collectible shown adds. Written with the",
+              "Entries whose weight grows for a player who shows a collectible that passes (any number). The purchase fixes what the collectible shown adds. Written with the",
               "rest of the box, so a change of them is an edit (`version`)."
             ],
             "type": {
@@ -14348,6 +14355,22 @@
             "docs": [
               "How many of `won` were settled by its earlier parts (`settle`'s `upto`): the next part starts",
               "there."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "undrawn",
+            "docs": [
+              "The draws its roll did not make, of its opens' (`LootBox::draws` each): a slot that found nothing",
+              "in stock, or what the oracle's compute had no room for. The last settle part gives back their",
+              "share of what was paid."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "drew",
+            "docs": [
+              "The draws its roll made."
             ],
             "type": "u32"
           },

@@ -46,8 +46,9 @@ test('uintLE refuses a number that already lost precision, and what does not fit
 test('a u8 seed or byte past 255 is refused, never wrapped', () => {
   assert.throws(() => loot.pda.pool(A, 256), RangeError);
   assert.notEqual(loot.pda.pool(A, 255), loot.pda.pool(A, 0));
-  assert.throws(() => loot.rollNonce(A, 1n, 256), RangeError);
-  assert.equal(typeof loot.rollNonce(A, 1n, 255), 'bigint');
+  // A prize's place in a roll's nonce is 4 bytes: past 2^32 - 1 is refused.
+  assert.throws(() => loot.rollNonce(A, 1n, 2 ** 32), RangeError);
+  assert.notEqual(loot.rollNonce(A, 1n, 256), loot.rollNonce(A, 1n, 0));
   assert.throws(() => loot.verdictBytes({ contest: A, incarnation: 0n, side: 256, expires: 0 }), RangeError);
   const off = loot.verdictBytes({ contest: A, incarnation: 0n, side: null, expires: 0 });
   assert.equal(off[off.length - 9], 255);

@@ -264,11 +264,11 @@ export const orderEscrow = (box) => ESCROW_LAMPORTS * BigInt(Math.max(0, ...box.
 
 /**
  * The nonce the `k`th roll an order won is named by when it settles: the first 8 bytes, little
- * endian, of sha256("roll" | order | its requested slot (u64 LE) | k (u8)). Like every prize's roll, its order is at
+ * endian, of sha256("roll" | order | its requested slot (u64 LE) | k (u32 LE)). Like every prize's roll, its order is at
  * `prizeRollNonce` of it.
  */
 export function rollNonce(order, requestedSlot, k) {
-  const hash = sha256(concat(utf8('roll'), addressBytes(order), uintLE(requestedSlot, 8), uintLE(k, 1)));
+  const hash = sha256(concat(utf8('roll'), addressBytes(order), uintLE(requestedSlot, 8), uintLE(k, 4)));
   return readUintLE(hash, 0, 8);
 }
 
@@ -854,6 +854,13 @@ export function settlePartEnd(order, from = Number(order.settled ?? 0), items = 
   return end;
 }
 
+/** The most cards a client puts in one order: what one oracle answer holds for most boxes (the program stops a roll
+ * that its count of compute says might not fit, and gives back the draws it didn't make; `tests/limits.rs`). */
+export const CARDS_AN_ORDER = 30;
+
+/** How many draws one open of `box` makes: its slots' counts, or one. */
+export const boxDraws = (box) => (box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
+
 /** How many settle parts an order of `opens` opens of `box` takes at most: each card, at its most calls. */
 export function settleParts(box, opens = 1) {
   const draws = box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1;
@@ -939,6 +946,8 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       treasury_token: ata(projectState.treasury, order.mint, tokenProgram),
       ...on.accounts,
       receiver,
+      // The last part of an order whose roll didn't make every draw gives their share of the payment back here.
+      player_token: Number(order.undrawn ?? 0) > 0 && end === order.won.length ? ata(order.player, order.mint, tokenProgram) : null,
     },
     {
       remaining: [...on.proof, ...prizes, ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...extra],

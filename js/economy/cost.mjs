@@ -5,7 +5,7 @@
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { boxOrderBytes, plan as compile, contestBytes } from './plan.mjs';
 import { ACCOUNT_BYTES, contributionBytes } from '../client/index.js';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT, holdsRent, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
+import { boxBuys, boxRolls, COLLECTIBLE_RENT, drawsOf, holdsRent, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -78,7 +78,8 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   };
   const back = (what, lamports, when) => ({ what, sol: sol(lamports), back: when });
   // An order holds a collectible's rent for each item the richest outcome gives (order.rs `escrow`).
-  const itemsOf = (b) => Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((p) => holdsRent(p, m)).length));
+  // A pack's each draw is a card: one open holds the rent of its every card.
+  const itemsOf = (b) => drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((p) => holdsRent(p, m)).length));
   const order = (b) => [
     back('the order', rent(boxOrderBytes(b, m)), 'at settle or refund'),
     ...(itemsOf(b) ? [back(`the SOL the order holds for ${itemsOf(b) === 1 ? 'a collectible’s' : `${itemsOf(b)} collectibles’`} rent (the player fee is paid on top of it)`, ESCROW_LAMPORTS * BigInt(itemsOf(b)), `at settle, less each collectible’s rent (about ${sol(COLLECTIBLE_RENT)} SOL) it gives; all of it, and the fee, on a refund`)] : []),

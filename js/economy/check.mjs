@@ -325,14 +325,14 @@ export function settleSize(b, o, m) {
   const { keys, count, memo, compressedSubject } = settleAccounts(b, o, m);
   const parts = outcomeParts(o);
   const moves = parts.filter((x) => x.gives === 'stash' || x.gives === 'nft').length + (b.rollsOn ? 1 : 0);
-  // The settle's account list, with each slot it leaves empty (`settleIx`): its own 37, the proof of a compressed NFT
+  // The settle's account list, with each slot it leaves empty (`settleIx`): its own 38, the proof of a compressed NFT
   // it rolls on, each prize's (tokens 3, a collectible 4, a normal item 1, a roll 2, an NFT the 23 of a piece and a
   // compressed one's proof), each share's (a holder's 3, a wallet's 2, a pool's or an account's 1), a hook's and a memo.
   const compressedPick = (x) => (m.stash.get(x.stash) ? stashNfts(m.stash.get(x.stash)) : []).filter((n) => x.gives !== 'nft' || n.asset === x.nft).some((n) => n.kind === 'compressed');
   const won = parts.reduce((n, x) => n + ({ pay: 3, share: 3, mint: 3, item: isCollectible(m.item.get(x.item)) ? 4 : 1, roll: 2, stash: PIECE_SLOTS, nft: PIECE_SLOTS }[x.gives] ?? 0) + ((x.gives === 'stash' || x.gives === 'nft') && compressedPick(x) ? LONGEST_PROOF : 0), 0);
   const split = sharesOf(b.split).reduce((n, x) => n + ({ holder: 3, chosen: 3, wallet: 2, pool: 1, account: 1, lottery: 1 }[x.kind] ?? 0), 0);
   const hooks = keys.filter((k) => k.startsWith('hook:') || k === 'program:hook').length;
-  const entries = 37 + (compressedSubject ? LONGEST_PROOF : 0) + won + split + hooks + (memo ? 1 : 0);
+  const entries = 38 + (compressedSubject ? LONGEST_PROOF : 0) + won + split + hooks + (memo ? 1 : 0);
   const named = keys.filter((k) => k !== 'program:compute-budget' && k !== 'program:loot');
   // Its data: the discriminator, `upto`, `prize_accounts` and no proven rows.
   const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: 8 + 4 + 2 + 4 };
@@ -592,7 +592,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const never = code === 'E-GRANT' || code === 'E-RECIPE' ? 'every claim or craft would be refused' : 'its winner would get nothing';
     if (!isCollectible(it)) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is a normal item: only a collectible is an NFT.`, 'Make it a collectible, or leave "compressed" out.');
     if (it.soulbound) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is soulbound: a compressed NFT can’t be kept from moving, so the program never gives one (${never}).`, 'Give it as a Core collectible (leave "compressed" out), or make the item tradable.');
-    const longest = (it.uri ?? '').replaceAll('{serial}', String(Number(it.supply ?? 0) || 4_294_967_295));
+    // Its serial at its longest, and each drawn trait's value at its longest (32 bytes) wherever its `{attribute}` is.
+    const longest = (it.drawn ?? []).reduce((uri, d) => uri.replaceAll(`{${d.attribute}}`, 'x'.repeat(32)), (it.uri ?? '').replaceAll('{serial}', String(Number(it.supply ?? 0) || 4_294_967_295)));
     if (utf8Bytes(longest) > LIMITS.compressedUriBytes) refuse(code, `${at}.compressed`, `${label(it)}’s link, its serial written in, is longer than Bubblegum’s ${LIMITS.compressedUriBytes} bytes: ${never}.`, 'Use a shorter link.');
     if (it.collection) warn('W-COMPRESSED', `${at}.compressed`, `${label(it)} is minted into ${it.collection}: a compressed one is given only if that collection was made with Bubblegum’s plugin (BubblegumV2), which a collection can’t add later; otherwise ${never}.`, 'Use the setup’s collection, or one made with the plugin.');
     // A new setup still landing made its collection with the plugin, and opens the tree after the project.
@@ -990,6 +991,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (o >= outs.length) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o}, but the box has ${outs.length}.`, 'Name outcomes by their place in "outcomes", from 0.');
       else if ((s.from ?? []).slice(0, j).includes(o)) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o} twice.`, 'Name each once.');
     }));
+    // A compressed item an outcome gives is minted at the settle, as any prize's (`compressedCheck`).
+    outs.forEach((o, i) => outcomeParts(o).forEach((part) => part.gives === 'item' && part.compressed && m.item.get(part.item) && compressedCheck(m.item.get(part.item), `${where}.outcomes[${i}]`, label(b), 'E-ODDS')));
     const cards = slots.reduce((n, s) => n + s.count, 0);
     const oneOfItems = outs.length === 1 && outcomeParts(outs[0]).every((p) => p.gives === 'item');
     if (cards > 1 && (b.rollsOn || outs.some(outcomeBurns) || !(boxRolls(b, m) || oneOfItems)))

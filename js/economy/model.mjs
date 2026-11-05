@@ -445,6 +445,9 @@ export function outcomeParts(o) {
 export const outcomeBurns = (o) => o?.gives === 'burn' || Boolean(o?.burns);
 
 /** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
+/** How many draws one open of a box makes: its slots' counts, or one. */
+export const drawsOf = (b) => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
+
 /** Whether a box's prize holds a collectible's rent in its order (order.rs `escrow`): an item minted as a Core NFT, or a
  * fresh compressed one (its traits' Sheet). A plain compressed NFT costs no rent. */
 export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);

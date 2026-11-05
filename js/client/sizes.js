@@ -61,7 +61,7 @@ export function orderBytes(lootBox, shares = 0, opens = 1) {
     won: new Array(won).fill({ Tokens: { mint: ZERO, amount: 0n } }),
     burns: false, paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
-    opens: 0, settled: 0, answer: new Uint8Array(32), drawn: [],
+    opens: 0, settled: 0, undrawn: 0, drew: 0, answer: new Uint8Array(32), drawn: [],
     requested_slot: 0n, asked_first: 0n, counted: 0, subject: ZERO, held: false, fate,
   };
   return encodeAccount(IDL, 'Order', largest).length;

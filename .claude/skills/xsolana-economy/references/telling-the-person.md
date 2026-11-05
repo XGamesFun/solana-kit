@@ -39,6 +39,30 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
 8. **Anything else the checker warned about**, in a sentence each (a mint that can freeze accounts, a free box bots
    can drain, a grant with no limits or no funds).
 
+## What stays the project's job
+
+Say these whenever the spec has the part they name, before the person goes live. The program holds the rules and the
+money; it holds no files and serves nothing.
+
+- **Images and metadata are off the chain.** An item's `uri` points at a file the project hosts; the program keeps no
+  images. A fresh item's `uri` with `{attribute}` in it (`https://…/hero/{color}/{power}.json`) becomes a different link
+  for every value drawn: the project hosts a file for every value a table or range can give (every row's label, every
+  number from `min` to `max`), or a server that renders them on request. A link with nothing behind it is a card
+  that shows no picture, for good.
+- **A committed table needs a keeper of its rows.** The program keeps only its root; each settle of a card it drew
+  needs that row's proof, so someone keeps the posted rows and serves proofs for as long as cards are drawn. The tools
+  write tables of rows on chain, which need nobody.
+- **Large tables cost rent the owner pays, never back**: about 8 bytes a row of numbers and 40 a row of labels, at
+  5,080 lamports (0.00000508 SOL) a byte: 1,000 labels about 0.2 SOL, 100,000 numbers about 4.1 SOL. Quote
+  `xsolana_cost` for the real figure.
+- **A pack's cards each hold a collectible's rent until settled.** The order holds 0.006 SOL for each Core card it may
+  mint; Core keeps about 0.0031 SOL of it in each card the player gets, and the rest comes back at the settle. A plain
+  compressed card holds none. Anyone settles; a pack too big for one transaction settles in parts (about 14 Core cards
+  a part), which the page sends.
+- **The oracle's answer reads at most 21 accounts**, so a box's distinct prize accounts (its items, pools, stashes,
+  the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
+  `xsolana_check` counts them.
+
 Don'ts:
 - Don't show mints, account addresses, PDAs, lamports or instruction names unless asked.
 - Don't promise returns, profits or "passive income". Say what the program does, with the numbers.
