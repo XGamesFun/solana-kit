@@ -226,3 +226,26 @@ t('a token exit that would lose what its seat grew writes it first, in the same 
   const xp = loot.decodeProfile(w.chain.get(pda.profile(w.project, w.player)).data).attributes.find((a) => a.key === 'xp');
   assert.ok(Number(xp.value) >= 100, 'what it grew is on the profile');
 });
+
+t('an auction ended with hold leaves its NFT lot in a hold for the winner, which anyone then releases; the ender gets the rent back', () => {
+  const w = world({ seed: 'end-hold' });
+  w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+  const seller = w.who();
+  const art = w.make(1, seller);
+  const now = w.chain.now();
+  w.chain.send(seller, [loot.openAuctionIx({ seller, project: w.project, collection: w.collection, id: 1, mint: w.mint, args: { lot: { Asset: [art] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [], gate: null } })]);
+  const address = pda.auction(w.project, seller, 1);
+  w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: w.read('Auction', address), amount: 100n })]);
+  w.chain.warp(now + 601);
+  const ender = w.who();
+  w.chain.send(ender, [loot.endAuctionIx({ signer: ender, project: w.project, projectState: w.projectState(), id: 1, auction: w.read('Auction', address), collection: w.collection, hold: true })]);
+  const at = pda.hold(art, 0);
+  const hold = w.read('Hold', at);
+  assert.deepEqual([hold.player, hold.payer], [w.player, ender], 'held for the winner, its rent the ender’s');
+  assert.equal(ownerOf(w, art), w.project);
+  const [before, rent] = [w.chain.get(ender).lamports, w.chain.get(at).lamports];
+  w.chain.send(w.cranker, [loot.releaseIx({ signer: w.cranker, project: w.project, asset: art, collection: w.collection, hold })]);
+  assert.equal(ownerOf(w, art), w.player, 'released to the winner');
+  assert.equal(w.chain.get(at), null);
+  assert.equal(w.chain.get(ender).lamports, before + rent, 'the hold’s rent came back to the ender');
+});

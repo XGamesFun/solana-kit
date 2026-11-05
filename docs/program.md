@@ -229,7 +229,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `claim` (`claimIx`) | anyone (only the winner picks losers' NFTs, `WinnerPicks`) | free | an entry's part of the pot, prize and the NFTs it names |
 | Auctions | `open_auction` (`openAuctionIx`) | seller alone | P for a player's NFT, J for the project's lot | an auction |
 | | `bid` (`bidIx`) | player | P | tops the high bid; the topped one goes back at once |
-| | `end_auction` (`endAuctionIx`) | anyone once over; seller to call off one with no bid | free (J for the project calling off its own) | pays out, hands the lot over, closes |
+| | `end_auction` (`endAuctionIx`) | anyone once over; seller to call off one with no bid | free (J for the project calling off its own) | pays out, hands the lot over, closes; with `hold` (anyone), an NFT lot (its address alone, no proof) and a bid's winning NFTs become holds for whoever they go to, released after by anyone, the rent back to the ender |
 | Offers | `open_offer` (`openOfferIx`) | maker | P, or J | a bid or a loan, all its money in the vault |
 | | `close_offer` (`closeOfferIx`) | maker | free | what is left back to the maker |
 | | `sell_to_offer` (`sellToOfferIx`) | the NFT's holder | P, or J | NFT to the maker, price to the seller |
@@ -458,9 +458,15 @@ must carry Bubblegum's plugin: a settle into one without it fails, and a rolled 
 (`Order::space_for`, `orderBytes`), holding a collectible's rent for every card it may mint, so anyone settles it, in
 as many parts as the chain needs: each `settle` carries out the prizes from where the last part stopped
 (`Order.settled`) up to `upto`, and writes its receipt (`OrderPartSettled`) before it mints, so a log Solana cuts at
-10 KB keeps it; the last part (`OrderSettled`) takes the payment first and closes the order. A transaction's
-instruction trace (64 calls) binds first: measured on 0.22, one settle mints about 14 Core cards, 10 compressed or 8
-fresh compressed (`settlePartEnd`, `settleParts`). js/play's `openBox` sends every part.
+10 KB keeps it; the last part (`upto` 0, or past the end: `OrderSettled`) takes the payment, the shares, the NFT rolled
+on and the fee, gives whatever prizes are left (maybe none) and closes the order. A part before it (`upto` at most the
+end) gives prizes only, with no share accounts and a stand-in piece. A transaction's instruction trace (64 calls) binds
+first: measured on 0.22, one settle mints about 14 Core cards, 10 compressed or 8 fresh compressed (`settlePartEnd`,
+`settleParts`); then 64 accounts and 1,232 bytes: js/play's `openBox` sends prizes in parts, each shrunk until it fits,
+then the last part, all from the throwaway key. Rows of committed tables a fresh unit drew are proven in the data
+(`52 + 32 × depth` bytes a row, `MAX_PROVEN_BYTES` 800 a unit: an item past it is out of stock); the tables the economy
+tools write are never committed. An open's order is at most 10,240 bytes (`MAX_ORDER_BYTES`, about 243 one-prize
+draws): a box past it is refused at its upsert (`BadEntries`).
 
 **Prices** are in the box's `currency`. `rise { step, growth_bps }` lifts the price after each sale (rounded down: a
 10% rise on a price of 9 base units adds nothing). `fall { step, every, floor, since, shared }` lowers it with time
@@ -677,7 +683,9 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 - **A prize per winning entry** (`prize`), given with its first claim (a roll at the claim's `nonce`); the player may
   `forgo` it.
 - **A prize split by stake** (`prize_split`, tokens only): its vault `["prize", contest]` opens with the contest;
-  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake.
+  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake. From a
+  pool, a claim that may close the contest (and a `decide` that calls off one nobody entered) names that pool
+  (`prize_pool`), where what the vault still holds goes back (`WrongPool` without it; `claimIx` and `decideIx` pass it).
 - **A contest of NFTs** (`nft`, a rule): each entry stakes one NFT (not compressed); sides count NFTs and the NFTs are
   the pot. At the decision each winner's share of the losers' NFTs is fixed, `min(cap, losers ÷ winners)`, the first
   winners to enter taking one more when they don't divide evenly. A claim names the entries whose NFTs it moves by

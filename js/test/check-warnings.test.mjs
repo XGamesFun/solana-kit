@@ -209,3 +209,13 @@ test('a bid of NFTs holds at most three: past a high bid of three, nothing tops 
   assert.equal(loot.leastBid({ ...auction, high: 3n }), null, 'a high bid of three can’t be topped');
   assert.equal(loot.leastBid({ ...auction, nft_bids: null, high: 3n }), 4n, 'a bid of tokens has no such cap');
 });
+
+test('a box whose open’s order would pass 10,240 bytes is refused (BadEntries)', () => {
+  const arena = example('coin-flip-arena');
+  const box = arena.boxes.find((b) => (b.outcomes ?? []).length);
+  const spec = structuredClone(arena);
+  Object.assign(spec.boxes.find((b) => b.key === box.key), { slots: [{ count: 300 }] });
+  const r = check(spec, { now: NOW });
+  assert.ok(r.refusals.some((x) => x.where === `economy.boxes.${box.key}.slots` && /order would be/.test(x.message)), r.refusals.map((x) => x.message).join('\n'));
+  assert.equal(loot.MAX_ORDER_BYTES, 10_240);
+});

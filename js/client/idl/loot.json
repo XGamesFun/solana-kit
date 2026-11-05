@@ -952,6 +952,14 @@
           "optional": true
         },
         {
+          "name": "prize_pool",
+          "docs": [
+            "against its index): what the vault still holds goes back to it."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "prize_vault",
           "writable": true,
           "optional": true
@@ -2311,6 +2319,9 @@
         },
         {
           "name": "order",
+          "docs": [
+            "hold, `[\"hold\", asset, 0]` (`hold::owe`)."
+          ],
           "writable": true,
           "optional": true
         }
@@ -2328,6 +2339,10 @@
         {
           "name": "nonce",
           "type": "u64"
+        },
+        {
+          "name": "hold",
+          "type": "bool"
         }
       ]
     },

@@ -11,7 +11,7 @@ import { parseCoreAsset } from '../chain/core.js';
 import { compileFitting, createTableIx, deactivateTableIx, extendTableIx, LOOKUP_TABLE_PROGRAM, planTable, readTable, slotHashes, tableAccounts, tableStep, TABLE_COOLDOWN_SLOTS } from '../chain/lookup.js';
 import { computeUnitLimit, meta, transferLamports } from '../chain/programs.js';
 import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
-import { MAX_TRANSACTION_BYTES, readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
+import { readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
@@ -127,7 +127,7 @@ function bigBox(seed, { standing = null } = {}) {
   const sent = [];
   const rpc = { ...w.chain.rpc, async send(wire) { sent.push(readTransaction(wire).message); return w.chain.rpc.send(wire); } };
   const app = solanaApp({ spec, rpc, wallet: asWallet(kp, signed), now: () => w.chain.now() });
-  return { w, app, me: kp.address, relics, holders, signed, sent };
+  return { w, app, kp, me: kp.address, relics, holders, signed, sent };
 }
 
 const units = (message) => {
@@ -137,26 +137,31 @@ const units = (message) => {
 };
 
 describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
-  test('a settle of three NFTs and four holders’ shares goes from the wallet as v0 with a lookup table, whose rent comes back', { skip }, async () => {
+  test('a settle of three NFTs and four holders’ shares that doesn’t fit one transaction goes in parts from the burner: one prompt', { skip }, async () => {
     const { w, app, me, relics, holders, signed, sent } = bigBox('lookup-big');
     const listing = (await app.boxes()).find((l) => l.key === 'chest');
     const got = await app.openBox('chest', { listing });
     assert.equal(w.chain.get(got.order), null, 'settled: the order closed');
     assert.ok(relics.every((a) => parseCoreAsset(w.chain.get(a).data).owner === me), 'all three NFTs are the player’s');
     assert.ok(holders.every((h) => w.balance(h.owner) === PRICE / 20n), 'each holder has its share');
-    // The open, the table's own step, the settle as v0 with the 1.4M compute limit, then the burner's lamports back.
-    const versions = sent.map((m) => readMessage(m).version);
-    assert.deepEqual(versions, ['legacy', 'legacy', 0, 'legacy']);
-    const settle = sent[2];
-    assert.equal(readMessage(settle).keys[0], me, 'the wallet paid the settle');
-    assert.equal(units(settle), 1_400_000);
-    assert.ok(transactionSize(settle) <= MAX_TRANSACTION_BYTES);
-    assert.equal(signed.length, 3, 'three prompts: the open, the table, the settle');
-    assert.notEqual(readMessage(sent[3]).keys[0], me, 'the burner gave its lamports back itself');
-    // The table: made by the player, deactivated by the settle, closable once cooled down.
+    // The open; a part of prizes only (no NFT rolled on, no shares); the last part with the shares, the burner's
+    // lamports back with it. Each legacy, the parts the burner's.
+    assert.deepEqual(sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 'legacy']);
+    assert.ok(sent.slice(1).every((m) => readMessage(m).keys[0] !== me), 'the burner sent both parts');
+    assert.equal(signed.length, 1, 'one prompt: the open');
+    assert.equal(got.parts?.length, 2);
+  });
+
+  test('a lookup table a big transaction of the wallet’s made is listed in claims once cooled down, and its rent comes back', { skip }, async () => {
+    const { w, app, kp, me, signed } = bigBox('lookup-table-claim');
+    const { sendFitting } = await import('../chain/lookup.js');
+    // Forty payments to forty new wallets: too many accounts for a legacy transaction.
+    const instructions = Array.from({ length: 40 }, (_, i) => transferLamports(me, key(2000 + i), 1_000_000n));
+    const wallet = asWallet(kp, signed);
+    await sendFitting({ rpc: w.chain.rpc, payer: me, instructions, sign: (message) => wallet.signTransaction(wireTransaction(message)), first: [w.project], sleep: async () => w.chain.nextSlot() });
     const [found] = await w.chain.rpc.programAccounts(LOOKUP_TABLE_PROGRAM, [{ memcmp: { offset: 22, bytes: me } }]);
     const table = readTable(found.account);
-    assert.ok(table.deactivationSlot !== null, 'the settle deactivated it');
+    assert.ok(table.deactivationSlot !== null, 'the transaction deactivated it');
     assert.deepEqual((await app.claims()).filter((c) => c.kind === 'lookup-table'), [], 'not yet: it is cooling down');
     w.chain.nextSlot(Number(TABLE_COOLDOWN_SLOTS) + 1);
     const [claim] = (await app.claims()).filter((c) => c.kind === 'lookup-table');
@@ -176,7 +181,7 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
     assert.equal(signed.length, 2, 'two prompts: the open and the settle; no table of its own');
     const off = bigBox('lookup-standing-off', { standing: 'deactivated' });
     await off.app.openBox('chest', { listing: (await off.app.boxes()).find((l) => l.key === 'chest') });
-    assert.deepEqual(off.sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 0, 'legacy'], 'a table of its own, as with none');
+    assert.deepEqual(off.sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 'legacy'], 'in parts, as with none');
   });
 
   test('right after one’s own open, an order a lagging RPC node doesn’t show yet is read again, never “settled already”', { skip }, async () => {

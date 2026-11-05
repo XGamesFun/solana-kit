@@ -8,6 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { vault } from '../client/pda.js';
+import { MAX_ORDER_BYTES } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
@@ -51,7 +52,7 @@ import {
   wholeCount,
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
-import { placeholderContext, setupSteps, stepBytes } from './plan.mjs';
+import { boxOrderBytes, placeholderContext, setupSteps, stepBytes } from './plan.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
@@ -338,7 +339,8 @@ export function settleSize(b, o, m) {
   const hooks = keys.filter((k) => k.startsWith('hook:') || k === 'program:hook').length;
   const entries = 38 + (compressedSubject ? LONGEST_PROOF : 0) + won + split + hooks + (memo ? 1 : 0);
   const named = keys.filter((k) => k !== 'program:compute-budget' && k !== 'program:loot');
-  // Its data: the discriminator, `upto`, `prize_accounts` and no proven rows.
+  // Its data: the discriminator, `upto`, `prize_accounts` and no proven rows: the tables the tools write are never
+  // committed, so no unit's rows are proven in a settle (`MAX_PROVEN_BYTES`).
   const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: 8 + 4 + 2 + 4 };
   const budget = [{ program: 'compute-budget', accounts: [], data: 5 }, ...(moves >= 3 ? [{ program: 'compute-budget', accounts: [], data: 5 }] : [])];
   // A table holds every account but the signer and the programs the transaction calls.
@@ -1014,6 +1016,15 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const oneOfItems = outs.length === 1 && outcomeParts(outs[0]).every((p) => p.gives === 'item');
     if (cards > 1 && (b.rollsOn || outs.some(outcomeBurns) || !(boxRolls(b, m) || oneOfItems)))
       refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} times an open, but a pack has no NFT it rolls on and no outcome that burns the payment, and draws among outcomes that roll (or gives one outcome of items) (BadEntries).`, 'Leave "slots" out, or drop "rollsOn" and the burns.');
+    // An open's order holds every prize it can set aside: at most 10,240 bytes (about 243 one-prize draws).
+    const orderSize = (() => {
+      try {
+        return boxOrderBytes(b, m);
+      } catch {
+        return 0;
+      }
+    })();
+    if (orderSize > MAX_ORDER_BYTES) refuse('E-ODDS', `${where}.slots`, `${label(b)}’s order would be ${orderSize.toLocaleString('en-US')} bytes, more than the ${MAX_ORDER_BYTES.toLocaleString('en-US')} an order can be (BadEntries).`, 'Fewer draws an open, or fewer prizes in its largest outcome.');
     const tok = token(b.currency, `${where}.currency`);
     const price = units(b.price, tok, `${where}.price`, `${label(b)}’s price`);
     prices(b, tok, where);

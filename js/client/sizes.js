@@ -54,6 +54,17 @@ const ZERO = '11111111111111111111111111111111';
 /** The bytes of an order of `lootBox` with `shares` shares and `opens` opens, as the program sizes it at the purchase
  * (`Order::space_for`): the largest order it can be, every prize its draws can set aside the largest kind of `Won`,
  * its odds, and its largest fate. A pack's order grows with its cards. */
+/** The most an order can be (`MAX_ORDER_BYTES`, not in the IDL): a box whose one open's order would be more is refused
+ * at its upsert (`BadEntries`): about 243 one-prize draws. */
+export const MAX_ORDER_BYTES = 10_240;
+
+/** The most bytes the rows of committed tables one fresh unit draws may be, proven in a settle's data (`MAX_PROVEN_BYTES`,
+ * not in the IDL): each row `52 + 32 × depth` (`provenRowBytes`). An item past it is out of stock: a purchase is refused,
+ * a roll goes on without it. Tables the economy tools write are never committed, so their items never reach it. */
+export const MAX_PROVEN_BYTES = 800;
+/** A proven row's bytes in a settle's data: its index, from, weight and payload, and a 32-byte node a level of its tree. */
+export const provenRowBytes = (rows) => 52 + 32 * Math.ceil(Math.log2(Math.max(1, Number(rows))));
+
 export function orderBytes(lootBox, shares = 0, opens = 1) {
   const most = Math.max(0, ...lootBox.entries.map((e) => e.prizes.length));
   const won = most * draws(lootBox) * Math.max(1, opens);

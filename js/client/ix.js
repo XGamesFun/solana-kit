@@ -963,21 +963,24 @@ export function settleComputeUnits(order) {
  */
 export function settleIx({ signer, orderAddress, order, projectState, items, nfts, prizeTo, putBack, subject, handBack = false, holders, programs, upto = 0, rows = [], tree, treeMinted, extra = [] }) {
   const project = order.project;
-  // A part: the order's prizes from where its last part stopped (`settled`) up to `upto` (0, all that is left). Only
-  // the last part takes the payment and closes the order. `rows` proves the rows of committed tables its fresh units
+  // A part: the order's prizes from where its last part stopped (`settled`) up to `upto` (0, or past the end: the last
+  // part, all that is left, maybe none). Only the last part takes the payment, the shares and the NFT rolled on, and
+  // closes the order; `upto` at the end gives every prize left and leaves the last part none. `rows` proves the rows of committed tables its fresh units
   // drew (`ProvenRow`, in order).
   const from = Number(order.settled ?? 0);
-  const end = upto ? Number(upto) : order.won.length;
+  const last = !upto || Number(upto) > order.won.length;
+  const end = last ? order.won.length : Number(upto);
   const prizes = wonAccounts({ orderAddress, order, items, nfts, prizeTo, putBack, programs, from, upto: end, tree, treeMinted });
   const tokenProgram = tokenProgramOf(programs, order.mint);
   const burns = order.burns || sharesBurn(order.shares);
   // The NFT it rolled on, as the settle moves it: given to a wallet that is an account of the loot program, it goes
   // back to its player (`handsBack`), into the player's token account for a Token Metadata NFT.
-  const receiver = receiverOf(order);
-  const on = orderPiece(project, orderAddress, order, subject, handBack && order.fate?.then?.Give ? order.player : receiver);
+  // A part before the last gives only its prizes: no NFT rolled on (its piece a stand-in), no shares.
+  const receiver = last ? receiverOf(order) : null;
+  const on = last ? orderPiece(project, orderAddress, order, subject, handBack && order.fate?.then?.Give ? order.player : receiver) : standIn(orderAddress);
   return lootIx(
     'settle',
-    { upto: upto ? Number(upto) : 0, prize_accounts: prizes.length, rows },
+    { upto: last ? 0 : end, prize_accounts: prizes.length, rows },
     {
       signer,
       order: orderAddress,
@@ -990,11 +993,11 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       ...on.accounts,
       receiver,
       // The last part of an order whose roll didn't make every draw gives their share of the payment back here.
-      player_token: Number(order.undrawn ?? 0) > 0 && end === order.won.length ? ata(order.player, order.mint, tokenProgram) : null,
+      player_token: Number(order.undrawn ?? 0) > 0 && last ? ata(order.player, order.mint, tokenProgram) : null,
     },
     {
-      remaining: [...on.proof, ...prizes, ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...tailOf(extra)],
-      writable: [...(burns ? ['mint'] : []), ...on.writable],
+      remaining: [...on.proof, ...prizes, ...(last ? shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }) : []), ...tailOf(extra)],
+      writable: [...(burns && last ? ['mint'] : []), ...on.writable],
     },
   );
 }
@@ -1243,7 +1246,8 @@ export function decideIx({ signer, project, projectState, contestAddress, contes
     {
       signer, project, contest: address, opener: contest.opener, mint: contest.mint, instructions: verdict ? SYSVAR_INSTRUCTIONS : null,
       prize_mint: split ? splitMint(contest.prize, prizeMint) : null,
-      prize_pool: split && side != null && from?.Pool ? pda.pool(project, from.Pool[0]) : null,
+      // Its pool: the prize set aside from it when a side is named, and anything its vault holds back at a close.
+      prize_pool: split && (side != null || closes) && from?.Pool ? pda.pool(project, from.Pool[0]) : null,
       prize_vault: split ? pda.prizeVault(address) : null,
       entries: contestEntries(address, contest),
     },
@@ -2224,6 +2228,8 @@ export function claimIx({ payer, project, projectState, id, contest, entries, pl
       to: ata(player, contest.mint, tokenProgramOf(programs, contest.mint)),
       mint: contest.mint,
       prize_mint: pMint,
+      // A split prize from a pool: what its vault holds at the close goes back to that pool (`WrongPool` without it).
+      prize_pool: split && contest.prize?.Tokens?.from?.Pool ? pda.pool(project, contest.prize.Tokens.from.Pool[0]) : null,
       prize_vault: split ? pda.prizeVault(address) : null,
       prize_to: split ? ata(player, pMint, tokenProgramOf(programs, pMint)) : null,
       treasury: projectState?.treasury ?? null,
@@ -2342,8 +2348,11 @@ export function bidIx({ bidder, project, id, auction, amount, shown, listProof, 
  * roll), however long after the end it is sent. With no bid, the lot goes home. `signer` opens any account the end pays into that is
  * not there. `item` is the decoded Item of an item lot; for an NFT lot, `collection` its Core collection now (the
  * project's when left out), `tokenMetadata` for a Token Metadata NFT, or `compressed` (after a `proveLeafIx`).
+ * `hold` (anyone may): an end that wouldn't fit otherwise (a compressed lot's long proof, a hooked mint, many shares)
+ * makes the NFT lot a hold for whoever it goes to (`["hold", asset, 0]`, no piece nor proof), and each winning NFT of a
+ * bid a hold for `proceeds`; anyone then delivers each with `releaseIx`, and the end's sender gets the rent back then.
  */
-export function endAuctionIx({ signer, project, projectState, id, auction, item = null, collection, tokenMetadata: tm, compressed, held = [], reference: ref, nonce, holders, programs, extra = [] }) {
+export function endAuctionIx({ signer, project, projectState, id, auction, item = null, collection, tokenMetadata: tm, compressed, held = [], hold = false, reference: ref, nonce, holders, programs, extra = [] }) {
   const tokenProgram = tokenProgramOf(programs, auction.mint);
   const sold = BigInt(auction.high) > 0n;
   const itemId = auction.lot.Item?.[0];
@@ -2356,7 +2365,10 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
   const roll = sold ? auction.lot.Roll?.[0] : undefined;
   nonce = toBigInt(nonce ?? prizeNonce(address, BigInt(auction.last_bid_at)));
   // An NFT lot is sent on; a collectible sold is minted into its item's collection, which Core writes.
-  const p = auction.lot.Asset
+  // With `hold`, an NFT lot is its address alone (no proof), and becomes a hold for whoever it goes to.
+  const p = auction.lot.Asset && hold
+    ? standIn(asset)
+    : auction.lot.Asset
     ? piece({ project, asset, wallet: receiver, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES })
     : asset
       ? { ...piece({ project, asset, collection: item.collection, moves: false, locks: false, reads: false }), writable: ['collection'] }
@@ -2364,13 +2376,14 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
   // A winning bid of NFTs: each to where the rest of a bid in tokens would go (`held`, their kinds in order).
   const winning = sold && auction.nft_bids
     ? (auction.held ?? []).flatMap((nft, i) => {
+      if (hold) return [meta(pda.hold(nft, 0), false, true)];
       const q = piece({ project, asset: nft, wallet: proceeds, ...held[i], ...ONLY_MOVES });
       return [...pieceMetas(q), ...q.proof];
     })
     : [];
   return lootIx(
     'end_auction',
-    { reference: reference(ref), nonce },
+    { reference: reference(ref), nonce, hold },
     {
       signer,
       project,
@@ -2384,7 +2397,7 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
       item: itemId !== undefined ? pda.item(project, itemId) : null,
       ...p.accounts,
       loot_box: roll !== undefined ? pda.box(project, roll) : null,
-      order: roll !== undefined ? pda.order(project, auction.high_bidder, prizeRollNonce(nonce)) : null,
+      order: roll !== undefined ? pda.order(project, auction.high_bidder, prizeRollNonce(nonce)) : hold && auction.lot.Asset ? pda.hold(asset, 0) : null,
     },
     {
       remaining: [...p.proof, ...(sold ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury }) : []), ...winning, ...tailOf(extra)],

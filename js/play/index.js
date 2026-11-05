@@ -701,17 +701,22 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const ix = loot.settleIx({ signer, orderAddress, order, projectState: g, items, nfts, putBack, subject, handBack, holders, programs, upto, ...(await treeOf()) });
       return { ix, nfts, before: [...subjectProof, ...proving].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM) };
     };
-    // A pack whose prizes don't fit one transaction settles in parts, each its own transaction, from where the last
-    // stopped: all but the last only hand prizes over (`settlePartEnd`: as many as the instruction trace holds, fewer
-    // when they don't fit a legacy transaction). The burner sends each; the player's wallet, a part it can't.
+    // An order whose settle doesn't fit one transaction (the instruction trace, 64 accounts, 1,232 bytes) settles in
+    // parts, each its own transaction, from where the last stopped: parts that only hand prizes over (`upto` where each
+    // stops: no NFT rolled on, no shares), as many as the trace holds (`settlePartEnd`) and fewer until they fit, then a
+    // last part (`upto` 0) with the payment, the shares and the NFT rolled on. The burner sends each; the player's
+    // wallet, a part it can't.
     const signatures = [];
-    while (order.won.length - Number(order.settled ?? 0) > 0 && loot.settlePartEnd(order, Number(order.settled ?? 0), items) < order.won.length) {
-      let end = loot.settlePartEnd(order, Number(order.settled ?? 0), items);
-      const part = async (signer) => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(signer, end)).ix];
-      if (burner && !putBack.length) {
-        while (end > Number(order.settled ?? 0) + 1 && !compileFitting({ payer: burner.address, blockhash: NOBODY, instructions: await part(burner.address) })) end--;
-        signatures.push(await sendAs(burner, await part(burner.address)));
-      } else signatures.push(await send(await part(wallet.address)));
+    const by = burner && !putBack.length ? burner.address : wallet.address;
+    const fits = async (instructions) => Boolean(compileFitting({ payer: by, blockhash: NOBODY, instructions, tables: await standing() })) && transactionLocks(by, instructions) <= 64;
+    const part = async (end) => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(by, end)).ix];
+    for (;;) {
+      const from = Number(order.settled ?? 0);
+      if (from >= order.won.length) break;
+      let end = loot.settlePartEnd(order, from, items);
+      if (end >= order.won.length && (await fits(await part(0)))) break;
+      while (end > from + 1 && !(await fits(await part(end)))) end--;
+      signatures.push(by === wallet.address ? await send(await part(end)) : await sendAs(burner, await part(end)));
       order = await current();
       if (!order) return { order: orderAddress, settled: 'elsewhere', says: 'The order was settled already.' };
     }
@@ -1813,7 +1818,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     /**
      * Ends an auction that is over (anyone can; the winner usually does): the lot to the highest bidder, a new
      * collectible minted for them at the address its item and serial name, however long after the end it is sent. A
-     * roll lot makes the winner's roll of its box (`order`), which `collect` asks for and settles.
+     * roll lot makes the winner's roll of its box (`order`), which `collect` asks for and settles. An end too big for one
+     * transaction makes each NFT a hold and sends each home with a release after it (`releases`).
      */
     async endAuction(auctionKey, { holders, ...others } = NO_OPTIONS) {
       only(others, ['holders'], 'endAuction');
@@ -1840,7 +1846,21 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         }
       }
       const ix = loot.endAuctionIx({ signer: wallet.address, project, projectState: g, id: a.id, auction, item, ...nft, collection, held, holders, programs, extra: memo });
-      const all = [computeUnitLimit(800_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+      let all = [computeUnitLimit(800_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+      // An end that can't fit one transaction (a compressed lot's long proof, a hooked mint, many shares) makes each NFT
+      // a hold for whoever it goes to, then sends each home with its own release: anyone may, and the rent comes back.
+      const holds = lot || (sold && auction.nft_bids) ? !sendPlan({ payer: wallet.address, instructions: all, alone: isProveLeaf }) : false;
+      if (holds) {
+        all = [computeUnitLimit(800_000), loot.endAuctionIx({ signer: wallet.address, project, projectState: g, id: a.id, auction, item, ...nft, collection, held, hold: true, holders, programs, extra: memo })];
+        const signature = await send(all);
+        const releases = [];
+        for (const [asset, to] of [...(lot ? [[lot, sold ? auction.high_bidder : auction.seller]] : []), ...(sold && auction.nft_bids ? auction.held.map((x) => [x, proceeds]) : [])]) {
+          const hold = await read('Hold', loot.pda.hold(asset, 0));
+          const { before: proof, hasAuthority: _h, ...kind } = await nftOf(asset, wallet.address, { to });
+          releases.push(await send([...proof, loot.releaseIx({ signer: wallet.address, project, asset, ...kind, collection: kind.compressed || kind.tokenMetadata ? undefined : (await collectionOf(asset)) ?? MPL_CORE, hold, to })]));
+        }
+        return { signature, releases, ...(sold ? { winner: auction.high_bidder } : {}) };
+      }
       // A roll lot sold: the winner's roll, made at the default nonce, waits for anyone to ask it (`collect`); the winner
       // ending it asks in the same transaction and a key settles it.
       const roll = sold && auction.lot.Roll ? loot.pda.order(project, auction.high_bidder, loot.prizeRollNonce(loot.prizeNonce(auctionAt(a), BigInt(auction.last_bid_at)))) : null;
