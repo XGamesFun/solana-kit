@@ -18,7 +18,7 @@ import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
-import { LOOT_PROGRAM } from '../client/pda.js';
+import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { LEGAL, legalFlags } from '../economy/legal.mjs';
@@ -201,7 +201,15 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
         if (lines) was.set(step.id, lines);
       }
     }
-    wasLive = { steps: was, treasury: p.ctx.treasury };
+    // A grant published before and gone from the chain (closed) that the change makes again with a list: a list leaf
+    // names no grant or incarnation, so the same root would pay every listed round again.
+    const remade = [];
+    const published = new Set((spec.live.published.grants ?? []).map((g) => g.key));
+    for (const g of model(spec, { now: at }).grants) {
+      if (!g.list?.length || !published.has(g.key) || !p.ctx.project) continue;
+      if (!(await chain.account(pda.grant(p.ctx.project, g.id)).catch(() => 'unread'))) remade.push(`“${g.name ?? g.key}”`);
+    }
+    wasLive = { steps: was, treasury: p.ctx.treasury, remade };
   }
   const detailsOf = (t, i, n) => {
     const lines = stepDetails(t.built[i], n);
@@ -210,6 +218,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
   };
   /** The lines a change is held against for its outside-address warning: what was read from the chain, or nothing yet. */
   const wasLines = () => (spec.live?.published ? [...(wasLive ? [...wasLive.steps.values()].flat() : []), ...(wasLive?.treasury ? [`Treasury: ${wasLive.treasury}`] : [])] : null);
+  const remadeLists = () => (wasLive?.remade?.length ? `This change makes ${wasLive.remade.join(', ')} again after it was closed, with the same list: a list names no grant, so every wallet on it could claim every listed round again. Give the grant a fresh list (new rounds) before you approve.` : null);
   const unread = () => (spec.live?.published && !wasLive ? 'What is live has not been read from the chain yet: connect your wallet, and each line is marked against what is on chain.' : null);
 
   // The project's own settings a change names are never published: the page says so.
@@ -231,7 +240,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       program: LOOT_PROGRAM,
       cluster: 'devnet',
       setupSol: cost(spec, { now: at, live: live(), only }).setup?.totalSol ?? null,
-      warnings: [...(extra.refused ? [extra.refused] : []), ...verdict.warnings.filter((w) => !Object.hasOwn(LEGAL, w.code)).map((w) => w.message), ...[settings, unread(), outsideAddresses(steps.flatMap((s) => s.details), { was: wasLines(), owner: n.owner })].filter(Boolean)],
+      warnings: [...(extra.refused ? [extra.refused] : []), ...verdict.warnings.filter((w) => !Object.hasOwn(LEGAL, w.code)).map((w) => w.message), ...[settings, unread(), remadeLists(), outsideAddresses(steps.flatMap((s) => s.details), { was: wasLines(), owner: n.owner })].filter(Boolean)],
       // The legal flags in plain words, shown in a block of their own whatever the agent said: Approve waits until the
       // owner ticks that they read them.
       legal,

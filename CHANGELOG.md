@@ -22,7 +22,8 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   stash at random. `finish_lottery_contribution` is gone. A lottery's terms are one `LotteryTerms` (`LotteryArgs {
   terms, every, gate, per_wallet }`), which the round copies (`round.terms`, `paymentMint(terms)`); `buy_tickets`
   names no incarnation (its round's address does); `LotteryPulled` carries the `amount` settled, and `LotteryPaid` is
-  gone.
+  gone. A pull pays at most 300 places of a run (`MOST_A_PULL`, `placesPulled`). A grant's tag is 27, a profile's 24.
+  A Token Metadata NFT's Sheet closes naming its edition (`closeSheetIx({ tokenMetadata })`).
 - **A contest's entries are one list** (`decodeEntries`); `claim(entry, nonce, forgo, end, give_up, nfts)`; winners
   share the losers' NFTs (`cap`), losers send nothing.
 - **The tail**: every route's extra accounts (hook accounts, Core's checks) come from the Memo program's account on
@@ -47,6 +48,8 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   same transaction and a key settles it: one prompt (`rolled`, `rolls`). `repay(asset, due)` repays alone and a key
   sends the NFT home. `claimAll()` signs independent claims in one prompt with a wallet that signs several
   (`signTransactions`).
+- The checker refuses a lottery run whose token prize in all passes a u64; the approval page warns when a change
+  makes a closed grant again with the same list (its rounds would pay again).
 - Going live opens the project's token accounts and its share wallets' and makes a standing lookup table
   (`live.tables`), which play's sends and keys use; the authority's steps come last.
 

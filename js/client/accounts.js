@@ -10,8 +10,7 @@ import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { LOOT_PROGRAM, pda } from './pda.js';
 import IDL from './idl/loot.js';
 
-/** Account tags: each account's first byte, as the program writes it. A grant and a profile share 24 (`decodeAny` tells
- * them apart by a profile's shape); every list of records (`decodeList`) is 26. */
+/** Account tags: each account's first byte, as the program writes it; every list of records (`decodeList`) is 26. */
 export const TAGS = Object.freeze({
   Platform: 1,
   Project: 2,
@@ -32,17 +31,17 @@ export const TAGS = Object.freeze({
   Auction: 20,
   Offer: 22,
   Listing: 23,
-  Grant: 24,
   Profile: 24,
+  Grant: 27,
   // A table, and a stash: a table of NFTs (21 was a stash's own before 0.22).
   Table: 25,
   // A list of records: a wallet's counts, a grant's claims or rounds, a contest's entries.
   List: 26,
 });
 
-const BY_TAG = Object.fromEntries(Object.entries(TAGS).filter(([name]) => name !== 'Profile').map(([name, tag]) => [tag, name]));
+const BY_TAG = Object.fromEntries(Object.entries(TAGS).map(([name, tag]) => [tag, name]));
 
-/** The kind of a loot account from its first byte, or null. Tag 24 is a grant or a profile (`decodeAny` reads which). */
+/** The kind of a loot account from its first byte, or null. */
 export const accountKind = (data) => (data?.length ? BY_TAG[data[0]] ?? null : null);
 
 /**
@@ -83,7 +82,7 @@ export const decode = (name, data) => decodeAccount(IDLX, name, data);
 export function decodeAny(data) {
   const kind = accountKind(data);
   if (!kind) return null;
-  if (kind === 'Grant' && isProfile(data)) return { kind: 'Profile', value: decodeProfile(data) };
+  if (kind === 'Profile') return { kind, value: decodeProfile(data) };
   if (kind === 'List') return { kind, value: decodeList(data) };
   if (kind === 'LotteryRound') return { kind, value: decodeRound(data) };
   if (kind === 'Sheet') return { kind, value: decodeSheet(data) };
@@ -91,15 +90,6 @@ export function decodeAny(data) {
   if (kind === 'Proven') return { kind, value: decodeProven(data) };
   if (kind === 'Traits') return { kind, value: decodeTraits(data) };
   return { kind, value: decode(kind, data) };
-}
-
-/** Whether data tagged 24 is a profile's: its attributes end exactly where the data does (a grant's never could). */
-function isProfile(data) {
-  try {
-    return attributesAt(data, 'Profile').end === data.length;
-  } catch {
-    return false;
-  }
 }
 
 // ---------------------------------------------------------------- lists of records (M1)
@@ -460,17 +450,28 @@ const placePaid = (r, place, prize) => {
   return Boolean((r.paid[at >> 3] ?? 0) & (1 << (at & 7)));
 };
 
-/** What entry `i`'s places in run `run` take now and are not paid yet, of its pot part or (`prize`) its token prize. */
-export function placesOwed(r, i, run, prize) {
+/** The most places of one run one `pull` pays (`MOST_A_PULL`, not in the IDL): the next pull pays the next ones. */
+export const MOST_A_PULL = 300;
+
+/** Entry `i`'s places in run `run` not paid yet of its pot part or (`prize`) its token prize, lowest first, each with
+ * what it takes now: [{ place, amount }]. */
+function unpaidPlaces(r, i, run, prize) {
   const e = r.entries[i];
   const k = prize ? r.prizes.findIndex((p) => Number(p.run) === run) : -1;
-  if (prize && k < 0) return 0n;
+  if (prize && k < 0) return [];
   const runs = k >= 0
     ? [[BigInt(r.prizes[k].each), runPlaces(r, run)[1] - runPlaces(r, run)[0]]]
     : r.terms.places.map((p, j) => [bpsOf(r.pot_total, p.bps), runPlaces(r, j)[1] - runPlaces(r, j)[0]]);
   const [sent, arrived, from] = k >= 0 ? [r.prizes[k].sent, r.prizes[k].arrived, runPlaces(r, run)[0]] : [r.pot_sent, r.pot_arrived, 0];
-  return placesIn(r, run, e.start, e.end).filter((p) => !placePaid(r, p, prize)).reduce((sum, p) => sum + splitPart(runs, sent, arrived, p - from), 0n);
+  return placesIn(r, run, e.start, e.end).filter((p) => !placePaid(r, p, prize)).map((place) => ({ place, amount: splitPart(runs, sent, arrived, place - from) }));
 }
+
+/** What entry `i`'s places in run `run` take now and are not paid yet, of its pot part or (`prize`) its token prize. */
+export const placesOwed = (r, i, run, prize) => unpaidPlaces(r, i, run, prize).reduce((sum, p) => sum + p.amount, 0n);
+
+/** How many of the round's owed parts a pull of `{ Pot: [run] }` or `{ Prize: [run] }` for entry `i` settles: of the
+ * first `MOST_A_PULL` places it pays, those that take more than nothing. */
+export const placesPulled = (r, i, run, prize) => unpaidPlaces(r, i, run, prize).slice(0, MOST_A_PULL).filter((p) => p.amount > 0n).length;
 
 /**
  * The parts entry `i` of a round is owed now, in the order a keeper pulls them (`pullIx`'s `part`): its own ('Own': a

@@ -2357,8 +2357,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const instructions = [];
       for (const { entry, parts } of owed.slice(0, 4)) instructions.push(...(await pulls(c.round, r, entry, parts, me)));
       // When these pulls leave nothing owed, the round closes in the same transaction (its deposit back to its opener).
-      const everyone = r.entries.every((_, i) => !loot.partsOwed(r, i).length || owed.slice(0, 4).some((x) => x.entry === i && x.parts.length === loot.partsOwed(r, i).length));
-      if (everyone && (r.status === 'Swept' || r.status === 'Cancelled')) instructions.push(loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: { ...r, owed: 0 }, projectState: g, programs }));
+      // Each pull settles one part, a run's places as many as take something of the first `MOST_A_PULL` it pays.
+      const settles = owed.slice(0, 4).reduce((n, { entry, parts }) => n + parts.reduce((m, p) => m + (p.Pot || p.Prize ? loot.placesPulled(r, entry, Number((p.Pot ?? p.Prize)[0]), Boolean(p.Prize)) : 1), 0), 0);
+      if (settles >= Number(r.owed) && (r.status === 'Swept' || r.status === 'Cancelled')) instructions.push(loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: { ...r, owed: 0 }, projectState: g, programs }));
       return send(instructions);
     },
 

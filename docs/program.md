@@ -159,11 +159,11 @@ order, offer) is created, never written over.
 | 20 | `Auction` | `["auction", project, seller, id]` | varies, + 32 an NFT bid | seller, back at the end |
 | 22 | `Offer` | `["offer", project, maker, id]` | varies | maker, back on close |
 | 23 | `Listing` | `["listing", project, asset]` | 183 sale / 189 rental, + 3–35 a share | maker, back on close |
-| 24 | `Grant` | `["grant", project, id]` | varies | owner, back with funds on close |
-| 24 | `Profile` | `["profile", project, wallet]` (the same tag as a grant; `decodeAny` tells them apart) | 69 + attributes | whoever's write grows it; never closed |
+| 24 | `Profile` | `["profile", project, wallet]` | 69 + attributes | whoever's write grows it; never closed |
 | 25 | `Table` | `["table", project, id]` | 51 + 8 a row of numbers / 40 a row of labels; a committed table 1,107 | owner, as it writes rows; never closed |
 | 25 | `Table` (a stash) | `["stash", project, id]`; a lottery's own `["lottery_stash", lottery]` | 103 with one NFT, + 36 an NFT | whoever puts an NFT in; never closed |
 | 26 | a list (`decodeList`) | a wallet's counts `["counts", project, wallet]`; a grant's claims `["claims", grant, incarnation, shard]` and rounds `["rounds", grant, incarnation, shard]`; a contest's entries `["entries", contest, incarnation, 0]` | 7, + 28 a limit record, 16 a round paid, 43 or 83 an entry | the one counted (a grant's funds for a claim), never closed; a grant's shards close once it is gone (rent to the owner); a contest's with it |
+| 27 | `Grant` | `["grant", project, id]` | varies | owner, back with funds on close |
 
 Also: a **pool** is a plain token account at `["pool", project, index]` that only the project spends, opened by the
 owner (`open_pool`), never closed. Every collectible loot mints of its own accord (an order's, a prize's, a craft's,
@@ -239,7 +239,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `take_listing` (`takeListingIx`) | taker | P, or J | buys, or rents for 1 to `max_periods` periods |
 | | `close_listing` (`closeListingIx`) | maker | free | NFT home; during a rental only stops it |
 | Proofs | `prove_leaf` (`proveLeafIx`) | anyone (pays the record's rent once) | free | records a compressed NFT proven against its tree |
-| | `close_leaf` (`closeLeafIx`, `closeSheetIx`) | anyone | free | closes a record that no longer reads (`StillProven` otherwise), or a burned NFT's Sheet (`NotBurned` otherwise) |
+| | `close_leaf` (`closeLeafIx`, `closeSheetIx`) | anyone | free | closes a record that no longer reads (`StillProven` otherwise), or a burned NFT's Sheet (`NotBurned` otherwise; a Token Metadata NFT's names its edition, `edition`, and closes once its mint holds none, its mint authority is none or its edition, and its edition account is closed) |
 | | `prove_traits` (`proveTraitsIx`) | anyone (pays the Sheet's growth) | free | writes vouched traits into a Sheet |
 | Grants | `claim_grant` (`claimGrantIx`, `js/client/grant.js`) | the wallet always, plus a `signer` who pays (may be the wallet) | P, from the signer | gives the grant's prize for each round not paid yet; a voucher is an Ed25519 instruction right before (`ed25519Ix`) |
 | | `close_shard` (`closeShardIx`) | anyone | free | a shard of a grant gone or made again, rent to the owner (`GrantLive` before) |
@@ -583,10 +583,16 @@ after its first ask** lets anyone cancel the round. A short round (`min_sold`) i
 an NFT or a collectible to its winner, a run of token prizes in one step into the round's account (minted ones at the
 pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
 and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
-winner (`hold`); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise).
+winner (`hold`); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
+mark also when the places take nothing of it). In a hooked payment mint with a common share above 0, the first marked
+sweep only moves the shares into the pot's part: the round stays Drawn, that call reads no account past the sweep's
+five, and the sweep is sent again after it. With no place sharing the pot, a marked sweep fails with the token's error
+until the pot can take the part.
 
 **Then each part is pulled** (`pull`, anyone, `partsOwed`): an entry's own (a refund, a no-loss ticket's price, its NFT
-ticket back or where its price sends it), each recipient's share, its places' pot parts and token prizes in one run.
+ticket back or where its price sends it), each recipient's share, its places' pot parts and token prizes in one run:
+at most 300 places a pull (`MOST_A_PULL`, not in the IDL), lowest first, the next pull paying the next ones; such a pull
+closes the round only when the places of those 300 that take something are the last parts owed (`placesPulled`).
 Each part waits under its own bit, holding up nobody else; the pull (or step) that leaves nothing owed closes the round,
 burning what nobody is owed and returning each account's rent to its opener.
 
@@ -922,7 +928,8 @@ only where a call writes them, so a hold never write-locks a collection or tree.
 **A compressed NFT is proven first.** Its leaf comes from an indexer (DAS `getAsset`, `getAssetProof`;
 `compressedFromDas`). `prove_leaf` checks it against a tree whose authority is Bubblegum's own `TreeConfig`, at the
 current root or one still in the tree's change log with no change since at that leaf (`StaleProof` otherwise), and
-records owner, delegate, collection, hashes, flags and root at `["leaf", asset]`. Routes read the record only while its
+records owner, delegate, collection, hashes, flags and root at `["leaf", asset]`. An empty leaf at or past the tree's
+`num_minted` is no NFT (`NotTheNft`). Routes read the record only while its
 leaf is unchanged and its root is still in the log (`NotProven` otherwise, never read as the NFT gone). Other leaves
 moving never spoil it, so two compressed NFTs of one tree move in one instruction. Anyone may re-prove at an older
 root, so **prove in the same transaction as the move** (v0 with a lookup table if needed; the client does). A data

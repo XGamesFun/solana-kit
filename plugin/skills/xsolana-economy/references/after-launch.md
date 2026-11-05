@@ -108,7 +108,7 @@ paid once, and the same voucher sent again later pays what a limit held back. Ch
 clear its history. Closing and recreating a grant starts a new campaign with new records and invalidates old vouchers;
 anyone may then close the old records (`loot.closeShardIx`), their rent to the owner. A grant for more than about
 100,000 wallet-rounds names `wallets` (and `rounds`) so its records are kept in enough lists. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
-claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A results server must read the current grant incarnation when accepting
+claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A list leaf names no grant or incarnation, so a grant closed and made again with the same list pays every listed round again: give a re-made grant a fresh list (new rounds); the approval page warns when a change does that. A results server must read the current grant incarnation when accepting
 a result and include it in the voucher it signs.
 
 ## Before you act on what the person says happened

@@ -174,3 +174,30 @@ test('a lottery’s places as runs and a raffle of many NFTs are checked as the 
   assert.ok(runs.refused.includes('E-LOTTERY economy.lotteries.art.places'), 'a run of 101 places at 1% is more than the pot');
   assert.ok(edit(raffle, (s) => Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'roll', box: 'x' }, times: 2 }] })).refused.includes('E-LOTTERY economy.lotteries.art.places[1].times'), 'a roll is one place’s (after the raffle’s own NFT)');
 });
+
+test('a run of places whose token prize in all passes a u64 is refused (BadLottery)', () => {
+  const arena = example('coin-flip-arena');
+  const run = (amount) => edit(arena, (s) => Object.assign(s.lotteries[0], { places: [50, { percent: 0, prize: { gives: 'tokens', from: 'mint', currency: 'arena', amount }, times: 2 }] })).refused;
+  assert.ok(run(10_000_000_000_000).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'), 'ten trillion tokens of 6 decimals, twice');
+  assert.ok(!run(1).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'));
+});
+
+test('a pull pays at most 300 places of a run; it closes the round only when they are the last parts owed', () => {
+  const r = round({ status: 'Swept', terms: { returns: false, mint: WALLET, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 20, prize: null, times: 400 }] }, sold: 400n, pot_total: 1_000_000n, pot_sent: 800_000n, pot_arrived: 800_000n, paid: new Uint8Array(100), entries: [{ buyer: WALLET, start: 0n, end: 400n, paid: 0n, amount: 400n, to: [], nft: '11111111111111111111111111111111' }] });
+  assert.equal(loot.MOST_A_PULL, 300);
+  assert.equal(loot.placesPulled(r, 0, 0, false), 300);
+  const opener = pda.platform();
+  const pull = (owed) => loot.pullIx({ payer: WALLET, project: WALLET, roundAddress: WALLET, round: { ...r, owed, accounts: [], opener }, entry: 0, part: { Pot: [0] }, projectState: { treasury: WALLET } }).keys.map((k) => k.pubkey);
+  assert.ok(pull(300).includes(opener), 'the last 300 owed: it closes the round, naming its opener');
+  assert.ok(!pull(301).includes(opener), 'one more owed: the next pull closes it');
+});
+
+test('a grant is tag 27 and a profile 24: told apart by their tag; a Token Metadata Sheet names its edition to close', () => {
+  assert.equal(loot.TAGS.Grant, 27);
+  assert.equal(loot.accountKind(Uint8Array.of(27)), 'Grant');
+  assert.equal(loot.accountKind(Uint8Array.of(24)), 'Profile');
+  const core = loot.closeSheetIx({ project: WALLET, nft: WALLET, treasury: WALLET });
+  const tm = loot.closeSheetIx({ project: WALLET, nft: WALLET, treasury: WALLET, tokenMetadata: true });
+  assert.equal(core.keys[4].pubkey, loot.LOOT_PROGRAM, 'none: the program id');
+  assert.equal(tm.keys[4].pubkey, loot.tokenMetadata.edition(WALLET));
+});

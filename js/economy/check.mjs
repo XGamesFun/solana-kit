@@ -56,6 +56,9 @@ import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
 import { validate } from './validate.mjs';
 
+/** The most a u64 holds. */
+const U64_MAX = 2n ** 64n - 1n;
+
 /** A transaction's estimated bytes, or with `detail` { bytes, locks }. */
 const measured = (input, detail) => (detail ? { bytes: transactionSize(input), locks: transactionLocks(input) } : transactionSize(input));
 
@@ -1491,6 +1494,16 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       // A run holds places alike: a named NFT, a roll or a share of a pool is one place's.
       if (p.times > 1 && ((p.prize?.gives === 'nft') || p.prize?.gives === 'roll' || p.prize?.gives === 'share'))
         refuse('E-LOTTERY', `${where}.places[${i}].times`, `${label(l)}’s place ${i + 1} repeats ${p.times} times a prize one place gives (a named NFT, a roll, a share of a pool) (BadLottery).`, 'Give it to one place, or make it a prize places can share alike (tokens, an item, an NFT drawn from the lottery’s stash).');
+      // A run's token prize in all, each place's amount times its places, fits a u64 (BadLottery).
+      const t = p.prize?.amount !== undefined ? prizeToken(p.prize, m) : null;
+      let each = 0n;
+      try {
+        each = t ? toUnits(p.prize.amount, t.decimals ?? 0) : 0n;
+      } catch {
+        // An amount that doesn't read is refused where the prize is checked.
+      }
+      if (each * BigInt(p.times ?? 1) > U64_MAX)
+        refuse('E-LOTTERY', `${where}.places[${i}].times`, `${label(l)}’s place ${i + 1} gives ${p.prize.amount} ${p.times} times: more tokens in all than the program can count (BadLottery).`, 'Fewer places in the run, or a smaller prize.');
     }
     // A raffle of many NFTs: its places draw from the lottery's own stash, which holds at least as many; it draws once,
     // and never also names NFTs of it (lottery.rs).

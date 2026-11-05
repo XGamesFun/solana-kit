@@ -24,7 +24,7 @@ import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '
 import { sha256 } from '../chain/sha256.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import IDL from './idl/loot.js';
-import { CLAIMED, ENDED, entryOf, paymentMint, placesIn, roundFinished, roundWinners, runOf, runPlaces, shareOf, ticketOfPlace } from './accounts.js';
+import { CLAIMED, ENDED, entryOf, paymentMint, placesPulled, roundFinished, roundWinners, runOf, runPlaces, shareOf, ticketOfPlace } from './accounts.js';
 import { stream, TAG, weighted } from './random.js';
 import { ata, BUBBLEGUM_PROGRAM, COMPRESSION_PROGRAM, LOOT_PROGRAM, MPL_CORE_PROGRAM, NOOP_PROGRAM, pda, vault, VRF_QUEUE } from './pda.js';
 
@@ -1456,7 +1456,8 @@ export function pullIx({ payer, project, roundAddress: key, round: r, entry, par
     const p = part.Prize ? r.prizes.find((x) => Number(x.run) === run) : null;
     mint = p ? p.mint : r.terms.mint;
     to = account(mint, e.buyer);
-    settled = placesIn(r, run, e.start, e.end).length;
+    // At most `MOST_A_PULL` places a pull: it closes the round only when they are the last parts owed.
+    settled = placesPulled(r, entry, run, Boolean(part.Prize));
   }
   const closes = (r.status === 'Swept' || r.status === 'Cancelled') && Number(r.owed) <= settled;
   if (closes) rest.push(...roundCloseMetas(key, r));
@@ -1810,14 +1811,16 @@ const ONLY_MOVES = { moves: true, locks: false, writes: false, reads: false };
 const standIn = (at) => ({ accounts: { ...NO_PIECE, asset: at }, proof: [], writable: [] });
 
 /** Anyone closes a compressed NFT's record (`pda.leaf`) that no longer matches its tree; its rent goes to `payer`, who paid it. */
-export const closeLeafIx = ({ asset, tree, payer }) => lootIx('close_leaf', {}, { record: pda.leaf(asset), tree, payer, project: null });
+export const closeLeafIx = ({ asset, tree, payer }) => lootIx('close_leaf', {}, { record: pda.leaf(asset), tree, payer, project: null, edition: null });
 
 /**
  * Anyone closes the Sheet of an NFT that is burned: `burned` is what shows it (the Core asset's own address, burned to
  * one byte; a Token Metadata mint holding none; or a compressed NFT's record proving its leaf burned). Its rent goes to
- * the project's `treasury` wallet.
+ * the project's `treasury` wallet. A Token Metadata NFT's (`tokenMetadata`: true, or its kind) also names its edition,
+ * which must be closed too: its mint holds none, with no mint authority but its edition (`NotBurned` otherwise).
  */
-export const closeSheetIx = ({ project, nft, burned = nft, treasury }) => lootIx('close_leaf', {}, { record: pda.sheet(project, nft), tree: burned, payer: treasury, project });
+export const closeSheetIx = ({ project, nft, burned = nft, treasury, tokenMetadata: tm = null }) =>
+  lootIx('close_leaf', {}, { record: pda.sheet(project, nft), tree: burned, payer: treasury, project, edition: tm ? tokenMetadata.edition(nft) : null });
 
 /**
  * Anyone proves a compressed NFT's leaf (`compressed` from `compressedFromDas`): put it before the instruction that

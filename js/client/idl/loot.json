@@ -1168,6 +1168,13 @@
             "For a Sheet, its project, for its treasury."
           ],
           "optional": true
+        },
+        {
+          "name": "edition",
+          "docs": [
+            "empty once Token Metadata burned it (read below)."
+          ],
+          "optional": true
         }
       ],
       "args": []
@@ -8081,7 +8088,7 @@
     {
       "name": "Grant",
       "discriminator": [
-        24
+        27
       ]
     },
     {

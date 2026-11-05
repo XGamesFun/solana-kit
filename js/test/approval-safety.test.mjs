@@ -267,3 +267,22 @@ test('the opener\'s command line carries no code; the page it opens is private a
     server.close();
   }
 });
+
+test('a change that makes a closed grant again with the same list is warned: the list would pay its rounds again', { skip }, async () => {
+  const a = await approval('grant-remade', (w) => ({
+    version: 2, name: 'Airdrop', currency: 'coin', collection: false,
+    tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6 }],
+    pools: [{ key: 'prizes', currency: 'coin', seed: 300 }],
+    grants: [{ key: 'drop', name: 'Community airdrop', prize: { gives: 'tokens', from: 'pool:prizes', amount: 100 }, list: [newAddress(w.random)] }],
+  }));
+  const saved = await a.runAll();
+  const grant = loot.pda.grant(saved.live.project, saved.grants[0].id);
+  a.w.chain.send(a.owner.address, [loot.closeRecordIx({ owner: a.owner.address, project: saved.live.project, target: grant })]);
+  assert.equal(a.w.chain.get(grant), null, 'closed');
+  const again = structuredClone(saved);
+  again.grants[0].name = 'Community airdrop, again';
+  writeFileSync(a.file, JSON.stringify(again, null, 2));
+  const session = await createApproval({ file: a.file, chain: approvalChain(a.w), now: () => NOW });
+  const state = await session.stateFor(a.owner.address);
+  assert.ok(state.warnings.some((x) => x.includes('again after it was closed, with the same list')), state.warnings.join('\n'));
+});

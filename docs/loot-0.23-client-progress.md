@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the clean-up build (program commit
-8b39d43, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-cleanup-build`,
-`loot.so` sha256 3f530f80…); before it, the phase 6 build (sha256 032b0666…). The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 1 build (program commit
+545cce0, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r1-build`,
+`loot.so` sha256 0032534c…); before it, the clean-up build (3f530f80…) and the phase 6 build (032b0666…). The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -25,6 +25,8 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
 - [x] tests green
 - [x] clean-up build: `LotteryTerms` (Lottery, LotteryArgs and the round hold `terms`), buy_tickets without
       incarnation, `LotteryPulled.amount`, no `LotteryPaid`
+- [x] review 1 build: close_leaf `edition`, grant tag 27, pulls of at most 300 places (`placesPulled`), the checker's
+      u64 run refusal, the re-made grant list warning (approval page)
 
 ## Client-only items (plan "The client, with no program change")
 
@@ -42,8 +44,8 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
   runs, raffles, shards, contest picks), then skill/docs text, then the client-only items.
 
 - program: a lottery's per-wallet count keeps a u32 total of every round's tickets; 2^32 in all refuses that wallet's next purchase (Overflow). The 0.22 receipt kept no total.
-- program: a grant's tag (24) is a profile's tag too (sheet.rs PROFILE); decodeAny tells them apart by a profile's shape. A profile of project P passed where a grant is read (Account<Grant>) starts with P as a grant does.
+- program (fixed in review 1): a grant's tag was a profile's (24); now 27.
 
-- check: `npm run check` with the clean-up build: fixtures, skills, lint and 462 tests pass; `release-manifest --check`
+- check: `npm run check` with the review 1 build: fixtures, skills, lint and 466 tests pass; `release-manifest --check`
   fails only because release.json pins devnet's 0.22 IDL and client (left as is until the 0.23 upgrade).
 - program: the IDL's metadata version is still 0.22.0 (the package's too).
