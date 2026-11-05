@@ -201,3 +201,11 @@ test('a grant is tag 27 and a profile 24: told apart by their tag; a Token Metad
   assert.equal(core.keys[4].pubkey, loot.LOOT_PROGRAM, 'none: the program id');
   assert.equal(tm.keys[4].pubkey, loot.tokenMetadata.edition(WALLET));
 });
+
+test('a bid of NFTs holds at most three: past a high bid of three, nothing tops it', () => {
+  assert.equal(loot.MAX_BID_NFTS, 3);
+  const auction = { nft_bids: { of: 'Any' }, reserve: 1n, min_raise_bps: 0, high: 2n };
+  assert.equal(loot.leastBid(auction), 3n);
+  assert.equal(loot.leastBid({ ...auction, high: 3n }), null, 'a high bid of three can’t be topped');
+  assert.equal(loot.leastBid({ ...auction, nft_bids: null, high: 3n }), 4n, 'a bid of tokens has no such cap');
+});

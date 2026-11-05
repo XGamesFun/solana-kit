@@ -587,10 +587,12 @@ an NFT or a collectible to its winner, a run of token prizes in one step into th
 pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
 and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
 winner (`hold`; its rent, and a Token Metadata NFT's account's, back to whoever sent it, `rent_to`, at the release); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
-mark also when the places take nothing of it). In a hooked payment mint with a common share above 0, the first marked
-sweep only moves the shares into the pot's part: the round stays Drawn, that call reads no account past the sweep's
-five, and the sweep is sent again after it. With no place sharing the pot, a marked sweep fails with the token's error
-until the pot can take the part.
+mark also when the places take nothing of it). In a payment mint with a transfer hook the sweep goes a step a call:
+each common share above 0 that isn't a burn, then the pot, with the same accounts each time; the round stays Drawn
+(its cursor past its places) until the pot's step sweeps it, so whoever moves it on (a keeper, the page's
+`settle-round` claim, listed again while it is Drawn) calls again. The authority's mark covers only the step at hand.
+With no place sharing the pot, a marked pot step fails with the token's error until the pot can take the part. A mint
+with no hook sweeps in one call.
 
 **Then each part is pulled** (`pull`, anyone, `partsOwed`): an entry's own (a refund, a no-loss ticket's price, its NFT
 ticket back or where its price sends it), each recipient's share, its places' pot parts and token prizes in one run:
@@ -698,8 +700,8 @@ At `["auction", project, seller, id]`, so an id is its seller's own; the seller 
   above the high bid by `min_raise_bps` rounded up (at least 1), counted on what arrived. The topped bid goes back in
   the same instruction; there is no record per bidder. A bid in the last `extend` seconds pushes the end to `extend`
   after it. `ends_at` within 5 years, `extend` at most that (`BadAuction`).
-- **Bids of NFTs** (`nft_bids`, a rule): any number of NFTs a bid, as many as one transaction moves, not compressed
-  (`CompressedBid`); reserve and raise count NFTs; the topped bundle goes back at once. The record grows 32 bytes per
+- **Bids of NFTs** (`nft_bids`, a rule): 1 to 3 NFTs a bid (`MAX_BID_NFTS`, not in the IDL: more is `BidTooLow`, and a
+  high bid of 3 can't be topped), not compressed (`CompressedBid`); reserve (1 to 3, `BadAuction`) and raise count NFTs; the topped bundle goes back at once. The record grows 32 bytes per
   NFT of the high bid at the bidder's cost (162,560 lamports each), which goes to the seller at the end. No shares.
 - **The end**: anyone, once it is over. Shares take their parts, the rest to the lot's owner (the seller, or the
   treasury for an item or roll), the lot to the winner. With no bid the lot goes home (an item's serial is voided). The
@@ -924,7 +926,9 @@ only where a call writes them, so a hold never write-locks a collection or tree.
   (`NotAnNft`). The project's token account of it closes only when empty, so a token sent beside it never blocks it.
 - **Token Metadata receivers**: it goes out to the token account the sender passes as the receiver's (any account of
   the mint the receiver owns). If the receiver's associated account belongs to another key or is frozen, the sender
-  makes a fresh one (`freshNftAccount`; the client does).
+  makes a fresh one (`freshNftAccount`, a pNFT's token record then the record of that account; the client does, in
+  js/play's every hand-out: an outbid bidder's NFTs handed back, an auction's end, a listing, a settle, a release and
+  the rest, through `nftOf(asset, signer, { to })`).
 - **pNFT token records**: the rent goes to whoever pays the move out; on a listing's sale the maker doesn't get the
   record's rent back (about 0.00145 SOL).
 - Compressed NFTs of v1 trees are refused.

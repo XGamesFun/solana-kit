@@ -1345,8 +1345,9 @@ export const raffledNft = (stash, answer, place) => stash?.nfts[weighted(stream(
  * prize's accounts: `prizeMetas`, `collection`, `poolMints`, `items`, `nfts`; a held or raffled NFT's from the lottery's
  * own stash, `stash` its decoded stash for a raffle's draw); its last part sweeps (the shares, the pot), given
  * `projectState` (the treasury) and `holders`. With `hold`, the next NFT prize becomes a hold for its winner (anyone),
- * or the project's authority marks a pool's run, or the sweep's pot, that can't move. A finished round that owes nothing
- * closes.
+ * or the project's authority marks a pool's run, or the sweep's pot, that can't move. In a payment mint with a transfer
+ * hook the sweep is a step a call (each common share, then the pot), with these same accounts: send it again while the
+ * round is Drawn. A finished round that owes nothing closes.
  */
 export function settleRoundIx({ payer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints = {}, projectMint, items, nfts = {}, collection, stash, places = 1, nonce = 0n, hold = false, extra = [] }) {
   const rest = [];
@@ -2232,13 +2233,14 @@ export const auctionEnds = (auction) => {
   return late > BigInt(auction.ends_at) ? late : BigInt(auction.ends_at);
 };
 
-/** The least next bid the program takes, or null when no u64 amount can top it. */
+/** The least next bid the program takes, or null when nothing can top it (no u64 amount; a bid of NFTs past `MAX_BID_NFTS`). */
 export function leastBid(auction) {
   const high = BigInt(auction.high);
   if (high === 0n) return BigInt(auction.reserve) > 0n ? BigInt(auction.reserve) : 1n;
   const raise = (high * BigInt(auction.min_raise_bps) + 9_999n) / 10_000n;
   const next = high + (raise > 0n ? raise : 1n);
-  return next <= (1n << 64n) - 1n ? next : null;
+  // A bid of NFTs holds at most `MAX_BID_NFTS`: past it, nobody can top the high bid.
+  return next <= (auction.nft_bids ? BigInt(MAX_BID_NFTS) : (1n << 64n) - 1n) ? next : null;
 }
 
 /**
@@ -2260,6 +2262,10 @@ export function openAuctionIx({ seller, project, collection, tokenMetadata: tm, 
     { remaining: p.proof, writable: p.writable },
   );
 }
+
+/** The most NFTs one bid of an auction of NFT bids holds (`MAX_BID_NFTS`, not in the IDL): a bid of more fails
+ * (`BidTooLow`), and a high bid of this many can't be topped. Its reserve is 1 to this many (`BadAuction`). */
+export const MAX_BID_NFTS = 3;
 
 /**
  * `bidder` bids `amount` on auction `id`, signing its terms; the bid it tops goes back to the high bidder's account

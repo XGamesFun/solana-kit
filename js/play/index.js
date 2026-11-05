@@ -1529,10 +1529,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * Crafts a recipe, handing in `assets` (the collectibles it burns or uses, in the recipe's order). `version`: the
      * recipe's version the page showed the player (`recipes()`, or the listing itself as `listing`), so a recipe the
      * owner changed since is refused rather than crafted on terms the player never saw. It is required: the version
-     * read now is never signed in its place.
+     * read now is never signed in its place. `extra`: the tail a Core collection's plugins need when the craft moves or
+     * rolls on a Core NFT (sent after the Memo program's account, as on every other Core move).
      */
-    async craft(recipeKey, assets = [], times = 1, { version, listing, ...others } = NO_OPTIONS) {
-      only(others, ['version', 'listing'], 'craft');
+    async craft(recipeKey, assets = [], times = 1, { version, listing, extra = [], ...others } = NO_OPTIONS) {
+      only(others, ['version', 'listing', 'extra'], 'craft');
       const r = part('recipes', recipeKey);
       version ??= listing?.version ?? undefined;
       if (version === undefined || version === null) throw new Error(`Say which version of “${r.name ?? recipeKey}” the player was shown: pass the listing recipes() showed (listing), or its version. The version read now is never signed in its place.`);
@@ -1597,7 +1598,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         return [loot.pda.itemAsset(loot.pda.item(project, id), Number(items[id].issued) + counts[id])];
       });
       const before = [...proving, ...given.before].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM);
-      let instructions = [computeUnitLimit(1_000_000), ...before, loot.craftIx({ player: wallet.address, project, collection: collections[0], id: r.id, recipe, assets: handed, times, nonce, holders, programs, treasury, poolMints: given.poolMints, items, nfts: given.nfts, boxes: given.boxes, rollPools: given.rollPools })];
+      let instructions = [computeUnitLimit(1_000_000), ...before, loot.craftIx({ player: wallet.address, project, collection: collections[0], id: r.id, recipe, assets: handed, times, nonce, holders, programs, treasury, poolMints: given.poolMints, items, nfts: given.nfts, boxes: given.boxes, rollPools: given.rollPools, extra })];
       // Fuel bought for a staked collectible counts once its seat is refreshed: in the same transaction.
       for (const raise of recipe.raises ?? []) {
         const asset = assets[raise.place];
@@ -1749,7 +1750,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
           secondsLeft: Number(ends > at ? ends - at : 0n),
           open: nextBid !== null && at >= x.starts_at && at < ends,
           over: at >= ends,
-          ...(x.nft_bids ? { nftBids: true, held: x.held } : {}),
+          // A bid of NFTs: a picker of 1 to `maxNfts` (and at least `nextBid`) of the player's NFTs.
+          ...(x.nft_bids ? { nftBids: true, held: x.held, maxNfts: loot.MAX_BID_NFTS } : {}),
           ...(tokens.get(a.currency ?? currencyKey)?.source === 'sol' ? { waiting } : {}),
         };
       });
@@ -1772,6 +1774,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (auction.nft_bids) {
         const bundle = nfts ?? (Array.isArray(amount) ? amount : null);
         if (!bundle?.length) throw new Error('This auction takes NFTs as bids: say which (nfts).');
+        if (bundle.length > loot.MAX_BID_NFTS) throw new Error(`A bid holds at most ${loot.MAX_BID_NFTS} NFTs.`);
+        if (auction.held.length >= loot.MAX_BID_NFTS) throw new Error(`The high bid holds ${loot.MAX_BID_NFTS} NFTs, the most a bid holds: it can't be topped.`);
         const before = [];
         const kindOf = async (asset, to) => {
           const { before: proof, ...kind } = await nftOf(asset, wallet.address, { to });

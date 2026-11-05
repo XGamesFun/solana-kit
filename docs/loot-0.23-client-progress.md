@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 2 build (program commit
-416e5da, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r2-build`,
-`loot.so` sha256 e6d170b9…); before it, the review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 3 build (program commit
+a5adb83, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r3-build`,
+`loot.so` sha256 74b2415a…); before it, the review 2 (e6d170b9…), review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -29,6 +29,9 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
       u64 run refusal, the re-made grant list warning (approval page)
 - [x] review 2 build (no wire change): a fresh item warned as a finishing route's prize, refused as an auction lot;
       a closing contest claim needs the treasury; docs for close_leaf, end_auction, decide(None), hold rent_to
+- [x] review 3 build (IDL docs only): `MAX_BID_NFTS` (leastBid, bid, auctions().maxNfts), a hooked sweep a step a
+      call (docs; play lists settle-round again while Drawn), Token Metadata hand-outs into a fresh account (already
+      in js/play's nftOf; documented), craft's `extra` tail
 
 ## Client-only items (plan "The client, with no program change")
 
@@ -48,6 +51,6 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
 - program: a lottery's per-wallet count keeps a u32 total of every round's tickets; 2^32 in all refuses that wallet's next purchase (Overflow). The 0.22 receipt kept no total.
 - program (fixed in review 1): a grant's tag was a profile's (24); now 27.
 
-- check: `npm run check` with the review 1 build: fixtures, skills, lint and 466 tests pass; `release-manifest --check`
+- check: `npm run check` with the review 1 build: fixtures, skills, lint and 467 tests pass; `release-manifest --check`
   fails only because release.json pins devnet's 0.22 IDL and client (left as is until the 0.23 upgrade).
 - program: the IDL's metadata version is still 0.22.0 (the package's too).

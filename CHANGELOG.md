@@ -51,6 +51,8 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- An NFT bid holds at most 3 NFTs (`MAX_BID_NFTS`): `leastBid` is null past it, `auctions()` names `maxNfts`, and
+  `bid` refuses more. `craft` takes `extra`, the tail a Core collection's plugins need.
 - The checker refuses a lottery run whose token prize in all passes a u64; the approval page warns when a change
   makes a closed grant again with the same list (its rounds would pay again).
 - Going live opens the project's token accounts and its share wallets' and makes a standing lookup table

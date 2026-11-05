@@ -6,6 +6,7 @@
 // lottery's pot, a pool nothing fills, a recipe too big to send, a prize its pool cannot pay.
 import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
+import { MAX_BID_NFTS } from '../client/ix.js';
 import { vault } from '../client/pda.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
@@ -1756,8 +1757,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     startsFrozen(tok, `${where}.currency`, label(a), 'E-AUCTION', 'BadAuction');
     const reserve = a.bidNfts ? BigInt(Number.isInteger(a.reserve) ? a.reserve : 1) : units(a.reserve, tok, `${where}.reserve`, `${label(a)}’s reserve`);
     if (a.bidNfts) {
-      // Bids of NFT bundles (auction.rs): no split, and a reserve a bid of up to four can reach.
-      if (a.reserve !== undefined && !(Number.isInteger(a.reserve) && a.reserve >= 1 && a.reserve <= 3)) refuse('E-AUCTION', `${where}.reserve`, `${label(a)}’s bids are bundles of NFTs: its reserve counts NFTs, from 1 to 3, the most one bid holds (BadAuction).`, 'Write a reserve of 1 to 3.');
+      // Bids of NFT bundles (auction.rs): no split, and a reserve a bid of up to three can reach.
+      if (a.reserve !== undefined && !(Number.isInteger(a.reserve) && a.reserve >= 1 && a.reserve <= MAX_BID_NFTS)) refuse('E-AUCTION', `${where}.reserve`, `${label(a)}’s bids are bundles of NFTs: its reserve counts NFTs, from 1 to ${MAX_BID_NFTS}, the most one bid holds (BadAuction).`, `Write a reserve of 1 to ${MAX_BID_NFTS}.`);
       if (sharesOf(a.split).length) refuse('E-AUCTION', `${where}.split`, `${label(a)}’s bids are NFTs: there is no money to take shares of (BadAuction).`, 'Remove the split.');
       rule(a.bidNfts, `${where}.bidNfts`, `${label(a)}’s bids`);
       outsideAttribute(a.bidNfts, `${where}.bidNfts`, `${label(a)}’s bids`);
