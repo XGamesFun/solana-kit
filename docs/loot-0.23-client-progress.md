@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the frozen phase 6 build
-(`XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-p6-build`,
-`loot.so` sha256 032b0666…). The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the clean-up build (program commit
+8b39d43, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-cleanup-build`,
+`loot.so` sha256 3f530f80…); before it, the phase 6 build (sha256 032b0666…). The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -23,16 +23,18 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
 - [x] play: lottery, contest, grant, farm, hold flows
 - [x] mcp, cli, skill text, docs/program.md, CHANGELOG
 - [x] tests green
+- [x] clean-up build: `LotteryTerms` (Lottery, LotteryArgs and the round hold `terms`), buy_tickets without
+      incarnation, `LotteryPulled.amount`, no `LotteryPaid`
 
 ## Client-only items (plan "The client, with no program change")
 
-- [ ] 1 key job rule
-- [ ] 2 rolls in one prompt
+- [x] 1 key job rule (`keyFor`/`keyRun` in js/play; a box's open funds its key the same way; `repay` then a key's release)
+- [x] 2 rolls in one prompt (`sendRolling`: craft, mission, grant, contest prize, a roll lot its winner ends; a lottery place's roll is settle_round's, not a player's step)
 - [x] 3 standing lookup tables (the project's, made at go-live, used by play's sends and keys; loot's frozen cluster table not made: needs the loot team's key)
-- [ ] 4 packing rule
+- [~] 4 packing rule: `claimAll` signs independent claims in one prompt (`signTransactions`, else one by one); a loan's repay alone, a key's release. Not done here: the keeper's pack (in games.fun), new chained flows (buy then craft, prove_traits then the action)
 - [x] 5 owner flows (authority steps last, approvals counted per signer, stash NFTs a group a call)
 - [x] 6 go-live accounts
-- [ ] AGENTS.md key rule
+- [x] AGENTS.md key rule
 
 ## Notes
 
@@ -41,3 +43,7 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
 
 - program: a lottery's per-wallet count keeps a u32 total of every round's tickets; 2^32 in all refuses that wallet's next purchase (Overflow). The 0.22 receipt kept no total.
 - program: a grant's tag (24) is a profile's tag too (sheet.rs PROFILE); decodeAny tells them apart by a profile's shape. A profile of project P passed where a grant is read (Account<Grant>) starts with P as a grant does.
+
+- check: `npm run check` with the clean-up build: fixtures, skills, lint and 462 tests pass; `release-manifest --check`
+  fails only because release.json pins devnet's 0.22 IDL and client (left as is until the 0.23 upgrade).
+- program: the IDL's metadata version is still 0.22.0 (the package's too).

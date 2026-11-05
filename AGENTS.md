@@ -30,7 +30,11 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 ## Rules
 
 - **Nothing here signs with a person's key, and no tool asks for one.** Going live is always the owner approving in
-  their own wallet. A test may make throwaway keys; nothing else holds a secret.
+  their own wallet. A step after the wallet's prompt (a settle, an ask for a roll, a release) may be sent by a
+  throwaway key `js/play` makes in memory for that one job: the wallet's own transaction funds it with what the step
+  pays, the rent minimum and one spare fee; its step is simulated first and, if it would fail, the wallet sends it
+  instead; then the key empties itself back to the wallet. A key never pays for an account with its own lamports and
+  never holds anything after its job. Tests may make throwaway keys too; nothing else holds a secret.
 - **Devnet only.** Never pass a mainnet URL for anything that sends; mainnet waits for an audit. Reading public
   mainnet to fetch test fixtures is the one exception.
 - Plain ES modules, Node 22 or later, no build step: the code runs as written. The TypeScript declarations are
