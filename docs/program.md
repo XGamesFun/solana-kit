@@ -248,9 +248,10 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 
 ### The split
 
-A split is a list of shares, each basis points with a destination (`To`), any number of them, as many as the
-transaction that pays them can carry: a stored split (a box's, order's, lottery's, contest's, auction's, offer's,
-listing's) or a `pay`'s. What the shares leave goes to the split's owner: the treasury for a sale, the seller for an
+A split is a list of shares, each basis points with a destination (`To`): a stored split (a box's, order's, lottery's,
+contest's, auction's, offer's, listing's) holds at most 8 (`MAX_SHARES`, not in the IDL; a ninth is `BadShares`), a
+`pay`'s as many as its transaction can carry. A step that pays many shares into accounts not open yet (an end, a
+settle) stays under the 64-instruction trace limit when some of those accounts are opened first. What the shares leave goes to the split's owner: the treasury for a sale, the seller for an
 auction, listing or offer.
 
 | `To` | Paid to |
@@ -393,7 +394,7 @@ from: a table (`Values::Table`), a row drawn by weight among those in stock at t
 (`Values::Range { min, max }`), every number as likely, drawn at the mint. Whoever settles, whenever, the same answer
 gives the same unit. Its name and URI take the values (`{key}`, beside `{serial}`), and the traits are written on the
 collectible. A key is the project's own, each once (`BadItem`); the traits lock with the rest once a unit is out. A
-fresh item is given only by a box's roll (`NeedsRoll`: not by `Make`, `buy`, a grant or a recipe's output; a lottery
+fresh item is given only by a box's roll (`PrizeNotCovered`: not by `Make`, `buy`, a grant or a recipe's output; a lottery
 place, a contest's prize or a mission's end gives nothing in its place; an auction refuses it as a lot, `LotRefused`):
 one in a box asks the oracle even as its only entry. A compressed prize is given only into the project's own tree
 (`open_tree`): any other gives nothing (`PrizeNotCovered` on a strict route).
@@ -503,7 +504,9 @@ A box whose every entry burns, gives or stashes the NFT takes it as its price.
   soulbound NFT is rolled where it is.
 - **One roll at a time on an NFT.** Such a roll is at the NFT's own nonce (`nonceOn`: the first 8 bytes of its address,
   little endian; `SubjectNonce` otherwise), so a second waits for the first, and rules read what the last roll wrote.
-  An NFT frozen on a farm seat is refused.
+  An NFT frozen on a farm seat is refused. A craft's `RollOn` and a mission's roll name a nonce and are made at
+  `namedRollNonce`: the NFT's own on a box that holds it, whatever was named; otherwise `prizeRollNonce` of the named
+  one (a mission of several names seat `i`'s roll `nonce + 2i`, its prize's `nonce + 2i + 1`).
 - **What was rolled stays rolled**: the fate is copied into the order at the roll.
 - `settle`, `refund` and `end_auction` pass their remaining accounts to the NFT's move, so a Core collection's transfer
   checks find what they read.
@@ -614,7 +617,7 @@ burning what nobody is owed and returning each account's rent to its opener.
 - **No-loss** (`returns`): after the draw every ticket is owed back whole; winners take only what was paid into the pot.
 
 Pot and payment mints can't be non-transferable, default-frozen or switchable to it, or confidential (`BadLottery`); at
-most 15 shares and 8 mints. Edits apply to the next round (the gate and `per_wallet` at once); closing or making a
+most 8 shares (`MAX_SHARES`, as every split kept to be paid later) and 8 mints. Edits apply to the next round (the gate and `per_wallet` at once); closing or making a
 draw-once lottery again waits while its current round has a record (`RoundRunning`). `per_wallet` counts tickets per
 round in the wallet's counts.
 

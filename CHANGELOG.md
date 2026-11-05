@@ -51,6 +51,10 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- A split kept to be paid later holds at most 8 shares (`MAX_SHARES`): the checker and the builders refuse a ninth.
+  A craft's roll on a collectible and a mission's roll are at `namedRollNonce` (the NFT's own nonce on a box that holds
+  it, else `prizeRollNonce` of the one named); `unstakeNftIx` takes `boxes`. A fresh item on a paid route is
+  `PrizeNotCovered` (`NeedsRoll` is gone).
 - An NFT bid holds at most 3 NFTs (`MAX_BID_NFTS`): `leastBid` is null past it, `auctions()` names `maxNfts`, and
   `bid` refuses more. `craft` takes `extra`, the tail a Core collection's plugins need.
 - The checker refuses a lottery run whose token prize in all passes a u64; the approval page warns when a change

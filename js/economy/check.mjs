@@ -6,7 +6,7 @@
 // lottery's pot, a pool nothing fills, a recipe too big to send, a prize its pool cannot pay.
 import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
-import { MAX_BID_NFTS } from '../client/ix.js';
+import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { vault } from '../client/pda.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
@@ -764,7 +764,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const p of m.pools) if (!m.tokens.has(p.currency)) refuse('E-REF', `economy.pools.${p.key}.currency`, `The pool “${p.key}” holds “${p.currency}”, which is not in the tokens.`, 'Add the token, or name one that is there.');
 
   /**
-   * A split carried out in `tok`: percents, any number of shares and 100% at most (state.rs check_later_shares), pools of the same
+   * A split carried out in `tok`: percents, at most 8 shares (any number in a payment's) and 100% at most (state.rs check_later_shares), pools of the same
    * token, and no share that burns in wrapped SOL (the program refuses it). What the shares leave goes to the
    * treasury wallet's account of `tok`, whatever token it is. `chosen`: the buyer may name one share ("chosen",
    * "chosen:<item>"): a box's or a lottery's split; 'wallet': only "chosen", a wallet (a payment's split).
@@ -775,6 +775,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const total = shares.reduce((n, s) => n + (s.bps ?? 0), 0);
     if (total > 10_000) refuse('E-SPLIT', where, `${what}’s shares add up to ${total / 100}%, more than the whole payment.`, 'Make them add up to 100% or less; the treasury gets what they leave.');
     if (shares.filter((s) => s.kind === 'chosen').length > 1) refuse('E-CHOSEN', where, `${what} lets the buyer choose more than one share.`, 'Let them choose one.');
+    // A split kept to be paid later (a box's, a lottery's, a contest's, an auction's) holds at most 8 shares; a
+    // payment's is paid at once and has no such cap.
+    if (chosen !== 'wallet' && shares.length > MAX_SHARES) refuse('E-SPLIT', where, `${what}’s split has ${shares.length} shares; the program keeps at most ${MAX_SHARES} (BadShares).`, `Merge some, to ${MAX_SHARES} or fewer.`);
     for (const [i, s] of shares.entries()) {
       if (s.kind === 'pool') {
         const p = pool(s.key, `${where}[${i}].to`);
@@ -839,13 +842,13 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const p of prizes(m)) if (p.prize.gives === 'item') given.add(p.prize.item);
   for (const a of m.auctions) if (a.lot?.item) given.add(a.lot.item);
   for (const d of m.decisions) if (d.does === 'make') given.add(d.item);
-  // A fresh item is given only by a box's roll: a route the player pays or asks for refuses it (NeedsRoll); one that
+  // A fresh item is given only by a box's roll: a route the player pays or asks for refuses it (PrizeNotCovered); one that
   // only finishes (a lottery place, a contest, a mission's end) gives nothing in its place; an auction refuses the lot.
   const fix = 'Give a roll of a box that gives it (`{ "gives": "roll", "box": key }`) instead.';
   for (const p of prizes(m)) {
     const it = p.prize.gives === 'item' ? m.item.get(p.prize.item) : null;
     if (!(it?.drawn ?? []).length) continue;
-    if (p.strict) refuse('E-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: a ${p.route} gives alike units (NeedsRoll).`, fix);
+    if (p.strict) refuse('E-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: a ${p.route} gives alike units (PrizeNotCovered).`, fix);
     else warn('W-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: as a ${p.route}’s prize it is never given (its winner gets nothing for it).`, fix);
   }
   for (const a of m.auctions) {
@@ -868,7 +871,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const it of m.items) {
     const where = `economy.items.${it.key}`;
     // A fresh collectible: each trait its own attribute, drawn from a table the spec has or a range from its least to its
-    // most; given only by a box's roll (a shop sells alike units: NeedsRoll).
+    // most; given only by a box's roll (a shop sells alike units: PrizeNotCovered).
     const drawn = it.drawn ?? [];
     if (drawn.length && !isCollectible(it)) refuse('E-ITEM', `${where}.drawn`, `${label(it)} draws traits, but it is a normal item: only a collectible carries them.`, 'Make it a collectible, or leave "drawn" out.');
     drawn.forEach((d, i) => {
@@ -879,7 +882,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       else if (d.table !== undefined && !m.table.get(d.table)) refuse('E-REF', `${at}.table`, `${label(it)}’s trait “${d.attribute}” draws from “${d.table}”, which is not one of the spec’s tables.`, 'Add the table to "tables", or name one it has.');
       else if (d.table === undefined && !(d.min !== undefined && d.max !== undefined && d.min <= d.max)) refuse('E-ITEM', at, `${label(it)}’s trait “${d.attribute}” needs a table, or a range from its "min" to its "max", the least first.`, 'Name a table, or give a "min" and a "max".');
     });
-    if (drawn.length && (Number(it.price ?? 0) > 0 || it.free)) refuse('E-ITEM', `${where}.price`, `${label(it)} draws its traits per unit, by a roll: the shop sells only alike units (NeedsRoll).`, 'Sell it from a box (one outcome is enough: the box still rolls), and leave "price" out.');
+    if (drawn.length && (Number(it.price ?? 0) > 0 || it.free)) refuse('E-ITEM', `${where}.price`, `${label(it)} draws its traits per unit, by a roll: the shop sells only alike units (PrizeNotCovered).`, 'Sell it from a box (one outcome is enough: the box still rolls), and leave "price" out.');
     // A collectible is minted into a collection of the project's (catalog.rs BadCollection).
     if (isCollectible(it) && it.collection && !m.collections.includes(it.collection))
       refuse('E-COLLECTION', `${where}.collection`, `${label(it)} is minted into ${it.collection}, which is not one of the project’s "collections" (BadCollection).`, 'Add it to "collections", or leave "collection" out to mint into the one the setup makes.');

@@ -12,6 +12,7 @@ import { SYSTEM_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit, createAssociatedTokenAccountIdempotent, transferLamports } from '../chain/programs.js';
 import { rpcClient } from '../chain/rpc.js';
 import { setAuthorityIx } from '../chain/token.js';
+import { parseCoreAsset } from '../chain/core.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
@@ -95,6 +96,29 @@ test('a topped NFT bid goes back into a fresh account when its bidder\'s own can
   assert.equal(auction.high_bidder, b);
   const fresh = loot.freshNftAccount({ payer: b, holder: a, mint: x }).address;
   assert.deepEqual([w.chain.tokens(fresh), ownerOf(w, fresh)], [1n, a]);
+});
+
+test('an auction\'s end hands the winning NFTs into a fresh account when the seller\'s own can\'t take them', { skip }, async () => {
+  const { w, maker, club } = setup('handout-end');
+  const a = w.who();
+  const x = nftOf(w, maker, a, club);
+  const seller = w.who();
+  w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+  const art = w.make(1, seller);
+  const now = w.chain.now();
+  w.chain.send(seller, [loot.openAuctionIx({ seller, project: w.project, collection: w.collection, id: 1, mint: w.mint,
+    args: { lot: { Asset: [art] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(now), ends_at: BigInt(now + DAY), extend: 0, shares: [], gate: null, nft_bids: { of: { Collection: [club] }, key: '', test: 'Any' } } })]);
+  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, auctions: [{ key: 'lot', id: 1, seller }] };
+  const appOf = (who) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: who, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
+  await appOf(a).bid('lot', null, { nfts: [x] });
+  // The seller's associated account of the NFT now belongs to another key: the end opens a fresh one of the seller's.
+  spoil(w, seller, x, newAddress(w.random));
+  w.chain.warp(now + DAY + 1);
+  const ender = w.who();
+  await appOf(ender).endAuction('lot');
+  const fresh = loot.freshNftAccount({ payer: ender, holder: seller, mint: x }).address;
+  assert.deepEqual([w.chain.tokens(fresh), ownerOf(w, fresh)], [1n, seller], 'the winning NFT is in a fresh account the seller owns');
+  assert.equal(parseCoreAsset(w.chain.get(art).data).owner, a, 'the lot went to its winner');
 });
 
 // Two ways a fresh account could go wrong, on the bid above. If the player module put the page RPC's rent figure into

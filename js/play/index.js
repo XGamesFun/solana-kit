@@ -1377,12 +1377,14 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const prize = farm.tiers[seat.tier]?.prize ?? null;
       // A forfeit takes no prize: none of its accounts (`unstakeNftIx`).
       const given = await prizeInputs([forfeit ? null : prize]);
-      // A mission's roll on the NFT is at the NFT's nonce (`nonceOn`): one at a time on it.
+      // A mission's roll on the NFT: on a box that holds it, at the NFT's own nonce (one at a time on it), else at
+      // `prizeRollNonce` of the one named (`namedRollNonce`).
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
-      const ix = loot.unstakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, forfeit, roll, nonce, tier: seat.tier, projectCollection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, ...token });
+      const boxes = roll != null ? { [roll]: await read('LootBox', loot.pda.box(project, roll)) } : {};
+      const ix = loot.unstakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, forfeit, roll, nonce, tier: seat.tier, projectCollection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, boxes, ...token });
       const { signature, rolls } = await sendRolling([...before, ...given.before, ...token.before, ix]);
       const rolled = rolls.length ? { rolled: rolls[0] } : {};
-      if (roll != null) return { signature, roll: loot.pda.order(project, wallet.address, nonce), ...rolled };
+      if (roll != null) return { signature, roll: loot.pda.order(project, wallet.address, loot.namedRollNonce(boxes[roll], asset, nonce)), ...rolled };
       return prize?.Roll && !forfeit ? { signature, roll: loot.pda.order(project, wallet.address, loot.prizeRollNonce(nonce + 1n)), ...rolled } : signature;
     },
 
@@ -1578,7 +1580,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       }));
       // A recipe that rolls makes its roll in an order of the player's, which `collect` then finishes.
       const rolls = recipe.outputs.some((o) => o.RollOn || o.Prize?.[0]?.Roll);
-      // A roll on a collectible kept is at that collectible's nonce (`nonceOn`): one at a time on it.
+      // A roll on a collectible kept is named by that collectible's nonce (`nonceOn`): on a box that holds it, its
+      // order is there, one at a time on it (`namedRollNonce`).
       const rollOn = recipe.outputs.find((o) => o.RollOn)?.RollOn;
       const nonce = rollOn ? loot.nonceOn(typeof assets[rollOn.place] === 'string' ? assets[rollOn.place] : assets[rollOn.place].asset) : freshNonce();
       // A roll on a kept collectible (`RollOn`) passes its box's prize mints as a roll given does.
@@ -1614,7 +1617,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       for (const p of pays) instructions = withSolWrap(wallet.address, p.mint, p.amount * BigInt(times), instructions);
       // A roll on a collectible kept is at its nonce; a prize's roll at `prizeRollNonce` of the craft's. Asked for in the
       // craft's own transaction and settled by a key after: one prompt.
-      const roll = rolls ? loot.pda.order(project, wallet.address, rollOn ? nonce : loot.prizeRollNonce(nonce)) : null;
+      const on = rollOn && (typeof assets[rollOn.place] === 'string' ? assets[rollOn.place] : assets[rollOn.place].asset);
+      const roll = rolls ? loot.pda.order(project, wallet.address, rollOn ? loot.namedRollNonce(given.boxes[rollOn.box_id], on, nonce) : loot.prizeRollNonce(nonce)) : null;
       const { signature, rolls: rolled } = await sendRolling(instructions);
       return { signature, made, ...(roll ? { roll } : {}), ...(rolled.length ? { rolled: rolled[0] } : {}) };
     },

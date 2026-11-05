@@ -13,7 +13,8 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { TOKEN_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES } from '../chain/token.js';
-import { readTransaction, wireTransaction } from '../chain/tx.js';
+import { readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { MEMO_PROGRAM } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { check } from '../economy/check.mjs';
@@ -294,6 +295,16 @@ describe('the price a player was shown is the most they pay', () => {
     assert.equal(listing.key, 'melt');
     await player.craft('melt', [gem], 1, { listing });
     assert.ok((w.chain.get(gem)?.data.length ?? 0) <= 1, 'burned');
+    // A craft carries the tail a Core collection's plugins need (`extra`), after the Memo program's account.
+    const sent = [];
+    const rpc = { ...w.chain.rpc, send: (wire) => (sent.push(readTransaction(wire)), w.chain.rpc.send(wire)) };
+    const tailed = solanaApp({ spec, rpc, wallet: asWallet(kp), now: () => w.chain.now() });
+    const another = w.make(1, kp.address);
+    await tailed.craft('melt', [another], 1, { listing, extra: [{ pubkey: MEMO_PROGRAM, isSigner: false, isWritable: false }] });
+    assert.ok((w.chain.get(another)?.data.length ?? 0) <= 1, 'burned, with its tail');
+    const message = readMessage(sent.at(-1).message);
+    const craft = message.instructions.find((ix) => message.keys[ix.programIndex] === loot.LOOT_PROGRAM);
+    assert.equal(message.keys[craft.accountIndexes.at(-1)], MEMO_PROGRAM, 'the tail closes the craft');
   });
 });
 

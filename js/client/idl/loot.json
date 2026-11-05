@@ -9621,41 +9621,36 @@
     },
     {
       "code": 6144,
-      "name": "NeedsRoll",
-      "msg": "A fresh item's traits are drawn by a roll: give it by a box (open_box), or by a roll of one"
-    },
-    {
-      "code": 6145,
       "name": "WrongRow",
       "msg": "This row is not the committed table's row whose range holds the number drawn: its path doesn't lead to the table's root, or its range doesn't hold the number"
     },
     {
-      "code": 6146,
+      "code": 6145,
       "name": "BadList",
       "msg": "This is not a list of records of this width, or no record is at this place"
     },
     {
-      "code": 6147,
+      "code": 6146,
       "name": "GrantLive",
       "msg": "A grant's shards close only once the grant is closed or made again"
     },
     {
-      "code": 6148,
+      "code": 6147,
       "name": "ShardsFixed",
       "msg": "A grant keeps its shard bits (0 to 8) for its incarnation: an edit can't change them"
     },
     {
-      "code": 6149,
+      "code": 6148,
       "name": "BadRounds",
       "msg": "A claim by voucher or list names one round or more; an open claim names none"
     },
     {
-      "code": 6150,
+      "code": 6149,
       "name": "NotBurned",
       "msg": "This NFT is not burned: a Sheet closes once its Core asset is burned, its mint holds none, or a record proves its leaf burned"
     },
     {
-      "code": 6151,
+      "code": 6150,
       "name": "OutOfOrder",
       "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
     }
@@ -12714,7 +12709,7 @@
             "docs": [
               "A fresh item's traits: each drawn when a unit of it is won, and written on it as an attribute",
               "(`Trait`). None is an item whose units are all alike. A fresh item is given only by a roll",
-              "(`NeedsRoll`), and its traits never change once a unit is out."
+              "(`gives`), and its traits never change once a unit is out."
             ],
             "type": {
               "vec": {

@@ -55,7 +55,10 @@ test('a mission rolls on the NFT leaving it: the roll waits for anyone to ask, t
   w.tokenAccount(w.player, dust);
   w.chain.send(w.player, [loot.stakeNftIx({ player: w.player, project: w.project, id: 3, farm, asset, collection: w.collection })]);
   w.chain.warp(w.chain.now() + 61);
-  w.chain.send(w.player, [computeUnitLimit(400_000), loot.unstakeNftIx({ player: w.player, project: w.project, id: 3, farm, asset, collection: w.collection, roll: 6, nonce: loot.nonceOn(asset) })]);
+  // The box holds the NFT: its order is at the NFT's own nonce, whatever was named.
+  const lootBox = w.read('LootBox', pda.box(w.project, 6));
+  assert.ok(loot.boxHolds(lootBox));
+  w.chain.send(w.player, [computeUnitLimit(400_000), loot.unstakeNftIx({ player: w.player, project: w.project, id: 3, farm, asset, collection: w.collection, roll: 6, nonce: 77n, boxes: { 6: lootBox } })]);
   const orderAddress = pda.order(w.project, w.player, loot.nonceOn(asset));
   let order = w.read('Order', orderAddress);
   assert.deepEqual([order.status, order.held], ['Waiting', true]);

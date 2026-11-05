@@ -8,7 +8,7 @@ import { addressBytes } from '../chain/base58.js';
 import { concat, uintLE } from '../chain/bytes.js';
 import { parseCoreAsset } from '../chain/core.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit } from '../chain/programs.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
 import { mintToIx } from '../chain/token.js';
 import { EXECUTE_DISCRIMINATOR, validationAddress } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
@@ -122,7 +122,9 @@ t('a craft’s roll on the hero it keeps (RollOn) of a box paying in a hooked co
     w.upsert({ Recipe: { id: 2, args: recipeArgs([{ Use: { item: HERO } }], [{ RollOn: { box_id: ANVIL, place: 0 } }]) } });
     const nonce = loot.nonceOn(hero);
     const craft = [computeUnitLimit(1_000_000), loot.craftIx({ player: w.player, project: w.project, collection: w.collection, id: 2, recipe: recipe(w, 2), assets: [hero], nonce, items: items(w), programs, ...rolls() })];
-    const order = pda.order(w.project, w.player, nonce);
+    // The anvil only rolls on the hero, holding nothing: its order is at `prizeRollNonce` of the nonce named.
+    const order = pda.order(w.project, w.player, loot.namedRollNonce(w.read('LootBox', pda.box(w.project, ANVIL)), hero, nonce));
+    assert.equal(order, pda.order(w.project, w.player, loot.prizeRollNonce(nonce)));
     if (hooked) {
       assert.throws(() => w.chain.send(w.player, craft), /PrizeHasHook/);
       assert.equal(w.chain.get(order), null, 'no roll made');
@@ -240,4 +242,35 @@ t('the checker counts a roll’s prize mints in a craft and a bundle buy', () =>
   const said = (prizes) => { const r = check(spec(prizes)); return [...r.refusals, ...r.warnings].filter((x) => ['E-TX-SIZE', 'W-TX-V0'].includes(x.code)).map((x) => `${x.code} ${x.where}`); };
   assert.deepEqual(said(['a']), []);
   assert.deepEqual(said(['a', 'b', 'c', 'd', 'e']), ['W-TX-V0 economy.boxes.bundle']);
+});
+
+t('a lottery paid in a hooked coin sweeps a step a call: its common share, then its pot; the round stays Drawn until then', () => {
+  const w = world({ seed: 'hooked-sweep' });
+  const coin = hookedMint(w);
+  // The test hook counts each transfer in an account its list names: a list of one.
+  const counter = newAddress(w.random);
+  w.chain.put(validationAddress(coin, HOOK), { owner: HOOK, lamports: w.chain.rent(51), data: concat(EXECUTE_DISCRIMINATOR, uintLE(39, 4), uintLE(1, 4), Uint8Array.of(0), addressBytes(counter), Uint8Array.of(0, 1)) });
+  w.chain.put(counter, { owner: HOOK, lamports: w.chain.rent(16), data: new Uint8Array(16) });
+  const programs = { [coin]: TOKEN_2022_PROGRAM };
+  // What every transfer of the coin carries: the hook program, its list and the account the list names.
+  const extra = [{ pubkey: HOOK, isSigner: false, isWritable: false }, { pubkey: validationAddress(coin, HOOK), isSigner: false, isWritable: false }, { pubkey: counter, isSigner: false, isWritable: true }];
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  const address = pda.lottery(w.project, 1);
+  const lottery = w.read('Lottery', address);
+  const buyers = [w.who(), w.who()];
+  for (const buyer of buyers) {
+    w.chain.send(w.creator, [createAssociatedTokenAccountIdempotent(w.creator, buyer, coin, TOKEN_2022_PROGRAM), mintToIx({ mint: coin, to: loot.ata(buyer, coin, TOKEN_2022_PROGRAM), authority: w.creator, amount: 10_000n, tokenProgram: TOKEN_2022_PROGRAM })]);
+    w.chain.send(buyer, [loot.buyTicketsIx({ player: buyer, project: w.project, id: 1, lottery, round: w.round(1)?.round ?? null, count: 2n, programs, extra })]);
+  }
+  w.chain.warp(w.chain.now() + 3601);
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  const treasury = loot.ata(w.treasury, coin, TOKEN_2022_PROGRAM);
+  const steps = [];
+  for (let at = w.round(1); at.round.status === 'Drawn'; at = w.round(1)) {
+    w.chain.send(w.cranker, [computeUnitLimit(1_400_000), loot.settleRoundIx({ payer: w.cranker, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState(), programs, extra })]);
+    steps.push(w.round(1).round.status);
+    assert.ok(steps.length <= 3, 'a sweep of one share and a pot is two steps');
+  }
+  assert.deepEqual(steps, ['Drawn', 'Swept'], 'the share, then the pot');
+  assert.equal(w.chain.tokens(treasury), 400n, 'the treasury’s 10% of 4,000');
 });
