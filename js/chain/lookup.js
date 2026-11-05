@@ -222,12 +222,14 @@ async function freshSlot(rpc, payer) {
  * first (`planTable`); else the table first, then each compressed NFT's prove_leaf alone, then the rest as v0 (or the
  * proofs then a legacy rest, when that fits with no table). The v0 transaction is compiled against the table as the
  * chain holds it. `sign(message)` → the signed wire transaction. `rpc`: the client's (latestBlockhash, send, confirm,
- * account, call('getSlot')). `table: false` sends no lookup table (a throwaway key holds no rent for one); `first`:
+ * account, call('getSlot')). `standing`: tables already made ([{ address, addresses }], a project's, active), tried
+ * first: one v0 transaction with them when they hold enough. `table: false` sends no lookup table of its own (a throwaway
+ * key holds no rent for one); `first`:
  * addresses a table holds first (`planTable`). Throws a
  * plain sentence when it can't be sent. Returns { signature (the last transaction's), table (its address, or null),
  * steps (the signatures of the transactions before it) }.
  */
-export async function sendFitting({ rpc, payer, instructions, sign, table = true, alone = () => false, first = [], sleep = pause }) {
+export async function sendFitting({ rpc, payer, instructions, sign, table = true, alone = () => false, first = [], standing = [], sleep = pause }) {
   const sendOne = async (build) => {
     const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();
     const message = build(blockhash);
@@ -240,6 +242,10 @@ export async function sendFitting({ rpc, payer, instructions, sign, table = true
   const plan = sendPlan({ payer, blockhash, instructions, alone });
   if (!plan) throw new Error(`This transaction is too large to send even as a v0 one with a lookup table: it names ${tableAccounts(instructions).length + 1} accounts or more (a transaction locks at most 64), or its instructions are too long.`);
   if (plan.legacy) return { signature: await plain(instructions), table: null, steps: [] };
+  // Standing tables (a project's, made at go-live; each still active) that hold enough of its accounts: one v0
+  // transaction with them, and no table of its own.
+  const fits = standing.length && compileFitting({ payer, blockhash, instructions, tables: standing });
+  if (fits && fits[0] === 0x80) return { signature: await sendOne((bh) => compileMessage({ payer, blockhash: bh, instructions, version: 0, lookupTables: standing })), table: null, steps: [] };
   if (plan.table && !table) throw new Error(`This transaction takes ${sizeOf({ payer, blockhash, instructions })} bytes, more than the ${MAX_TRANSACTION_BYTES} a legacy one holds, and this key holds no rent for a lookup table.`);
   const steps = [];
   const proofs = async () => {

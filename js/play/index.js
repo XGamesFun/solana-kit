@@ -416,6 +416,23 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
    * go alone, after the table and before the rest.
    */
+  /**
+   * The project's standing lookup tables (made at go-live, `spec.live.tables`), each as the chain holds it now: one
+   * deactivated (or gone) is left out, and a transaction then makes a table of its own as before.
+   */
+  let standingTables = null;
+  async function standing() {
+    standingTables ??= (async () => {
+      const addresses = spec.live?.tables ?? [];
+      const found = addresses.length ? await client.accounts(addresses) : [];
+      return addresses.flatMap((address, i) => {
+        const table = readTable(found[i] && { ...found[i], owner: found[i].owner ?? LOOKUP_TABLE_PROGRAM });
+        return table && table.deactivationSlot === null ? [{ address, addresses: table.addresses }] : [];
+      });
+    })();
+    return standingTables;
+  }
+
   async function send(instructions, extra = [], { keepWrapped = false } = {}) {
     if (!wallet?.address) throw new Error('Connect a wallet first.');
     if (!keepWrapped) instructions = await unwrapAfter(instructions);
@@ -425,7 +442,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       return wallet.signTransaction(wireTransaction(message, sigs));
     };
     // The project first in a table, so claims() knows a table whose later steps were never sent as this project's.
-    return (await sendFitting({ rpc: client, payer: wallet.address, instructions, sign, alone: isProveLeaf, first: [project] }).catch(inWords)).signature;
+    return (await sendFitting({ rpc: client, payer: wallet.address, instructions, sign, alone: isProveLeaf, first: [project], standing: await standing() }).catch(inWords)).signature;
   }
 
   /**
@@ -443,11 +460,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   }
 
   /**
-   * Build, sign with `key` alone (it pays), send and confirm: a throwaway key's transaction. No wallet prompt. Legacy
-   * only: the key holds no rent for a lookup table.
+   * Build, sign with `key` alone (it pays), send and confirm: a throwaway key's transaction. No wallet prompt. Legacy,
+   * or v0 with the project's standing tables (which cost it nothing); the key holds no rent for a table of its own.
    */
   async function sendAs(key, instructions) {
-    return (await sendFitting({ rpc: client, payer: key.address, instructions, sign: async (message) => wireTransaction(message, [await key.sign(message)]), table: false }).catch(inWords)).signature;
+    return (await sendFitting({ rpc: client, payer: key.address, instructions, sign: async (message) => wireTransaction(message, [await key.sign(message)]), table: false, standing: await standing() }).catch(inWords)).signature;
   }
 
   /**
@@ -2111,7 +2128,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const recent = mineTables.length ? await recentSlots() : [];
       for (const { pubkey, account } of mineTables) {
         const table = readTable({ ...account, owner: account.owner ?? LOOKUP_TABLE_PROGRAM });
-        if (!table || table.authority !== me) continue;
+        // The project's standing tables are never a transaction's own: never retired here.
+        if (!table || table.authority !== me || (spec.live?.tables ?? []).includes(pubkey)) continue;
         const step = tableStep(table, slot, recent);
         const rent = show(BigInt(account.lamports ?? 0), 9);
         if (step === 'close') out.push({ kind: 'lookup-table', table: pubkey, says: `${rent} SOL of rent back from a lookup table a large transaction of yours used.` });

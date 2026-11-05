@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { LOOKUP_TABLE_PROGRAM, readTable } from '../chain/lookup.js';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
@@ -70,6 +71,10 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
     lotteries: [{ key: 'daily', name: 'Daily', price: 0.001, every: '1h' }],
     auctions: [{ key: 'sunset', name: 'Sunset', lot: { item: 'art' }, reserve: 0.01, runs: '1h' }],
   });
+  // Going live made the project's standing lookup table, its addresses on chain.
+  assert.equal(live.live.tables?.length, 1, 'one standing table');
+  const standing = readTable(w.chain.get(live.live.tables[0]) && { ...w.chain.get(live.live.tables[0]), owner: LOOKUP_TABLE_PROGRAM });
+  assert.ok(standing.addresses.includes(live.live.project) && standing.authority === owner.address);
   const wallet = asWallet(player);
   const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
   const theirs = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(rival), now: () => w.chain.now() });

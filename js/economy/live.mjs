@@ -15,9 +15,10 @@ export function freshAddresses(names, random = randomBytes) {
  * The transactions that put `economy` live for `owner`, with `keys` the addresses of the fresh accounts (each signs
  * the transaction that creates it). `live`: what is already live (a change publishes only what differs).
  */
-export function prepare(economy, { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null }) {
+export function prepare(economy, { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null }) {
   const m = model(economy, { now });
-  const ctx = setupContext(m, { owner, keys, live: live ?? {}, rent });
+  // `slot`: a recent slot (in the slot hashes now), which the project's standing lookup table is made at.
+  const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent }), slot };
   const p = plan(economy, { now, ctx, live, only });
   if (!p.ok) return p;
   return { ...p, ctx };
@@ -52,6 +53,7 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
     // A project made with no collection (`"collection": false`) has none to write: the schema takes an address only.
     ...(ctx.collection ? { collection: ctx.collection } : {}),
     ...(ctx.tree ? { tree: ctx.tree } : {}),
+    ...(ctx.tables?.length ? { tables: ctx.tables } : {}),
     treasury: ctx.treasury,
     authority: ctx.authority,
     ...(Object.keys(mints).length ? { mints } : {}),

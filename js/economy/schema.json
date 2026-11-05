@@ -2065,6 +2065,13 @@
           "$ref": "#/$defs/address",
           "description": "The project's tree of compressed NFTs, once the setup opened it."
         },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/address"
+          },
+          "description": "The project's standing lookup tables, made at go-live (the owner their authority): a transaction too big for a legacy one goes as v0 with them, in one approval."
+        },
         "treasury": {
           "$ref": "#/$defs/address"
         },

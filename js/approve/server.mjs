@@ -13,6 +13,8 @@ import { spawn } from 'node:child_process';
 import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
+import { slotHashes, tableAddress } from '../chain/lookup.js';
+import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
@@ -170,7 +172,9 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       return rents.get(bytes);
     };
     const addresses = Object.fromEntries([...keys].map(([n, k]) => [n, k.address]));
-    const p = prepare(spec, { owner, keys: addresses, live: live() ?? {}, now: at, rent, only });
+    // A recent slot, for the project's standing lookup table (made at go-live at a slot still in the slot hashes when it lands).
+    const hashes = slotHashes((await chain.account(SYSVAR_SLOT_HASHES).catch(() => null))?.data);
+    const p = prepare(spec, { owner, keys: addresses, live: live() ?? {}, now: at, rent, only, slot: hashes[0] ?? null });
     if (!p.ok) throw new ApproveError(400, describe({ refusals: p.refusals, warnings: [] }));
     return p;
   }
@@ -399,6 +403,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       ...(ids.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
       ...(ids.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(ids.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
+      ...(ids.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
       ...(Object.keys(mints).length ? { mints } : {}),
     };
   }
@@ -479,6 +484,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       ...(made.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
       ...(made.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
+      ...(made.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
       mints,
       landed: [...new Set([...(was.landed ?? []), ...ids])],
       partial: true,
@@ -496,7 +502,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     if (rest.ok && rest.transactions.length === 0) {
       const { live: _, ...bare } = spec;
       // Everything the setup made, whichever session or transaction made it.
-      const all = { ...ctx, ...Object.fromEntries(['project', 'treasury', 'authority', 'collection', 'tree'].map((k) => [k, progress[k] ?? ctx[k]])), mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) } };
+      const all = { ...ctx, ...Object.fromEntries(['project', 'treasury', 'authority', 'collection', 'tree', 'tables'].map((k) => [k, progress[k] ?? ctx[k]])), mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) } };
       const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
       final.live = { ...final.live, transactions: progress.transactions };
       spec = final;

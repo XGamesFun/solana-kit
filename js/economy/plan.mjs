@@ -8,7 +8,9 @@
 // sized and shown before anyone connects a wallet.
 import { encodeBase58 } from '../chain/base58.js';
 import { createCollectionInstruction } from '../chain/core.js';
-import { NATIVE_MINT, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { ASSOCIATED_TOKEN_PROGRAM, NATIVE_MINT, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { createTableIx, extendTableIx } from '../chain/lookup.js';
+import { MEMO_PROGRAM } from '../chain/token2022.js';
 import { createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx, setAuthorityIx, transferCheckedIx } from '../chain/token.js';
 import { compileMessage, transactionSize } from '../chain/tx.js';
@@ -509,6 +511,39 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       ],
     });
 
+  // The token accounts players' purchases would otherwise open (the owner pays their rent now, about 0.002 SOL each,
+  // so no player's purchase pays another wallet's): the treasury's of each coin the economy takes, the project's vault
+  // of each coin a box or an auction holds, and each fixed wallet's a split pays.
+  const accounts = goLiveAccounts(m);
+  if (fresh && accounts.length)
+    add({
+      id: 'accounts',
+      part: 'project',
+      says: `Open ${accounts.length} token account${accounts.length === 1 ? '' : 's'} the economy pays into (the treasury’s, the project’s vaults, the wallets its splits name), so no player’s purchase opens them`,
+      creates: accounts.map((x) => ({ what: `${x.who}’s account of ${m.tokens.get(x.token)?.symbol ?? x.token}`, bytes: 165 })),
+      build: (ctx) => accounts.map((x) => createAssociatedTokenAccountIdempotent(ctx.owner, x.who === 'the project' ? ctx.project : x.who === 'the treasury' ? ctx.treasury : x.who, ctx.mints[x.token], programsOf(ctx)[ctx.mints[x.token]] ?? TOKEN_PROGRAM)),
+    });
+
+  // The project's standing lookup table (the owner its authority): the addresses its transactions name most, so a
+  // transaction too big for a legacy one goes as v0 with it in one approval, never with a table of its own. Made with
+  // the first of its addresses, then extended a group a step.
+  if (fresh) {
+    const named = standingAddresses(m);
+    groupsOf(named, TABLE_GROUP).forEach((group, i) =>
+      add({
+        id: i ? `table:${i}` : 'table',
+        part: 'project',
+        says: i ? `Add ${group.length} more addresses to the project’s lookup table` : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
+        creates: i ? [{ what: `room for ${group.length} addresses in the lookup table`, bytes: 32 * group.length, grows: true }] : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
+        build: (ctx) => {
+          // With no recent slot known (a plan built offline), there is no table to make.
+          if (ctx.slot == null) return [];
+          const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
+          return [...(i ? [] : [instruction]), extendTableIx({ table, authority: ctx.owner, addresses: group.map((at) => at(ctx)).filter(Boolean) })];
+        },
+      }));
+  }
+
   for (const p of m.pools) {
     const t = m.tokens.get(p.currency);
     add({ id: `pool:${p.key}`, part: `pool:${p.key}`, says: `Open the pool “${p.key}” for ${t?.symbol}`, creates: [{ what: `the pool “${p.key}”`, bytes: 165 }], build: (ctx) => [loot.openPoolIx({ owner: ctx.owner, project: project(ctx), index: p.index, mint: ctx.mints[p.currency] })] });
@@ -735,7 +770,47 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     const lamports = toUnits(g.fund, 9);
     add({ id: `fund:${g.key}`, part: `fund:${g.key}`, says: `Put ${g.fund} SOL in the funds of the grant “${g.name}” (they pay each claim’s rent)`, build: (ctx) => [transferLamports(ctx.owner, loot.pda.grant(project(ctx), g.id), lamports)] });
   }
-  return { steps, model: m };
+  // The authority's steps go last: the owner approves theirs in one batch, the authority theirs in another.
+  return { steps: [...steps.filter((x) => !x.signers.includes('authority')), ...steps.filter((x) => x.signers.includes('authority'))], model: m };
+}
+
+/** The token accounts going live opens (`setupSteps`): [{ who ('the treasury', 'the project' or a wallet), token }], each
+ * once, for the coins the economy takes in. */
+export function goLiveAccounts(m) {
+  const out = new Map();
+  const add = (who, token) => token && out.set(`${who}|${token}`, { who, token });
+  const takes = (part, token = part.currency ?? m.currencyKey) => {
+    add('the treasury', token);
+    for (const s of sharesOf(part.split)) if (s.kind === 'wallet') add(s.key, token);
+  };
+  for (const b of m.allBoxes) takes(b), add('the project', b.currency ?? m.currencyKey);
+  for (const p of m.payments) takes(p);
+  for (const l of m.lotteries) if (!l.ticketNft) takes(l, l.ticketCurrency ?? l.currency ?? m.currencyKey);
+  for (const a of m.auctions) if (!a.bidNfts) takes(a), add('the project', a.currency ?? m.currencyKey);
+  return [...out.values()];
+}
+
+/** How many addresses one step adds to the project's lookup table (each extension its own transaction). */
+const TABLE_GROUP = 24;
+
+/**
+ * The addresses a project's transactions name most, for its standing lookup table: loot's own fixed accounts (the
+ * platform, the oracle's), the project and its fee box, its treasury and collections, each coin's mint, its vault and
+ * the treasury's account of it, then each pool, item, box and stash. Each a function of the go-live context.
+ */
+export function standingAddresses(m) {
+  const fixed = [loot.LOOT_PROGRAM, loot.pda.platform(), loot.pda.identity(), loot.VRF_PROGRAM, loot.VRF_QUEUE, loot.MPL_CORE_PROGRAM, TOKEN_PROGRAM, TOKEN_2022_PROGRAM, ASSOCIATED_TOKEN_PROGRAM, SYSTEM_PROGRAM, SYSVAR_SLOT_HASHES, SYSVAR_INSTRUCTIONS, MEMO_PROGRAM].map((a) => () => a);
+  const programOf = (ctx, key) => programsOf(ctx)[ctx.mints[key]] ?? TOKEN_PROGRAM;
+  return [
+    ...fixed,
+    (ctx) => ctx.project, (ctx) => loot.pda.fees(ctx.project), (ctx) => ctx.treasury,
+    ...(m.collection ? [(ctx) => ctx.collection] : []),
+    ...[...m.tokens.values()].flatMap((t) => [(ctx) => ctx.mints[t.key], (ctx) => ctx.mints[t.key] && loot.ata(ctx.project, ctx.mints[t.key], programOf(ctx, t.key)), (ctx) => ctx.mints[t.key] && loot.ata(ctx.treasury, ctx.mints[t.key], programOf(ctx, t.key))]),
+    ...m.pools.map((p) => (ctx) => loot.pda.pool(ctx.project, p.index)),
+    ...m.items.map((it) => (ctx) => loot.pda.item(ctx.project, it.id)),
+    ...m.allBoxes.map((b) => (ctx) => loot.pda.box(ctx.project, b.id)),
+    ...m.stashes.map((s) => (ctx) => loot.pda.stash(ctx.project, s.id)),
+  ].slice(0, 256);
 }
 
 /** How many Core NFTs one `stash` call puts in (`Piece::another`: three accounts each after the first). */
@@ -792,6 +867,7 @@ export function placeholderContext(m, { rent = (bytes) => (BigInt(bytes) + ACCOU
     mints,
     keys: { ...(collection ? { 'new:collection': collection } : {}), ...(tree ? { 'new:tree': tree } : {}), ...Object.fromEntries([...m.tokens.values()].map((t) => [`new:mint/${t.key}`, placeholderKey(`new:mint/${t.key}`)])) },
     rent,
+    slot: 0n,
   };
 }
 
@@ -858,6 +934,8 @@ export function pack(steps, ctx) {
   const sizeOf = (instructions) => stepBytes(instructions, ctx);
   for (const step of steps) {
     const instructions = step.build(ctx);
+    // A step with nothing to send (the lookup table of a plan built with no recent slot) is left out.
+    if (!instructions.length) continue;
     const signerKind = step.signers.includes('authority') ? 'authority' : 'owner';
     if (current && current.signer === signerKind) {
       const next = [...current.instructions, ...instructions];
@@ -895,7 +973,8 @@ export function plan(economy, { now = Math.floor(Date.now() / 1000), ctx = null,
     warnings: checked.warnings,
     steps,
     transactions,
-    approvals: Math.max(1, Math.ceil(transactions.filter((t) => t.signer === 'owner').length / PER_APPROVAL)) + (transactions.some((t) => t.signer === 'authority') ? 1 : 0),
+    // A wallet approves up to PER_APPROVAL transactions at once: the owner's, then the authority's (its steps go last).
+    approvals: Math.max(1, Math.ceil(transactions.filter((t) => t.signer === 'owner').length / PER_APPROVAL)) + Math.ceil(transactions.filter((t) => t.signer === 'authority').length / PER_APPROVAL),
     freshKeys: [...new Set(steps.flatMap((s) => s.signers.filter((x) => x.startsWith('new:'))))],
   };
 }

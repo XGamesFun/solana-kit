@@ -19,19 +19,19 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
       groups of several NFTs (stake/unstake/harvest/stash/hold/release/Make)
 - [x] grant: voucher v5 (`prefix || sha256(body)`), rounds list, shards, close_shard, 400k compute on claims
 - [x] verdict v4, u16 sides
-- [~] economy: schema, checker, plan, simulate, cost, explain (places as runs, Raffled, contest cap, shard bits)
+- [x] economy: schema, checker, plan, simulate, cost, explain (places as runs, Raffled, contest cap, shard bits)
 - [x] play: lottery, contest, grant, farm, hold flows
-- [~] mcp, cli, skill text (mcp tool text done; skill, docs/program.md, CHANGELOG to do)
+- [x] mcp, cli, skill text, docs/program.md, CHANGELOG
 - [x] tests green
 
 ## Client-only items (plan "The client, with no program change")
 
 - [ ] 1 key job rule
 - [ ] 2 rolls in one prompt
-- [ ] 3 standing lookup tables
+- [x] 3 standing lookup tables (the project's, made at go-live, used by play's sends and keys; loot's frozen cluster table not made: needs the loot team's key)
 - [ ] 4 packing rule
-- [ ] 5 owner flows
-- [ ] 6 go-live accounts
+- [x] 5 owner flows (authority steps last, approvals counted per signer, stash NFTs a group a call)
+- [x] 6 go-live accounts
 - [ ] AGENTS.md key rule
 
 ## Notes

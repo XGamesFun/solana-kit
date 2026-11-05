@@ -64,9 +64,11 @@ test('a sale and a payment pay a share to plain wallets', { skip: skip ?? false 
   });
   const singerSol = associatedTokenAddress(singer.address, NATIVE_MINT);
   const artistSol = associatedTokenAddress(artist.address, NATIVE_MINT);
-  assert.equal(await w.chain.rpc.account(singerSol), null, 'going live opens no payee’s account');
+  // Going live opens each fixed payee's account of the coin (the owner pays its rent), so no player's sale does.
+  assert.ok(await w.chain.rpc.account(singerSol), 'going live opens the singer’s account');
+  assert.ok(await w.chain.rpc.account(artistSol), 'and the artist’s');
   const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
-  assert.ok((await app.buy('track', { listing: (await app.shop()).find((l) => l.key === 'track') })).asset, 'the sale settles, and opens the singer’s and the artist’s SOL accounts');
+  assert.ok((await app.buy('track', { listing: (await app.shop()).find((l) => l.key === 'track') })).asset, 'the sale settles');
   assert.equal(await w.chain.rpc.tokenBalance(singerSol), 3_000_000n);
   assert.equal(await w.chain.rpc.tokenBalance(artistSol), 2_000_000n);
   await app.pay('tip');

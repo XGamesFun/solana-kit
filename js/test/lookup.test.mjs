@@ -8,9 +8,9 @@ import { describe, test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
-import { compileFitting, deactivateTableIx, LOOKUP_TABLE_PROGRAM, planTable, readTable, tableAccounts, tableStep, TABLE_COOLDOWN_SLOTS } from '../chain/lookup.js';
+import { compileFitting, createTableIx, deactivateTableIx, extendTableIx, LOOKUP_TABLE_PROGRAM, planTable, readTable, slotHashes, tableAccounts, tableStep, TABLE_COOLDOWN_SLOTS } from '../chain/lookup.js';
 import { computeUnitLimit, meta, transferLamports } from '../chain/programs.js';
-import { COMPUTE_BUDGET_PROGRAM } from '../chain/pda.js';
+import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MAX_TRANSACTION_BYTES, readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
@@ -88,7 +88,7 @@ const asWallet = (kp, signed) => ({
 });
 
 /** A box that gives three NFTs of a stash and pays four holders' shares, and a player's app. */
-function bigBox(seed) {
+function bigBox(seed, { standing = null } = {}) {
   const w = world({ seed });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const relics = [0, 1, 2].map(() => w.make(1, w.authority));
@@ -112,6 +112,17 @@ function bigBox(seed) {
     boxes: [{ key: 'chest', name: 'Chest', id: 1 }, { key: 'small', name: 'Small', id: 2 }],
     live: { project: w.project, collections: [w.collection], mints: { gold: w.mint } },
   };
+  // A project's standing lookup table (made at go-live; here by hand): the addresses its settles name most.
+  if (standing) {
+    const [slot] = slotHashes(w.chain.get(SYSVAR_SLOT_HASHES).data);
+    const { address, instruction } = createTableIx({ authority: w.creator, slot });
+    const vault = loot.vault(w.project, w.mint);
+    const names = [w.project, loot.pda.fees(w.project), loot.pda.platform(), w.mint, vault, loot.ata(w.treasury, w.mint), loot.pda.stash(w.project, 4), w.collection, loot.MPL_CORE_PROGRAM, ...relics, ...holders.flatMap((h) => [h.asset, h.owner, loot.ata(h.owner, w.mint)])];
+    w.chain.send(w.creator, [instruction, extendTableIx({ table: address, authority: w.creator, addresses: names })]);
+    if (standing === 'deactivated') w.chain.send(w.creator, [deactivateTableIx({ table: address, authority: w.creator })]);
+    w.chain.nextSlot();
+    spec.live.tables = [address];
+  }
   const signed = [];
   const sent = [];
   const rpc = { ...w.chain.rpc, async send(wire) { sent.push(readTransaction(wire).message); return w.chain.rpc.send(wire); } };
@@ -154,6 +165,18 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
     await app.claim(claim);
     assert.equal(w.chain.get(found.pubkey), null, 'closed');
     assert.ok((await w.chain.rpc.balance(me)) > before, 'its rent is the player’s again');
+  });
+
+  test('with the project’s standing lookup table the same settle is one v0 transaction, one prompt; a deactivated table is passed by', { skip }, async () => {
+    const { w, app, relics, signed, sent, me } = bigBox('lookup-standing', { standing: 'active' });
+    const got = await app.openBox('chest', { listing: (await app.boxes()).find((l) => l.key === 'chest') });
+    assert.equal(w.chain.get(got.order), null, 'settled');
+    assert.ok(relics.every((a) => parseCoreAsset(w.chain.get(a).data).owner === me));
+    assert.deepEqual(sent.map((m) => readMessage(m).version), ['legacy', 0, 'legacy'], 'the open, the settle with the standing table, the burner’s lamports back');
+    assert.equal(signed.length, 2, 'two prompts: the open and the settle; no table of its own');
+    const off = bigBox('lookup-standing-off', { standing: 'deactivated' });
+    await off.app.openBox('chest', { listing: (await off.app.boxes()).find((l) => l.key === 'chest') });
+    assert.deepEqual(off.sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 0, 'legacy'], 'a table of its own, as with none');
   });
 
   test('right after one’s own open, an order a lagging RPC node doesn’t show yet is read again, never “settled already”', { skip }, async () => {
