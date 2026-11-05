@@ -124,13 +124,13 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
   assert.equal(roundAt(0), null, 'the one pull paid the place and closed the round');
 
   // Nobody buys the next round; at its date the next buyer moves it on in their own transaction.
-  w.chain.warp(Number(lottery().draws_at) + 10);
+  w.chain.warp(Number(lottery().terms.draws_at) + 10);
   await theirs.buyTickets('daily', 1, { listing: (await theirs.lotteries()).find((l) => l.key === 'daily') });
   assert.equal(roundAt(1).sold, 1n);
-  assert.ok(roundAt(1).draws_at > BigInt(w.chain.now()));
+  assert.ok(roundAt(1).terms.draws_at > BigInt(w.chain.now()));
 
   // That round has one buyer. Once it is drawn, a player who didn't win may move it on; the winner pulls their place.
-  w.chain.warp(Number(roundAt(1).draws_at) + 10);
+  w.chain.warp(Number(roundAt(1).terms.draws_at) + 10);
   await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
   assert.equal(roundAt(1).status, 'Drawn');
   await app.claim((await app.claims()).find((c) => c.kind === 'settle-round'));

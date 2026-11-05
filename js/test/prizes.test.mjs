@@ -83,7 +83,7 @@ t('a lottery’s place gives a roll of a box', () => {
   w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   let lottery = w.read('Lottery', address);
-  assert.deepEqual(lottery.places, [{ bps: 7000, prize: null, times: 1 }, { bps: 0, prize: { Roll: [CHEST] }, times: 1 }], 'its places as written');
+  assert.deepEqual(lottery.terms.places, [{ bps: 7000, prize: null, times: 1 }, { bps: 0, prize: { Roll: [CHEST] }, times: 1 }], 'its places as written');
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
   w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 1n })]);

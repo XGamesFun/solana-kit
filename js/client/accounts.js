@@ -60,10 +60,9 @@ const RECORDS = [
       fields: [
         ['project', 'pubkey'], ['lottery', 'pubkey'], ['id', 'u32'], ['incarnation', 'u64'], ['round', 'u32'], ['bump', 'u8'], ['opener', 'pubkey'], ['head', 'u32'],
         ['status', { defined: { name: 'Round' } }],
-        // The terms, as the lottery had them at the round's first purchase.
-        ['revision', 'u32'], ['price', 'u64'], ['returns', 'bool'], ['mint', 'pubkey'], ['pay_mint', 'pubkey'], ['burns', 'bool'], ['fee', 'bool'],
-        ['nft_ticket', { option: { defined: { name: 'NftPrice' } } }], ['shares', { vec: { defined: { name: 'Share' } } }], ['places', { vec: { defined: { name: 'Place' } } }],
-        ['min_sold', 'u64'], ['draws_at', 'i64'],
+        // The terms, as the lottery's revision had them at the round's first purchase; whether its entries keep what
+        // arrived (a payment mint with a transfer fee).
+        ['revision', 'u32'], ['terms', { defined: { name: 'LotteryTerms' } }], ['fee', 'bool'],
         // The totals, split at each purchase, and what it still owes.
         ['sold', 'u64'], ['to_pot', 'u64'], ['common', { vec: 'u64' }], ['owed_if_cancelled', 'u32'], ['owed_if_drawn', 'u32'], ['owed', 'u32'],
         // The draw, the cursor and the sweep.
@@ -332,6 +331,11 @@ export const OWN_PAID = 1n << 63n;
 /** The bit of an entry's `k`th recipient's part. */
 export const sharePaid = (k) => 1n << BigInt(62 - k);
 
+/** The mint a lottery's tickets are paid in (`terms`: a Lottery's or a round's): its ticket mint, burned, or its pot's. */
+export const paymentMint = (terms) => (ticketsBurn(terms) ? terms.ticket_mint : terms.mint);
+/** Whether a lottery's tickets are burned: they are paid in a ticket mint of its own. */
+export const ticketsBurn = (terms) => Boolean(terms.ticket_mint) && terms.ticket_mint !== NO_ADDRESS;
+
 /** A share each buyer's own entry names a wallet for: their choice, or whoever holds a collectible then. */
 export const perBuyer = (share) => Boolean(share.to?.Chosen || share.to?.Holder);
 
@@ -349,8 +353,8 @@ export function decodeRound(data) {
   const at = Number(r.head);
   const width = Number(readUintLE(data, at, 2));
   const count = Number(readUintLE(data, at + 2, 4));
-  if (width !== entryWidth(r.shares, r.fee, r.nft_ticket != null) || data.length !== at + 6 + width * count) throw new Error('LotteryRound entries do not match its header');
-  const recipients = r.shares.filter(perBuyer).length;
+  if (width !== entryWidth(r.terms.shares, r.fee, r.terms.nft_ticket != null) || data.length !== at + 6 + width * count) throw new Error('LotteryRound entries do not match its header');
+  const recipients = r.terms.shares.filter(perBuyer).length;
   let start = 0n;
   const entries = Array.from({ length: count }, (_, i) => {
     const e = data.subarray(at + 6 + width * i, at + 6 + width * (i + 1));
@@ -358,9 +362,9 @@ export function decodeRound(data) {
     const end = word & END_BITS;
     let k = 40;
     const take = (n) => e.subarray((k += n) - n, k);
-    const amount = r.fee ? readUintLE(take(8), 0, 8) : (end - start) * BigInt(r.price);
+    const amount = r.fee ? readUintLE(take(8), 0, 8) : (end - start) * BigInt(r.terms.price);
     const to = Array.from({ length: recipients }, () => encodeBase58(take(32)));
-    const entry = { buyer: encodeBase58(e.subarray(0, 32)), start, end, paid: word & ~END_BITS, amount, to, nft: r.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS };
+    const entry = { buyer: encodeBase58(e.subarray(0, 32)), start, end, paid: word & ~END_BITS, amount, to, nft: r.terms.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS };
     start = end;
     return entry;
   });
@@ -371,7 +375,7 @@ export function decodeRound(data) {
 export const placeCount = (places) => places.reduce((n, p) => n + Number(p.times ?? 1), 0);
 
 /** The places of a round that have a winner: every place, but no more than tickets. */
-export const roundWinners = (r) => Math.min(placeCount(r.places), Number(r.sold));
+export const roundWinners = (r) => Math.min(placeCount(r.terms.places), Number(r.sold));
 
 /** The ticket that wins `place` of a drawn round: even steps around the list from first place's ticket. */
 export function ticketOfPlace(r, place) {
@@ -384,18 +388,18 @@ export function ticketOfPlace(r, place) {
 /** The run of places that holds `place`, and its first place. */
 export function runOf(r, place) {
   let first = 0;
-  for (let run = 0; run < r.places.length; run++) {
-    if (place < first + Number(r.places[run].times)) return [run, first];
-    first += Number(r.places[run].times);
+  for (let run = 0; run < r.terms.places.length; run++) {
+    if (place < first + Number(r.terms.places[run].times)) return [run, first];
+    first += Number(r.terms.places[run].times);
   }
-  return [r.places.length, first];
+  return [r.terms.places.length, first];
 }
 
 /** The places of run `run` with a winner: [first, end). */
 export function runPlaces(r, run) {
-  const first = placeCount(r.places.slice(0, run));
+  const first = placeCount(r.terms.places.slice(0, run));
   const w = roundWinners(r);
-  return [Math.min(first, w), Math.min(first + Number(r.places[run].times), w)];
+  return [Math.min(first, w), Math.min(first + Number(r.terms.places[run].times), w)];
 }
 
 /** The places of run `run` whose ticket is in `start..end` (an entry's), in order. */
@@ -463,7 +467,7 @@ export function placesOwed(r, i, run, prize) {
   if (prize && k < 0) return 0n;
   const runs = k >= 0
     ? [[BigInt(r.prizes[k].each), runPlaces(r, run)[1] - runPlaces(r, run)[0]]]
-    : r.places.map((p, j) => [bpsOf(r.pot_total, p.bps), runPlaces(r, j)[1] - runPlaces(r, j)[0]]);
+    : r.terms.places.map((p, j) => [bpsOf(r.pot_total, p.bps), runPlaces(r, j)[1] - runPlaces(r, j)[0]]);
   const [sent, arrived, from] = k >= 0 ? [r.prizes[k].sent, r.prizes[k].arrived, runPlaces(r, run)[0]] : [r.pot_sent, r.pot_arrived, 0];
   return placesIn(r, run, e.start, e.end).filter((p) => !placePaid(r, p, prize)).reduce((sum, p) => sum + splitPart(runs, sent, arrived, p - from), 0n);
 }
@@ -477,17 +481,17 @@ export function partsOwed(r, i, { places = true } = {}) {
   const e = r.entries[i];
   const parts = [];
   const drawn = r.status === 'Drawn' || r.status === 'Swept';
-  const back = r.status === 'Cancelled' || (r.returns && drawn);
+  const back = r.status === 'Cancelled' || (r.terms.returns && drawn);
   const nft = e.nft !== NO_ADDRESS;
   if ((e.amount > 0n || nft) && (back || (nft && drawn)) && !(e.paid & OWN_PAID)) parts.push('Own');
-  if (drawn && !r.returns && !r.burns) {
-    const bps = r.shares.filter(perBuyer).map((s) => s.bps);
+  if (drawn && !r.terms.returns && !ticketsBurn(r.terms)) {
+    const bps = r.terms.shares.filter(perBuyer).map((s) => s.bps);
     e.to.forEach((wallet, k) => {
       if (wallet !== NO_ADDRESS && bpsOf(e.amount, bps[k]) > 0n && !(e.paid & sharePaid(k))) parts.push({ Share: [k] });
     });
   }
   if (!places) return parts;
-  for (let run = 0; run < r.places.length; run++) {
+  for (let run = 0; run < r.terms.places.length; run++) {
     const prizeReady = r.status === 'Swept' || (r.status === 'Drawn' && r.cursor >= runPlaces(r, run)[1]);
     if (r.status === 'Swept' && placesOwed(r, i, run, false) > 0n) parts.push({ Pot: [run] });
     if (prizeReady && placesOwed(r, i, run, true) > 0n) parts.push({ Prize: [run] });

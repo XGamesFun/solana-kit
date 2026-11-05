@@ -105,7 +105,7 @@ test('Stakers’ Draw: race rewards by rank from one grant, a draw only locked s
 
   const lotteryAddress = loot.pda.lottery(project, live.lotteries.find((l) => l.key === 'draw').id);
   const lottery = () => w.read('Lottery', lotteryAddress);
-  assert.equal(lottery().returns, true);
+  assert.equal(lottery().terms.returns, true);
   const pot = await held(w, loot.pda.pot(lotteryAddress));
   assert.equal(pot, 100_000_000n + 10_000_000n, 'the seed and half a badge');
 
@@ -114,7 +114,7 @@ test('Stakers’ Draw: race rewards by rank from one grant, a draw only locked s
   const wrapped = (k) => held(w, associatedTokenAddress(k.address, NATIVE_MINT));
   const before = { alice: await wrapped(alice), bob: await wrapped(bob) };
   const round = loot.currentRound(lotteryAddress, lottery());
-  w.chain.warp(Number(lottery().draws_at));
+  w.chain.warp(Number(lottery().terms.draws_at));
   await k.claim((await k.claims()).find((c) => c.kind === 'reveal'));
   await k.claim((await k.claims()).find((c) => c.kind === 'settle-round'));
   // The stranger pays everyone, a few pulls a transaction, so what comes back lands in each buyer's account untouched.

@@ -211,7 +211,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `roll` / `callback_random` (`rollIx`, `callbackRandomIx`) | authority / oracle | J / — | a random number for the project's own use |
 | | `stash` (`stashIx`) | owner or authority | J | NFTs into a stash (or a lottery's own), each with its weight in the draws (above 0), or out to a wallet |
 | | `run_schedule` (`runScheduleIx`) | anyone | free | every due run up to `upto` (`runsDue`), one transfer |
-| Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | an entry in the current round (its first purchase opens it), naming `incarnation` and the round's `revision` (`TermsChanged`) |
+| Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | an entry in the current round (its first purchase opens it; its address names the incarnation), naming the round's `revision` (`TermsChanged`) |
 | | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | asks for a due draw (again after `STALE_SLOTS`), lands it on the round's record |
 | | `cancel_lottery` (`cancelLotteryIx`) | anyone | free | a draw unanswered 7 days after its first ask (`lotteryCancellable`) |
 | | `settle_round` (`settleRoundIx`) | anyone; its payer opens accounts | free | a drawn round's places' prizes by a cursor, then its sweep; closes a finished round |
@@ -560,11 +560,12 @@ as safe as where it pays: into a pool, tokens are the authority's once they land
 
 ## Lotteries
 
-`LotteryArgs { price, mint, shares, places, ticket_mint, every, draws_at, gate, per_wallet, nft_ticket, returns,
-min_sold }`. The prize pot is `["pot", lottery]`. The lottery keeps its terms, its incarnation, its round number and
-its next draw; each **round is a record of its own**, `["round", lottery, incarnation, round]` (`decodeRound`), opened
-by its first purchase, which copies the terms (later purchases name the round's `revision`; the gate and `per_wallet`
-are read live). The round holds its money in token accounts of its own, `["round-tokens", round, mint]`, so a cancel
+`LotteryArgs { terms, every, gate, per_wallet }`, its `terms` a `LotteryTerms { price, mint, shares, places,
+ticket_mint, draws_at, nft_ticket, returns, min_sold }` (`withDefaults` takes them beside `every` too). Tickets are paid
+in `ticket_mint` (burned) when it is set, else in `mint` (`paymentMint(terms)`). The prize pot is `["pot", lottery]`.
+The lottery keeps its terms, its incarnation and its round number; each **round is a record of its own**,
+`["round", lottery, incarnation, round]` (`decodeRound`), opened by its first purchase, which copies the terms (its
+`terms` and `revision`; later purchases name the round's `revision`; the gate and `per_wallet` are read live). The round holds its money in token accounts of its own, `["round-tokens", round, mint]`, so a cancel
 moves nothing and the pot holds only what nobody is owed. A draw more than 5 years off sells nothing (`SalesClosed`).
 
 **A purchase** appends an entry (`entryWidth`): its buyer, where its tickets end, what arrived (a fee mint), a wallet for
@@ -1029,7 +1030,7 @@ still carry the receipts. If a log is truncated, read the transaction again.
 | `OfferOpened`, `OfferClosed`, `SoldToOffer`, `Borrowed`, `Repaid` | offers and loans |
 | `Entered`, `Decided` (`side: None` when off), `Claimed` | contests |
 | `AuctionOpened`, `BidPlaced` (`ends_at` after extension), `BidRefunded`, `AuctionEnded` (`winner: None` unsold, `remainder`) | auctions |
-| `ScheduleRan` (`from`, `run`: a range of runs), `TicketsBought` (`entry`), `LotteryDrawn`, `LotteryCancelled` (`short`), `LotteryPulled` (`entry`, `part`), `LotteryPaid`, `RoundClosed`, `Crafted`, `Rolled` | mechanics |
+| `ScheduleRan` (`from`, `run`: a range of runs), `TicketsBought` (`entry`), `LotteryDrawn`, `LotteryCancelled` (`short`), `LotteryPulled` (`entry`, `buyer`: the winner of a `Pot` or `Prize` part, its run in `part`; `amount`: tokens settled, 0 for an NFT), `RoundClosed`, `Crafted`, `Rolled` | mechanics |
 | `Seated`, `Unseated` (`fee`, `leaving`, `toll`), `Harvested` (`toll`, `compounded`), `Withdrawn`, `Reweighed`, `Grown` | farms |
 | `PrizeGiven` (`winner`, `prize`, `asset`, `serial`, `amount`, `order`) | every prize given at once |
 | `TraitsSet`, `TraitsProven`, `GrantClaimed`, `RecordWritten`, `RecordClosed`, `TreeOpened` | traits, grants, `upsert`, `open_tree` |

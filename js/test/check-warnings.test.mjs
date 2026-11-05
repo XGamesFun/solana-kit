@@ -125,8 +125,8 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
 });
 
 /** A round's record as `decodeRound` reads it, for the parts it owes. */
-const round = (more = {}) => ({
-  status: 'Drawn', returns: false, burns: false, shares: [], places: [{ bps: 10_000, prize: null, times: 1 }], sold: 2n, first: 0n, cursor: 0, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n,
+const round = ({ returns = false, ...more } = {}) => ({
+  status: 'Drawn', terms: { returns, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, cursor: 0, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n,
   paid: new Uint8Array(1), prizes: [], entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }],
   ...more,
 });

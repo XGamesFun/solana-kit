@@ -95,7 +95,7 @@ test('Shelter Fair: one ticket a wallet, rent to the plot named, the shelter and
 
   const address = loot.pda.lottery((live.live.project ?? live.live.game), live.lotteries.find((l) => l.key === 'raffle').id);
   const lottery = () => w.read('Lottery', address);
-  w.chain.warp(Number(lottery().draws_at));
+  w.chain.warp(Number(lottery().terms.draws_at));
   await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
   // The sweep pays the shelter's share; the referrer's part waits in the round for its pull, and so does the place.
   await app.claim((await app.claims()).find((c) => c.kind === 'settle-round'));

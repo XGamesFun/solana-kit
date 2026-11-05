@@ -19,7 +19,10 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - **A lottery round is its own record** (`["round", lottery, incarnation, round]`, `decodeRound`), holding its money in
   accounts of its own: `settle_round` gives its places' prizes and sweeps, `pull` pays one part of one entry
   (`partsOwed`), the last closes it. Places are runs (`times`); `Prize::Raffled` draws an NFT of the lottery's own
-  stash at random. `finish_lottery_contribution` is gone.
+  stash at random. `finish_lottery_contribution` is gone. A lottery's terms are one `LotteryTerms` (`LotteryArgs {
+  terms, every, gate, per_wallet }`), which the round copies (`round.terms`, `paymentMint(terms)`); `buy_tickets`
+  names no incarnation (its round's address does); `LotteryPulled` carries the `amount` settled, and `LotteryPaid` is
+  gone.
 - **A contest's entries are one list** (`decodeEntries`); `claim(entry, nonce, forgo, end, give_up, nfts)`; winners
   share the losers' NFTs (`cap`), losers send nothing.
 - **The tail**: every route's extra accounts (hook accounts, Core's checks) come from the Memo program's account on
@@ -38,6 +41,14 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   count entries' bytes that never come back and the reserve's units.
 - js/play: lotteries read their rounds; `claims()` lists `settle-round`, `pull` and `payout`; a contest's claim picks a
   winner's share; grant claims read the shards.
+- js/play keys: a step after the wallet's prompt is a throwaway key's job (funded in that transaction for what it pays,
+  the rent minimum read from the cluster and a spare fee; simulated, sent, or else sent by the wallet; emptied back).
+  A craft, a mission left, a grant's or contest's roll prize and a roll lot the winner ends ask for their roll in the
+  same transaction and a key settles it: one prompt (`rolled`, `rolls`). `repay(asset, due)` repays alone and a key
+  sends the NFT home. `claimAll()` signs independent claims in one prompt with a wallet that signs several
+  (`signTransactions`).
+- Going live opens the project's token accounts and its share wallets' and makes a standing lookup table
+  (`live.tables`), which play's sends and keys use; the authority's steps come last.
 
 ## 0.22.0 (not released; the program is not deployed yet)
 

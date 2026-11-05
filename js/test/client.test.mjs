@@ -519,7 +519,7 @@ describe('mechanics that run by themselves', () => {
     assert.equal(w.chain.tokens(pda.roundTokens(key, w.mint)), 4000n, 'the round holds its own money');
     fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
     // A round nobody draws waits; one whose draw the oracle never answers is refunded.
-    w.chain.warp(Number(lottery.draws_at) + 30 * 86_400);
+    w.chain.warp(Number(lottery.terms.draws_at) + 30 * 86_400);
     fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
     w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery })]); // the oracle never answers
     w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);

@@ -215,9 +215,9 @@ describe('a no-loss lottery and a stake gate in a spec', () => {
   test('the plan writes them, and the checker refuses what the program would', () => {
     const m = model(given, { now: NOW });
     const lottery = lotteryArgs(m.lottery.get('draw'), m);
-    assert.equal(lottery.returns, true);
+    assert.equal(lottery.terms.returns, true);
     assert.deepEqual(lottery.gate, { Staked: { farm: `@farm:${m.farm.get('vault').id}`, at_least: 100_000_000n } }, 'the least stake in the token’s base units');
-    assert.equal(lotteryArgs({ ...m.lottery.get('draw'), noLoss: undefined }, m).returns, false);
+    assert.equal(lotteryArgs({ ...m.lottery.get('draw'), noLoss: undefined }, m).terms.returns, false);
     const refused = (edit) => {
       const spec = structuredClone(given);
       edit(spec);
@@ -264,8 +264,8 @@ describe('a bundle bought at once, a list gate, NFTs as the price, in a spec', (
     const trade = recipeArgs(m.recipe.get('trade-in'), m).inputs[0].Trade;
     assert.deepEqual(trade.then, { Stash: [m.stash.get('returns').id] });
     const lottery = lotteryArgs(m.lottery.get('shield-raffle'), m);
-    assert.equal(lottery.price, 0n);
-    assert.equal(lottery.nft_ticket.then, 'Burn');
+    assert.equal(lottery.terms.price, 0n);
+    assert.equal(lottery.terms.nft_ticket.then, 'Burn');
     // What the program refuses, the checker refuses first.
     const refused = (edit) => {
       const spec = structuredClone(given);
@@ -483,7 +483,7 @@ describe('stashes and prizes in a spec', () => {
     const box = (key) => m.box.get(key).id;
     assert.deepEqual(grantArgs(m.grants[0], m).gives, { Roll: [box('daily-chest')] });
     const rare = base.stashes[2].nfts[0].asset;
-    assert.deepEqual(lotteryArgs(m.lotteries[0], m).places, [{ bps: 0, prize: { Nft: { stash: m.stash.get('rare').id, nft: rare } }, times: 1 }, { bps: 9000, prize: null, times: 1 }]);
+    assert.deepEqual(lotteryArgs(m.lotteries[0], m).terms.places, [{ bps: 0, prize: { Nft: { stash: m.stash.get('rare').id, nft: rare } }, times: 1 }, { bps: 9000, prize: null, times: 1 }]);
     assert.deepEqual(farmArgs(m.farms[0], m).tiers[0].prize, { Roll: [box('daily-chest')] });
     assert.deepEqual(prizeArgs({ gives: 'tokens', amount: 2, from: 'mint', currency: 'shards' }, m), { Tokens: { from: { Mint: ['@mint:shards'] }, amount: { Fixed: [2_000_000n] } } });
     assert.deepEqual(prizeArgs({ gives: 'share', pool: 'shard-rewards', percent: 10 }, m), { Tokens: { from: { Pool: [m.pool.get('shard-rewards').index] }, amount: { Bps: [1000] } } });

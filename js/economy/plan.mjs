@@ -219,23 +219,26 @@ export function lotteryArgs(l, m) {
   const ticket = l.ticketCurrency ? m.tokens.get(l.ticketCurrency) : potToken;
   const every = toSeconds(l.every);
   return {
-    price: l.ticketNft ? 0n : amount(l.price, ticket),
-    mint: `@mint:${potKey}`,
-    shares: shares(lotterySplit(l), m),
-    // A place takes a share of the pot, a prize for its winner, or both.
-    // A run of `times` places alike: "places 2 to 201 each take 1%" is one.
-    places: (l.places ?? []).map(placeOf).map((p) => ({ bps: Math.round(p.percent * 100), prize: prizeOrNull(p.prize, m), times: p.times })),
-    ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : '11111111111111111111111111111111',
+    // What a round copies at its first purchase.
+    terms: {
+      price: l.ticketNft ? 0n : amount(l.price, ticket),
+      mint: `@mint:${potKey}`,
+      shares: shares(lotterySplit(l), m),
+      // A place takes a share of the pot, a prize for its winner, or both.
+      // A run of `times` places alike: "places 2 to 201 each take 1%" is one.
+      places: (l.places ?? []).map(placeOf).map((p) => ({ bps: Math.round(p.percent * 100), prize: prizeOrNull(p.prize, m), times: p.times })),
+      ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : '11111111111111111111111111111111',
+      draws_at: BigInt(l.firstDraw ? toTime(l.firstDraw, m.now) : m.now + every),
+      // A ticket paid with one NFT that passes the rule, in place of tokens.
+      nft_ticket: l.ticketNft ? { rule: ruleOf(l.ticketNft.rule, m), then: spendOf(l.ticketNft.then, m) } : null,
+      // No loss: every ticket goes back to its buyer once the round is drawn; the winners take the pot alone.
+      returns: Boolean(l.noLoss),
+      // A least sale: a round that sold fewer tickets is cancelled at its draw and refunded.
+      min_sold: BigInt(l.minSold ?? 0),
+    },
     every: BigInt(every),
-    draws_at: BigInt(l.firstDraw ? toTime(l.firstDraw, m.now) : m.now + every),
     gate: gateOf(l.gate, m),
     per_wallet: l.perWallet ?? 0,
-    // A ticket paid with one NFT that passes the rule, in place of tokens.
-    nft_ticket: l.ticketNft ? { rule: ruleOf(l.ticketNft.rule, m), then: spendOf(l.ticketNft.then, m) } : null,
-    // No loss: every ticket goes back to its buyer once the round is drawn; the winners take the pot alone.
-    returns: Boolean(l.noLoss),
-    // A least sale: a round that sold fewer tickets is cancelled at its draw and refunded.
-    min_sold: BigInt(l.minSold ?? 0),
   };
 }
 
@@ -833,10 +836,7 @@ export const recordBytesOf = (kind, body) => {
     Recipe: () => ({ project: NOBODY, id: 0, version: 0, ...placeholders(args) }),
     Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),
     // Its terms and its round number: each round keeps the rest in a record of its own.
-    Lottery: () => {
-      const places = (args.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 }));
-      return { project: NOBODY, id: 0, pot_bump: 0, incarnation: 0n, revision: 0, ...placeholders(args), places, round: 0 };
-    },
+    Lottery: () => ({ project: NOBODY, id: 0, incarnation: 0n, revision: 0, ...placeholders(loot.withDefaults({ Lottery: { args } }).Lottery.args), round: 0 }),
     Grant: () => ({ project: NOBODY, id: 0, incarnation: 0n, ...placeholders(args), counters: { claimed: 0, today: 0, day: 0n } }),
   }[kind];
   return encodedSize(kind, base());

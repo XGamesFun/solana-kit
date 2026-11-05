@@ -678,10 +678,6 @@
           }
         },
         {
-          "name": "incarnation",
-          "type": "u64"
-        },
-        {
           "name": "revision",
           "type": "u32"
         }
@@ -8436,19 +8432,6 @@
       ]
     },
     {
-      "name": "LotteryPaid",
-      "discriminator": [
-        187,
-        208,
-        228,
-        188,
-        26,
-        6,
-        174,
-        127
-      ]
-    },
-    {
       "name": "LotteryPulled",
       "discriminator": [
         133,
@@ -13492,13 +13475,6 @@
             "type": "u32"
           },
           {
-            "name": "pot_bump",
-            "docs": [
-              "The bump of its prize pot."
-            ],
-            "type": "u8"
-          },
-          {
             "name": "incarnation",
             "docs": [
               "A creation identity allocated by the persistent Project: written again as a new lottery, it",
@@ -13515,65 +13491,20 @@
             "type": "u32"
           },
           {
-            "name": "price",
+            "name": "terms",
             "docs": [
-              "The price of one ticket, in the mint of the pot (or in `ticket_mint`)."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "mint",
-            "docs": [
-              "The mint of the pot, the lottery's own token account at `[\"pot\", lottery]`. Fixed."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "shares",
-            "docs": [
-              "Where ticket money goes before the pot: what they leave goes into it."
+              "The terms of its next round (its `draws_at` that round's date)."
             ],
             "type": {
-              "vec": {
-                "defined": {
-                  "name": "Share"
-                }
+              "defined": {
+                "name": "LotteryTerms"
               }
             }
-          },
-          {
-            "name": "places",
-            "docs": [
-              "What each place wins, first place first, as runs of places alike (`Place::times`)."
-            ],
-            "type": {
-              "vec": {
-                "defined": {
-                  "name": "Place"
-                }
-              }
-            }
-          },
-          {
-            "name": "ticket_mint",
-            "docs": [
-              "When set, a ticket costs `price` of this mint and is burned, and no ticket money reaches",
-              "the pot. The default address means there is none: tickets pay into the pot. It may change",
-              "between rounds: each round has its own account of it."
-            ],
-            "type": "pubkey"
           },
           {
             "name": "every",
             "docs": [
               "Seconds from one draw to the next. 0: it draws once, then ends."
-            ],
-            "type": "i64"
-          },
-          {
-            "name": "draws_at",
-            "docs": [
-              "Unix time the next round's draw is due. A round keeps its own copy from its first purchase."
             ],
             "type": "i64"
           },
@@ -13604,37 +13535,6 @@
               "The most tickets one wallet holds in a round (`counter.rs`), read at each purchase. 0: no limit."
             ],
             "type": "u32"
-          },
-          {
-            "name": "nft_ticket",
-            "docs": [
-              "When set, a ticket costs one NFT that passes its rule, in place of tokens (`price.rs`):",
-              "handed to the project as it is bought, then sent where its price says once the round is",
-              "swept (back to its buyer when it is cancelled). Such a lottery has no price and no shares."
-            ],
-            "type": {
-              "option": {
-                "defined": {
-                  "name": "NftPrice"
-                }
-              }
-            }
-          },
-          {
-            "name": "returns",
-            "docs": [
-              "No loss: every ticket goes back to its buyer once the round is drawn, and the winners take",
-              "only the pot (what is paid into it: yield, a sponsor). No shares, no ticket mint."
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "min_sold",
-            "docs": [
-              "The least tickets a round sells to be drawn: a due round that sold fewer is cancelled at its",
-              "draw. 0: no least."
-            ],
-            "type": "u64"
           }
         ]
       }
@@ -13645,54 +13545,18 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "price",
-            "type": "u64"
-          },
-          {
-            "name": "mint",
+            "name": "terms",
             "docs": [
-              "The pot's mint. Fixed once the pot is open."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "shares",
-            "docs": [
-              "Where ticket money goes before the pot (one may be the buyer's choice). Empty when tickets",
-              "are burned."
+              "Its round's terms; the pot's mint fixed once the pot is open."
             ],
             "type": {
-              "vec": {
-                "defined": {
-                  "name": "Share"
-                }
+              "defined": {
+                "name": "LotteryTerms"
               }
             }
-          },
-          {
-            "name": "places",
-            "docs": [
-              "What each run of places wins, first place first: a share of the pot, a prize, or both. Empty",
-              "means one winner who takes all."
-            ],
-            "type": {
-              "vec": {
-                "defined": {
-                  "name": "Place"
-                }
-              }
-            }
-          },
-          {
-            "name": "ticket_mint",
-            "type": "pubkey"
           },
           {
             "name": "every",
-            "type": "i64"
-          },
-          {
-            "name": "draws_at",
             "type": "i64"
           },
           {
@@ -13714,33 +13578,6 @@
               "The most tickets one wallet holds in a round (0: no limit)."
             ],
             "type": "u32"
-          },
-          {
-            "name": "nft_ticket",
-            "docs": [
-              "A ticket costs one NFT in place of tokens (`None`: tokens)."
-            ],
-            "type": {
-              "option": {
-                "defined": {
-                  "name": "NftPrice"
-                }
-              }
-            }
-          },
-          {
-            "name": "returns",
-            "docs": [
-              "Every ticket goes back to its buyer after the draw (`Lottery::returns`)."
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "min_sold",
-            "docs": [
-              "The least tickets a round sells to be drawn (`Lottery::min_sold`; 0: none)."
-            ],
-            "type": "u64"
           }
         ]
       }
@@ -13825,51 +13662,10 @@
       }
     },
     {
-      "name": "LotteryPaid",
-      "docs": [
-        "A winner was paid their places of one run: their part of the pot, or their token prize."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "project",
-            "type": "pubkey"
-          },
-          {
-            "name": "id",
-            "type": "u32"
-          },
-          {
-            "name": "incarnation",
-            "type": "u64"
-          },
-          {
-            "name": "round",
-            "type": "u32"
-          },
-          {
-            "name": "place",
-            "docs": [
-              "The run's first place."
-            ],
-            "type": "u32"
-          },
-          {
-            "name": "winner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ]
-      }
-    },
-    {
       "name": "LotteryPulled",
       "docs": [
-        "One part of a round's entry was settled."
+        "One part of a round's entry was settled: `amount`, the tokens it settled (0 for an NFT), to the",
+        "buyer, or for a recipient's part to the recipient."
       ],
       "type": {
         "kind": "struct",
@@ -13905,6 +13701,111 @@
                 "name": "Part"
               }
             }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LotteryTerms",
+      "docs": [
+        "A round's terms: written with the lottery, and copied by each round at its first purchase."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price",
+            "docs": [
+              "The price of one ticket, in the mint of the pot (or in `ticket_mint`)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "The mint of the pot, the lottery's own token account at `[\"pot\", lottery]`. Fixed once the",
+              "pot is open."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "docs": [
+              "Where ticket money goes before the pot (one may be the buyer's choice): what they leave goes",
+              "into it. Empty when tickets are burned."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Share"
+                }
+              }
+            }
+          },
+          {
+            "name": "places",
+            "docs": [
+              "What each place wins, first place first, as runs of places alike (`Place::times`): a share of",
+              "the pot, a prize, or both. Written empty: one winner who takes all."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Place"
+                }
+              }
+            }
+          },
+          {
+            "name": "ticket_mint",
+            "docs": [
+              "When set, a ticket costs `price` of this mint and is burned, and no ticket money reaches",
+              "the pot. The default address means there is none: tickets pay into the pot. It may change",
+              "between rounds: each round has its own account of it."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "draws_at",
+            "docs": [
+              "Unix time the round's draw is due."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "nft_ticket",
+            "docs": [
+              "When set, a ticket costs one NFT that passes its rule, in place of tokens (`price.rs`):",
+              "handed to the project as it is bought, then sent where its price says once the round is",
+              "swept (back to its buyer when it is cancelled). Such a lottery has no price and no shares."
+            ],
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "NftPrice"
+                }
+              }
+            }
+          },
+          {
+            "name": "returns",
+            "docs": [
+              "No loss: every ticket goes back to its buyer once the round is drawn, and the winners take",
+              "only the pot (what is paid into it: yield, a sponsor). No shares, no ticket mint."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "min_sold",
+            "docs": [
+              "The least tickets a round sells to be drawn: a due round that sold fewer is cancelled at its",
+              "draw. 0: no least."
+            ],
+            "type": "u64"
           }
         ]
       }
