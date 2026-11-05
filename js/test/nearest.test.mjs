@@ -24,12 +24,10 @@ test('every limit says why and offers at least one nearest version', () => {
 
 test('a person’s own words find the limit and its nearest versions, and ordinary asks find none', () => {
   const first = (q) => limits(q)[0]?.what ?? '';
-  assert.match(first('5-card packs for 0.004 SOL'), /more than three prizes/);
-  assert.ok(limits('5-card packs')[0].nearest[0].includes('roll'), 'a nested roll is the nearest version of a big pack');
   assert.match(first('guild dues treasury 3 of 5 officers'), /multisig/);
   assert.match(first('a weekly top tipper badge'), /top tipper/);
   assert.match(first('lend SOL against my NFT'), /lending/);
-  for (const q of ['gacha with pity', 'staking with lock tiers', 'a weekly lottery']) assert.deepEqual(limits(q), [], q);
+  for (const q of ['gacha with pity', 'staking with lock tiers', 'a weekly lottery', '5-card packs for 0.004 SOL']) assert.deepEqual(limits(q), [], q);
 });
 
 // Limits that earlier versions had and later ones removed: agents kept repeating them (one built a listing per partner
@@ -144,14 +142,9 @@ test('a tip of any amount, and another wallet as the treasury, check and explain
   assert.equal(check({ ...spec, treasury: 'shelter' }, { now: NOW }).ok, false);
 });
 
-test('voucher campaign limits disclose the bounded lifetime round history', () => {
+test('a voucher campaign pays a wallet as many rounds as its limit says: a receipt keeps every round it is paid', () => {
   const spec = { version: 2, network: 'devnet', name: 'Rewards', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], pools: [{ key: 'prizes', currency: 'sol', seed: 1 }], grants: [{ key: 'wins', name: 'Wins', gives: { pool: 'prizes', amount: 0.001 }, vouchers: [WALLET], limits: { perWallet: 1000 }, fund: 1 }] };
-  const oversized = check(spec, { now: NOW });
-  assert.ok(oversized.ok, JSON.stringify(oversized.refusals));
-  assert.ok(oversized.warnings.some((warning) => warning.code === 'W-GRANT-CAPACITY' && warning.message.includes('256')));
-  spec.grants[0].limits.perWallet = 256;
-  assert.ok(!check(spec, { now: NOW }).warnings.some((warning) => warning.code === 'W-GRANT-CAPACITY'));
-  spec.grants[0].vouchers = [];
-  spec.grants[0].limits.perWallet = 1000;
-  assert.ok(!check(spec, { now: NOW }).warnings.some((warning) => warning.code === 'W-GRANT-CAPACITY'), 'open claims consume no voucher round slots');
+  const r = check(spec, { now: NOW });
+  assert.ok(r.ok, JSON.stringify(r.refusals));
+  assert.ok(!r.warnings.some((warning) => warning.code === 'W-GRANT-CAPACITY'));
 });

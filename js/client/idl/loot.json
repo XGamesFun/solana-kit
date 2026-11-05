@@ -2,7 +2,7 @@
   "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
   "metadata": {
     "name": "loot",
-    "version": "0.20.1",
+    "version": "0.22.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"
@@ -1546,7 +1546,8 @@
           "docs": [
             "creates it, and the runtime refuses the call when it did not sign);",
             "otherwise one in `collection`, which Core checks. For `Set`, any NFT: one the project has no",
-            "authority over is a Core asset of another collection, or a Token Metadata NFT's mint."
+            "authority over is a Core asset of another collection, or a Token Metadata NFT's mint. For",
+            "`Profile`, the wallet whose profile it writes (nothing is written on it)."
           ],
           "writable": true
         },
@@ -1587,7 +1588,7 @@
         {
           "name": "sheet",
           "docs": [
-            "the first time."
+            "the first time; for `Profile`, the wallet's profile (`profile.rs`), checked by its address."
           ],
           "writable": true,
           "optional": true
@@ -1687,6 +1688,14 @@
           "name": "receipt",
           "docs": [
             "what one wallet crafts. Made at their first craft, its rent theirs."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`PROFILE_PLACE`), checked by its address (`WrongProfile`)."
           ],
           "writable": true,
           "optional": true
@@ -3607,6 +3616,10 @@
         {
           "name": "version",
           "type": "u32"
+        },
+        {
+          "name": "count",
+          "type": "u32"
         }
       ]
     },
@@ -5049,6 +5062,14 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
+          ],
+          "writable": true,
+          "optional": true
         }
       ],
       "args": []
@@ -6083,6 +6104,9 @@
         },
         {
           "name": "order",
+          "docs": [
+            "Closed to its player by its last part."
+          ],
           "writable": true
         },
         {
@@ -6272,7 +6296,26 @@
           "optional": true
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "upto",
+          "type": "u32"
+        },
+        {
+          "name": "prize_accounts",
+          "type": "u16"
+        },
+        {
+          "name": "rows",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "ProvenRow"
+              }
+            }
+          }
+        }
+      ]
     },
     {
       "name": "stake_nft",
@@ -6555,6 +6598,14 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
+          ],
+          "writable": true,
+          "optional": true
         }
       ],
       "args": [
@@ -6747,6 +6798,14 @@
           "name": "toll_pool",
           "docs": [
             "client marks the rewards' mint writable when the toll is burned."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
           ],
           "writable": true,
           "optional": true
@@ -6972,6 +7031,10 @@
         {
           "name": "out",
           "type": "bool"
+        },
+        {
+          "name": "weight",
+          "type": "u32"
         }
       ]
     },
@@ -7511,6 +7574,14 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
+          ],
+          "writable": true,
+          "optional": true
         }
       ],
       "args": [
@@ -7710,6 +7781,14 @@
           "name": "toll_pool",
           "docs": [
             "client marks the rewards' mint writable when the toll is burned."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
           ],
           "writable": true,
           "optional": true
@@ -8351,6 +8430,19 @@
       ]
     },
     {
+      "name": "OrderPartSettled",
+      "discriminator": [
+        160,
+        216,
+        137,
+        215,
+        149,
+        131,
+        185,
+        100
+      ]
+    },
+    {
       "name": "OrderRefunded",
       "discriminator": [
         120,
@@ -8426,6 +8518,19 @@
         219,
         127,
         254
+      ]
+    },
+    {
+      "name": "ProfileWritten",
+      "discriminator": [
+        148,
+        147,
+        161,
+        3,
+        122,
+        220,
+        75,
+        161
       ]
     },
     {
@@ -8709,688 +8814,708 @@
     },
     {
       "code": 6006,
-      "name": "StringTooLong",
-      "msg": "Name or URI too long"
-    },
-    {
-      "code": 6007,
       "name": "BadEntries",
       "msg": "Box needs 1 to 8 entries with non-zero weights and non-zero prizes (none that burns in wrapped SOL)"
     },
     {
-      "code": 6008,
+      "code": 6007,
       "name": "BadShares",
       "msg": "A split takes at most 4 shares (a payment: any number) that add up to 100% or less, none that burns in wrapped SOL, and only the destinations its route can pay"
     },
     {
-      "code": 6009,
+      "code": 6008,
       "name": "KindLocked",
       "msg": "An item's kind, life, soulbound and burnable flags can't change once one is issued"
     },
     {
-      "code": 6010,
+      "code": 6009,
       "name": "Paused",
       "msg": "Project is paused by its owner"
     },
     {
-      "code": 6011,
+      "code": 6010,
       "name": "Suspended",
       "msg": "Project is suspended by the platform"
     },
     {
-      "code": 6012,
+      "code": 6011,
       "name": "ZeroAmount",
       "msg": "Amount must be above zero"
     },
     {
-      "code": 6013,
+      "code": 6012,
       "name": "NotForSale",
       "msg": "Box, item or recipe is not on offer"
     },
     {
-      "code": 6014,
+      "code": 6013,
       "name": "SoldOut",
       "msg": "Item is sold out"
     },
     {
-      "code": 6015,
+      "code": 6014,
       "name": "PriceAboveMax",
       "msg": "The price is above the most the buyer agreed to pay"
     },
     {
-      "code": 6016,
+      "code": 6015,
       "name": "WrongPool",
       "msg": "A share names an account that was not passed, or the wrong account was"
     },
     {
-      "code": 6017,
+      "code": 6016,
       "name": "NotTheirAccount",
       "msg": "Money owed to a wallet goes to that wallet's associated token account of the mint"
     },
     {
-      "code": 6018,
+      "code": 6017,
       "name": "WrongMint",
       "msg": "This is not the mint the price is in"
     },
     {
-      "code": 6019,
+      "code": 6018,
       "name": "BadOrderState",
       "msg": "Order is not in the right state"
     },
     {
-      "code": 6020,
+      "code": 6019,
       "name": "NotStale",
       "msg": "Order is not stale yet"
     },
     {
-      "code": 6021,
+      "code": 6020,
       "name": "ItemMismatch",
       "msg": "Item or pool accounts don't match the box or the order"
     },
     {
-      "code": 6022,
+      "code": 6021,
       "name": "NotThePlayers",
       "msg": "This is not the player, the winner or the record it belongs to"
     },
     {
-      "code": 6023,
+      "code": 6022,
       "name": "NotCollectible",
       "msg": "Only a collectible item can be made as an asset"
     },
     {
-      "code": 6024,
+      "code": 6023,
       "name": "BadSchedule",
       "msg": "A schedule needs a period above zero; a sealed one, a mint that moves, a last run within 10 years and at most 10,000 runs, and a destination every run can pay"
     },
     {
-      "code": 6025,
+      "code": 6024,
       "name": "NotDue",
       "msg": "This is not due yet"
     },
     {
-      "code": 6026,
+      "code": 6025,
       "name": "ScheduleOver",
       "msg": "This schedule is switched off or has done its last run"
     },
     {
-      "code": 6027,
+      "code": 6026,
       "name": "BadLottery",
       "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, at most 8 places that each take something and together 100% or less, and a held prize in its own stash, once, on a lottery that draws once"
     },
     {
-      "code": 6028,
+      "code": 6027,
       "name": "RoundRunning",
       "msg": "A lottery can't be changed while tickets of its round are sold"
     },
     {
-      "code": 6029,
+      "code": 6028,
       "name": "SalesClosed",
       "msg": "Ticket sales are closed for this round"
     },
     {
-      "code": 6030,
+      "code": 6029,
       "name": "StillLocked",
       "msg": "This seat can't be taken out yet: its lock tier has not run"
     },
     {
-      "code": 6031,
+      "code": 6030,
       "name": "MoreThanStaked",
       "msg": "That is more than this position holds"
     },
     {
-      "code": 6032,
+      "code": 6031,
       "name": "BadRecipe",
       "msg": "A recipe has up to 8 lines a side, takes up to 8 collectibles, no line of it is zero, and its needs and keeps name collectibles it has"
     },
     {
-      "code": 6033,
+      "code": 6032,
       "name": "OnceAtATime",
       "msg": "A recipe that takes or makes a collectible is crafted once at a time"
     },
     {
-      "code": 6034,
+      "code": 6033,
       "name": "NeedNotMet",
       "msg": "A collectible handed in does not have the number this recipe asks for"
     },
     {
-      "code": 6035,
+      "code": 6034,
       "name": "MaxedOut",
       "msg": "That number is already as high as this recipe raises it"
     },
     {
-      "code": 6036,
+      "code": 6035,
       "name": "RecipeChanged",
       "msg": "This recipe was edited since the player saw it"
     },
     {
-      "code": 6037,
+      "code": 6036,
       "name": "NotReady",
       "msg": "This collectible is not ready yet: it is too new, or it was used too recently"
     },
     {
-      "code": 6038,
+      "code": 6037,
       "name": "Expired",
       "msg": "This collectible has expired"
     },
     {
-      "code": 6039,
+      "code": 6038,
       "name": "UsedUp",
       "msg": "This collectible has no uses left"
     },
     {
-      "code": 6040,
+      "code": 6039,
       "name": "Held",
       "msg": "The project is holding this collectible for a player"
     },
     {
-      "code": 6041,
+      "code": 6040,
       "name": "TermsChanged",
       "msg": "The signed version, incarnation or terms no longer match this record"
     },
     {
-      "code": 6042,
+      "code": 6041,
       "name": "ResultOverdue",
       "msg": "This contest is off (its result was due, or its sides held less than its least pot once entries closed): every entry takes its own money back"
     },
     {
-      "code": 6043,
+      "code": 6042,
       "name": "StillHeld",
       "msg": "This collectible is held until its time is up"
     },
     {
-      "code": 6044,
+      "code": 6043,
       "name": "HoldOver",
       "msg": "The hold on this collectible is over: it can only go back to its player"
     },
     {
-      "code": 6045,
+      "code": 6044,
       "name": "BadContest",
       "msg": "A contest needs a side or more, entries that close no later than its result is due, and a side that exists"
     },
     {
-      "code": 6046,
+      "code": 6045,
       "name": "ContestNotOpen",
       "msg": "This contest is not open"
     },
     {
-      "code": 6047,
+      "code": 6046,
       "name": "ContestOpen",
       "msg": "This contest has no result yet"
     },
     {
-      "code": 6048,
+      "code": 6047,
       "name": "EntriesOpen",
       "msg": "Entries are still open: a decider's verdict naming a side is taken once they close (a call-off at any time)"
     },
     {
-      "code": 6049,
+      "code": 6048,
       "name": "NoWinner",
       "msg": "Nobody backed that side: call the contest off instead"
     },
     {
-      "code": 6050,
+      "code": 6049,
       "name": "NotATokenAccount",
       "msg": "Not a token account"
     },
     {
-      "code": 6051,
+      "code": 6050,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6052,
+      "code": 6051,
       "name": "BadPrice",
       "msg": "A falling price needs a period above zero and a start that is not before 1970, and a window's times can't be before 1970"
     },
     {
-      "code": 6053,
+      "code": 6052,
       "name": "NotAMint",
       "msg": "Not a mint of the SPL Token program or of Token-2022"
     },
     {
-      "code": 6054,
+      "code": 6053,
       "name": "MemoNeeded",
       "msg": "A destination requires a memo: pass the Memo program with the hook's accounts"
     },
     {
-      "code": 6055,
+      "code": 6054,
       "name": "SameAccount",
       "msg": "The project can't pay into the account it pays from"
     },
     {
-      "code": 6056,
+      "code": 6055,
       "name": "SameSlot",
       "msg": "An order closes in a later slot than the one it was opened in"
     },
     {
-      "code": 6057,
+      "code": 6056,
       "name": "ToTheProject",
       "msg": "The project's own address, or an account of this program, can't be given an NFT or a grant's prize: no record holds it, so nothing could move it again"
     },
     {
-      "code": 6058,
+      "code": 6057,
       "name": "NotVoucher",
       "msg": "The voucher is not signed by one of this grant's voucher keys"
     },
     {
-      "code": 6059,
+      "code": 6058,
       "name": "VoucherExpired",
       "msg": "The voucher has expired"
     },
     {
-      "code": 6060,
+      "code": 6059,
       "name": "WrongVoucherBytes",
       "msg": "The Ed25519 check does not sign exactly this claim's voucher, once, within its own instruction"
     },
     {
-      "code": 6061,
+      "code": 6060,
       "name": "NoPrecompile",
       "msg": "This grant is claimed with a voucher (the Ed25519 check right before the claim): it has no list, and is not open"
     },
     {
-      "code": 6062,
+      "code": 6061,
       "name": "GrantClosed",
       "msg": "This grant is switched off"
     },
     {
-      "code": 6063,
+      "code": 6062,
       "name": "OverTotal",
       "msg": "This grant has given all it may"
     },
     {
-      "code": 6064,
+      "code": 6063,
       "name": "OverDay",
       "msg": "This grant has given all it may today"
     },
     {
-      "code": 6065,
+      "code": 6064,
       "name": "OverWallet",
       "msg": "This wallet has claimed this grant as often as it may"
     },
     {
-      "code": 6066,
+      "code": 6065,
       "name": "OverPerson",
       "msg": "This person has claimed this grant as often as they may"
     },
     {
-      "code": 6067,
+      "code": 6066,
       "name": "BadListProof",
       "msg": "This wallet is not on the grant's approved list"
     },
     {
-      "code": 6068,
+      "code": 6067,
       "name": "WrongGrant",
       "msg": "Not this grant, or not the accounts its reward needs"
     },
     {
-      "code": 6069,
+      "code": 6068,
       "name": "AlreadyClaimed",
       "msg": "This wallet was already paid for this round, or claimed this list"
     },
     {
-      "code": 6070,
-      "name": "ReceiptFull",
-      "msg": "This wallet has reached this grant's supported voucher history limit"
-    },
-    {
-      "code": 6071,
+      "code": 6069,
       "name": "GateNotMet",
       "msg": "This needs an NFT that passes its gate, held by the player and shown after the instruction's own accounts"
     },
     {
-      "code": 6072,
+      "code": 6070,
       "name": "BadRule",
       "msg": "A rule or a boost the program can't keep: a key or text over 32 bytes, a number test with no key, a boost over +10,000%, or more than 4"
     },
     {
-      "code": 6073,
+      "code": 6071,
       "name": "BadOdds",
       "msg": "Odds name one of the box's entries"
     },
     {
-      "code": 6074,
+      "code": 6072,
       "name": "BadFarm",
       "msg": "A farm this program can't keep: 1 to 4 lock tiers each above x0 and at most x11, at most 4 boosts, and exits, unbonding, tolls and missions only where its kind takes them"
     },
     {
-      "code": 6075,
+      "code": 6073,
       "name": "BadTier",
       "msg": "Not one of this farm's lock tiers"
     },
     {
-      "code": 6076,
+      "code": 6074,
       "name": "WrongFarm",
       "msg": "This farm takes tokens, not collectibles, or the other way round"
     },
     {
-      "code": 6077,
+      "code": 6075,
       "name": "NotFarmed",
       "msg": "This farm doesn't take this NFT: not one the player holds, not one its gate names, or a booster on a seat with no tokens"
     },
     {
-      "code": 6078,
+      "code": 6076,
       "name": "WrongSheet",
       "msg": "An NFT the project has no authority over comes with its Sheet's address right after it"
     },
     {
-      "code": 6079,
+      "code": 6077,
       "name": "SoulboundEscrow",
       "msg": "A soulbound collectible can't be escrowed: stake it in a farm that freezes"
     },
     {
-      "code": 6080,
+      "code": 6078,
       "name": "NotTheNft",
       "msg": "That is not the NFT this needs: not the one its record or stash names, not the project's, a compressed NFT where none is taken, or a tree that is not Bubblegum v2"
     },
     {
-      "code": 6081,
+      "code": 6079,
       "name": "StaleProof",
       "msg": "The proof is out of date: its root is gone from the tree's change log, its leaf changed since, or a route that calls Bubblegum twice needs its nodes current: fetch it again"
     },
     {
-      "code": 6082,
+      "code": 6080,
       "name": "NotProven",
       "msg": "Prove the compressed NFT in this transaction first (prove_leaf): its record no longer reads (its leaf changed, or its root left the tree's change log)"
     },
     {
-      "code": 6083,
+      "code": 6081,
       "name": "StillProven",
       "msg": "That record still reads: its leaf is unchanged and its root still in the tree's change log"
     },
     {
-      "code": 6084,
+      "code": 6082,
       "name": "NotTheTraits",
       "msg": "Those traits are not in the project's traits tree"
     },
     {
-      "code": 6085,
+      "code": 6083,
       "name": "NeedsCustody",
       "msg": "That roll can burn or give the NFT away: the project must hold it first (a custodial route)"
     },
     {
-      "code": 6086,
+      "code": 6084,
       "name": "FarmOver",
       "msg": "This farm has ended, or ends before that lock would"
     },
     {
-      "code": 6087,
+      "code": 6085,
       "name": "AlreadyStaked",
       "msg": "That NFT is staked here already"
     },
     {
-      "code": 6088,
+      "code": 6086,
       "name": "ShorterTier",
       "msg": "A seat's lock tier can only move to one that locks at least as long"
     },
     {
-      "code": 6089,
+      "code": 6087,
       "name": "BoosterOn",
       "msg": "Take the seat's booster off first"
     },
     {
-      "code": 6090,
+      "code": 6088,
       "name": "BoosterSlot",
       "msg": "This seat has a booster already, or has none to take off"
     },
     {
-      "code": 6091,
+      "code": 6089,
       "name": "BadMove",
       "msg": "A move this program can't make: new tokens move as a fixed amount and are never burned; a pool pays at most all it holds, never into itself; a sealed schedule's vault pays only its runs"
     },
     {
-      "code": 6092,
+      "code": 6090,
       "name": "RefreshFirst",
       "msg": "Refresh the seat first, in the same transaction (refresh_seat): its booster has grown at its tier since"
     },
     {
-      "code": 6093,
+      "code": 6091,
       "name": "WrongRecord",
       "msg": "Not one of this project's records an owner writes, or not the one at this address"
     },
     {
-      "code": 6094,
+      "code": 6092,
       "name": "CannotClose",
       "msg": "Still needed: an item with units out, or a lottery with tickets sold this round. A box, a recipe or a sealed schedule is never closed, so its version or its terms never repeat"
     },
     {
-      "code": 6095,
+      "code": 6093,
       "name": "BadAuction",
       "msg": "An auction needs an end after its start and after now but within five years, an extension of at most five years, and a mint whose new accounts do not start frozen and can't be switched to"
     },
     {
-      "code": 6096,
+      "code": 6094,
       "name": "LotRefused",
       "msg": "Not a lot an auction takes: a unit of an item on sale with one left, or an NFT its seller holds (a player's: a Core NFT in one of the project's collections)"
     },
     {
-      "code": 6097,
+      "code": 6095,
       "name": "AuctionNotOpen",
       "msg": "This auction is not taking bids: it has not started, or it is over"
     },
     {
-      "code": 6098,
+      "code": 6096,
       "name": "BidTooLow",
       "msg": "A bid must reach the reserve, and top the high bid by the auction's least raise"
     },
     {
-      "code": 6099,
+      "code": 6097,
       "name": "AuctionRunning",
       "msg": "This auction is not over: with a bid in, nobody can call it off"
     },
     {
-      "code": 6100,
+      "code": 6098,
       "name": "NotTheBidders",
       "msg": "The lot goes to the high bidder, and a bid back to its bidder"
     },
     {
-      "code": 6101,
+      "code": 6099,
       "name": "NotOpenYet",
       "msg": "Not open yet: its window opens later"
     },
     {
-      "code": 6102,
+      "code": 6100,
       "name": "WindowClosed",
       "msg": "Its window has closed"
     },
     {
-      "code": 6103,
+      "code": 6101,
       "name": "PrizeNotCovered",
       "msg": "A prize this can't give whole: a pool short of it (or a share of it that comes to nothing), a mint the project can no longer mint, a contest's split not set aside, or the project has no vault for a prize's mint yet: open it first"
     },
     {
-      "code": 6104,
+      "code": 6102,
       "name": "BadChoice",
       "msg": "The choice a share needs: a wallet other than the buyer's own or the project's, or a collectible of the share's item that a player holds, passed as the chosen account; a contest's recipient only for its chosen share"
     },
     {
-      "code": 6105,
+      "code": 6103,
       "name": "BadStake",
       "msg": "This contest takes one entry per player, of exactly its stake"
     },
     {
-      "code": 6106,
+      "code": 6104,
       "name": "BelowMinPot",
       "msg": "This contest's sides hold less than its least pot"
     },
     {
-      "code": 6107,
+      "code": 6105,
       "name": "OverWindow",
       "msg": "Over this record's limit for one wallet in this window"
     },
     {
-      "code": 6108,
+      "code": 6106,
       "name": "WrongReceipt",
       "msg": "Not the canonical counter for this record, incarnation and subject"
     },
     {
-      "code": 6109,
+      "code": 6107,
       "name": "BadLimits",
       "msg": "A grant's window needs times that are not before 1970"
     },
     {
-      "code": 6110,
+      "code": 6108,
       "name": "OverKey",
       "msg": "This voucher key has signed all the claims the grant allows one key"
     },
     {
-      "code": 6111,
+      "code": 6109,
       "name": "TooManyAccounts",
       "msg": "A box's roll would hand the oracle more accounts than its answer can carry: fewer entries, or fewer mints its prizes are in"
     },
     {
-      "code": 6112,
+      "code": 6110,
       "name": "PrizeHasHook",
       "msg": "A box that rolls can't pay a prize in a mint with a transfer hook (a box of one entry can)"
     },
     {
-      "code": 6113,
+      "code": 6111,
       "name": "ContributionsPending",
       "msg": "Finish every ticket contribution before paying the winners"
     },
     {
-      "code": 6114,
+      "code": 6112,
       "name": "BadPrize",
       "msg": "A prize this route can't give: a stash's NFT at random is a box's entry only"
     },
     {
-      "code": 6115,
+      "code": 6113,
       "name": "Rolls",
       "msg": "This box rolls (more than one entry, an NFT at random, or an NFT it rolls on): open it with open_box"
     },
     {
-      "code": 6116,
+      "code": 6114,
       "name": "OneTicket",
       "msg": "An NFT pays for one ticket at a time"
     },
     {
-      "code": 6117,
+      "code": 6115,
       "name": "WinnersFirst",
       "msg": "A loser's NFT goes to the opener only once every winning entry has claimed"
     },
     {
-      "code": 6118,
+      "code": 6116,
       "name": "CompressedBid",
       "msg": "A bid can't be a compressed NFT: bid Core or Token Metadata NFTs"
     },
     {
-      "code": 6119,
+      "code": 6117,
       "name": "OverPrize",
       "msg": "A claim's own amount is of a grant of a fixed amount of tokens, at most that amount, and named by a voucher or a list"
     },
     {
-      "code": 6120,
+      "code": 6118,
       "name": "NoSolForFee",
       "msg": "The signer holds too little SOL for the fee"
     },
     {
-      "code": 6121,
+      "code": 6119,
       "name": "BadOffer",
       "msg": "An offer takes a rule it can keep, at least one taker, a price or a loan above 0 (repaid with at least as much, within 5 years), shares only on a price, all its money as it arrives, and a mint whose accounts can't turn a payment away"
     },
     {
-      "code": 6122,
+      "code": 6120,
       "name": "WinnerPicks",
       "msg": "While losers' NFTs are left, only the winner claims, and picks which one they take"
     },
     {
-      "code": 6123,
+      "code": 6121,
       "name": "SubjectNonce",
       "msg": "A roll that moves an NFT's numbers is at the NFT's own nonce (its address's first 8 bytes): one at a time"
     },
     {
-      "code": 6124,
+      "code": 6122,
       "name": "NotALoan",
       "msg": "This hold is no loan, or it is repaid"
     },
     {
-      "code": 6125,
+      "code": 6123,
       "name": "LoanDue",
       "msg": "This loan is due: it can't be repaid, and its NFT goes to its lender"
     },
     {
-      "code": 6126,
+      "code": 6124,
       "name": "OwedToLender",
       "msg": "A loan that is due goes to its lender"
     },
     {
-      "code": 6127,
+      "code": 6125,
       "name": "Rented",
       "msg": "This NFT is rented: a rental runs until its end, and nobody takes the listing before (its maker may stop it)"
     },
     {
-      "code": 6128,
+      "code": 6126,
       "name": "BadListing",
       "msg": "A listing asks for a price above 0, and a rental for 1 period or more of a length above 0, all of them within 5 years"
     },
     {
-      "code": 6129,
+      "code": 6127,
       "name": "NotCompoundable",
       "msg": "Only a farm of tokens whose rewards are the staked token compounds"
     },
     {
-      "code": 6130,
+      "code": 6128,
       "name": "Sealed",
       "msg": "A sealed schedule is written once: nobody edits, switches off or re-seals it"
     },
     {
-      "code": 6131,
+      "code": 6129,
       "name": "NotInStash",
       "msg": "A lottery's held prize must be in its own stash when the lottery is written"
     },
     {
-      "code": 6132,
+      "code": 6130,
       "name": "Promised",
       "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended"
     },
     {
-      "code": 6133,
+      "code": 6131,
       "name": "PrizesFirst",
       "msg": "A drawn round gives every place's prize before any ticket money moves"
     },
     {
-      "code": 6134,
+      "code": 6132,
       "name": "ListingStopped",
       "msg": "Its maker stopped this listing: it takes no more renters, and closes once the rental runs out"
     },
     {
-      "code": 6135,
+      "code": 6133,
       "name": "NotAnNft",
       "msg": "Only an NFT is taken: one token of a mint that can never mint another, not a unit of a semi-fungible item"
     },
     {
-      "code": 6136,
+      "code": 6134,
       "name": "OtherSide",
       "msg": "A wallet backs one side of a contest: it already has an entry on another side"
     },
     {
-      "code": 6137,
+      "code": 6135,
       "name": "RewardsLocked",
       "msg": "This seat's tier has an early exit, so its rewards wait for its lock: harvest once the lock has run"
     },
     {
-      "code": 6138,
+      "code": 6136,
       "name": "PlacesInOrder",
       "msg": "A round's prizes go in place order: give the lower places' prizes first"
     },
     {
-      "code": 6139,
+      "code": 6137,
       "name": "ExitWhileLocked",
       "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
     },
     {
-      "code": 6140,
+      "code": 6138,
       "name": "HarvestFirst",
       "msg": "This seat is owed rewards it may take now: harvest before moving to, or topping up on, a tier whose rewards wait for its lock"
     },
     {
-      "code": 6141,
+      "code": 6139,
       "name": "WalletMustSign",
       "msg": "A grant's claim needs its wallet's signature"
     },
     {
-      "code": 6142,
+      "code": 6140,
       "name": "BurnLocked",
       "msg": "This Token-2022 mint's issuer keeps a burn authority (permissioned burn), so the program could never burn it later: it is refused before any money comes in"
+    },
+    {
+      "code": 6141,
+      "name": "WrongProfile",
+      "msg": "This needs the player's own profile in this project: it is missing, or another wallet's or another project's"
+    },
+    {
+      "code": 6142,
+      "name": "WrongTable",
+      "msg": "This is not the project's table at the address its id names"
+    },
+    {
+      "code": 6143,
+      "name": "BadTable",
+      "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
+    },
+    {
+      "code": 6144,
+      "name": "BadItem",
+      "msg": "A trait's key is the project's own (not item_id, rarity, serial, made, used or used_at), and each item names each key once"
+    },
+    {
+      "code": 6145,
+      "name": "NeedsRoll",
+      "msg": "A fresh item's traits are drawn by a roll: give it by a box (open_box), or by a roll of one"
+    },
+    {
+      "code": 6146,
+      "name": "WrongRow",
+      "msg": "This row is not the committed table's row whose range holds the number drawn: its path doesn't lead to the table's root, or its range doesn't hold the number"
     }
   ],
   "types": [
@@ -9620,7 +9745,7 @@
             "name": "nft_bids",
             "docs": [
               "When set, a bid is a bundle of NFTs that pass this rule, in place of tokens (`price.rs`):",
-              "`reserve`, `high` and the least raise count NFTs, at most `MAX_BID_NFTS` a bid. The NFTs",
+              "`reserve`, `high` and the least raise count NFTs. The NFTs",
               "a bid tops go back to their bidder in the same instruction; the winning ones go where the",
               "rest of a winning bid in tokens would (`EndAuction::proceeds`). No bid is a compressed NFT:",
               "one moves only with a proof against its tree's root of that moment, and anyone with a leaf",
@@ -10078,6 +10203,19 @@
             }
           },
           {
+            "name": "slots",
+            "docs": [
+              "What one open draws (`LootBox::slots`): none is one draw among every entry."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Slot"
+                }
+              }
+            }
+          },
+          {
             "name": "gate",
             "docs": [
               "Who may open it (`None`: anyone)."
@@ -10188,6 +10326,18 @@
           },
           {
             "name": "Burn"
+          },
+          {
+            "name": "Profile",
+            "fields": [
+              {
+                "vec": {
+                  "defined": {
+                    "name": "Attribute"
+                  }
+                }
+              }
+            ]
           }
         ]
       }
@@ -10400,7 +10550,7 @@
           {
             "name": "deciders",
             "docs": [
-              "Keys whose signed verdict decides it, besides the authority (at most `MAX_DECIDERS`)."
+              "Keys whose signed verdict decides it, besides the authority."
             ],
             "type": {
               "vec": "pubkey"
@@ -10905,6 +11055,23 @@
                 "type": {
                   "defined": {
                     "name": "GrantArgs"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "Table",
+            "fields": [
+              {
+                "name": "id",
+                "type": "u32"
+              },
+              {
+                "name": "args",
+                "type": {
+                  "defined": {
+                    "name": "TableArgs"
                   }
                 }
               }
@@ -11511,7 +11678,7 @@
             "docs": [
               "The entry, the first of the box being 0."
             ],
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "shifts",
@@ -11974,6 +12141,23 @@
               "watches (`BadFarm`): its NFT leaves by moving, with nothing to write the 0."
             ],
             "type": "bool"
+          },
+          {
+            "name": "profile",
+            "docs": [
+              "Written on the seat's player's profile (`profile.rs`) instead of the collectible: every seat",
+              "the player holds adds its own points. A token seat grows it with or without a booster. No",
+              "streak (`BadFarm`): one seat leaving would wipe what the others grew."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "at_least",
+            "docs": [
+              "In a farm of tokens, a seat grows only while it stakes at least this much (base units), so a",
+              "dust stake earns no XP. 0 in a farm of collectibles (`BadFarm`)."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -12312,6 +12496,21 @@
           {
             "name": "uri",
             "type": "string"
+          },
+          {
+            "name": "traits",
+            "docs": [
+              "A fresh item's traits: each drawn when a unit of it is won, and written on it as an attribute",
+              "(`Trait`). None is an item whose units are all alike. A fresh item is given only by a roll",
+              "(`NeedsRoll`), and its traits never change once a unit is out."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Trait"
+                }
+              }
+            }
           }
         ]
       }
@@ -12373,6 +12572,19 @@
               "A collectible's collection: one of the project's."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "traits",
+            "docs": [
+              "A fresh collectible's traits (`Item::traits`): none for one whose units are all alike."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Trait"
+                }
+              }
+            }
           }
         ]
       }
@@ -12938,6 +13150,21 @@
             }
           },
           {
+            "name": "slots",
+            "docs": [
+              "What one open draws: each slot draws `count` entries, among its own (`only`), every one",
+              "weighted, with the stock as the draws before it left it. None is one draw among every entry:",
+              "a box of one roll. A pack of 5 is one slot of 5; a guaranteed rare, a slot of 1 among the rares."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Slot"
+                }
+              }
+            }
+          },
+          {
             "name": "gate",
             "docs": [
               "Who may open it: a player who shows a collectible that passes (`rules.rs`)."
@@ -13123,17 +13350,14 @@
           {
             "name": "places",
             "docs": [
-              "What each place wins, first place first. Unused places win nothing (`Place::set`)."
+              "What each place wins, first place first: as many as the owner writes."
             ],
             "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "Place"
-                  }
-                },
-                8
-              ]
+              "vec": {
+                "defined": {
+                  "name": "Place"
+                }
+              }
             }
           },
           {
@@ -13206,9 +13430,9 @@
           {
             "name": "paid",
             "docs": [
-              "The places paid this round, one bit each."
+              "The places paid this round, one bit each (`bit`), a byte for every eight places."
             ],
-            "type": "u8"
+            "type": "bytes"
           },
           {
             "name": "pot_at_payout",
@@ -13276,7 +13500,7 @@
               "The places of this drawn round whose prize has been given (or found not there to give), one",
               "bit each: no ticket money moves before every place's prize has (`PrizesFirst`)."
             ],
-            "type": "u8"
+            "type": "bytes"
           }
         ]
       }
@@ -13300,7 +13524,7 @@
           {
             "name": "shares",
             "docs": [
-              "Where ticket money goes before the pot (at most `MAX_SHARES`; one may be the buyer's",
+              "Where ticket money goes before the pot (one may be the buyer's",
               "choice). Empty when tickets are burned."
             ],
             "type": {
@@ -13462,15 +13686,15 @@
           },
           {
             "name": "recipients",
+            "docs": [
+              "One for each of the lottery's shares."
+            ],
             "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "LotteryRecipient"
-                  }
-                },
-                4
-              ]
+              "vec": {
+                "defined": {
+                  "name": "LotteryRecipient"
+                }
+              }
             }
           },
           {
@@ -13597,7 +13821,7 @@
           },
           {
             "name": "place",
-            "type": "u8"
+            "type": "u32"
           },
           {
             "name": "winner",
@@ -13701,7 +13925,8 @@
           {
             "name": "place",
             "docs": [
-              "Which collectible: the first handed in is 0, in the recipe's order."
+              "Which collectible: the first handed in is 0, in the recipe's order; or the player's profile",
+              "(`PROFILE_PLACE`)."
             ],
             "type": "u8"
           },
@@ -13757,7 +13982,7 @@
             "docs": [
               "The entry, the first of the box being 0."
             ],
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "boost",
@@ -13824,6 +14049,9 @@
             "fields": [
               "u32"
             ]
+          },
+          {
+            "name": "Profile"
           }
         ]
       }
@@ -14050,10 +14278,7 @@
               "binds each position to its rule; unused positions are zero. The roll still checks stock."
             ],
             "type": {
-              "array": [
-                "u32",
-                4
-              ]
+              "vec": "u32"
             }
           },
           {
@@ -14109,6 +14334,42 @@
                   "name": "Share"
                 }
               }
+            }
+          },
+          {
+            "name": "opens",
+            "docs": [
+              "How many opens of its box it is (`open_box`'s `count`): paid together, drawn from one answer."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "settled",
+            "docs": [
+              "How many of `won` were settled by its earlier parts (`settle`'s `upto`): the next part starts",
+              "there."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "answer",
+            "docs": [
+              "The oracle's answer, once rolled: what a fresh item's traits drawn at its mint are drawn from."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "drawn",
+            "docs": [
+              "The rows fresh items' table traits drew at the roll (`Won::Fresh`)."
+            ],
+            "type": {
+              "vec": "u64"
             }
           },
           {
@@ -14198,6 +14459,36 @@
       }
     },
     {
+      "name": "OrderPartSettled",
+      "docs": [
+        "A part of an order's prizes carried out (`settle` with an `upto` short of its last): its",
+        "`from..upto` of `won`. What each became follows from it: a collectible at `[\"asset\", item, serial]`,",
+        "the NFT itself, a roll's order at `roll_nonce`. The order stays until its last part, which takes",
+        "the payment (`OrderSettled`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "order",
+            "type": "pubkey"
+          },
+          {
+            "name": "requested_slot",
+            "type": "u64"
+          },
+          {
+            "name": "from",
+            "type": "u32"
+          },
+          {
+            "name": "upto",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "OrderRefunded",
       "docs": [
         "An order's payment went back to its player."
@@ -14266,11 +14557,14 @@
             "type": "pubkey"
           },
           {
-            "name": "entry",
+            "name": "entries",
             "docs": [
-              "The entry rolled, the first of the box being 0."
+              "The entries drawn, in order (each open's slots, each slot's draws), the first of the box",
+              "being 0."
             ],
-            "type": "u8"
+            "type": {
+              "vec": "u16"
+            }
           },
           {
             "name": "won",
@@ -14336,9 +14630,18 @@
             "type": "pubkey"
           },
           {
+            "name": "from",
+            "docs": [
+              "The first of `won` this settle carried out: earlier ones were by earlier parts",
+              "(`OrderPartSettled`)."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "won",
             "docs": [
-              "What the player got, as the roll set it aside."
+              "What the player got, as the roll set it aside. What each became follows from it: a",
+              "collectible at `[\"asset\", item, serial]`, the NFT itself, a roll's order at `roll_nonce`."
             ],
             "type": {
               "vec": {
@@ -14346,16 +14649,6 @@
                   "name": "Won"
                 }
               }
-            }
-          },
-          {
-            "name": "assets",
-            "docs": [
-              "For each of `won`, the collectible minted, the NFT handed over or the order a roll is made in",
-              "(the default address for tokens, or a normal item, which the project's backend delivers)."
-            ],
-            "type": {
-              "vec": "pubkey"
             }
           },
           {
@@ -14542,6 +14835,26 @@
                 32
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Payload",
+      "docs": [
+        "What a table's rows carry."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Number"
+          },
+          {
+            "name": "Label"
+          },
+          {
+            "name": "Nft"
           }
         ]
       }
@@ -14780,6 +15093,39 @@
       }
     },
     {
+      "name": "ProfileWritten",
+      "docs": [
+        "Numbers were written on a wallet's profile (`profile.rs`): by the project's authority",
+        "(`collectible`), a farm's growth, or a recipe the player crafted."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "lines",
+            "docs": [
+              "What it wrote, key by key: an empty value took the key off."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Attribute"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "Project",
       "docs": [
         "One per project, at `[\"project\", creator, id]`: any wallet makes as many as it likes, each with",
@@ -14873,7 +15219,7 @@
           {
             "name": "collections",
             "docs": [
-              "The Core collections the project has authority over (at most `MAX_COLLECTIONS`): its items",
+              "The Core collections the project has authority over: its items",
               "are minted into them, an NFT of one is read and written as the project's own (`Of::Item`,",
               "what the project writes goes on the NFT itself), and every other NFT is read with its Sheet.",
               "The owner names them (`update_project`); Core still checks, at each write, that the project",
@@ -14945,6 +15291,51 @@
       }
     },
     {
+      "name": "ProvenRow",
+      "docs": [
+        "A row of a committed table, as its poster wrote it, with the path that proves it: its index, the",
+        "weight of the rows before it, its weight, its payload (a label's bytes, zero-padded; zeros for a",
+        "number), and the sibling of each node from the leaf up."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "index",
+            "type": "u32"
+          },
+          {
+            "name": "from",
+            "type": "u64"
+          },
+          {
+            "name": "weight",
+            "type": "u32"
+          },
+          {
+            "name": "payload",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "path",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "Raise",
       "docs": [
         "A number a recipe moves on a collectible handed in and kept: `by` more under `key`, up to",
@@ -14959,7 +15350,8 @@
           {
             "name": "place",
             "docs": [
-              "Which collectible: the first handed in is 0, in the recipe's order. One that is kept."
+              "Which collectible: the first handed in is 0, in the recipe's order. One that is kept; or the",
+              "player's profile (`PROFILE_PLACE`)."
             ],
             "type": "u8"
           },
@@ -15256,6 +15648,9 @@
           },
           {
             "name": "Grant"
+          },
+          {
+            "name": "Table"
           }
         ]
       }
@@ -15951,6 +16346,32 @@
       }
     },
     {
+      "name": "Slot",
+      "docs": [
+        "A slot of a box's open (`LootBox::slots`): `count` draws among the entries `only` names (every entry",
+        "when it names none), and with `distinct`, no entry twice in it."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "count",
+            "type": "u32"
+          },
+          {
+            "name": "only",
+            "type": {
+              "vec": "u16"
+            }
+          },
+          {
+            "name": "distinct",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
       "name": "SoldToOffer",
       "docs": [
         "A holder sold an NFT into a bid: the NFT to the maker, the price through the shares, `paid` of",
@@ -16079,6 +16500,75 @@
             "type": {
               "option": "pubkey"
             }
+          },
+          {
+            "name": "weight",
+            "docs": [
+              "Its weight in the stash, put in; 0 taken out."
+            ],
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TableArgs",
+      "docs": [
+        "What `upsert` writes on a table: rows added after the ones it has, whether it is sealed now, and",
+        "whether it is committed (its rows folded into a root, not kept: as it was made)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payload",
+            "type": {
+              "defined": {
+                "name": "Payload"
+              }
+            }
+          },
+          {
+            "name": "rows",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "TableRow"
+                }
+              }
+            }
+          },
+          {
+            "name": "seal",
+            "type": "bool"
+          },
+          {
+            "name": "committed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TableRow",
+      "docs": [
+        "One row the owner writes: its weight, its stock (`NO_LIMIT` for none) and, for a table of labels,",
+        "its label."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "weight",
+            "type": "u32"
+          },
+          {
+            "name": "left",
+            "type": "u32"
+          },
+          {
+            "name": "label",
+            "type": "string"
           }
         ]
       }
@@ -16381,6 +16871,29 @@
       }
     },
     {
+      "name": "Trait",
+      "docs": [
+        "A trait a fresh item's units draw: written under `key`, from `from`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "key",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": {
+              "defined": {
+                "name": "Values"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "TraitsProven",
       "docs": [
         "Traits were proven and written into an NFT's Sheet: the ones it did not have yet."
@@ -16564,6 +17077,36 @@
       }
     },
     {
+      "name": "Values",
+      "docs": [
+        "Where a trait's value comes from."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Table",
+            "fields": [
+              "u32"
+            ]
+          },
+          {
+            "name": "Range",
+            "fields": [
+              {
+                "name": "min",
+                "type": "u64"
+              },
+              {
+                "name": "max",
+                "type": "u64"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "Verdict",
       "type": {
         "kind": "enum",
@@ -16675,6 +17218,10 @@
               {
                 "name": "nft",
                 "type": "pubkey"
+              },
+              {
+                "name": "weight",
+                "type": "u32"
               }
             ]
           },
@@ -16682,6 +17229,42 @@
             "name": "Roll",
             "fields": [
               "u32"
+            ]
+          },
+          {
+            "name": "Fresh",
+            "fields": [
+              {
+                "name": "item",
+                "type": "u32"
+              },
+              {
+                "name": "serial",
+                "type": "u32"
+              },
+              {
+                "name": "drawn",
+                "type": "u32"
+              }
+            ]
+          },
+          {
+            "name": "Compressed",
+            "fields": [
+              {
+                "name": "item",
+                "type": "u32"
+              },
+              {
+                "name": "serial",
+                "type": "u32"
+              },
+              {
+                "name": "drawn",
+                "type": {
+                  "option": "u32"
+                }
+              }
             ]
           }
         ]
@@ -16883,15 +17466,6 @@
       "value": "10000000"
     },
     {
-      "name": "MAX_RECEIPT_ROUNDS",
-      "docs": [
-        "The maximum paid voucher rounds per wallet and grant incarnation. Claims remain bounded",
-        "in memory and retain their consumed rounds for that incarnation."
-      ],
-      "type": "u32",
-      "value": "256"
-    },
-    {
       "name": "MAX_SCHEDULE_SECONDS",
       "docs": [
         "The latest a sealed schedule's last run may fall, from when it is written: 10 years (a cliff of a",
@@ -16971,6 +17545,14 @@
       "value": "[112, 114, 105, 122, 101]"
     },
     {
+      "name": "PROFILE_SEED",
+      "docs": [
+        "`[\"profile\", project, wallet]`: what the project writes about a wallet (`profile.rs`)."
+      ],
+      "type": "bytes",
+      "value": "[112, 114, 111, 102, 105, 108, 101]"
+    },
+    {
       "name": "PROJECT_SEED",
       "docs": [
         "`[\"project\", creator, id]`: a project (`state::Project`)."
@@ -17043,6 +17625,14 @@
       ],
       "type": "bytes",
       "value": "[115, 116, 97, 115, 104]"
+    },
+    {
+      "name": "TABLE_SEED",
+      "docs": [
+        "`[\"table\", project, id]`: rows drawn by weight (`table.rs`)."
+      ],
+      "type": "bytes",
+      "value": "[116, 97, 98, 108, 101]"
     },
     {
       "name": "TRAITS_SEED",

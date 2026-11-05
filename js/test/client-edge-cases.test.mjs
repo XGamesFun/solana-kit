@@ -83,18 +83,20 @@ test('signVoucher takes the cluster clock as a bigint', async () => {
 });
 
 test('a truncated Stash or Sheet is refused, never read as empty addresses', () => {
-  const stash = concat(Uint8Array.of(loot.TAGS.Stash), addressBytes(A), uintLE(7, 4), uintLE(3, 4), addressBytes(B));
-  assert.throws(() => loot.decodeStash(stash), /truncated/);
-  const whole = concat(stash, addressBytes(B), addressBytes(B));
-  assert.deepEqual(loot.decodeStash(whole), { project: A, id: 7, nfts: [B, B, B] });
-  assert.throws(() => loot.decodeStash(Uint8Array.of(loot.TAGS.Stash, 1, 2)), /Not a Stash/);
+  // A stash is a table of NFTs: its header (the tag, project, id, payload 2, sealed, count, total), a group's and a
+  // block's totals, then each NFT's weight and address.
+  const row = (weight) => concat(uintLE(weight, 4), addressBytes(B));
+  const head = (count) => concat(Uint8Array.of(loot.TAGS.Table), addressBytes(A), uintLE(7, 4), Uint8Array.of(2, 1), uintLE(count, 4), uintLE(6, 8), uintLE(6, 8), uintLE(6, 8));
+  assert.throws(() => loot.decodeStash(concat(head(3), row(1))), /truncated/);
+  assert.deepEqual(loot.decodeStash(concat(head(3), row(1), row(2), row(3))), { project: A, id: 7, nfts: [B, B, B], weights: [1, 2, 3] });
+  assert.throws(() => loot.decodeStash(Uint8Array.of(loot.TAGS.Table, 1, 2)), /Not a Stash/);
 
   const text = (t) => concat(uintLE(t.length, 4), new TextEncoder().encode(t));
-  const head = concat(Uint8Array.of(loot.TAGS.Sheet), addressBytes(A), addressBytes(B));
-  assert.deepEqual(loot.decodeSheet(concat(head, uintLE(1, 4), text('Class'), text('Mage'))).attributes, [{ key: 'Class', value: 'Mage' }]);
-  assert.throws(() => loot.decodeSheet(concat(head, uintLE(1000, 4), text('Class'), text('Mage'))), /truncated/);
-  assert.throws(() => loot.decodeSheet(concat(head, uintLE(1, 4), uintLE(50, 4), new TextEncoder().encode('Class'))), /truncated/);
-  assert.throws(() => loot.decodeSheet(head), /Not a Sheet/);
+  const sheet = concat(Uint8Array.of(loot.TAGS.Sheet), addressBytes(A), addressBytes(B));
+  assert.deepEqual(loot.decodeSheet(concat(sheet, uintLE(1, 4), text('Class'), text('Mage'))).attributes, [{ key: 'Class', value: 'Mage' }]);
+  assert.throws(() => loot.decodeSheet(concat(sheet, uintLE(1000, 4), text('Class'), text('Mage'))), /truncated/);
+  assert.throws(() => loot.decodeSheet(concat(sheet, uintLE(1, 4), uintLE(50, 4), new TextEncoder().encode('Class'))), /truncated/);
+  assert.throws(() => loot.decodeSheet(sheet), /Not a Sheet/);
 });
 
 test('claimWins stops when the server leaves out the next page', async () => {

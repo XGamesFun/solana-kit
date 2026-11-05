@@ -206,9 +206,12 @@ export const sharesBurn = (shares) => shares.some((s) => s.to === 'Burn');
  * its item for an item, its pool for tokens from one, its stash for an NFT of one (a named one, or one at random). All
  * written: the roll takes from them. Tokens minted and rolls take none here.
  */
-export function entryAccounts(project, entries) {
+export function entryAccounts(project, entries, items = {}) {
   return entries.flatMap(({ prizes }) => prizes.flatMap((prize) => {
-    if (prize.Item) return [meta(pda.item(project, prize.Item[0]), false, true)];
+    // An item, compressed or not; a fresh one's tables after it, in the order of its traits (`items` maps an item's id
+    // to its decoded Item: one left out is taken as not fresh).
+    const id = prize.Item?.[0] ?? prize.Compressed?.item;
+    if (id !== undefined) return [meta(pda.item(project, id), false, true), ...traitTables(items[id]).map((t) => meta(pda.table(project, t), false, true))];
     if (prize.Tokens?.from.Pool) return [meta(pda.pool(project, prize.Tokens.from.Pool[0]), false, true)];
     const stash = prize.Nft?.stash ?? prize.Stash?.[0];
     return stash === undefined ? [] : [meta(pda.stash(project, stash), false, true)];
@@ -247,6 +250,13 @@ function boxPoolMints(box, poolMints) {
 
 /** Whether a box leaves its outcome to the oracle: more than one entry, or an entry gives a stash's NFT at random. */
 export const boxRolls = (entries) => entries.length > 1 || entries.some((e) => e.prizes.some((p) => p.Stash));
+
+/** The tables a fresh item's traits draw from, in the order of its traits (none for an item whose units are alike). */
+export const traitTables = (item) => (item?.traits ?? []).flatMap((t) => (t.from?.Table ? [t.from.Table[0]] : []));
+
+/** Whether a box gives a fresh item (one with traits): its roll then asks the oracle even as one entry (`items` maps
+ * an item's id to its decoded Item, as `entryAccounts`). */
+export const boxFresh = (entries, items = {}) => entries.some((e) => e.prizes.some((p) => (items[p.Item?.[0] ?? p.Compressed?.item]?.traits ?? []).length > 0));
 
 /** What an order of `box` holds for the collectibles its roll may mint: a collectible's rent for each item the entry
  * with the most of them gives. */
@@ -527,10 +537,16 @@ export function withDefaults(def) {
   const body = def[kind];
   const args = { ...body.args };
   if (kind === 'Box' || kind === 'Lottery' || kind === 'Grant') args.gate ??= null;
-  if (kind === 'Item') args.collection ??= NO_ADDRESS;
+  if (kind === 'Item') {
+    args.collection ??= NO_ADDRESS;
+    // A fresh item's traits (`Item::traits`): none for one whose units are all alike.
+    args.traits ??= [];
+  }
   if (kind === 'Box') {
     if (!args.currency) throw new Error('A box names the mint its price is in (`currency`).');
-    // An entry: up to three prizes (`prizeMetas`), whether it burns the payment, and its weight.
+    // What one open draws (`LootBox::slots`): none is one draw among every entry.
+    args.slots = (args.slots ?? []).map((s) => ({ only: [], distinct: false, ...s }));
+    // An entry: its prizes (`prizeMetas`), whether it burns the payment, and its weight.
     if (!Array.isArray(args.entries)) throw new Error('A box needs its entries (`entries`): what its roll can give, each with its weight.');
     args.entries = args.entries.map((e) => ({ prizes: [], burns: false, ...e }));
     args.subject ??= null;
@@ -645,11 +661,14 @@ export function payIx({ player, project, mint, treasury, amount, shares = [], re
  * The player opens the project's vault for the price's mint, and for each prize's, when it is not there. A box that
  * limits each wallet counts the purchase in the player's receipt (its rent theirs).
  */
-export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, shown, listProof, subject, chosenRecipient = null, chosen = null, poolMints, playerToken, programs, extra = [] }) {
+export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, count = 1, items = {}, shown, listProof, subject, chosenRecipient = null, chosen = null, poolMints, playerToken, programs, extra = [] }) {
   const mint = box.currency;
   poolMints = boxPoolMints(box, poolMints);
   const tokenProgram = tokenProgramOf(programs, mint);
-  const rolled = boxRolls(box.entries);
+  // `count` opens in one purchase (a box that packs), signed for `maxPrice` (the price times `count` when not given:
+  // pass the sum for a box whose price rises with each sale); `items` maps an item a prize names to its decoded Item,
+  // for a fresh one's tables (a box whose prizes are all alike needs none).
+  const rolled = boxRolls(box.entries) || boxFresh(box.entries, items);
   const address = boxAddress ?? pda.box(project, box.box_id);
   // A box that rolls on an NFT takes it (`subject`: { asset, collection, hasAuthority, tokenMetadata, compressed }, as
   // `piece` takes it); any other, its own address stands in.
@@ -663,7 +682,7 @@ export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, s
   const gate = [...gateAccounts(project, { gate: box.gate, wallet: player, listProof }), ...(box.subject ? on.proof : shownAccounts(project, shown))];
   return lootIx(
     'open_box',
-    { nonce, max_price: maxPrice ?? box.price, chosen_recipient: chosenRecipient, version: box.version },
+    { nonce, max_price: maxPrice ?? box.price * BigInt(count), chosen_recipient: chosenRecipient, version: box.version, count },
     {
       loot_box: address,
       player,
@@ -679,7 +698,7 @@ export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, s
       receipt: limits(box.per_wallet) ? pda.receipt(address, player) : null,
       ...on.accounts,
     },
-    { remaining: [...entryAccounts(project, box.entries), ...prizeAccounts(project, box.entries, poolMints, programs), ...gate, ...extra], writable: on.writable },
+    { remaining: [...entryAccounts(project, box.entries, items), ...prizeAccounts(project, box.entries, poolMints, programs), ...gate, ...extra], writable: on.writable },
   );
 }
 
@@ -751,9 +770,30 @@ export function callbackRollIx({ order, orderState, box, boxAddress, randomness,
  *   Nft     the NFT as `piece` takes it (`nfts[nft]` its kind), going to the player, then a compressed NFT's proof
  *   Roll    the box, then the order its roll is made in (`rollNonce`)
  */
-export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeTo, putBack = [], programs }) {
+export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeTo, putBack = [], programs, from = 0, upto = order.won.length, tree, treeMinted = 0n }) {
   const project = order.project;
-  return order.won.flatMap((won, k) => {
+  // A compressed prize is minted into `tree` (any of the project's with room), the next NFT it mints: after
+  // `treeMinted`, and the compressed prizes before it in this part.
+  let minted = BigInt(treeMinted);
+  return order.won.slice(from, upto).flatMap((won, at) => {
+    const k = from + at;
+    if (won.Fresh || won.Compressed) {
+      const { item: id, serial, drawn } = won.Fresh ?? won.Compressed;
+      const address = pda.item(project, id);
+      const item = items[id];
+      if (!item) throw new Error(`settling item ${id} needs the item (items), for its collection and its traits`);
+      const tables = (won.Fresh || drawn != null) ? traitTables(item).map((t) => meta(pda.table(project, t), false, false)) : [];
+      if (won.Fresh) return [meta(address, false, true), meta(item.collection, false, true), meta(pda.itemAsset(address, serial), false, true), meta(MPL_CORE_PROGRAM, false, false), ...tables];
+      if (!tree) throw new Error('settling a compressed prize needs the project tree it is minted into (tree, treeMinted)');
+      const asset = pda.compressedAsset(tree, minted);
+      minted += 1n;
+      return [
+        meta(address, false, true), meta(pda.treeConfig(tree), false, true), meta(tree, false, true), meta(item.collection, false, true),
+        meta(BUBBLEGUM_PROGRAM, false, false), meta(COMPRESSION_PROGRAM, false, false), meta(NOOP_PROGRAM, false, false), meta(MPL_CORE_PROGRAM, false, false), meta(BUBBLEGUM_CORE_SIGNER, false, false),
+        // A fresh one's traits are written in the project's Sheet for the NFT it mints.
+        ...(drawn != null ? [...tables, meta(pda.sheet(project, asset), false, true)] : []),
+      ];
+    }
     if (won.Item) {
       const { item: id, serial } = won.Item;
       const address = pda.item(project, id);
@@ -825,8 +865,14 @@ export function settleComputeUnits(order) {
  * (`handsBack` of it as read), so the program gives it back to the player, and a Token Metadata NFT's `token` is the
  * player's. `extra`: a hook's or a memo's accounts.
  */
-export function settleIx({ signer, orderAddress, order, projectState, items, nfts, prizeTo, putBack, subject, handBack = false, holders, programs, extra = [] }) {
+export function settleIx({ signer, orderAddress, order, projectState, items, nfts, prizeTo, putBack, subject, handBack = false, holders, programs, upto = 0, rows = [], tree, treeMinted, extra = [] }) {
   const project = order.project;
+  // A part: the order's prizes from where its last part stopped (`settled`) up to `upto` (0, all that is left). Only
+  // the last part takes the payment and closes the order. `rows` proves the rows of committed tables its fresh units
+  // drew (`ProvenRow`, in order).
+  const from = Number(order.settled ?? 0);
+  const end = upto ? Number(upto) : order.won.length;
+  const prizes = wonAccounts({ orderAddress, order, items, nfts, prizeTo, putBack, programs, from, upto: end, tree, treeMinted });
   const tokenProgram = tokenProgramOf(programs, order.mint);
   const burns = order.burns || sharesBurn(order.shares);
   // The NFT it rolled on, as the settle moves it: given to a wallet that is an account of the loot program, it goes
@@ -835,7 +881,7 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
   const on = orderPiece(project, orderAddress, order, subject, handBack && order.fate?.then?.Give ? order.player : receiver);
   return lootIx(
     'settle',
-    {},
+    { upto: upto ? Number(upto) : 0, prize_accounts: prizes.length, rows },
     {
       signer,
       order: orderAddress,
@@ -849,7 +895,7 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       receiver,
     },
     {
-      remaining: [...on.proof, ...wonAccounts({ orderAddress, order, items, nfts, prizeTo, putBack, programs }), ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...extra],
+      remaining: [...on.proof, ...prizes, ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...extra],
       writable: [...(burns ? ['mint'] : []), ...on.writable],
     },
   );
@@ -1215,15 +1261,16 @@ export function finishLotteryContributionIx({ payer, project, id, lottery, contr
  * The owner opens farm `id`: of `stakedMint`'s tokens, or of collectibles when it is null. Its rewards come from pool
  * `args.rewards_pool`, whose mint is `rewardsMint`: all it receives, shared, or with `args.rate` ({ per_day, mints })
  * a fixed rate, minted or from that pool (a rate of 0 pays nothing: a farm that only grows or gives prizes).
- * `args.gates`: the rules an NFT must all pass. `args.growth`: up to 4 of { key, per_day, level, steps, streak }, each
- * writing points (and a level) on what is staked; tiers' `prize` is paid from `args.prize` ({ Mint: [mint] } or
+ * `args.gates`: the rules an NFT must all pass. `args.growth`: any number of { key, per_day, level, steps, streak,
+ * profile, at_least }, each writing points (and a level) on what is staked, or with `profile` on the staker's profile
+ * (a token seat only while it stakes `at_least`); tiers' `prize` is paid from `args.prize` ({ Mint: [mint] } or
  * { Pool: [index] }), whose mint is `prizeMint`. `args.ends_at`: when it ends (0: never). For a farm of collectibles,
  * `args.lock_key`: the attribute a staked NFT's lock is written under, as the time it ends, so recipes and rolls can
  * move it; `args.upkeep_key`: the attribute that says until when it earns and grows (fuel). Empty: none.
  */
 export const openFarmIx = ({ owner, project, id, args, rewardsMint, stakedMint = null }) => {
   if (!Array.isArray(args?.tiers)) throw new Error('A farm needs its lock tiers (`args.tiers`: [{ lock, bps }, …]).');
-  const full = { gates: [], rate: null, growth: [], ends_at: 0, lock_key: '', upkeep_key: '', exit_to: null, unbond: 0, toll: null, ...args, tiers: args.tiers.map((t) => ({ prize: null, roll: null, exit_bps: 0, ...t })) };
+  const full = { gates: [], rate: null, ends_at: 0, lock_key: '', upkeep_key: '', exit_to: null, unbond: 0, toll: null, ...args, tiers: args.tiers.map((t) => ({ prize: null, roll: null, exit_bps: 0, ...t })), growth: (args.growth ?? []).map((g) => ({ profile: false, at_least: 0n, ...g })) };
   return lootIx('open_farm', { id, args: full }, {
     owner, project, rewards_pool: pda.pool(project, args.rewards_pool), rewards_mint: rewardsMint, staked_mint: stakedMint,
     staked_vault: stakedMint ? pda.staked(pda.farm(project, id)) : null,
@@ -1722,7 +1769,7 @@ export function holdIx({ player, project, collection, asset, tokenMetadata: tm, 
  * by, and gets back the rent it no longer needs. Taken out with `out` the project's own address, the entry is only dropped
  * from the stash and the NFT stays where it is. `out` is never another account of the program (`ToTheProject`).
  */
-export function stashIx({ signer, project, id, lottery = null, asset, out = null, collection, tokenMetadata: tm, compressed }) {
+export function stashIx({ signer, project, id, lottery = null, asset, out = null, weight = 1, collection, tokenMetadata: tm, compressed }) {
   const to = out ?? signer;
   // A lottery's own stash (`lottery`: the lottery's id): an NFT its place names leaves only as that prize, or once the
   // lottery has ended; taking one out passes the lottery.
@@ -1734,7 +1781,8 @@ export function stashIx({ signer, project, id, lottery = null, asset, out = null
   if (out && out !== project && [stash, own, pda.fees(project), pda.platform()].includes(out))
     throw new Error('An NFT taken out of a stash can’t go to an account of the program: name a wallet, or the project’s own address to only drop it from the stash.');
   const p = piece({ project, asset, wallet: to, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  return lootIx('stash', { of: own ? { Lottery: [lottery] } : { Project: [id] }, out: Boolean(out) }, { signer, project, stash, to, ...p.accounts, lottery: own && out ? own : null }, { remaining: p.proof, writable: p.writable });
+  // Put in, it weighs `weight` in the stash's draws.
+  return lootIx('stash', { of: own ? { Lottery: [lottery] } : { Project: [id] }, out: Boolean(out), weight }, { signer, project, stash, to, ...p.accounts, lottery: own && out ? own : null }, { remaining: p.proof, writable: p.writable });
 }
 
 // ---------------------------------------------------------------- contests

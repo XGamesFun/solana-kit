@@ -125,18 +125,18 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
 
 test('a drawn round’s prizes go in place order across purchases (PlacesInOrder)', () => {
   const roll = { bps: 0, prize: { Roll: [1] } };
-  const lottery = { status: 'Drawn', places: [roll, roll, ...Array(6).fill({ bps: 0, prize: null })], sold: 2n, first_ticket: 0n, given: 0, pending: 2n };
+  const lottery = { status: 'Drawn', places: [roll, roll], sold: 2n, first_ticket: 0n, given: new Uint8Array(1), pending: 2n };
   const first = { first_ticket: 0n, end: 1n, done: false };
   const second = { first_ticket: 1n, end: 2n, done: false };
   assert.equal(loot.lotteryStep(lottery, first), 'prizes', 'first place first');
   assert.equal(loot.lotteryStep(lottery, second), null, 'second place waits for the first');
-  assert.equal(loot.lotteryStep({ ...lottery, given: 1 }, second), 'prizes');
-  assert.equal(loot.lotteryStep({ ...lottery, given: 3 }, second), 'finish', 'then the money');
+  assert.equal(loot.lotteryStep({ ...lottery, given: Uint8Array.of(1) }, second), 'prizes');
+  assert.equal(loot.lotteryStep({ ...lottery, given: Uint8Array.of(3) }, second), 'finish', 'then the money');
 });
 
 test('in a lottery that returns its tickets, a winner’s ticket goes back before its prize', () => {
   const roll = { bps: 0, prize: { Roll: [1] } };
-  const lottery = { status: 'Drawn', returns: true, places: [roll, ...Array(7).fill({ bps: 0, prize: null })], sold: 1n, first_ticket: 0n, given: 0, pending: 1n };
+  const lottery = { status: 'Drawn', returns: true, places: [roll], sold: 1n, first_ticket: 0n, given: new Uint8Array(1), pending: 1n };
   const winner = { first_ticket: 0n, end: 1n, done: false };
   assert.equal(loot.lotteryStep(lottery, winner), 'refund');
   assert.equal(loot.lotteryStep({ ...lottery, pending: 0n }, { ...winner, done: true }), 'prizes', 'then its prize');

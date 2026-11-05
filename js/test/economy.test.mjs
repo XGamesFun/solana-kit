@@ -132,7 +132,7 @@ describe('every example goes live on the program', () => {
       assert.equal(project.owner, owner);
       assert.equal(w.chain.get(p.ctx.project).data.length, loot.projectBytes((m.collection ? 1 : 0) + m.collections.length));
       const records = [
-        ...m.items.map((x) => ['Item', loot.pda.item(p.ctx.project, x.id), itemArgs(x)]),
+        ...m.items.map((x) => ['Item', loot.pda.item(p.ctx.project, x.id), itemArgs(x, m)]),
         ...m.allBoxes.map((x) => ['LootBox', loot.pda.box(p.ctx.project, x.id), boxArgs(x, m)]),
         ...m.recipes.map((x) => ['Recipe', loot.pda.recipe(p.ctx.project, x.id), recipeArgs(x, m)]),
         ...m.schedules.map((x) => ['Schedule', loot.pda.schedule(p.ctx.project, x.id), scheduleArgs(x, m)]),
@@ -272,7 +272,7 @@ describe('a bundle bought at once, a list gate, NFTs as the price, in a spec', (
       edit(spec);
       return check(spec, { now: NOW }).refusals.map((x) => `${x.code} ${x.where}`);
     };
-    assert.ok(refused((s) => s.boxes[0].outcomes[0].prizes.push({ gives: 'item', item: 'badge' })).includes('E-SCHEMA economy.boxes[0].outcomes[0].prizes'), 'four prizes in one bundle');
+    assert.ok(!refused((s) => s.boxes[0].outcomes[0].prizes.push({ gives: 'item', item: 'badge' })).some((x) => x.includes('outcomes[0].prizes')), 'four prizes in one bundle: an entry gives any number');
     assert.ok(refused((s) => (s.lotteries[0].price = 1)).includes('E-LOTTERY economy.lotteries.shield-raffle.price'), 'an NFT and a price');
     assert.ok(refused((s) => (s.recipes[0].in[0].then = { stash: 'nowhere' })).some((x) => x.startsWith('E-REF')));
     assert.ok(refused((s) => (s.boxes[1].gate.list[0] = 'not-an-address')).includes('E-SCHEMA economy.boxes[1].gate'));
@@ -478,7 +478,7 @@ describe('stashes and prizes in a spec', () => {
     const m = model(base, { now: NOW });
     const stashSteps = p.steps.filter((s) => s.part.startsWith('stash:'));
     assert.equal(stashSteps.length, 6);
-    assert.deepEqual(stashSteps.filter((s) => s.creates.length).map((s) => s.creates[0].bytes), [41 + 3 * 32, 41 + 2 * 32, 41 + 32]);
+    assert.deepEqual(stashSteps.filter((s) => s.creates.length).map((s) => s.creates[0].bytes), [67 + 3 * 36, 67 + 2 * 36, 67 + 36], 'a table of NFTs: its header, a group’s and a block’s totals, 36 bytes an NFT');
     const box = (key) => m.box.get(key).id;
     assert.deepEqual(grantArgs(m.grants[0], m).gives, { Roll: [box('daily-chest')] });
     const rare = base.stashes[2].nfts[0].asset;

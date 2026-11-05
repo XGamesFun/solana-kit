@@ -41,8 +41,10 @@ export const COLLECTIBLE_RENT = 3_100_000n;
 export const SIGNATURE_FEE = 5_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;
 export const WSOL = 'So11111111111111111111111111111111111111112';
-/** The program's limits. */
-export const LIMITS = Object.freeze({ shares: 4, entries: 8, callbackAccounts: 21, lines: 8, collectiblesPerCraft: 8, places: 8, tiers: 4, boosts: 4, growths: 4, gates: 4, odds: 4, vouchers: 3, deciders: 3, gateWallets: 16, nameBytes: 32, uriBytes: 200, keyBytes: 32, maxBoostBps: 1_000_000, maxTierBps: 110_000 });
+/** The limits a spec meets: the chain's (the oracle's answer carries 21 accounts; a farm names a tier and a recipe a
+ * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32) and the two
+ * caps that keep a farm's numbers from overflowing. Since loot 0.22 the program caps no count or size of its own. */
+export const LIMITS = Object.freeze({ callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000 });
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs). */
 export const RESERVED_ATTRIBUTES = Object.freeze(['made', 'used', 'used_at', 'item_id', 'rarity', 'serial', 'origin']);
 export const RARITIES = Object.freeze(['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']);
@@ -247,6 +249,7 @@ export function model(economy, { now = 0 } = {}) {
     items: assignIds(e.items ?? [], 'id', 1),
     pools,
     stashes: assignIds(e.stashes ?? [], 'id', 1),
+    tables: assignIds(e.tables ?? [], 'id', 1),
     boxes: [],
     payments: e.payments ?? [],
     recipes: assignIds(e.recipes ?? [], 'id', 1),
@@ -290,6 +293,7 @@ export function model(economy, { now = 0 } = {}) {
   m.item = index(m.items);
   m.pool = index(m.pools);
   m.stash = index(m.stashes);
+  m.table = index(m.tables);
   m.box = index(m.allBoxes);
   m.recipe = index(m.recipes);
   m.farm = index(m.farms);
@@ -312,10 +316,11 @@ export function model(economy, { now = 0 } = {}) {
  */
 export function stashNfts(s) {
   return (s.nfts ?? []).map((n) => {
-    if (typeof n === 'string') return { kind: 'core', asset: n, collection: s.collection ?? null };
-    if (n.mint) return { kind: 'token-metadata', asset: n.mint, programmable: Boolean(n.programmable), ruleSet: n.ruleSet ?? null };
-    if (n.compressed) return { kind: 'compressed', asset: n.compressed };
-    return { kind: 'core', asset: n.asset, collection: n.collection ?? s.collection ?? null };
+    if (typeof n === 'string') return { kind: 'core', asset: n, collection: s.collection ?? null, weight: 1 };
+    const weight = n.weight ?? 1;
+    if (n.mint) return { kind: 'token-metadata', asset: n.mint, programmable: Boolean(n.programmable), ruleSet: n.ruleSet ?? null, weight };
+    if (n.compressed) return { kind: 'compressed', asset: n.compressed, weight };
+    return { kind: 'core', asset: n.asset, collection: n.collection ?? s.collection ?? null, weight };
   });
 }
 
@@ -364,7 +369,8 @@ export function prizes(m) {
  * canopy, bytes }
  */
 export function compressedTree(m) {
-  if (!prizes(m).some((p) => p.prize.gives === 'item' && p.prize.compressed)) return null;
+  const boxGives = m.allBoxes.some((b) => (b.outcomes ?? []).flatMap(outcomeParts).some((o) => o.gives === 'item' && o.compressed));
+  if (!boxGives && !prizes(m).some((p) => p.prize.gives === 'item' && p.prize.compressed)) return null;
   const depth = Math.min(20, Math.max(14, Math.ceil(Math.log2(Math.max(1, m.treeHolds)))));
   const canopy = Math.min(depth - 10, 8);
   return { depth, buffer: 64, canopy, bytes: treeSize(depth, 64, canopy) };
@@ -439,10 +445,14 @@ export function outcomeParts(o) {
 export const outcomeBurns = (o) => o?.gives === 'burn' || Boolean(o?.burns);
 
 /** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
-export const boxRolls = (b) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash');
+/** Whether a box's prize holds a collectible's rent in its order (order.rs `escrow`): an item minted as a Core NFT, or a
+ * fresh compressed one (its traits' Sheet). A plain compressed NFT costs no rent. */
+export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
+
+export const boxRolls = (b, m) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
 
 /** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll, and rolls on no NFT. */
-export const boxBuys = (b) => !boxRolls(b) && !b.rollsOn;
+export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn;
 
 /** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
 export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize) } : { percent: p, prize: null });

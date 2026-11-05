@@ -97,7 +97,7 @@ t('a raffle: the NFT is locked in the lottery’s own stash, given before the se
   assert.equal(lottery.status, 'Drawn');
   // Money waits for the prize: finishing a contribution that won nothing is refused until the NFT is given.
   const loser = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value) !== 'prizes');
-  fails(() => w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery: { ...lottery, given: 1 }, contributionAddress: loser.address, contribution: loser.value, treasury: w.treasury })]), 'PrizesFirst');
+  fails(() => w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery: { ...lottery, given: Uint8Array.of(1) }, contributionAddress: loser.address, contribution: loser.value, treasury: w.treasury })]), 'PrizesFirst');
   const winner = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value) === 'prizes').value.player;
   const treasuryBefore = w.balance(w.treasury);
   finishRound(w, 1, { nfts: { [art]: { collection: w.collection } } });

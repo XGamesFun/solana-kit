@@ -8,8 +8,7 @@ import { sha256 } from '../chain/sha256.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { LOOT_PROGRAM } from './pda.js';
 import IDL from './idl/loot.js';
-import { MAX_RECEIPT_ROUNDS, RECEIPT_BASE_BYTES, RECEIPT_ROUND_BYTES } from './sizes.js';
-export { MAX_RECEIPT_ROUNDS } from './sizes.js';
+import { RECEIPT_BASE_BYTES, RECEIPT_ROUND_BYTES } from './sizes.js';
 
 /** Account tags: each account's first byte, as the program writes it. */
 export const TAGS = Object.freeze({
@@ -33,9 +32,11 @@ export const TAGS = Object.freeze({
   Seat: 18,
   Proven: 19,
   Auction: 20,
-  Stash: 21,
   Offer: 22,
   Listing: 23,
+  Profile: 24,
+  // A table, and a stash: a table of NFTs (21 was a stash's own before 0.22).
+  Table: 25,
 });
 
 const BY_TAG = Object.fromEntries(Object.entries(TAGS).map(([name, tag]) => [tag, name]));
@@ -52,9 +53,10 @@ export function decodeAny(data) {
   if (!kind) return null;
   if (kind === 'Receipt') return { kind, value: decodeReceipt(data) };
   if (kind === 'Sheet') return { kind, value: decodeSheet(data) };
+  if (kind === 'Profile') return { kind, value: decodeProfile(data) };
+  if (kind === 'Table') return data[37] === PAYLOAD.Nft ? { kind: 'Stash', value: decodeStash(data) } : { kind, value: decodeTable(data) };
   if (kind === 'Proven') return { kind, value: decodeProven(data) };
   if (kind === 'Traits') return { kind, value: decodeTraits(data) };
-  if (kind === 'Stash') return { kind, value: decodeStash(data) };
   return { kind, value: decode(kind, data) };
 }
 
@@ -67,7 +69,6 @@ export function decodeAny(data) {
 export function decodeReceipt(data) {
   if (!(data instanceof Uint8Array) || data[0] !== TAGS.Receipt || data.length < RECEIPT_BASE_BYTES) throw new Error('Not a Receipt account');
   const n = Number(readUintLE(data, RECEIPT_BASE_BYTES - 4, 4));
-  if (n > MAX_RECEIPT_ROUNDS) throw new Error('Receipt history exceeds the supported capacity');
   if (data.length !== RECEIPT_BASE_BYTES + RECEIPT_ROUND_BYTES * n) throw new Error('Receipt length does not match its rounds');
   const rounds = Array.from({ length: n }, (_, i) => data.slice(RECEIPT_BASE_BYTES + RECEIPT_ROUND_BYTES * i, RECEIPT_BASE_BYTES + RECEIPT_ROUND_BYTES * (i + 1)));
   if (rounds.some((round, i) => i > 0 && compareBytes(rounds[i - 1], round) >= 0)) throw new Error('Receipt rounds must be unique and sorted');
@@ -89,11 +90,26 @@ export function decodeReceipt(data) {
 export function decodeSheet(data) {
   if (data == null || data.length === 0) return null;
   if (!(data instanceof Uint8Array) || data[0] !== TAGS.Sheet || data.length < 69) throw new Error('Not a Sheet account');
+  const { attributes, head } = attributesAt(data, 'Sheet');
+  return { project: head(1), nft: head(33), attributes };
+}
+
+/** A player's profile (`["profile", project, wallet]`): { project, wallet, attributes }, what the project keeps about
+ * the wallet (its XP, level, rank). Its layout is a Sheet's, under its own tag. */
+export function decodeProfile(data) {
+  if (data == null || data.length === 0) return null;
+  if (!(data instanceof Uint8Array) || data[0] !== TAGS.Profile || data.length < 69) throw new Error('Not a Profile account');
+  const { attributes, head } = attributesAt(data, 'Profile');
+  return { project: head(1), wallet: head(33), attributes };
+}
+
+/** The attributes after a Sheet's or a profile's two addresses, read with every length checked against the data. */
+function attributesAt(data, name) {
   let at = 65;
   // Every length is checked against the data: a count or a text longer than what is there is a truncated account.
   const text = () => {
     const n = Number(readUintLE(data, at, 4));
-    if (at + 4 + n > data.length) throw new Error('Sheet account is truncated');
+    if (at + 4 + n > data.length) throw new Error(`${name} account is truncated`);
     const value = new TextDecoder().decode(data.subarray(at + 4, at + 4 + n));
     at += 4 + n;
     return value;
@@ -101,19 +117,56 @@ export function decodeSheet(data) {
   const count = Number(readUintLE(data, at, 4));
   at += 4;
   // Each attribute takes 8 bytes at least (two empty texts).
-  if (count * 8 > data.length - at) throw new Error('Sheet account is truncated');
+  if (count * 8 > data.length - at) throw new Error(`${name} account is truncated`);
   const attributes = Array.from({ length: count }, () => ({ key: text(), value: text() }));
-  return { project: encodeBase58(data.subarray(1, 33)), nft: encodeBase58(data.subarray(33, 65)), attributes };
+  return { attributes, head: (from) => encodeBase58(data.subarray(from, from + 32)) };
 }
 
-/** A stash (`["stash", project, id]`): { project, id, nfts }, the NFTs the project holds to give away, in no order. */
+/** What a table's rows carry (its payload byte; 128 more marks a committed table). */
+export const PAYLOAD = Object.freeze({ Number: 0, Label: 1, Nft: 2 });
+const COMMITTED = 0x80;
+const TABLE_HEAD = 51;
+
+/** Where row `r` of a table of `len`-byte rows is: groups of 64 blocks of 64 rows, each led by its weight in stock. */
+export function tableRowAt(len, r) {
+  const block = 8 + 64 * len;
+  const group = 8 + 64 * block;
+  return TABLE_HEAD + Math.floor(r / 4096) * group + 8 + (Math.floor(r / 64) % 64) * block + 8 + (r % 64) * len;
+}
+
+/**
+ * A table (`["table", project, id]`, `table.rs`): { project, id, payload ('Number' | 'Label'), committed, sealed,
+ * count, total (the weight in stock), rows: [{ weight, left, label }] (none for a committed table), root (hex, a
+ * committed table's once sealed) }. A row's `left` is `NO_LIMIT` (4294967295) for a stock that never runs out.
+ */
+export function decodeTable(data) {
+  if (data == null || data.length === 0) return null;
+  if (!(data instanceof Uint8Array) || data[0] !== TAGS.Table || data.length < TABLE_HEAD) throw new Error('Not a Table account');
+  const committed = (data[37] & COMMITTED) !== 0;
+  const payload = Object.keys(PAYLOAD).find((k) => PAYLOAD[k] === (data[37] & ~COMMITTED));
+  if (!payload || payload === 'Nft') throw new Error('Not a Table account');
+  const count = Number(readUintLE(data, 39, 4));
+  const head = { project: encodeBase58(data.subarray(1, 33)), id: Number(readUintLE(data, 33, 4)), payload, committed, sealed: data[38] === 1, count, total: readUintLE(data, 43, 8) };
+  if (committed) return { ...head, rows: [], root: head.sealed ? toHex(data.subarray(TABLE_HEAD, TABLE_HEAD + 32)) : null };
+  const len = payload === 'Label' ? 40 : 8;
+  if (count && tableRowAt(len, count - 1) + len > data.length) throw new Error('Table account is truncated');
+  const rows = Array.from({ length: count }, (_, r) => {
+    const at = tableRowAt(len, r);
+    const label = payload === 'Label' ? new TextDecoder().decode(data.subarray(at + 8, at + 40)).replace(/\0+$/, '') : '';
+    return { weight: Number(readUintLE(data, at, 4)), left: Number(readUintLE(data, at + 4, 4)), label };
+  });
+  return { ...head, rows, root: null };
+}
+
+/** A stash (`["stash", project, id]`, or a lottery's own): { project, id, nfts, weights }, the NFTs the project holds to
+ * give away and the weight each is drawn by, as a table of NFTs keeps them (a row: its weight, then the NFT). */
 export function decodeStash(data) {
   if (data == null || data.length === 0) return null;
-  if (!(data instanceof Uint8Array) || data[0] !== TAGS.Stash || data.length < 41) throw new Error('Not a Stash account');
-  const count = Number(readUintLE(data, 37, 4));
-  if (41 + 32 * count > data.length) throw new Error('Stash account is truncated');
-  const nfts = Array.from({ length: count }, (_, i) => encodeBase58(data.subarray(41 + 32 * i, 73 + 32 * i)));
-  return { project: encodeBase58(data.subarray(1, 33)), id: Number(readUintLE(data, 33, 4)), nfts };
+  if (!(data instanceof Uint8Array) || data[0] !== TAGS.Table || data[37] !== PAYLOAD.Nft || data.length < TABLE_HEAD) throw new Error('Not a Stash account');
+  const count = Number(readUintLE(data, 39, 4));
+  if (count && tableRowAt(36, count - 1) + 36 > data.length) throw new Error('Stash account is truncated');
+  const rows = Array.from({ length: count }, (_, r) => tableRowAt(36, r));
+  return { project: encodeBase58(data.subarray(1, 33)), id: Number(readUintLE(data, 33, 4)), nfts: rows.map((at) => encodeBase58(data.subarray(at + 4, at + 36))), weights: rows.map((at) => Number(readUintLE(data, at, 4))) };
 }
 
 /**
@@ -233,19 +286,22 @@ export function placesWon(lottery, first, end) {
 /** The places of a drawn round that have a winner and a prize, in order: what it gives before its money moves. */
 export const prizePlaces = (lottery) => [...Array(lotteryWinners(lottery)).keys()].filter((place) => lottery.places[place].prize != null);
 
+/** Whether place `place`'s bit is set in a lottery's list of bits (`Lottery.paid`, `Lottery.given`: a bit a place,
+ * the first place the lowest bit of the first byte). */
+export const placeBit = (bits, place) => Boolean(((bits ?? [])[place >> 3] ?? 0) & (1 << (place & 7)));
+
 /** The places a contribution won whose prize is not given yet (`Lottery.given`): its next step gives them. */
 export function lotteryOwed(lottery, contribution) {
   if (lottery.status !== 'Drawn') return [];
-  const given = Number(lottery.given ?? 0);
   const prizes = new Set(prizePlaces(lottery));
-  return placesWon(lottery, contribution.first_ticket, contribution.end).filter((place) => prizes.has(place) && !(given & (1 << place)));
+  return placesWon(lottery, contribution.first_ticket, contribution.end).filter((place) => prizes.has(place) && !placeBit(lottery.given, place));
 }
 
 /** Whether every place's prize of a drawn round is given, so its money may move (`PrizesFirst`). */
-export const prizesGiven = (lottery) => prizePlaces(lottery).every((place) => Number(lottery.given ?? 0) & (1 << place));
+export const prizesGiven = (lottery) => prizePlaces(lottery).every((place) => placeBit(lottery.given, place));
 
 /** The lowest place of a drawn round whose prize is not given yet, or null: prizes go in place order (`PlacesInOrder`). */
-export const nextPrizePlace = (lottery) => prizePlaces(lottery).find((place) => !(Number(lottery.given ?? 0) & (1 << place))) ?? null;
+export const nextPrizePlace = (lottery) => prizePlaces(lottery).find((place) => !placeBit(lottery.given, place)) ?? null;
 
 /**
  * What a contribution's next `finish_lottery_contribution` does, or null for nothing yet:

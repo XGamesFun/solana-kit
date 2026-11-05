@@ -161,7 +161,7 @@ describe('money in', () => {
       assert.equal(r.answers.length, 1, 'the oracle answered');
       const orderAddress = pda.order(w.project, w.player, nonce);
       const order = w.read('Order', orderAddress);
-      assert.equal(w.chain.get(orderAddress).data.length, loot.ACCOUNT_BYTES.Order);
+      assert.equal(w.chain.get(orderAddress).data.length, loot.orderBytes(box, 1), 'sized to its box: its prizes, its one share');
       assert.equal(order.status, 'Rolled');
       seen.add(order.won.length ? Object.keys(order.won[0])[0] : order.burns ? 'Burn' : 'Nothing');
       w.chain.nextSlot();

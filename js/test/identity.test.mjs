@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { encodeBase58 } from '../chain/base58.js';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
-import { ACCOUNT_BYTES, allocationBytes, projectBytes, decodeAny, decodeReceipt, MAX_RECEIPT_ROUNDS, receiptBytes, pda, readVoucher, VOUCHER_BYTES, voucherBytes } from '../client/index.js';
+import { ACCOUNT_BYTES, contributionBytes, projectBytes, decodeAny, decodeReceipt, receiptBytes, pda, readVoucher, VOUCHER_BYTES, voucherBytes } from '../client/index.js';
 
 const address = (n) => encodeBase58(new Uint8Array(32).fill(n));
 
@@ -50,22 +50,19 @@ test('receipt decoding requires the bounded current layout and preserves arbitra
   assert.equal(receipt.rounds.length, 1);
   assert.ok(receipt.claimed(round));
   assert.ok(!receipt.claimed(new Uint8Array(16)));
-  assert.equal(MAX_RECEIPT_ROUNDS, 256);
   assert.throws(() => decodeReceipt(bytes.slice(0, 13)), /Receipt/);
   assert.throws(() => decodeReceipt(bytes.slice(0, -1)), /length/);
   assert.throws(() => decodeReceipt(concat(bytes, Uint8Array.of(0))), /length/);
-  assert.throws(() => decodeReceipt(header(MAX_RECEIPT_ROUNDS + 1)), /capacity/);
   assert.throws(() => decodeReceipt(concat(header(2), digest, digest)), /unique and sorted/);
   assert.throws(() => decodeReceipt(concat(header(2), new Uint8Array(8).fill(2), new Uint8Array(8).fill(1))), /unique and sorted/);
   assert.throws(() => decodeAny(Uint8Array.of(19)), /Proven/, 'tag 19 is a compressed NFT\'s record now');
 });
 
-test('fixed allocation maxima and receipt capacity share one size source', () => {
-  assert.deepEqual(ACCOUNT_BYTES, { Order: 621, Seat: 232, Hold: 179, Entry: 106, LotteryContribution: 254 });
+test('fixed allocations, and the records sized to what they hold, share one size source', () => {
+  assert.deepEqual(ACCOUNT_BYTES, { Seat: 232, Hold: 179, Entry: 106 });
   assert.deepEqual([projectBytes(0), projectBytes(8)], [153, 409], 'a project grows with its collections');
-  assert.equal(allocationBytes('Project'), projectBytes(8), 'at most eight collections');
+  assert.deepEqual([contributionBytes(0), contributionBytes(4)], [126, 258], 'a purchase of tickets keeps a recipient a share');
   assert.equal(receiptBytes(), 17);
   assert.equal(receiptBytes(1), 25);
-  assert.equal(receiptBytes(MAX_RECEIPT_ROUNDS), 2065);
-  assert.throws(() => receiptBytes(MAX_RECEIPT_ROUNDS + 1), /at most/);
+  assert.equal(receiptBytes(300), 2417, 'a receipt holds as many rounds as it is paid');
 });

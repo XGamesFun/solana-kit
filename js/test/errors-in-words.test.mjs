@@ -20,10 +20,10 @@ const answer = (body) => ({ status: 200, ok: true, headers: new Headers(), json:
 test("a send refused in preflight says the program's reason, not the bare code", async () => {
   const logs = [
     'Program 9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ invoke [1]',
-    'Program log: AnchorError occurred. Error Code: AlreadyClaimed. Error Number: 6069. Error Message: This wallet was already paid for this round, or claimed this list.',
-    'Program 9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ failed: custom program error: 0x17b5',
+    'Program log: AnchorError occurred. Error Code: AlreadyClaimed. Error Number: 6068. Error Message: This wallet was already paid for this round, or claimed this list.',
+    'Program 9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ failed: custom program error: 0x17b4',
   ];
-  const fetchImpl = async () => answer({ jsonrpc: '2.0', id: 1, error: { code: -32002, message: 'Transaction simulation failed: Error processing Instruction 0: custom program error: 0x17b5', data: { err: { InstructionError: [0, { Custom: 6069 }] }, logs } } });
+  const fetchImpl = async () => answer({ jsonrpc: '2.0', id: 1, error: { code: -32002, message: 'Transaction simulation failed: Error processing Instruction 0: custom program error: 0x17b4', data: { err: { InstructionError: [0, { Custom: 6068 }] }, logs } } });
   const rpc = rpcClient('http://rpc', { fetchImpl, sleepImpl: async () => {} });
   await assert.rejects(rpc.send(new Uint8Array(1)), (e) => /already paid for this round, or claimed this list \(AlreadyClaimed\)/.test(e.message) && e.logs === logs);
 });
@@ -54,6 +54,6 @@ test("a wallet's bare loot code is named; another program's code is left as it c
     const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: refusing(said), now: () => w.chain.now() });
     return app.buy('badge', { listing: (await app.shop()).find((l) => l.key === 'badge') });
   };
-  await assert.rejects(buy('Transaction simulation failed: Error processing Instruction 1: custom program error: 0x17b5'), (e) => e.name === 'AlreadyClaimed' && /^This wallet was already paid/.test(e.message) && /0x17b5/.test(e.cause.message));
+  await assert.rejects(buy('Transaction simulation failed: Error processing Instruction 1: custom program error: 0x17b4'), (e) => e.name === 'AlreadyClaimed' && /^This wallet was already paid/.test(e.message) && /0x17b4/.test(e.cause.message));
   await assert.rejects(buy('Transaction simulation failed: Error processing Instruction 1: custom program error: 0x1'), (e) => /custom program error: 0x1$/.test(e.message));
 });

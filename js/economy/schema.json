@@ -56,7 +56,6 @@
     },
     "tokens": {
       "type": "array",
-      "maxItems": 16,
       "items": {
         "$ref": "#/$defs/token"
       }
@@ -74,7 +73,6 @@
     },
     "items": {
       "type": "array",
-      "maxItems": 64,
       "items": {
         "$ref": "#/$defs/item"
       }
@@ -88,85 +86,80 @@
     },
     "stashes": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/stash"
       },
       "description": "NFTs the game holds to give away as prizes: a box's outcome `{ \"gives\": \"stash\" }` gives one of a stash's at random. The owner's wallet hands each listed NFT to the game when the economy goes live, so it must hold them then."
     },
+    "tables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/table"
+      },
+      "description": "Tables of weighted rows the project writes once and seals: a fresh item's trait draws a row of one per unit (its label, or its number), by weight among the rows still in stock. Written when the economy goes live, a batch of rows a transaction."
+    },
     "boxes": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/box"
       }
     },
     "payments": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/payment"
       }
     },
     "recipes": {
       "type": "array",
-      "maxItems": 64,
       "items": {
         "$ref": "#/$defs/recipe"
       }
     },
     "schedules": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/schedule"
       }
     },
     "lotteries": {
       "type": "array",
-      "maxItems": 16,
       "items": {
         "$ref": "#/$defs/lottery"
       }
     },
     "farms": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/farm"
       }
     },
     "contests": {
       "type": "array",
-      "maxItems": 16,
       "items": {
         "$ref": "#/$defs/contest"
       }
     },
     "auctions": {
       "type": "array",
-      "maxItems": 16,
       "items": {
         "$ref": "#/$defs/auction"
       }
     },
     "holds": {
       "type": "array",
-      "maxItems": 16,
       "items": {
         "$ref": "#/$defs/hold"
       }
     },
     "grants": {
       "type": "array",
-      "maxItems": 64,
       "items": {
         "$ref": "#/$defs/grant"
       }
     },
     "traits": {
       "type": "array",
-      "maxItems": 16,
       "description": "Traits the game vouches for from NFTs' off-chain metadata (a background, a class), so rules can read them: the root of a Merkle tree of each NFT's traits (`loot.traitsTree`), set when the economy goes live. Anyone then writes an NFT's traits into its Sheet with its proof (`app.proveTraits`), and boosts, gates and odds read them like any attribute.",
       "items": {
         "type": "object",
@@ -193,7 +186,6 @@
     },
     "decisions": {
       "type": "array",
-      "maxItems": 32,
       "items": {
         "$ref": "#/$defs/decision"
       }
@@ -213,7 +205,6 @@
     },
     "collections": {
       "type": "array",
-      "maxItems": 7,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/address"
@@ -247,8 +238,7 @@
     },
     "link": {
       "type": "string",
-      "pattern": "^https://",
-      "maxLength": 200
+      "pattern": "^https://"
     },
     "words": {
       "type": "string",
@@ -314,7 +304,6 @@
     },
     "split": {
       "type": "array",
-      "maxItems": 4,
       "items": {
         "$ref": "#/$defs/share"
       },
@@ -542,8 +531,7 @@
           "description": "The program's number for it. Written when it goes live; never change it after."
         },
         "name": {
-          "type": "string",
-          "maxLength": 32
+          "type": "string"
         },
         "description": {
           "$ref": "#/$defs/words"
@@ -662,6 +650,34 @@
         "collection": {
           "$ref": "#/$defs/address",
           "description": "A collectible's collection: one of `collections`. Default: the one the setup makes."
+        },
+        "drawn": {
+          "type": "array",
+          "description": "A fresh collectible: traits drawn for each unit, in order, written on it. Each from a table (`\"table\": key`, a row by weight among those in stock, drawn atomically with the box's roll) or a range (`\"min\"`/`\"max\"`, every whole number as likely, drawn at the mint from the same answer). Its name and link may contain `{attribute}` for each, beside `{serial}`. A fresh item is given only by a box's roll.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attribute"
+            ],
+            "properties": {
+              "attribute": {
+                "type": "string",
+                "minLength": 1
+              },
+              "table": {
+                "$ref": "#/$defs/key"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
         }
       }
     },
@@ -741,7 +757,6 @@
         },
         "shifts": {
           "type": "array",
-          "maxItems": 2,
           "description": "For a box that rolls on an NFT (`rollsOn`): numbers this outcome moves on it (+1 level, -2 affection), never below 0, and never above `upTo` when raising. Written on the NFT when the game has authority over it, in its Sheet otherwise. With `fromNow`, a time: a day in jail from now.",
           "items": {
             "type": "object",
@@ -753,8 +768,7 @@
             "properties": {
               "attribute": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 32
+                "minLength": 1
               },
               "by": {
                 "anyOf": [
@@ -854,7 +868,6 @@
         "prizes": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 3,
           "description": "For bundle: what it gives together, at most three: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
           "items": {
             "type": "object",
@@ -969,7 +982,6 @@
         "outcomes": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 8,
           "items": {
             "$ref": "#/$defs/outcome"
           }
@@ -980,7 +992,6 @@
         },
         "odds": {
           "type": "array",
-          "maxItems": 4,
           "items": {
             "$ref": "#/$defs/odds"
           }
@@ -1041,6 +1052,34 @@
               }
             }
           ]
+        },
+        "slots": {
+          "type": "array",
+          "description": "What one open draws: each slot `count` draws among the outcomes it names (`from`: their places in `outcomes`, from 0; all when left out), and with `distinct` no outcome twice in the open. Left out, an open is one draw among every outcome. A pack of five is `[{ \"count\": 5 }]`; a guaranteed rare `[{ \"count\": 4 }, { \"count\": 1, \"from\": [8, 9, 10] }]`. A player may open several packs in one purchase.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "count"
+            ],
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "from": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              },
+              "distinct": {
+                "type": "boolean"
+              }
+            }
+          }
         }
       }
     },
@@ -1106,7 +1145,7 @@
         "count": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 8
+          "maximum": 255
         },
         "amount": {
           "$ref": "#/$defs/amount"
@@ -1175,7 +1214,7 @@
         "on": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 7,
+          "maximum": 254,
           "description": "For `roll`: the collectible handed in and kept (its place, the first is 0) the box rolls on (a risky upgrade); left out, it rolls on nothing (a merge whose result is left to chance). One a recipe."
         },
         "stash": {
@@ -1215,21 +1254,18 @@
         },
         "in": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "$ref": "#/$defs/input"
           }
         },
         "out": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "$ref": "#/$defs/output"
           }
         },
         "needs": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "type": "object",
             "required": [
@@ -1243,12 +1279,11 @@
               "place": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7
+                "maximum": 254
               },
               "key": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 32
+                "minLength": 1
               },
               "atLeast": {
                 "type": "integer",
@@ -1260,7 +1295,6 @@
         },
         "keeps": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "type": "object",
             "required": [
@@ -1273,25 +1307,23 @@
             "properties": {
               "key": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 32
+                "minLength": 1
               },
               "from": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7
+                "maximum": 254
               },
               "to": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7
+                "maximum": 254
               }
             }
           }
         },
         "raises": {
           "type": "array",
-          "maxItems": 8,
           "description": "Numbers the recipe moves on collectibles handed in and kept (use, renew, show): a level or a stat bought with the recipe's own payment, or one it costs (a negative `by`: a merge that costs a level, never below 0). Written on the NFT when the game has authority over it, in its Sheet otherwise. One already at `upTo` is refused (MaxedOut) when raising. With `fromNow`, it moves a time: fuel for a day more (\"by\": \"1d\", \"upTo\": \"3d\"), a day off a lock (\"by\": \"-1d\").",
           "items": {
             "type": "object",
@@ -1305,13 +1337,12 @@
               "place": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7,
+                "maximum": 254,
                 "description": "Which collectible handed in (the first is 0); one that is kept."
               },
               "key": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 32
+                "minLength": 1
               },
               "by": {
                 "anyOf": [
@@ -1501,7 +1532,6 @@
         "places": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 8,
           "items": {
             "anyOf": [
               {
@@ -1654,7 +1684,6 @@
         },
         "deciders": {
           "type": "array",
-          "maxItems": 3,
           "items": {
             "$ref": "#/$defs/address"
           },
@@ -2134,8 +2163,7 @@
         },
         "attribute": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 32
+          "minLength": 1
         },
         "atLeast": {
           "type": "integer",
@@ -2143,8 +2171,7 @@
           "maximum": 4294967295
         },
         "equals": {
-          "type": "string",
-          "maxLength": 32
+          "type": "string"
         },
         "time": {
           "enum": [
@@ -2192,7 +2219,7 @@
         "outcome": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 7,
+          "maximum": 65535,
           "description": "Which outcome (0 is the first)."
         },
         "when": {
@@ -2313,7 +2340,7 @@
         "tiers": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 4,
+          "maxItems": 256,
           "items": {
             "$ref": "#/$defs/tier"
           },
@@ -2321,7 +2348,6 @@
         },
         "boosts": {
           "type": "array",
-          "maxItems": 4,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -2351,7 +2377,6 @@
             {
               "type": "array",
               "minItems": 1,
-              "maxItems": 4,
               "items": {
                 "$ref": "#/$defs/rule"
               }
@@ -2367,7 +2392,6 @@
             {
               "type": "array",
               "minItems": 1,
-              "maxItems": 4,
               "items": {
                 "$ref": "#/$defs/growth"
               }
@@ -2382,13 +2406,11 @@
         "lockAttribute": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32,
           "description": "For a farm of collectibles: the attribute the farm writes each staked collectible's lock under, as the time it ends (Unix seconds), and reads when it leaves. Whatever moves a number moves it: a recipe `raises` it by \"-1d\" with `fromNow` for a price (a way out early; the price can be burned, or paid into this farm's rewards pool, shared by the seats there at the next move), a roll's `shifts` add a day (jail). A mission's prize still needs the tier's own lock to have run, and a tier that rolls rolls whenever the collectible leaves. A recipe reaches a collectible staked in escrow (the default) on its seat."
         },
         "upkeepAttribute": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32,
           "description": "For a farm of collectibles: an upkeep. The attribute that says until when (Unix seconds) a staked collectible earns and grows: fuel, food, a license. A recipe sells it (`raises` with `fromNow`: \"+1d\" for 10 FUEL, up to \"3d\" ahead), and it runs out by itself. Run dry, the seat earns and grows nothing more, and what it was credited after it ran out goes back to the farm (split by time), shared by the seats there. Fuel bought counts once the seat is refreshed (anyone sends `refresh`; the play page sends it with the recipe). A mission's prize needs the upkeep to last its tier's lock."
         },
         "exitFeeTo": {
@@ -2587,7 +2609,6 @@
             "wallets": {
               "type": "array",
               "minItems": 0,
-              "maxItems": 16,
               "items": {
                 "$ref": "#/$defs/address"
               }
@@ -2672,7 +2693,6 @@
         "attribute": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32,
           "default": "xp",
           "description": "The attribute the points are written under."
         },
@@ -2685,13 +2705,11 @@
         "level": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32,
           "default": "level",
           "description": "The attribute the level is written under, when there are `levels`."
         },
         "levels": {
           "type": "array",
-          "maxItems": 16,
           "items": {
             "type": "integer",
             "minimum": 1,
@@ -2735,7 +2753,6 @@
         },
         "nfts": {
           "type": "array",
-          "maxItems": 256,
           "items": {
             "anyOf": [
               {
@@ -2754,6 +2771,12 @@
                   "collection": {
                     "$ref": "#/$defs/address",
                     "description": "Its Core collection, when it is not the stash's."
+                  },
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295,
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
                   }
                 }
               },
@@ -2775,6 +2798,12 @@
                   "ruleSet": {
                     "$ref": "#/$defs/address",
                     "description": "A pNFT's rule set, when it has one."
+                  },
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295,
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
                   }
                 }
               },
@@ -2788,6 +2817,12 @@
                   "compressed": {
                     "$ref": "#/$defs/address",
                     "description": "A compressed NFT's asset id."
+                  },
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295,
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
                   }
                 }
               }
@@ -2916,6 +2951,59 @@
         },
         "then": {
           "$ref": "#/$defs/spend"
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "rows"
+      ],
+      "description": "A table (`table.rs`): rows, each a weight and an optional stock, and a label (`\"labels\"`, up to 32 bytes each) or nothing (`\"numbers\"`: a row gives its own number, from 0). Sealed once written: its weights never change and its stock only goes down. A row with a stock leaves the draws once it is used up.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "kind": {
+          "enum": [
+            "labels",
+            "numbers"
+          ],
+          "default": "labels"
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "weight"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "stock": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967294,
+                "description": "How many units may draw it: left out, never runs out."
+              }
+            }
+          }
         }
       }
     }

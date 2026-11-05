@@ -110,9 +110,9 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} Anyone asks the oracle for a roll and settles it (the oracle's fee is the asker's), and a roll is never refunded while it waits.`);
       continue;
     }
-    const verb = boxBuys(src) ? 'Buy' : 'Open';
-    const oneStep = boxBuys(src) ? ' It sells in one step: the price is split and what it gives handed over in the same transaction.' : '';
-    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${src.outcomes.some(outcomeBurns) ? 'on a burn, all of it is burned; otherwise ' : ''}${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? ` It sells only while its pools hold every fixed prize${boxBuys(src) ? '' : ', and a prize won is set aside for its winner at once'}.` : ''}${oneStep}`);
+    const verb = boxBuys(src, m) ? 'Buy' : 'Open';
+    const oneStep = boxBuys(src, m) ? ' It sells in one step: the price is split and what it gives handed over in the same transaction.' : '';
+    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${src.outcomes.some(outcomeBurns) ? 'on a burn, all of it is burned; otherwise ' : ''}${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? ` It sells only while its pools hold every fixed prize${boxBuys(src, m) ? '' : ', and a prize won is set aside for its winner at once'}.` : ''}${oneStep}`);
   }
   for (const p of sim.payments) actions.push(`Pay “${p.name}”: ${p.atLeast ? `whatever the player chooses, at least ${num(p.amount)} ${sym(p.token)} (the page keeps the least; the chain takes any amount)` : `${num(p.amount)} ${sym(p.token)}`}, ${inAll(p.realCost)}. The money: ${splitOf(m.payments.find((x) => x.key === p.key)?.split, ['payer', 'payment'])}.`);
   for (const r of sim.recipes) actions.push(`Craft “${r.name}”: ${r.takes.join(' + ') || 'nothing'} → ${r.gives.join(' + ') || 'nothing'} (+ ${fee} SOL player fee).`);

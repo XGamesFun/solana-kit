@@ -96,7 +96,10 @@ t('a rolled bundle: the roll sets each prize aside, settle hands them all over a
   const s = w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), items: { 1: w.read('Item', pda.item(w.project, 1)) } })]);
   const settled = s.receipts.find((x) => x.name === 'OrderSettled').data;
   const roll = pda.order(w.project, w.player, loot.rollNonce(orderAddress, order.requested_slot, 2));
-  assert.deepEqual(settled.assets, [pda.itemAsset(pda.item(w.project, 1), 1), NOBODY, roll]);
+  // The receipt names what was won; what each became follows from it: the collectible at its item and serial, the
+  // roll's order at its nonce.
+  assert.deepEqual([settled.from, settled.won], [0, order.won]);
+  assert.ok(w.chain.get(pda.itemAsset(pda.item(w.project, 1), 1)), 'the collectible is minted');
   assert.equal(w.balance(w.player, coin), 40n);
   assert.equal(w.read('Order', roll).status, 'Waiting');
 });

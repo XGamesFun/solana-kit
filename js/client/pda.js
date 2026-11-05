@@ -41,6 +41,10 @@ export const pda = {
   box: (project, id) => at(seed('box'), key(project), u32(id)),
   /** NFTs the project holds to give away as prizes: a box entry of a stash gives one of them at random. */
   stash: (project, id) => at(seed('stash'), key(project), u32(id)),
+  /** A table of weighted rows the project writes and seals (a card among thousands, a trait's values), or commits by a Merkle root. */
+  table: (project, id) => at(seed('table'), key(project), u32(id)),
+  /** What the project keeps about a wallet (its player's profile: XP, level, rank). */
+  profile: (project, wallet) => at(seed('profile'), key(project), key(wallet)),
   schedule: (project, id) => at(seed('schedule'), key(project), u32(id)),
   lottery: (project, id) => at(seed('lottery'), key(project), u32(id)),
   recipe: (project, id) => at(seed('recipe'), key(project), u32(id)),

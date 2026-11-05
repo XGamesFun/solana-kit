@@ -6,7 +6,6 @@
 // lottery's pot, a pool nothing fills, a recipe too big to send, a prize its pool cannot pay.
 import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
-import { MAX_RECEIPT_ROUNDS } from '../client/sizes.js';
 import { vault } from '../client/pda.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
@@ -150,7 +149,7 @@ export function openBoxSize(b, m, { detail = false } = {}) {
   const none = 'program:loot';
   const outcomes = b.outcomes ?? [];
   // A stash's NFT is picked at random: a box of one stash outcome is rolled too.
-  const rolls = boxRolls(b);
+  const rolls = boxRolls(b, m);
   const limited = Boolean(b.perWallet || b.perWalletEach?.count);
   const chosenItem = (b.split ?? []).some((s) => /^chosen:./.test(String(s.to)));
   // The NFT it rolls on fills the `piece` slots: a Core collectible of the game's, else at its largest a pNFT's
@@ -335,7 +334,8 @@ export function settleSize(b, o, m) {
   const hooks = keys.filter((k) => k.startsWith('hook:') || k === 'program:hook').length;
   const entries = 37 + (compressedSubject ? LONGEST_PROOF : 0) + won + split + hooks + (memo ? 1 : 0);
   const named = keys.filter((k) => k !== 'program:compute-budget' && k !== 'program:loot');
-  const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: 8 };
+  // Its data: the discriminator, `upto`, `prize_accounts` and no proven rows.
+  const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: 8 + 4 + 2 + 4 };
   const budget = [{ program: 'compute-budget', accounts: [], data: 5 }, ...(moves >= 3 ? [{ program: 'compute-budget', accounts: [], data: 5 }] : [])];
   // A table holds every account but the signer and the programs the transaction calls.
   const held = keys.filter((k) => !['wallet:signer', 'program:compute-budget', 'program:loot'].includes(k)).length;
@@ -593,7 +593,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (!isCollectible(it)) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is a normal item: only a collectible is an NFT.`, 'Make it a collectible, or leave "compressed" out.');
     if (it.soulbound) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is soulbound: a compressed NFT can’t be kept from moving, so the program never gives one (${never}).`, 'Give it as a Core collectible (leave "compressed" out), or make the item tradable.');
     const longest = (it.uri ?? '').replaceAll('{serial}', String(Number(it.supply ?? 0) || 4_294_967_295));
-    if (utf8Bytes(longest) > LIMITS.uriBytes) refuse(code, `${at}.compressed`, `${label(it)}’s link, its serial written in, is longer than Bubblegum’s ${LIMITS.uriBytes} bytes: ${never}.`, 'Use a shorter link.');
+    if (utf8Bytes(longest) > LIMITS.compressedUriBytes) refuse(code, `${at}.compressed`, `${label(it)}’s link, its serial written in, is longer than Bubblegum’s ${LIMITS.compressedUriBytes} bytes: ${never}.`, 'Use a shorter link.');
     if (it.collection) warn('W-COMPRESSED', `${at}.compressed`, `${label(it)} is minted into ${it.collection}: a compressed one is given only if that collection was made with Bubblegum’s plugin (BubblegumV2), which a collection can’t add later; otherwise ${never}.`, 'Use the setup’s collection, or one made with the plugin.');
     // A new setup still landing made its collection with the plugin, and opens the tree after the project.
     else if (m.live.project && !m.live.tree && !(m.live.partial && !m.live.published)) refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but the project’s collection went live without Bubblegum’s plugin, which a collection can’t add later: ${never}.`, 'Give it as a Core collectible (leave "compressed" out), or mint it into another collection made with the plugin ("collection" on the item).');
@@ -691,7 +691,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       r.list.forEach((w, i) => isAddress(w) || refuse('E-REF', `${where}.list[${i}]`, `${what} lists “${w}”, which is not an address.`, 'Write the wallet’s public address.'));
       if (!refusals.some((x) => x.where.startsWith(`${where}.list`))) {
         const { depth } = gateList(r.list);
-        if (depth > 20) refuse('E-RULE', `${where}.list`, `${what} lists ${r.list.length} wallets: a proof is one account a level, and the program reads at most 20 (BadRule).`, 'Keep the list under 1,048,576 wallets, or gate by an NFT they hold.');
         if (depth > 12) warn('W-LIST', `${where}.list`, `${what}’s list is ${depth} levels deep: each player passes ${depth} proof nodes as accounts, ${depth * 32} bytes of their transaction.`, 'A shorter list, or gate by an NFT they hold.');
         warn('W-LIST', `${where}.list`, `${what} lets in ${r.list.length} listed wallet${r.list.length === 1 ? '' : 's'}: the program keeps only the list’s root, so the app (or xsolana_play) passes each player’s proof, and the list itself must stay where the app can read it (this spec keeps it).`);
       }
@@ -717,8 +716,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       return;
     }
     if (r.wallets !== undefined) {
-      if (r.wallets.length > LIMITS.gateWallets) refuse('E-RULE', `${where}.wallets`, `${what} lists ${r.wallets.length} wallets; a gate lists at most ${LIMITS.gateWallets}.`, 'List fewer wallets, or gate by a collectible they hold.');
-      else if (!r.wallets.length) warn('W-GATE', `${where}.wallets`, `${what} lists no wallets: nobody passes it.`, 'List the wallets it lets in, or leave the gate out.');
+      if (!r.wallets.length) warn('W-GATE', `${where}.wallets`, `${what} lists no wallets: nobody passes it.`, 'List the wallets it lets in, or leave the gate out.');
       r.wallets.forEach((w, i) => isAddress(w) || refuse('E-REF', `${where}.wallets[${i}]`, `${what} lists “${w}”, which is not an address.`, 'Write the wallet’s public address.'));
       return;
     }
@@ -727,7 +725,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (!r.item && !r.collection && !r.attribute) refuse('E-RULE', where, `${what} asks for nothing: no item, no collection and no attribute.`, 'Name the item or the collection players must hold, an attribute, or both.');
     if (r.item && r.collection) refuse('E-RULE', where, `${what} names both an item and a collection: a rule is about one.`, 'Keep "item" for an item the game mints, or "collection" for any NFT of a collection.');
     if (r.collection && !isAddress(r.collection)) refuse('E-REF', `${where}.collection`, `${what} names the collection “${r.collection}”, which is not an address.`, 'Write the Core collection’s address, or the Token Metadata collection mint.');
-    if (utf8Bytes(r.attribute ?? '') > LIMITS.keyBytes) refuse('E-RULE', `${where}.attribute`, `${what} reads an attribute name longer than ${LIMITS.keyBytes} bytes.`, 'Shorten it.');
     if (r.atLeast !== undefined && r.equals !== undefined) refuse('E-RULE', where, `${what} asks for an attribute that is both at least a number and equal to a text.`, 'Keep one of "atLeast" and "equals".');
     if (r.item) {
       const it = item(r.item, `${where}.item`);
@@ -760,7 +757,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const p of m.pools) if (!m.tokens.has(p.currency)) refuse('E-REF', `economy.pools.${p.key}.currency`, `The pool “${p.key}” holds “${p.currency}”, which is not in the tokens.`, 'Add the token, or name one that is there.');
 
   /**
-   * A split carried out in `tok`: percents, at most 4 shares and 100% (state.rs check_later_shares), pools of the same
+   * A split carried out in `tok`: percents, any number of shares and 100% at most (state.rs check_later_shares), pools of the same
    * token, and no share that burns in wrapped SOL (the program refuses it). What the shares leave goes to the
    * treasury wallet's account of `tok`, whatever token it is. `chosen`: the buyer may name one share ("chosen",
    * "chosen:<item>"): a box's or a lottery's split; 'wallet': only "chosen", a wallet (a payment's split).
@@ -769,7 +766,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const shares = sharesOf(list);
     shares.forEach((s, i) => percent(s.percent, `${where}[${i}].percent`));
     const total = shares.reduce((n, s) => n + (s.bps ?? 0), 0);
-    if (shares.length > LIMITS.shares) refuse('E-SPLIT', where, `${what} has ${shares.length} shares; the program takes at most ${LIMITS.shares}.`, 'Merge shares that go to the same place, or drop one.');
     if (total > 10_000) refuse('E-SPLIT', where, `${what}’s shares add up to ${total / 100}%, more than the whole payment.`, 'Make them add up to 100% or less; the treasury gets what they leave.');
     if (shares.filter((s) => s.kind === 'chosen').length > 1) refuse('E-CHOSEN', where, `${what} lets the buyer choose more than one share.`, 'Let them choose one.');
     for (const [i, s] of shares.entries()) {
@@ -827,10 +823,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   };
 
   // ---- the collections and items
-  if (m.collection && utf8Bytes(m.collection.name) > LIMITS.nameBytes) refuse('E-COLLECTION', 'economy.collection.name', `The collection’s name is longer than ${LIMITS.nameBytes} bytes.`, 'Shorten it.');
   if (m.collection && toBps(m.collection.royaltyPercent) === null) refuse('E-PERCENT', 'economy.collection.royaltyPercent', 'The royalty is finer than hundredths of a percent.', 'Round it to two decimals.');
   // A project takes up to eight collections (project.rs MAX_COLLECTIONS): the one it makes and the owner's others.
-  if ((m.collection ? 1 : 0) + m.collections.length > 8) refuse('E-COLLECTION', 'economy.collections', `The project would take ${(m.collection ? 1 : 0) + m.collections.length} collections; it takes at most 8 (BadCollection).`, 'Name fewer collections.');
   m.collections.forEach((c, i) => isAddress(c) || refuse('E-REF', `economy.collections[${i}]`, `“${c}” is not an address.`, 'Write the Core collection’s address.'));
   if (m.collections.length) warn('W-COLLECTIONS', 'economy.collections', `The project takes ${m.collections.length} collection${m.collections.length === 1 ? '' : 's'} you already have: going live passes ${m.collections.length === 1 ? 'it' : 'them'} to the program, which refuses one whose update authority is not your wallet (BadCollection). An item minted into one needs the project as an update delegate of it, which you add to the collection yourself.`);
   const given = new Set();
@@ -838,10 +832,39 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const p of prizes(m)) if (p.prize.gives === 'item') given.add(p.prize.item);
   for (const a of m.auctions) if (a.lot?.item) given.add(a.lot.item);
   for (const d of m.decisions) if (d.does === 'make') given.add(d.item);
+  // A fresh item is given only by a box's roll: any other route gives alike units (NeedsRoll).
+  for (const p of prizes(m)) {
+    const it = p.prize.gives === 'item' ? m.item.get(p.prize.item) : null;
+    if ((it?.drawn ?? []).length) refuse('E-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: a ${p.route} gives alike units (NeedsRoll).`, 'Give a roll of a box that gives it (`{ "gives": "roll", "box": key }`) instead.');
+  }
+
+  // A table: rows that weigh something, a label of 32 bytes at most in a table of labels, none in one of numbers.
+  for (const t of m.tables) {
+    const where = `economy.tables.${t.key}`;
+    if (!(t.rows ?? []).length) refuse('E-TABLE', `${where}.rows`, `The table “${t.key}” has no rows.`, 'Give it at least one row.');
+    (t.rows ?? []).forEach((r, i) => {
+      const bytes = new TextEncoder().encode(String(r.label ?? '')).length;
+      if (t.kind === 'numbers' && r.label !== undefined) refuse('E-TABLE', `${where}.rows[${i}].label`, `The table “${t.key}” is of numbers: a row gives its own number, and takes no label (BadTable).`, 'Remove the label, or make the table "labels".');
+      else if (t.kind !== 'numbers' && (bytes === 0 || bytes > 32)) refuse('E-TABLE', `${where}.rows[${i}].label`, `Row ${i} of the table “${t.key}” has a label of ${bytes} bytes: a label is 1 to 32 bytes (BadTable).`, 'Shorten it.');
+    });
+    if (!m.items.some((it) => (it.drawn ?? []).some((d) => d.table === t.key))) warn('W-TABLE', where, `No item draws a trait from the table “${t.key}”.`, 'Name it in an item’s "drawn", or leave it out.');
+  }
+
   for (const it of m.items) {
     const where = `economy.items.${it.key}`;
-    if (utf8Bytes(it.name) > LIMITS.nameBytes) refuse('E-ITEM', `${where}.name`, `${label(it)} is longer than ${LIMITS.nameBytes} bytes, the most the program keeps.`, 'Shorten the name.');
-    if (utf8Bytes(it.uri) > LIMITS.uriBytes) refuse('E-ITEM', `${where}.uri`, `${label(it)}’s link is longer than ${LIMITS.uriBytes} bytes.`, 'Use a shorter link.');
+    // A fresh collectible: each trait its own attribute, drawn from a table the spec has or a range from its least to its
+    // most; given only by a box's roll (a shop sells alike units: NeedsRoll).
+    const drawn = it.drawn ?? [];
+    if (drawn.length && !isCollectible(it)) refuse('E-ITEM', `${where}.drawn`, `${label(it)} draws traits, but it is a normal item: only a collectible carries them.`, 'Make it a collectible, or leave "drawn" out.');
+    drawn.forEach((d, i) => {
+      const at = `${where}.drawn[${i}]`;
+      if (RESERVED_ATTRIBUTES.includes(d.attribute)) refuse('E-ITEM', `${at}.attribute`, `${label(it)} draws “${d.attribute}”, an attribute the program writes itself (BadItem).`, 'Name another attribute.');
+      if (drawn.slice(0, i).some((e) => e.attribute === d.attribute)) refuse('E-ITEM', `${at}.attribute`, `${label(it)} draws “${d.attribute}” twice (BadItem).`, 'Draw each attribute once.');
+      if (d.table !== undefined && (d.min !== undefined || d.max !== undefined)) refuse('E-ITEM', at, `${label(it)}’s trait “${d.attribute}” names a table and a range.`, 'Keep one.');
+      else if (d.table !== undefined && !m.table.get(d.table)) refuse('E-REF', `${at}.table`, `${label(it)}’s trait “${d.attribute}” draws from “${d.table}”, which is not one of the spec’s tables.`, 'Add the table to "tables", or name one it has.');
+      else if (d.table === undefined && !(d.min !== undefined && d.max !== undefined && d.min <= d.max)) refuse('E-ITEM', at, `${label(it)}’s trait “${d.attribute}” needs a table, or a range from its "min" to its "max", the least first.`, 'Name a table, or give a "min" and a "max".');
+    });
+    if (drawn.length && (Number(it.price ?? 0) > 0 || it.free)) refuse('E-ITEM', `${where}.price`, `${label(it)} draws its traits per unit, by a roll: the shop sells only alike units (NeedsRoll).`, 'Sell it from a box (one outcome is enough: the box still rolls), and leave "price" out.');
     // A collectible is minted into a collection of the project's (catalog.rs BadCollection).
     if (isCollectible(it) && it.collection && !m.collections.includes(it.collection))
       refuse('E-COLLECTION', `${where}.collection`, `${label(it)} is minted into ${it.collection}, which is not one of the project’s "collections" (BadCollection).`, 'Add it to "collections", or leave "collection" out to mint into the one the setup makes.');
@@ -959,6 +982,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   const seedNeeds = new Map();
   for (const b of m.boxes) {
     const where = `economy.boxes.${b.key}`;
+    // A pack: each slot draws at least once, among outcomes the box has, each named once. Several draws need a box that
+    // rolls, or one outcome of items, with no outcome that burns the payment and no NFT to roll on (BadEntries).
+    const slots = b.slots ?? [];
+    const outs = b.outcomes ?? [];
+    slots.forEach((s, i) => (s.from ?? []).forEach((o, j) => {
+      if (o >= outs.length) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o}, but the box has ${outs.length}.`, 'Name outcomes by their place in "outcomes", from 0.');
+      else if ((s.from ?? []).slice(0, j).includes(o)) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o} twice.`, 'Name each once.');
+    }));
+    const cards = slots.reduce((n, s) => n + s.count, 0);
+    const oneOfItems = outs.length === 1 && outcomeParts(outs[0]).every((p) => p.gives === 'item');
+    if (cards > 1 && (b.rollsOn || outs.some(outcomeBurns) || !(boxRolls(b, m) || oneOfItems)))
+      refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} times an open, but a pack has no NFT it rolls on and no outcome that burns the payment, and draws among outcomes that roll (or gives one outcome of items) (BadEntries).`, 'Leave "slots" out, or drop "rollsOn" and the burns.');
     const tok = token(b.currency, `${where}.currency`);
     const price = units(b.price, tok, `${where}.price`, `${label(b)}’s price`);
     prices(b, tok, where);
@@ -1008,7 +1043,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // may turn on memos) is warned of, and one bigger than a legacy transaction goes as v0 with a lookup table its
     // sender makes. Two shapes outgrow the 32 KiB heap on a compressed subject (three Core NFTs of stashes; two and four
     // holders' or wallets' shares): with the 256 KiB heap frame xsolana's senders ask for they land (48 and 58 accounts).
-    if (!boxBuys(b) || rolls.some((r) => r.box === b.key)) {
+    if (!boxBuys(b, m) || rolls.some((r) => r.box === b.key)) {
       const sizes = (outcomes.length ? outcomes : [{}]).map((o, i) => ({ i, ...settleAccounts(b, o, m), least: settleAccounts(b, o, m, { proof: 0 }).count, units: settleUnits(b, o, m), ...settleSize(b, o, m) }));
       const at = (x) => `${where}.outcomes${outcomes.length ? `[${x.i}]` : ''}`;
       // As v0 (any settle past a legacy transaction), the transaction locks its lookup table and the table's program
@@ -1052,14 +1087,14 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // a mission's, a prize's, another box's outcome's, of any number of outcomes) at its ask, after the player gave what
     // it took.
     const rolledHere = [...new Set(rolls.filter((r) => r.box === b.key).map(roller))];
-    if (boxRolls(b) || rolledHere.length)
+    if (boxRolls(b, m) || rolledHere.length)
       for (const [i, o] of outcomes.entries()) {
         const hookedKey = outcomeParts(o)
           .map((x) => (x.gives === 'pay' || x.gives === 'share' ? m.pool.get(x.pool)?.currency : x.gives === 'mint' ? x.currency ?? m.currencyKey : undefined))
           .find((k) => k && m.tokens.get(k)?.powers?.transferHook);
         if (!hookedKey) continue;
         const fails = [
-          boxRolls(b) && 'every opening of it fails',
+          boxRolls(b, m) && 'every opening of it fails',
           rolledHere.length && `every roll of it ${rolledHere.join(', ')} make${rolledHere.length === 1 ? 's' : ''} fails when it is asked for, keeping what the player gave for it (a recipe’s inputs, a mission’s return, a grant’s round, a box’s price), or is refused at once on a route that can’t give it (a purchase in one step)`,
         ].filter(Boolean);
         refuse('E-BOX', `${where}.outcomes[${i}]`, `${label(b)} pays a prize in “${hookedKey}”, a token whose mint has a transfer hook, and its prizes move in a roll, which carries none of the accounts a hook asks for: the program refuses them (PrizeHasHook), so ${fails.join(', and ')}.`, `Pay its prizes in a token without a transfer hook${rolledHere.length ? '' : ', or give it one outcome (a box of one outcome moves its prize in the purchase, with the hook’s accounts)'}.`);
@@ -1086,7 +1121,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     for (const [i, outcome] of outcomes.entries()) {
       const at = `${where}.outcomes[${i}]`;
       if (outcome.gives === 'bundle' && !(outcome.prizes ?? []).length) refuse('E-ODDS', `${at}.prizes`, `A bundle of ${label(b)} gives nothing.`, 'List up to three prizes in "prizes".');
-      if (outcomeParts(outcome).length > 3) refuse('E-ODDS', `${at}.prizes`, `An outcome of ${label(b)} gives ${outcomeParts(outcome).length} prizes; an entry gives at most 3 (BadEntries).`, 'Give fewer, or move some to another outcome.');
       if (outcome.burns && outcome.gives !== 'bundle') refuse('E-ODDS', `${at}.burns`, `"burns" is a bundle's; this outcome is “${outcome.gives}”.`, 'Use "gives": "burn" for an outcome that only burns, or make it a bundle.');
       if (outcomeBurns(outcome) && outcome.gives !== 'burn' && tok?.wsol) refuse('E-WSOL-BURN', at, `${label(b)} is paid in SOL, and wrapped SOL cannot be burned.`, 'Leave "burns" out.');
       for (const [k, o] of outcomeParts(outcome).entries()) {
@@ -1115,10 +1149,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       }
       if (outcome.gives === 'burn' && tok?.wsol) refuse('E-WSOL-BURN', at, `${label(b)} is paid in SOL, and wrapped SOL cannot be burned.`, 'Make that outcome "nothing", or send its share somewhere.');
     }
-    if (outcomes.length > LIMITS.entries) refuse('E-ODDS', `${where}.outcomes`, `${label(b)} has ${outcomes.length} outcomes; a box holds at most ${LIMITS.entries}.`, 'Merge outcomes, or split it into two boxes.');
     // The oracle's answer to a roll carries the order, the box, its ticket, an account for each outcome that wins
     // something, and with prizes the token programs, the game and a mint and a vault for each pool (catalog.rs).
-    if (boxRolls(b)) {
+    if (boxRolls(b, m)) {
       const named = parts.filter((o) => ['item', 'pay', 'share', 'stash', 'nft'].includes(o.gives)).length;
       const sources = new Set(parts.filter((o) => ['pay', 'share', 'mint'].includes(o.gives)).map((o) => (o.gives === 'mint' ? `mint:${o.currency ?? m.currencyKey}` : o.pool))).size;
       const callback = 3 + named + (sources ? 3 + 2 * sources : 0);
@@ -1127,12 +1160,12 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // The player's purchase must be sendable, with the compute budget their wallet adds: js/play sends one
     // too big for a legacy transaction as v0 with a lookup table, which locks the table and its program too.
     if (b.active !== false && !refusals.some((x) => x.where.startsWith(where))) {
-      const { bytes, locks } = boxBuys(b) ? buySize(b, m, { detail: true }) : openBoxSize(b, m, { detail: true });
-      const verb = boxBuys(b) ? 'buy' : 'open';
+      const { bytes, locks } = boxBuys(b, m) ? buySize(b, m, { detail: true }) : openBoxSize(b, m, { detail: true });
+      const verb = boxBuys(b, m) ? 'buy' : 'open';
       if (bytes > MAX_TRANSACTION_BYTES && locks + TABLE_LOCKS > ACCOUNT_LOCKS)
-        refuse('E-TX-SIZE', where, `${boxBuys(b) ? 'Buying' : 'Opening'} ${label(b)} would take about ${bytes} bytes and ${locks} accounts, ${locks + TABLE_LOCKS} as a v0 transaction with a lookup table: more than the ${ACCOUNT_LOCKS} a transaction can lock, so no player could ${verb} it.`, 'Give it fewer outcomes that name an item or a pool, pay its prizes (and those of a box it rolls) from fewer pools, or drop its per-wallet limit.');
+        refuse('E-TX-SIZE', where, `${boxBuys(b, m) ? 'Buying' : 'Opening'} ${label(b)} would take about ${bytes} bytes and ${locks} accounts, ${locks + TABLE_LOCKS} as a v0 transaction with a lookup table: more than the ${ACCOUNT_LOCKS} a transaction can lock, so no player could ${verb} it.`, 'Give it fewer outcomes that name an item or a pool, pay its prizes (and those of a box it rolls) from fewer pools, or drop its per-wallet limit.');
       else if (bytes > MAX_TRANSACTION_BYTES)
-        warn('W-TX-V0', where, `${boxBuys(b) ? 'Buying' : 'Opening'} ${label(b)} takes about ${bytes} bytes with the compute budget a wallet adds, more than the ${MAX_TRANSACTION_BYTES} a legacy transaction holds: js/play sends it as a v0 transaction with a lookup table the player’s wallet makes first (one to three more approvals, and the table’s rent until it is closed, which claims() offers about two minutes later). A wallet or app that sends only legacy transactions can’t ${verb} it.`, 'To keep it a legacy transaction, give it fewer outcomes that name an item or a pool, or pay its prizes from fewer pools.');
+        warn('W-TX-V0', where, `${boxBuys(b, m) ? 'Buying' : 'Opening'} ${label(b)} takes about ${bytes} bytes with the compute budget a wallet adds, more than the ${MAX_TRANSACTION_BYTES} a legacy transaction holds: js/play sends it as a v0 transaction with a lookup table the player’s wallet makes first (one to three more approvals, and the table’s rent until it is closed, which claims() offers about two minutes later). A wallet or app that sends only legacy transactions can’t ${verb} it.`, 'To keep it a legacy transaction, give it fewer outcomes that name an item or a pool, or pay its prizes from fewer pools.');
     }
     for (const [i, o] of (b.odds ?? []).entries()) {
       const at = `${where}.odds[${i}]`;
@@ -1196,7 +1229,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const ins = r.in ?? [];
     const outs = r.out ?? [];
     if (!ins.length && !outs.length) warn('W-RECIPE', where, `${label(r)} takes nothing and gives nothing: crafting it only charges the player fee.`, 'Add what it takes and what it gives.');
-    if (ins.length > LIMITS.lines || outs.length > LIMITS.lines) refuse('E-RECIPE', where, `${label(r)} has more than ${LIMITS.lines} lines on a side.`, 'Merge lines, or split it into two recipes.');
     perWalletWindow(r, where);
     let taken = 0;
     const kept = [];
@@ -1545,7 +1577,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (bps <= 0 || bps > LIMITS.maxTierBps) refuse('E-FARM', `${where}.tiers[${i}].multiplier`, `${label(f)}’s tier ${i} multiplies by ${t.multiplier}: a tier is above 0 and at most x11.`, 'Use a multiplier above 0, up to 11.');
       else if (bps < 10_000) warn('W-FARM', `${where}.tiers[${i}].multiplier`, `${label(f)}’s tier ${i} weighs x${t.multiplier}, less than what it stakes: a flexible tier that earns less.`);
     }
-    if ((f.boosts ?? []).length > LIMITS.boosts) refuse('E-FARM', `${where}.boosts`, `${label(f)} has ${f.boosts.length} boosts; a farm has at most ${LIMITS.boosts}.`, 'Merge boosts.');
     for (const [i, b] of (f.boosts ?? []).entries()) {
       rule(b.when, `${where}.boosts[${i}].when`, `${label(f)}’s boost`);
       effect(b.add, `${where}.boosts[${i}].add`, `${label(f)}’s boost`);
@@ -1566,7 +1597,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (!f.rate.minted) warn('W-FARM-RATE', `${where}.rate`, `${label(f)} pays its fixed rate from “${f.rewards}” while it lasts: what the pool can’t cover is not owed later, and every seat earns less once it runs dry.`, 'Keep the pool filled (a schedule), or mint the rewards.');
       else rateRoom(f, warn, m);
     }
-    if (growths.length > LIMITS.growths) refuse('E-FARM', `${where}.growth`, `${label(f)} grows ${growths.length} things; a farm grows at most ${LIMITS.growths}.`, 'Merge them.');
     const names = growths.flatMap((g) => [g.attribute ?? 'xp', ...((g.levels ?? []).length ? [g.level ?? 'level'] : [])]);
     if (names.some((n, i) => names.indexOf(n) !== i)) refuse('E-FARM', `${where}.growth`, `${label(f)} grows the same attribute twice (${names.join(', ')}): each growth writes names of its own.`, 'Give each growth its own "attribute" (and "level").');
     for (const [i, g] of growths.entries()) {
@@ -1631,7 +1661,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     }
     if (f.gate && !ofCollectibles) refuse('E-FARM', `${where}.gate`, `${label(f)} stakes a token: a gate only says which collectibles a farm of collectibles takes.`, 'Remove the gate, or use a boost to favour holders.');
     const gates = listOf(f.gate);
-    if (gates.length > LIMITS.gates) refuse('E-FARM', `${where}.gate`, `${label(f)}’s gate has ${gates.length} rules; a farm’s has at most ${LIMITS.gates}.`, 'Keep the rules that matter.');
     for (const [i, r] of gates.entries()) rule(r, Array.isArray(f.gate) ? `${where}.gate[${i}]` : `${where}.gate`, label(f));
     // No lock rule for rewards that land: a sharing farm releases each over its release span, and a fixed rate pays by
     // the second, so a stake just before a reward lands and gone right after takes only what was released meanwhile.
@@ -1673,7 +1702,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       warn('W-NFT-PRICE', `${where}.stakeNft`, `${label(c)}’s entries each stake one NFT, and the NFTs are the pot: each winning entry takes its own back and one loser’s, in the order the entries are claimed (anyone may claim them), and the losers’ NFTs the winners leave go to whoever opened it. The project holds every NFT until its entry is claimed.`);
     }
     const deciders = c.deciders ?? [];
-    if (deciders.length > LIMITS.deciders) refuse('E-CONTEST', `${where}.deciders`, `${label(c)} names ${deciders.length} deciders; a contest takes at most ${LIMITS.deciders}.`, 'Name fewer keys.');
     deciders.forEach((k, i) => isAddress(k) || refuse('E-REF', `${where}.deciders[${i}]`, `${label(c)}’s decider “${k}” is not a public address.`, 'Write the results server’s public key (never its private key).'));
     // A contest of NFTs counts its pot in NFTs, so its least pot is a whole number of them.
     const minPot = c.stakeNft ? wholeCount(c.minPot) : units(c.minPot, tok, `${where}.minPot`, `${label(c)}’s least pot`);
@@ -1772,8 +1800,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (gives.gives !== 'tokens') refuse('E-GRANT', `${where}.list[${i}].amount`, `${label(g)}’s list names an amount, but it gives ${gives.gives ?? 'nothing'}: only a grant of a fixed amount of tokens takes one.`, 'Remove "amount", or make the grant give tokens.');
       else if (t && units(e.amount, t, `${where}.list[${i}].amount`, 'A listed amount') > units(gives.amount, t, `${where}.prize.amount`, label(g))) refuse('E-GRANT', `${where}.list[${i}].amount`, `${label(g)}’s list gives ${e.wallet} ${e.amount}, more than the grant’s ${gives.amount} (OverPrize).`, 'Raise the grant’s amount to the largest listed, or lower this one.');
     }
-    if ((vouchers.length || keys.length) && (!l.perWallet || l.perWallet > MAX_RECEIPT_ROUNDS))
-      warn('W-GRANT-CAPACITY', `${where}.limits.perWallet`, `${label(g)} can pay each wallet at most ${MAX_RECEIPT_ROUNDS} distinct voucher rounds in one grant incarnation. Its round history is retained even after vouchers expire.`, `Use a wallet limit at or below ${MAX_RECEIPT_ROUNDS}, or start a new grant incarnation when the campaign ends.`);
     // A grant with no voucher key, no key list and no list is open: any wallet claims it, within its limits (grant.rs).
     if (open && showsNft(g.gate) && l.perPerson)
       warn('W-GRANT', `${where}.limits.perPerson`, `${label(g)} is open: "perPerson" counts only vouchers that name a person, so here it limits nothing (the wallet limits count each collectible shown).`, 'Remove "perPerson".');

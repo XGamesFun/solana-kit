@@ -1,6 +1,6 @@
 // What an economy can be made of, read from the schema, and what loot cannot do: the guide an agent reads first.
 // Pure.
-import { FEES, LAMPORTS_PER_SOL, LIMITS, ORACLE_FEE } from './model.mjs';
+import { FEES, LAMPORTS_PER_SOL, ORACLE_FEE } from './model.mjs';
 import { SCHEMA } from './validate.mjs';
 import { IDL } from '../client/ix.js';
 
@@ -35,9 +35,9 @@ export const CONVENTIONS = [
   'Shares are percents with at most two decimals: 2.5 is 2.5%.',
   'Times are durations ("45s", "30m", "6h", "7d", "2w", or seconds); a start is "publish", "publish+7d" or a date like "2026-11-01T18:00:00Z".',
   'Every part has a `key` (lower case, digits, dashes) that other parts name: a box pays from "pool": "house"; a split sends to "pool:house".',
-  `A split is up to ${LIMITS.shares} shares of a payment, each { "to": "burn" | "treasury" | "pool:<key>" | "lottery:<key>" | "wallet:<address>" | "account:<token account>" | "holder:<collectible address>" | "chosen" | "chosen:<item>", "percent": n }; what they leave goes to the treasury, and so does a share that can’t be paid (a wallet with no account, a collectible nobody holds): a sale never fails over it.`,
+  `A split is any number of shares of a payment, each { "to": "burn" | "treasury" | "pool:<key>" | "lottery:<key>" | "wallet:<address>" | "account:<token account>" | "holder:<collectible address>" | "chosen" | "chosen:<item>", "percent": n }; what they leave goes to the treasury, and so does a share that can’t be paid (a wallet with no account, a collectible nobody holds): a sale never fails over it.`,
   'The treasury, where what a split leaves goes (and a lottery’s cut), is the owner’s own wallet: the program pays its account of whatever currency was paid, and opens it when it is not there. `"treasury": "wallet:<address>"` makes it another wallet instead (a charity, a team’s multisig vault).',
-  'A box’s outcomes each have a `chance` (percents adding up to 100) or each a `weight` (whole numbers). An outcome gives one thing, or a bundle of up to three ({ "gives": "bundle", "prizes": [{ "gives": "item", … }, { "gives": "pay", … }] }).',
+  'A box’s outcomes each have a `chance` (percents adding up to 100) or each a `weight` (whole numbers). An outcome gives one thing, or a bundle of any number ({ "gives": "bundle", "prizes": [{ "gives": "item", … }, { "gives": "pay", … }] }).',
   'An NFT can be the price: a box’s `rollsOn` and `then`, a recipe’s `trade` line, a lottery’s `ticketNft`, a contest’s `stakeNft`, an auction’s `bidNfts`. Where an NFT paid goes (`then`): "burn", "treasury", { "giveTo": address } or { "stash": key }. A payment with an NFT is a runtime call (`loot.payNftIx`), not a part of the spec.',
   'A prize is one line, the same on every route that gives one (a grant’s `prize`, a lottery place’s `prize`, a contest’s `prize`, a mission tier’s `prize`, a recipe’s `out` lines): { "gives": "item", "item": key } (with `"compressed": true`, a compressed NFT of it: no rent each, minted into a tree the setup opens, `compressedTree`), { "gives": "tokens", "amount": n, "from": "mint" (with "currency") or "pool:<key>" }, { "gives": "share", "pool": key, "percent": p }, { "gives": "nft", "stash": key, "nft": address } or { "gives": "roll", "box": key }. All but a roll are given in the transaction that wins them; use a roll only for chance.',
   'A rule (a gate, odds, a boost) is { "item": key (or left out for any), "attribute": "level", "atLeast": 3 } or { …, "equals": "gold" }, or { …, "time": "ahead" } (a time still to come: fuel left) or "passed" (out of jail), or just an attribute for anything. A gate may instead list wallets: { "wallets": [address, …] } (at most 16), or { "list": [address, …] } (any size: the program keeps its root, and each player passes their proof), or a stake: { "staked": { "farm": key, "atLeast": n } } (the wallet has at least n of a farm of tokens’ token staked in it and still locked, staked before the second it is used: launchpad tiers, stake to enter. A stake counts only while its tier’s lock runs, so one stake can’t be unstaked, moved to another wallet and count again; a tier with no lock never passes. The app passes the wallet’s seat and the farm).',
@@ -118,16 +118,6 @@ export const CANNOT = [
     ],
   },
   {
-    what: 'more than three prizes in one outcome',
-    words: 'pack packs five cards booster several items multiple items one open bundle ten cards',
-    why: 'an outcome gives at most three prizes (a bundle); each collectible also holds about 0.0031 SOL of rent',
-    nearest: [
-      'a bundle whose third prize is a roll of another box (`{ "gives": "roll", "box": key }`, that box `"active": false`, itself a bundle): two cards now and three more from the roll is five from one purchase; each roll is an order anyone settles after the oracle (0.0005 SOL)',
-      'cards as game tokens instead of collectibles: no rent per card; a box of pack kinds, then a recipe that turns a pack kind into its cards',
-      'one open per card, priced so five opens make the pack',
-    ],
-  },
-  {
     what: 'a treasury that needs several people to sign (a multisig)',
     words: 'multisig multi-sig 3 of 5 several signers officers council squads dao treasury approval',
     why: 'loot isn’t a multisig, but any wallet can receive and any key can be the spending key',
@@ -176,6 +166,7 @@ export const HOW = [
   { what: 'rewards by rank or by points from one grant', words: 'rank ranks top-10 first-second-third leaderboard-payout points-to-tokens', how: 'a grant of a fixed amount of tokens paid by vouchers: each voucher names its claim’s amount, up to the grant’s' },
   { what: 'NFT badges or an airdrop for thousands of wallets without rent for each one (POAPs, attendance, cNFTs)', words: 'compressed cnft cnfts bubblegum poap attendance badge badges airdrop thousands cheap mint rent-free', how: 'a prize `{ "gives": "item", "item": key, "compressed": true }` (on a grant, a lottery place, a contest, a mission or a recipe): a compressed NFT of the collectible, minted into the project’s tree (`compressedTree.holds`, 16,384 by default; its rent, about 0.23 SOL, paid once at the setup). The setup’s collection takes them when the spec has one before it goes live; not soulbound, not in a box' },
   { what: 'a no-loss prize draw', words: 'no-loss lossless prize-savings never-lose', how: 'a lottery with `"noLoss": true`: tickets come back after the draw; the pot is the seed plus what is paid into it (`lottery:<key>` in a split, or a schedule that pays it)' },
+  { what: 'a pack of cards from one purchase (a booster of five, a guaranteed rare, a hand of different cards)', words: 'pack packs booster five cards ten cards guaranteed rare hand deck several items one open gacha pull multi-pull', how: 'a box with `"slots"`: each slot so many draws among the outcomes it names (all, when it names none), `"distinct": true` for no outcome twice: `[{ "count": 4 }, { "count": 1, "from": [8, 9, 10] }]` is four cards and a rare. All its cards come from one purchase and one oracle answer, and the player may open several packs at once: one wallet prompt. Its order holds a collectible’s rent for each card until it settles; anyone settles it, in parts when the cards don’t fit one transaction (14 Core cards a part).' },
 ];
 
 function typeOf(node) {

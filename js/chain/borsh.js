@@ -35,6 +35,10 @@ function encodeScalar(type, value, out) {
   else if (type === 'string') {
     const bytes = utf8(String(value));
     out.push(uintLE(bytes.length, 4), bytes);
+  } else if (type === 'bytes') {
+    // A list of bytes (`Vec<u8>`): its length, then the bytes.
+    const bytes = Uint8Array.from(value);
+    out.push(uintLE(bytes.length, 4), bytes);
   } else throw new Error(`Unsupported IDL type ${type}`);
 }
 
@@ -145,6 +149,11 @@ function decodeScalar(type, data, at) {
     const length = Number(readUintLE(data, at, 4));
     if (at + 4 + length > data.length) throw new RangeError('string runs past the end of the data');
     return [fromUtf8(data.subarray(at + 4, at + 4 + length)), at + 4 + length];
+  }
+  if (type === 'bytes') {
+    const length = Number(readUintLE(data, at, 4));
+    if (at + 4 + length > data.length) throw new RangeError('bytes run past the end of the data');
+    return [data.slice(at + 4, at + 4 + length), at + 4 + length];
   }
   throw new Error(`Unsupported IDL type ${type}`);
 }
