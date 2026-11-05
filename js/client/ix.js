@@ -522,6 +522,8 @@ export function recordAddress(project, def) {
       return pda.recipe(project, body.id);
     case 'Grant':
       return pda.grant(project, body.id);
+    case 'Table':
+      return pda.table(project, body.id);
     default:
       throw new Error(`Unknown record kind ${kind}`);
   }
@@ -748,14 +750,14 @@ export function buyIx({ player, project, box, boxAddress, maxPrice, treasury, ch
  * for a prize in a mint with a transfer hook, the hook's accounts (`extra`). The buyer's odds boosts were fixed at
  * purchase.
  */
-export function callbackRollIx({ order, orderState, box, boxAddress, randomness, project, poolMints, programs, extra = [] }) {
+export function callbackRollIx({ order, orderState, box, boxAddress, randomness, project, poolMints, items = {}, programs, extra = [] }) {
   const projectAddress = project ?? orderState.project;
   const keys = [
     meta(pda.oracleIdentity(), true, false),
     meta(order, false, true),
     meta(boxAddress ?? orderState.loot_box, false, false),
     meta(ticketOf(order, orderState.asked_first), false, false),
-    ...entryAccounts(orderState.project, box.entries),
+    ...entryAccounts(orderState.project, box.entries, items),
   ];
   const prizes = prizeAccounts(orderState.project, box.entries, boxPoolMints(box, poolMints), programs);
   if (prizes.length) keys.push(meta(TOKEN_PROGRAM, false, false), meta(TOKEN_2022_PROGRAM, false, false), meta(projectAddress, false, false), ...prizes);
@@ -818,6 +820,47 @@ export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeT
   });
 }
 
+/** The calls a transaction may make, its own instructions and every call inside them (Solana's instruction trace). */
+export const TRACE_LIMIT = 64;
+/** The calls a settle makes before its prizes: the compute budget's, its own, and the payment's at most. */
+const SETTLE_BASE_CALLS = 6;
+
+/** The calls one prize makes when a settle hands it over, measured on the program (`tests/limits.rs`): a collectible's
+ * mint by Core (4, so 14 a transaction), a compressed one's by Bubblegum (5) and with its Sheet (7), tokens (2), an NFT
+ * moved (3), a roll's order made (2). `items` maps an item's id to its decoded Item (a normal item makes none). */
+export function prizeCalls(won, items = {}) {
+  if (won.Item) return items[won.Item.item]?.kind === 'Normal' ? 0 : 4;
+  if (won.Fresh) return 4;
+  if (won.Compressed) return won.Compressed.drawn != null ? 7 : 5;
+  if (won.Tokens) return 2;
+  if (won.Nft) return 3;
+  return 2;
+}
+
+/** Where a settle part that starts at `from` ends: as many of the order's prizes as fit the instruction trace (an
+ * NFT's move asks for the bigger heap, so at most three a part). Each part is its own transaction; anyone sends any. */
+export function settlePartEnd(order, from = Number(order.settled ?? 0), items = {}) {
+  let calls = SETTLE_BASE_CALLS;
+  let nfts = 0;
+  let end = from;
+  while (end < order.won.length) {
+    const won = order.won[end];
+    const next = prizeCalls(won, items);
+    if (end > from && (calls + next > TRACE_LIMIT || (won.Nft && nfts >= 3))) break;
+    calls += next;
+    nfts += won.Nft ? 1 : 0;
+    end++;
+  }
+  return end;
+}
+
+/** How many settle parts an order of `opens` opens of `box` takes at most: each card, at its most calls. */
+export function settleParts(box, opens = 1) {
+  const draws = box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1;
+  const cards = Math.max(1, ...box.entries.map((e) => e.prizes.length)) * draws * Math.max(1, opens);
+  return Math.max(1, Math.ceil(cards / Math.floor((TRACE_LIMIT - SETTLE_BASE_CALLS) / 7)));
+}
+
 /** The heap a settle that moves three or more NFTs asks for (`settleHeapFrame`): all a transaction may have, 256 KiB. */
 export const LARGE_SETTLE_HEAP = 256 * 1024;
 
@@ -850,7 +893,10 @@ export const MAX_COMPUTE_UNITS = 1_400_000;
  * them). A limit costs nothing more when no priority fee is set.
  */
 export function settleComputeUnits(order) {
-  const moves = (order.won ?? []).some((w) => w.Nft) || rolledOn(order);
+  // An NFT moved, an NFT rolled on, a compressed mint (Bubblegum's 60,000 to 90,000 units each) or a pack's part of
+  // many cards takes all a transaction may have.
+  const won = order.won ?? [];
+  const moves = won.some((w) => w.Nft || w.Compressed) || won.length > 8 || rolledOn(order);
   return moves ? MAX_COMPUTE_UNITS : 800_000;
 }
 

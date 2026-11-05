@@ -252,8 +252,15 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
           const held = get(pda.pool(orderState.project, pool));
           poolMints[pool] = held?.data?.length >= 32 ? encodeBase58(held.data.subarray(0, 32)) : null;
         }
+        // Each item a prize names, as the oracle reads the roll's accounts: a fresh one's tables follow it.
+        const items = {};
+        for (const prize of box.entries.flatMap((e) => e.prizes)) {
+          const id = prize.Item?.[0] ?? prize.Compressed?.item;
+          const held = id === undefined ? null : get(pda.item(orderState.project, id));
+          if (held?.data?.length) items[id] = decode('Item', held.data);
+        }
         restoreQueue();
-        answers.push(sendRaw(oracle, [callbackRollIx({ order, orderState, box, randomness, poolMints })], { label: `${label} (oracle)`, role: 'oracle' }));
+        answers.push(sendRaw(oracle, [callbackRollIx({ order, orderState, box, randomness, poolMints, items })], { label: `${label} (oracle)`, role: 'oracle' }));
       } else if (known.name === 'draw_lottery') {
         const lottery = account('lottery');
         const l = decode('Lottery', get(lottery).data);

@@ -1901,8 +1901,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       // A spec the steps can't be built from fails the same way when it is planned.
     }
     const ctx = setup && placeholderContext(setup.model);
-    const lists = { box: m.box, item: m.item, recipe: m.recipe, schedule: new Map(m.schedules.map((x) => [x.key, x])), lottery: m.lottery, grant: m.grant, farm: m.farm, auction: m.auction, pool: m.pool, seed: m.pool, fund: m.grant, stash: m.stash };
-    const paths = { box: 'boxes', item: 'items', recipe: 'recipes', schedule: 'schedules', lottery: 'lotteries', grant: 'grants', farm: 'farms', auction: 'auctions', pool: 'pools', seed: 'pools', fund: 'grants', stash: 'stashes', token: 'tokens', traits: 'traits' };
+    const lists = { box: m.box, item: m.item, recipe: m.recipe, schedule: new Map(m.schedules.map((x) => [x.key, x])), lottery: m.lottery, grant: m.grant, farm: m.farm, auction: m.auction, pool: m.pool, seed: m.pool, fund: m.grant, stash: m.stash, table: m.table };
+    const paths = { box: 'boxes', item: 'items', recipe: 'recipes', schedule: 'schedules', lottery: 'lotteries', grant: 'grants', farm: 'farms', auction: 'auctions', pool: 'pools', seed: 'pools', fund: 'grants', stash: 'stashes', table: 'tables', token: 'tokens', traits: 'traits' };
     for (const step of setup?.steps ?? []) {
       let bytes;
       try {

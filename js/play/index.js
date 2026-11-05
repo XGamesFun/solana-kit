@@ -470,8 +470,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   /** An NFT's kind as a route's `ticket` or `nft` takes it: without its asset. */
   const kindOnly = ({ asset: _, ...kind }) => kind;
 
-  /** A throwaway key's leftover back to the player: all it holds less its own fee, so the key ends empty. */
-  const giveBack = (burner) => transferLamports(burner.address, wallet.address, BURNER_LAMPORTS - SIGNATURE_FEE);
+  /** A throwaway key's leftover back to the player: all it holds (`left`, as read) less its own fee, so the key ends
+   * empty. */
+  const giveBack = (burner, left = BURNER_LAMPORTS) => transferLamports(burner.address, wallet.address, left - SIGNATURE_FEE);
 
   /**
    * Waits for an order's roll (the oracle answers a moment after the open), then settles it. With `burner` (the
@@ -526,7 +527,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       order = await current();
     }
     if (!order) {
-      if (burner) await sendAs(burner, [giveBack(burner)]);
+      if (burner) await sendAs(burner, [giveBack(burner, BigInt(await client.balance(burner.address).catch(() => BURNER_LAMPORTS)))]);
       // One's own open still not seen after that: say so plainly, never that it was settled (claims() lists it).
       if (opened) return { order: orderAddress, settled: null, says: 'The network doesn’t show this order yet: collect it again in a moment (claims() lists it).' };
       return { order: orderAddress, settled: 'elsewhere', says: 'The order was settled already.' };
@@ -544,16 +545,29 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     // What the roll set aside: each item it gave (its kind and collection) and each NFT's kind (a compressed one
     // proven first).
     const items = {};
-    for (const won of order.won) if (won.Item && !(won.Item.item in items)) items[won.Item.item] = await read('Item', loot.pda.item(project, won.Item.item));
+    for (const won of order.won) {
+      const id = won.Item?.item ?? won.Fresh?.item ?? won.Compressed?.item;
+      if (id !== undefined && !(id in items)) items[id] = await read('Item', loot.pda.item(project, id));
+    }
+    // A compressed prize is minted into the tree its box names (any of the project's with room), the next NFT it mints.
+    const treeOf = async () => {
+      if (!order.won.some((w) => w.Compressed)) return {};
+      const box = await read('LootBox', order.loot_box);
+      const tree = box.entries.flatMap((e) => e.prizes).find((p) => p.Compressed)?.Compressed.tree;
+      const config = (await client.account(loot.pda.treeConfig(tree)))?.data;
+      return { tree, treeMinted: config ? config.subarray(80, 88).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n) : 0n };
+    };
     const holders = await holdersOf(order.shares);
     // Given by its fate to a wallet that is an account of the loot program, the NFT goes back to the player.
     const gives = order.held ? order.fate?.then?.Give?.[0] : undefined;
     const handBack = gives !== undefined && loot.handsBack(await client.account(gives));
-    /** The settle as `signer` sends it, and what goes before it: each compressed NFT's proof, a fresh token account. */
-    const settleBy = async (signer) => {
+    /** The settle's part up to `upto` (0: all that is left) as `signer` sends it, and what goes before it: each compressed
+     * NFT's proof, a fresh token account. */
+    const settleBy = async (signer, upto = 0) => {
       const nfts = {};
       const proving = [];
-      for (const won of order.won) {
+      const end = upto || order.won.length;
+      for (const won of order.won.slice(Number(order.settled ?? 0), end)) {
         if (won.Nft && !putBack.includes(won.Nft.nft)) {
           // A Token Metadata NFT's settle is the wallet's to send (it pays rent: `paysRent`), so the wallet opens any fresh account.
           const { before, hasAuthority: _, ...kind } = await nftOf(won.Nft.nft, signer, { to: order.player, payer: wallet.address });
@@ -563,9 +577,23 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       }
       // The NFT the roll was on: its kind, and for a compressed one a proof first.
       const { before: subjectProof, ...subject } = order.subject !== NOBODY ? await nftOf(order.subject, signer) : { before: [] };
-      const ix = loot.settleIx({ signer, orderAddress, order, projectState: g, items, nfts, putBack, subject, handBack, holders, programs });
+      const ix = loot.settleIx({ signer, orderAddress, order, projectState: g, items, nfts, putBack, subject, handBack, holders, programs, upto, ...(await treeOf()) });
       return { ix, nfts, before: [...subjectProof, ...proving].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM) };
     };
+    // A pack whose prizes don't fit one transaction settles in parts, each its own transaction, from where the last
+    // stopped: all but the last only hand prizes over (`settlePartEnd`: as many as the instruction trace holds, fewer
+    // when they don't fit a legacy transaction). The burner sends each; the player's wallet, a part it can't.
+    const signatures = [];
+    while (order.won.length - Number(order.settled ?? 0) > 0 && loot.settlePartEnd(order, Number(order.settled ?? 0), items) < order.won.length) {
+      let end = loot.settlePartEnd(order, Number(order.settled ?? 0), items);
+      const part = async (signer) => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(signer, end)).ix];
+      if (burner && !putBack.length) {
+        while (end > Number(order.settled ?? 0) + 1 && !compileFitting({ payer: burner.address, blockhash: NOBODY, instructions: await part(burner.address) })) end--;
+        signatures.push(await sendAs(burner, await part(burner.address)));
+      } else signatures.push(await send(await part(wallet.address)));
+      order = await current();
+      if (!order) return { order: orderAddress, settled: 'elsewhere', says: 'The order was settled already.' };
+    }
     // Room for every move the shape makes (`loot.settleComputeUnits`), and for a settle of several NFTs the bigger heap
     // the program's allocator uses (`loot.settleHeapFrame`).
     const heap = loot.settleHeapFrame(order);
@@ -578,7 +606,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     let signature;
     const byBurner = burner && !putBack.length ? await settleBy(burner.address) : null;
     const paysRent = (built) => order.won.some((w) => w.Roll || (w.Nft && built.nfts[w.Nft.nft]?.tokenMetadata));
-    const alone = byBurner && !paysRent(byBurner) && !byBurner.before.length ? [...budget, byBurner.ix, giveBack(burner)] : null;
+    const left = burner ? BigInt(await client.balance(burner.address).catch(() => BURNER_LAMPORTS)) : 0n;
+    const alone = byBurner && !paysRent(byBurner) && !byBurner.before.length ? [...budget, byBurner.ix, giveBack(burner, left)] : null;
     // The burner's transaction counts its compute limit: a settle within about 40 bytes of the legacy limit goes from the
     // wallet (one prompt) rather than without one, as a settle with the default limit can run out (205,794 units on
     // devnet) and the burner holds the fee of one try only.
@@ -587,10 +616,10 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // The wallet's settle: as a v0 transaction with a lookup table when it doesn't fit a legacy one (`send`).
       const { ix, before } = await settleBy(wallet.address);
       signature = await send([...budget, ...before, ix]);
-      if (burner) await sendAs(burner, [giveBack(burner)]);
+      if (burner) await sendAs(burner, [giveBack(burner, left)]);
     }
     const assets = wonAssets(orderAddress, order).map((a) => (putBack.includes(a) ? null : a));
-    return { order: orderAddress, won: order.won, assets, settled: signature, ...(assets.find(Boolean) ? { asset: assets.find(Boolean) } : {}) };
+    return { order: orderAddress, won: order.won, assets, settled: signature, ...(signatures.length ? { parts: [...signatures, signature] } : {}), ...(assets.find(Boolean) ? { asset: assets.find(Boolean) } : {}) };
   }
 
   /**
@@ -599,8 +628,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    */
   function wonAssets(orderAddress, order) {
     return order.won.map((won, k) => {
-      if (won.Item) return loot.pda.itemAsset(loot.pda.item(project, won.Item.item), won.Item.serial);
+      const unit = won.Item ?? won.Fresh;
+      if (unit) return loot.pda.itemAsset(loot.pda.item(project, unit.item), unit.serial);
       if (won.Nft) return won.Nft.nft;
+      // A compressed NFT's asset id is the tree's count when it was minted: read from its settle's receipt or the
+      // player's assets (`claims`), not from the order.
+      if (won.Compressed) return null;
       if (won.Roll) return loot.pda.order(project, order.player, loot.rollNonce(orderAddress, order.requested_slot, k));
       return null;
     });
@@ -651,7 +684,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     throw new Error(`${method} doesn’t take ${unknown.map((k) => `“${k}”`).join(', ')}${hint}. It takes: ${takes.join(', ')}.`);
   }
   /** What `buy` and `openBox` take: a box bought at once (`buyBox`) or opened (`open`). */
-  const BOX_OPTIONS = ['shown', 'listProof', 'maxPrice', 'listing', 'chosenRecipient', 'on', 'oneSignature'];
+  const BOX_OPTIONS = ['shown', 'listProof', 'maxPrice', 'listing', 'chosenRecipient', 'on', 'oneSignature', 'count'];
 
   /**
    * Buys a box that needs no roll (a shop item, a bundle: one entry, nothing random, no NFT rolled on) in one
@@ -696,10 +729,18 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    * referrer, a plot). `on`: the NFT a box that rolls on one takes (an NFT whose price it is, a sword to enchant).
    * `listProof`: for a list gate.
    */
-  async function open(boxId, part, { shown = null, on = null, maxPrice, listing, oneSignature = true, chosenRecipient = null, listProof } = {}) {
+  async function open(boxId, part, { shown = null, on = null, maxPrice, listing, oneSignature = true, chosenRecipient = null, listProof, count = 1 } = {}) {
     const g = await projectNow();
     const box = await read('LootBox', loot.pda.box(project, boxId));
-    const bound = boundOf({ ...box, currencyKey: part?.currency }, part?.name ?? `box ${boxId}`, { maxPrice, listing }, part?.key);
+    // `count` packs in one purchase: one wallet prompt, one oracle answer, each at the price the one before it left.
+    if (!Number.isInteger(count) || count < 1) throw new Error('Open a whole number of packs, one at least (count).');
+    const bound = boundOf({ ...box, currencyKey: part?.currency }, part?.name ?? `box ${boxId}`, { maxPrice, listing }, part?.key) * BigInt(count);
+    // Each item a prize names: a fresh one's tables go with the purchase.
+    const items = {};
+    for (const p of box.entries.flatMap((e) => e.prizes)) {
+      const id = p.Item?.[0] ?? p.Compressed?.item;
+      if (id !== undefined && !(id in items)) items[id] = await readMaybe('Item', loot.pda.item(project, id));
+    }
     // A box that rolls on an NFT takes the one the player brings (`on`), whatever its kind.
     if (box.subject && !on) throw new Error('This box rolls on an NFT: say which (on).');
     const brought = box.subject ? await nftOf(on) : { before: [] };
@@ -716,7 +757,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const prizeMints = [...new Set([...Object.values(poolMints).filter(Boolean), ...minted])];
     const choosesHolder = box.shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
     const chosen = chosenRecipient && choosesHolder ? chosenRecipient : null;
-    const ix = loot.openBoxIx({ player: wallet.address, project, box, nonce, maxPrice: bound, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs });
+    const ix = loot.openBoxIx({ player: wallet.address, project, box, nonce, maxPrice: bound, count, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs });
     const before = [...proving, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint))];
     // (A compressed NFT's proof brings its own compute limit, the transaction's only one.)
     let burner = null;
@@ -738,10 +779,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // account: it stays open for the settle too.
       solPrize ||= mint === NATIVE_MINT && paid.has(wallet.address);
     }
-    const after = burner ? [transferLamports(wallet.address, burner.address, BURNER_LAMPORTS)] : [];
+    // The burner holds the fee of each settle part the pack may take (`settleParts`), and gives back what it doesn't use.
+    const after = burner ? [transferLamports(wallet.address, burner.address, BURNER_LAMPORTS + SIGNATURE_FEE * BigInt(loot.settleParts(box, count) - 1))] : [];
     // A SOL prize, or a share of the sale, lands in the player's wrapped-SOL account, which the prompt-less settle
     // can't open: it stays open, and the player's next transaction unwraps it.
-    let instructions = withSolWrap(wallet.address, mint, box.price, [...before, ix, ...after]);
+    let instructions = withSolWrap(wallet.address, mint, BigInt(box.price) * BigInt(count), [...before, ix, ...after]);
     if (solPrize) instructions = instructions.filter((x) => !(x.programId === TOKEN_PROGRAM && x.data?.[0] === 9 && x.keys[0]?.pubkey === associatedTokenAddress(wallet.address, NATIVE_MINT)));
     const signature = await send(instructions, [], { keepWrapped: solPrize });
     // The slot it landed in: the order is read from a node that has seen it (a load-balanced RPC's node lagging
@@ -780,10 +822,17 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     if (was.some((b, i) => b !== is[i])) throw new Error('This listing has changed since the player was shown it: show them its terms as they are now first.');
   }
 
-  /** A box bought at once when it needs no roll (`buyBox`), or opened and collected. */
+  /** A box bought at once when it needs no roll (`buyBox`), or opened and collected: one that rolls, gives a fresh item
+   * (its traits are rolled), or is opened several times at once (`count`, a pack's purchase). */
   async function buyOrOpen(boxId, part, options) {
     const box = await read('LootBox', loot.pda.box(project, boxId));
-    if (!loot.boxRolls(box.entries) && !box.subject) {
+    const items = {};
+    for (const p of box.entries.flatMap((e) => e.prizes)) {
+      const id = p.Item?.[0] ?? p.Compressed?.item;
+      if (id !== undefined) items[id] ??= await readMaybe('Item', loot.pda.item(project, id));
+    }
+    const packs = (options?.count ?? 1) > 1 || (box.slots ?? []).reduce((n, s) => n + Number(s.count), 0) > 1;
+    if (!loot.boxRolls(box.entries) && !box.subject && !loot.boxFresh(box.entries, items) && !packs) {
       await poolShareGiven(box.entries.flatMap((e) => e.prizes ?? []));
       return buyBox(boxId, part, options);
     }
@@ -881,7 +930,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
 
     /**
      * Opens a box (shows a collectible for its gate or odds when given): a box that needs no roll is bought at once
-     * (`buy`); one that rolls waits for the roll and collects it.
+     * (`buy`); one that rolls waits for the roll and collects it, settling a pack in as many parts as it needs. `count`
+     * opens several packs in one purchase: one wallet prompt and one oracle answer (`maxPrice` is a pack's).
      */
     async openBox(boxKey, options = {}) {
       only(options, BOX_OPTIONS, 'openBox');
