@@ -7,7 +7,7 @@
 // are refuelled and bound into a badge by recipes, held in until the badge is burned. Spends a little devnet SOL; every
 // key lives in memory only.
 //
-//   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only flip|examples|auction|farms|stash|compressed]
+//   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only flip|examples|auction|farms|stash|compressed|packs]
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -252,6 +252,45 @@ if (!only || only === 'stash') {
   console.log(`stash: settled ${await send([owner], [loot.settleIx({ signer: owner.address, orderAddress, order, projectState, nfts })])}`);
   if (parseCoreAsset((await rpc.account(won)).data).owner !== owner.address) throw new Error('The trophy is not the player\'s.');
   console.log(`stash: ${owner.address} holds the trophy ${won}`);
+}
+// 7. Packs (loot 0.22): a booster of four cards and a guaranteed rare, and a pack of fresh heroes whose color is drawn
+// from a sealed table and power from a range; four boosters bought at once, one wallet prompt, the real oracle's one
+// answer, settled in parts by the throwaway key.
+if (!only || only === 'packs') {
+  const live = await goLive('packs', {
+    version: 2,
+    network: 'devnet',
+    name: 'Packs',
+    prompt: 'Boosters of five cards with a guaranteed rare, and packs of heroes with a drawn color and power.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    collection: { name: 'Packs' },
+    tables: [{ key: 'colors', kind: 'labels', rows: [{ label: 'red', weight: 3 }, { label: 'blue', weight: 3 }, { label: 'gold', weight: 1, stock: 5 }] }],
+    items: [
+      { key: 'common', name: 'Common' },
+      { key: 'rare', name: 'Rare' },
+      { key: 'hero', name: '{color} Hero', uri: 'https://example.invalid/hero/{color}/{power}.json', drawn: [{ attribute: 'color', table: 'colors' }, { attribute: 'power', min: 1, max: 100 }] },
+    ],
+    boxes: [
+      { key: 'booster', name: 'Booster', price: 0.001, slots: [{ count: 4 }, { count: 1, from: [1] }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
+      { key: 'heroes', name: 'Heroes', price: 0.001, slots: [{ count: 3 }], outcomes: [{ gives: 'item', item: 'hero', weight: 1 }] },
+    ],
+  });
+  const player = freshKeypair();
+  await send([funder], [transferLamports(funder.address, player.address, 300_000_000n)]);
+  let prompts = 0;
+  const wallet = { ...asWallet(player), async signTransaction(wire) { prompts++; return asWallet(player).signTransaction(wire); } };
+  const app = solanaApp({ spec: live, rpc, wallet });
+  const boosters = await app.openBox('booster', { listing: (await app.boxes()).find((l) => l.key === 'booster'), count: 4 });
+  const rare = live.items.find((x) => x.key === 'rare').id;
+  if (boosters.won.length !== 20) throw new Error(`Four boosters gave ${boosters.won.length} cards, not 20.`);
+  if (![4, 9, 14, 19].every((k) => boosters.won[k].Item.item === rare)) throw new Error('A booster\'s fifth card was not a rare.');
+  console.log(`packs: four boosters, ${prompts} wallet prompt(s), 20 cards, settled in ${boosters.parts?.length ?? 1} part(s): ${(boosters.parts ?? [boosters.settled]).join(', ')}`);
+  const heroes = await app.openBox('heroes', { listing: (await app.boxes()).find((l) => l.key === 'heroes') });
+  const mine = (await app.collectibles()).filter((c) => c.attributes.color);
+  if (heroes.won.length !== 3 || mine.length !== 3) throw new Error(`The hero pack gave ${heroes.won.length} heroes, ${mine.length} held.`);
+  for (const c of mine) console.log(`packs: ${c.name}, color ${c.attributes.color}, power ${c.attributes.power}`);
+  console.log(`packs: ${prompts} wallet prompts for both purchases`);
 }
 // 6. A compressed badge, given by an open grant: the setup makes the collection with Bubblegum's plugin and opens the
 // project's tree; a fresh player claims, paying the player fee; Bubblegum mints the badge into the tree.

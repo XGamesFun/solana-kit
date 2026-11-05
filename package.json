@@ -1,6 +1,6 @@
 {
   "name": "@xgamesfun/solana",
-  "version": "0.20.1",
+  "version": "0.22.0",
   "mcpName": "io.github.XGamesFun/solana-kit",
   "description": "One shared Solana program for game and community economies, its JS client, and the tools that let an AI agent design, check, simulate and launch an economy on it.",
   "license": "Apache-2.0",

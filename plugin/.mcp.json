@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "--package=@xgamesfun/solana@0.20.1",
+        "--package=@xgamesfun/solana@0.22.0",
         "xsolana",
         "mcp"
       ]
