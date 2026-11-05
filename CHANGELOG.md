@@ -48,6 +48,9 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   same transaction and a key settles it: one prompt (`rolled`, `rolls`). `repay(asset, due)` repays alone and a key
   sends the NFT home. `claimAll()` signs independent claims in one prompt with a wallet that signs several
   (`signTransactions`).
+- The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
+  and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
+  treasury).
 - The checker refuses a lottery run whose token prize in all passes a u64; the approval page warns when a change
   makes a closed grant again with the same list (its rounds would pay again).
 - Going live opens the project's token accounts and its share wallets' and makes a standing lookup table

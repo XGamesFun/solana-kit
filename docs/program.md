@@ -269,8 +269,9 @@ what rounding leaves goes with the rest, or stays in the pool or pot, and a cont
 its rent) when it isn't there, so a payment never waits. In a stored split, a share that finds nobody (a collectible
 nobody or the project holds, a loot account as payee, an account that can't take the mint) joins what the split
 leaves. The **split owner's** account failing fails `pay`, `buy`, `take_listing`, `sell_to_offer` and `settle` (the
-money stays the payer's). Only `end_auction`, which nothing else could finish, passes over a seller's account that
-can't take the mint: the lot still goes, and that money stays in the vault for good. `move_tokens` and schedules fail
+money stays the payer's). Only `end_auction` of a seller's NFT (`Lot::Asset`), which nothing else could finish, passes
+over a seller's account that can't take the mint: the lot still goes, and that money stays in the vault for good. A
+new item's or a roll's lot whose treasury account is frozen waits (`AccountFrozen`) until it is thawed. `move_tokens` and schedules fail
 on a pool never opened or on the project's vault (`BadMove`). `pay`'s shares are separate transfers, so a transfer
 fee comes out of each.
 
@@ -392,8 +393,10 @@ from: a table (`Values::Table`), a row drawn by weight among those in stock at t
 (`Values::Range { min, max }`), every number as likely, drawn at the mint. Whoever settles, whenever, the same answer
 gives the same unit. Its name and URI take the values (`{key}`, beside `{serial}`), and the traits are written on the
 collectible. A key is the project's own, each once (`BadItem`); the traits lock with the rest once a unit is out. A
-fresh item is given only by a box's roll (`NeedsRoll`: not by `Make`, `buy`, a grant or a recipe's output): one in a
-box asks the oracle even as its only entry.
+fresh item is given only by a box's roll (`NeedsRoll`: not by `Make`, `buy`, a grant or a recipe's output; a lottery
+place, a contest's prize or a mission's end gives nothing in its place; an auction refuses it as a lot, `LotRefused`):
+one in a box asks the oracle even as its only entry. A compressed prize is given only into the project's own tree
+(`open_tree`): any other gives nothing (`PrizeNotCovered` on a strict route).
 
 **Tables** (`upsert` `Def::Table`, `["table", project, id]`): rows of a weight, a stock (`NO_LIMIT`, 4,294,967,295,
 for none) and a payload (a number, the row's own; or a label of up to 32 bytes), posted in batches and sealed. From the
@@ -583,7 +586,7 @@ after its first ask** lets anyone cancel the round. A short round (`min_sold`) i
 an NFT or a collectible to its winner, a run of token prizes in one step into the round's account (minted ones at the
 pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
 and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
-winner (`hold`); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
+winner (`hold`; its rent, and a Token Metadata NFT's account's, back to whoever sent it, `rent_to`, at the release); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
 mark also when the places take nothing of it). In a hooked payment mint with a common share above 0, the first marked
 sweep only moves the shares into the pot's part: the round stays Drawn, that call reads no account past the sweep's
 five, and the sweep is sent again after it. With no place sharing the pot, a marked sweep fails with the token's error
@@ -677,7 +680,8 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
   winner has picks left, what they left to the opener (anyone). `end` leaves the rest of a winner's share to the
   opener; `give_up` turns an NFT that can't move into a hold for whoever it goes to.
 - **Off**: `decide(None)` calls it off; a contest past `result_by` undecided is off by the clock (`contestOff`), and
-  every entry takes its own back.
+  every entry takes its own back. `decide(None)` closes the contest only when nobody entered; else the last claim does,
+  naming the treasury (`claimIx` takes `projectState`).
 - The claim that leaves nothing owed closes the contest, its list (its bytes to the treasury) and its pot and prize
   vault, burning what is left (wrapped SOL to the opener); an account the issuer froze, or a burn authority blocks, is
   left behind and that id can't open again. Mints can't be confidential or start frozen (`BadContest`).

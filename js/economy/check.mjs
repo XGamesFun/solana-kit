@@ -838,10 +838,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   for (const p of prizes(m)) if (p.prize.gives === 'item') given.add(p.prize.item);
   for (const a of m.auctions) if (a.lot?.item) given.add(a.lot.item);
   for (const d of m.decisions) if (d.does === 'make') given.add(d.item);
-  // A fresh item is given only by a box's roll: any other route gives alike units (NeedsRoll).
+  // A fresh item is given only by a box's roll: a route the player pays or asks for refuses it (NeedsRoll); one that
+  // only finishes (a lottery place, a contest, a mission's end) gives nothing in its place; an auction refuses the lot.
+  const fix = 'Give a roll of a box that gives it (`{ "gives": "roll", "box": key }`) instead.';
   for (const p of prizes(m)) {
     const it = p.prize.gives === 'item' ? m.item.get(p.prize.item) : null;
-    if ((it?.drawn ?? []).length) refuse('E-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: a ${p.route} gives alike units (NeedsRoll).`, 'Give a roll of a box that gives it (`{ "gives": "roll", "box": key }`) instead.');
+    if (!(it?.drawn ?? []).length) continue;
+    if (p.strict) refuse('E-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: a ${p.route} gives alike units (NeedsRoll).`, fix);
+    else warn('W-ITEM', p.where, `${label(it)} draws its traits per unit, which only a box’s roll does: as a ${p.route}’s prize it is never given (its winner gets nothing for it).`, fix);
+  }
+  for (const a of m.auctions) {
+    const it = a.lot?.item ? m.item.get(a.lot.item) : null;
+    if ((it?.drawn ?? []).length) refuse('E-AUCTION', `economy.auctions.${a.key}.lot.item`, `${label(it)} draws its traits per unit, which only a box’s roll does: an auction can’t sell a new one (LotRefused).`, 'Auction a roll of a box that gives it (`"lot": { "roll": key }`) instead.');
   }
 
   // A table: rows that weigh something, a label of 32 bytes at most in a table of labels, none in one of numbers.

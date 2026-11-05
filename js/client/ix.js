@@ -1816,7 +1816,8 @@ export const closeLeafIx = ({ asset, tree, payer }) => lootIx('close_leaf', {}, 
 /**
  * Anyone closes the Sheet of an NFT that is burned: `burned` is what shows it (the Core asset's own address, burned to
  * one byte; a Token Metadata mint holding none; or a compressed NFT's record proving its leaf burned). Its rent goes to
- * the project's `treasury` wallet. A Token Metadata NFT's (`tokenMetadata`: true, or its kind) also names its edition,
+ * the project's `treasury` wallet. A compressed NFT's closes only on a record proven empty (its data hash all zeros: a
+ * live leaf of the default owner is not burned). A Token Metadata NFT's (`tokenMetadata`: true, or its kind) also names its edition,
  * which must be closed too: its mint holds none, with no mint authority but its edition (`NotBurned` otherwise).
  */
 export const closeSheetIx = ({ project, nft, burned = nft, treasury, tokenMetadata: tm = null }) =>
@@ -2181,6 +2182,8 @@ export function claimIx({ payer, project, projectState, id, contest, entries, pl
   // What it leaves owed: at 0 it closes the contest, burning what its pot (and a split prize's vault) still hold.
   const owed = BigInt(contest.owed);
   const left = !contest.nft ? owed - (contest.verdict === 'Won' ? (first ? BigInt(me.amount) : 0n) : 1n) : owed - BigInt(nfts.length) - (first && contest.prize ? 1n : 0n);
+  // The claim that leaves nothing owed closes the contest, its rent and what is left to the treasury: it names it.
+  if (left <= 0n && !projectState?.treasury) throw new Error('This claim closes the contest: pass projectState, for its treasury.');
   return lootIx(
     'claim',
     { entry: i, nonce, forgo, end, give_up: giveUp, nfts },

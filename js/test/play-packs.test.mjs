@@ -79,6 +79,16 @@ test('a pack spec checks: slots, a table and a fresh item', () => {
   const sold = structuredClone(SPEC);
   sold.items[2].price = 0.01;
   assert.ok(check(sold, { now: NOW }).refusals.some((x) => /NeedsRoll/.test(x.message)), 'a fresh item is not sold in the shop');
+  // As a lottery's prize it is never given (a warning); as an auction's lot it is refused (LotRefused).
+  const fresh = SPEC.items[2].key;
+  const placed = structuredClone(SPEC);
+  placed.lotteries = [{ key: 'draw', name: 'Draw', price: 1, places: [50, { percent: 0, prize: { gives: 'item', item: fresh } }] }];
+  const r2 = check(placed, { now: NOW });
+  assert.ok(r2.warnings.some((x) => x.code === 'W-ITEM' && x.where === 'economy.lotteries.draw.places[1].prize'), JSON.stringify(r2.refusals));
+  assert.ok(!r2.refusals.some((x) => /NeedsRoll/.test(x.message)));
+  const lot = structuredClone(SPEC);
+  lot.auctions = [{ key: 'one', name: 'One', lot: { item: fresh }, reserve: 1, runs: '1h' }];
+  assert.ok(check(lot, { now: NOW }).refusals.some((x) => x.where === 'economy.auctions.one.lot.item' && /LotRefused/.test(x.message)));
 });
 
 test('four boosters in one purchase: one prompt, twenty cards, settled in parts by the throwaway key', { skip }, async () => {

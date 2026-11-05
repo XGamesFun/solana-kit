@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 1 build (program commit
-545cce0, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r1-build`,
-`loot.so` sha256 0032534c…); before it, the clean-up build (3f530f80…) and the phase 6 build (032b0666…). The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 2 build (program commit
+416e5da, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r2-build`,
+`loot.so` sha256 e6d170b9…); before it, the review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -27,6 +27,8 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
       incarnation, `LotteryPulled.amount`, no `LotteryPaid`
 - [x] review 1 build: close_leaf `edition`, grant tag 27, pulls of at most 300 places (`placesPulled`), the checker's
       u64 run refusal, the re-made grant list warning (approval page)
+- [x] review 2 build (no wire change): a fresh item warned as a finishing route's prize, refused as an auction lot;
+      a closing contest claim needs the treasury; docs for close_leaf, end_auction, decide(None), hold rent_to
 
 ## Client-only items (plan "The client, with no program change")
 
