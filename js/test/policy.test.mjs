@@ -4,19 +4,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { concat, uintLE } from '../chain/bytes.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { LOOT_PROGRAM, readReceiptAccount, orderRefundSlot, STALE_SLOTS, auctionEnds, leastBid } from '../client/index.js';
+import { LOOT_PROGRAM, readListAccount, orderRefundSlot, STALE_SLOTS, auctionEnds, leastBid } from '../client/index.js';
 
-test('receipt classification agrees with safe onchain initialization and rejects foreign/malformed accounts', () => {
-  assert.equal(readReceiptAccount(null), null);
-  assert.equal(readReceiptAccount({ owner: SYSTEM_PROGRAM, data: new Uint8Array(), lamports: 1_000_000n }), null);
-  const data = concat(Uint8Array.of(15), uintLE(7, 4), uintLE(1, 4), uintLE(3, 4), uintLE(0, 4));
-  assert.equal(readReceiptAccount({ owner: LOOT_PROGRAM, data }).count, 7);
+test('a list account agrees with the program opening a prefunded address, and foreign or malformed ones are refused', () => {
+  assert.equal(readListAccount(null), null);
+  assert.equal(readListAccount({ owner: SYSTEM_PROGRAM, data: new Uint8Array(), lamports: 1_000_000n }), null);
+  const data = concat(Uint8Array.of(26), uintLE(16, 2), uintLE(1, 4), new Uint8Array(16).fill(7));
+  assert.equal(readListAccount({ owner: LOOT_PROGRAM, data }).records.length, 1);
   for (const account of [
     { owner: SYSTEM_PROGRAM, data }, { owner: 'foreign', data },
     { owner: LOOT_PROGRAM, data: new Uint8Array() },
     { owner: LOOT_PROGRAM, data, executable: true },
     { owner: SYSTEM_PROGRAM, data: new Uint8Array(), executable: true },
-  ]) assert.throws(() => readReceiptAccount(account));
+  ]) assert.throws(() => readListAccount(account));
 });
 
 test('refund discovery: a failed or stale roll, and never a rolled order', () => {

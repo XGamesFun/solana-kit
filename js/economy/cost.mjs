@@ -4,8 +4,8 @@
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { boxOrderBytes, plan as compile, contestBytes } from './plan.mjs';
-import { ACCOUNT_BYTES, contributionBytes } from '../client/index.js';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT, drawsOf, holdsRent, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
+import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
+import { boxBuys, boxRolls, COLLECTIBLE_RENT, drawsOf, escrowUnits, holdsRent, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -82,7 +82,7 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   const itemsOf = (b) => drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((p) => holdsRent(p, m)).length));
   const order = (b) => [
     back('the order', rent(boxOrderBytes(b, m)), 'at settle or refund'),
-    ...(itemsOf(b) ? [back(`the SOL the order holds for ${itemsOf(b) === 1 ? 'a collectible’s' : `${itemsOf(b)} collectibles’`} rent (the player fee is paid on top of it)`, ESCROW_LAMPORTS * BigInt(itemsOf(b)), `at settle, less each collectible’s rent (about ${sol(COLLECTIBLE_RENT)} SOL) it gives; all of it, and the fee, on a refund`)] : []),
+    ...(escrowUnits(b, m) ? [back(`the SOL the order holds for what its settle may open (${escrowUnits(b, m)} × ${sol(ESCROW_LAMPORTS)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on; the player fee is paid on top of it)`, ESCROW_LAMPORTS * BigInt(escrowUnits(b, m)), `at settle, less what it opens (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it, and the fee, on a refund`)] : []),
   ];
   // A box that needs no roll is bought in one step (`buy`): no order, and a collectible's rent is paid at once.
   const bought = (b) => (itemsOf(b) ? [back(`${itemsOf(b)} new collectible${itemsOf(b) > 1 ? 's' : ''}`, COLLECTIBLE_RENT * BigInt(itemsOf(b)), `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`)] : []);
@@ -96,7 +96,12 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     const made = (r.out ?? []).filter((l) => l.gives === 'item' && !l.compressed).length;
     row(`recipe:${r.key}`, `craft “${r.name}”`, 'player', FEES.player, made ? [back(`${made} new collectible${made > 1 ? 's' : ''}`, COLLECTIBLE_RENT * BigInt(made), `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`)] : []);
   }
-  for (const l of m.lotteries) row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, [back('the purchase’s record (its tickets)', rent(contributionBytes(lotterySplit(l).length)), 'when the round is done with it: drawn and its place paid, or refunded')]);
+  for (const l of m.lotteries) {
+    // A purchase adds its entry's bytes to the round (not refunded); the round's first buyer fronts its header.
+    const shares = lotterySplit(l).map((s) => ({ to: String(s.to).startsWith('chosen') || String(s.to).startsWith('holder') ? { Chosen: {} } : 'Treasury' }));
+    const entry = BigInt(entryWidth(shares, false, Boolean(l.ticketNft))) * RENT_PER_BYTE;
+    row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], 'A round’s first buyer also fronts its record’s header (about 0.003 SOL, more with many places), back to them when the round closes, once everyone is paid.');
+  }
   for (const f of m.farms) {
     row(`farm:${f.key}`, `stake in “${f.name}”`, 'player', FEES.player, [back('the seat', rent(ACCOUNT_BYTES.Seat), 'when they take everything out')]);
     row(`farm:${f.key}`, `unstake or harvest from “${f.name}”`, 'player', FEES.player, [], [
@@ -105,15 +110,15 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
       f.toll && `${f.toll.percent}% of every payout of rewards goes ${f.toll.to === 'burn' ? 'to a burn' : `to ${String(f.toll.to).slice(5)}`}.`,
     ].filter(Boolean).join(' ') || undefined);
   }
-  for (const h of m.holds) row(`hold:${h.key}`, `hand in for “${h.name}”`, 'player', FEES.player, [back('the hold', rent(ACCOUNT_BYTES.Hold), 'when it ends')]);
+  for (const h of m.holds) row(`hold:${h.key}`, `hand in for “${h.name}”`, 'player', FEES.player, [back('the hold', rent(ACCOUNT_BYTES.Hold), 'when it is released')]);
   // What giving a prize opens, paid by whoever sends the instruction that gives it (prize.rs).
   const opens = (p) => prizeLine(p)?.compressed ? ', and the compressed NFT, which has no rent' : ({ item: ', plus the collectible’s rent', tokens: ', plus the winner’s token account for the prize when they have none', share: ', plus the winner’s token account for the prize when they have none', nft: ', and the NFT is handed over in the claim (a Token Metadata NFT opens the winner’s token account of it)', roll: ', plus the roll’s order (below)' })[prizeLine(p)?.gives] ?? '';
-  for (const g of m.grants) row(`grant:${g.key}`, `claim “${g.name}”`, 'the winner, who signs every claim (anyone may pay its fees)', FEES.player, [], `Only the winning wallet can claim: it signs, whatever proves it won (a voucher, a list, an open grant). Whoever pays the transaction pays the player fee from its own SOL; a first claim’s receipt rent${opens(g.prize ?? g.gives)} comes from the grant’s funds (the sender pays what they can’t): xsolana_simulate gives what to put in its funds per claim.`);
+  for (const g of m.grants) row(`grant:${g.key}`, `claim “${g.name}”`, 'the winner, who signs every claim (anyone may pay its fees)', FEES.player, [], `Only the winning wallet can claim: it signs, whatever proves it won (a voucher, a list, an open grant). Whoever pays the transaction pays the player fee from its own SOL; its records (${LIMIT_RECORD_BYTES} bytes a wallet, ${ROUND_RECORD_BYTES} a round it is paid)${opens(g.prize ?? g.gives)} come from the grant’s funds (the sender pays what they can’t), and go back to the owner when its shards close after the grant: xsolana_simulate gives what to put in its funds per claim.`);
   // A prize of a collectible given when a place is paid or a winning entry claimed: its rent, from whoever sends it.
   for (const p of prizes(m).filter((p) => p.prize.gives === 'item' && !p.prize.compressed && !['grant', 'recipe'].includes(p.route)))
     row(p.by, `give ${prizeWords(p.prize, m)} (${p.route})`, p.route === 'mission' ? 'the player leaving the mission' : p.route === 'contest' ? 'whoever claims the winning entry' : 'whoever pays the place', 0n, [back('the new collectible', COLLECTIBLE_RENT, 'never: it is the collectible’s own rent')]);
   for (const c of m.contests) {
-    row(`contest:${c.key}`, `back a side in “${c.name}”`, 'player', FEES.player, [back('the entry', rent(ACCOUNT_BYTES.Entry), 'at claim')]);
+    row(`contest:${c.key}`, `back a side in “${c.name}”`, 'player', FEES.player, [back('the entry’s bytes in the contest’s list', BigInt(c.stakeNft ? CONTEST_ENTRY_BYTES.nfts : CONTEST_ENTRY_BYTES.tokens) * RENT_PER_BYTE, 'never: they go to the treasury when the contest closes')], 'A loser of a contest of tokens sends nothing more; every other entry is paid by a claim anyone may send.');
     row(`contest:${c.key}`, `open “${c.name}”`, 'authority', FEES.project, [back('the contest and its pot', rent(contestBytes(c, m)) + rent(165), 'when it closes')]);
     row(`contest:${c.key}`, `decide “${c.name}”`, 'authority', FEES.project);
   }

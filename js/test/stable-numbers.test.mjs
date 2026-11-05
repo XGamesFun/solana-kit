@@ -63,7 +63,7 @@ test('removing a live economy’s first contest changes no contest a player or a
   // The authority (the owner here) opens the second match while the project runs, under a number it picks.
   const m = model(saved, { now: NOW });
   const opened = 7;
-  w.chain.send(owner.address, [loot.openContestIx({ authority: owner.address, project, id: opened, mint: WSOL, args: contestArgs(m.contest.get('second'), m, NOW) })]);
+  w.chain.send(owner.address, [loot.openContestIx({ authority: owner.address, project, projectState: w.read('Project', project), id: opened, mint: WSOL, args: contestArgs(m.contest.get('second'), m, NOW) })]);
   assert.equal(w.read('Contest', loot.pda.contest(project, opened)).sides.length, 3);
 
   // A player backs side 2 of it.

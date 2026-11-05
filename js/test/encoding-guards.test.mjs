@@ -3,9 +3,10 @@
 // wrapped, and data cut short says so.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { encodeBase58 } from '../chain/base58.js';
+import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { encodeBorsh } from '../chain/borsh.js';
-import { intLE, readCompactU16, toBigInt } from '../chain/bytes.js';
+import { concat, intLE, readCompactU16, toBigInt, uintLE, utf8 } from '../chain/bytes.js';
+import { sha256 } from '../chain/sha256.js';
 import { tableAddress } from '../chain/lookup.js';
 import { parseMint } from '../chain/mint.js';
 import { NATIVE_MINT, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
@@ -61,7 +62,9 @@ test('signed integers that do not fit are refused, not wrapped', () => {
   assert.throws(() => intLE(2n ** 63n, 8), RangeError);
   assert.throws(() => intLE(-(2n ** 63n) - 1n, 8), RangeError);
   assert.throws(() => loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: 2n ** 63n }), RangeError);
-  assert.deepEqual(loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: -1n }).slice(-8), new Uint8Array(8).fill(255));
+  // A verdict signs its body's sha256: expires -1 is eight bytes of 255 in the body.
+  const body = concat(addressBytes(loot.LOOT_PROGRAM), addressBytes(A), new Uint8Array(8), uintLE(0, 2), new Uint8Array(8).fill(255));
+  assert.deepEqual(loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: -1n }), concat(utf8('loot-verdict-v4'), sha256(body)));
   assert.throws(() => loot.pda.hold(A, -(2n ** 64n)), RangeError);
   assert.throws(() => loot.pda.hold(A, 2n ** 63n), RangeError);
   assert.equal(loot.pda.hold(A, -1n), loot.pda.hold(A, -1));

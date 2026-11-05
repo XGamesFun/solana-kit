@@ -477,12 +477,13 @@ describe('stashes and prizes in a spec', () => {
     const p = plan(base, { now: NOW });
     const m = model(base, { now: NOW });
     const stashSteps = p.steps.filter((s) => s.part.startsWith('stash:'));
-    assert.equal(stashSteps.length, 6);
+    // Several NFTs a call: one step a stash here.
+    assert.equal(stashSteps.length, 3);
     assert.deepEqual(stashSteps.filter((s) => s.creates.length).map((s) => s.creates[0].bytes), [67 + 3 * 36, 67 + 2 * 36, 67 + 36], 'a table of NFTs: its header, a group’s and a block’s totals, 36 bytes an NFT');
     const box = (key) => m.box.get(key).id;
     assert.deepEqual(grantArgs(m.grants[0], m).gives, { Roll: [box('daily-chest')] });
     const rare = base.stashes[2].nfts[0].asset;
-    assert.deepEqual(lotteryArgs(m.lotteries[0], m).places, [{ bps: 0, prize: { Nft: { stash: m.stash.get('rare').id, nft: rare } } }, { bps: 9000, prize: null }]);
+    assert.deepEqual(lotteryArgs(m.lotteries[0], m).places, [{ bps: 0, prize: { Nft: { stash: m.stash.get('rare').id, nft: rare } }, times: 1 }, { bps: 9000, prize: null, times: 1 }]);
     assert.deepEqual(farmArgs(m.farms[0], m).tiers[0].prize, { Roll: [box('daily-chest')] });
     assert.deepEqual(prizeArgs({ gives: 'tokens', amount: 2, from: 'mint', currency: 'shards' }, m), { Tokens: { from: { Mint: ['@mint:shards'] }, amount: { Fixed: [2_000_000n] } } });
     assert.deepEqual(prizeArgs({ gives: 'share', pool: 'shard-rewards', percent: 10 }, m), { Tokens: { from: { Pool: [m.pool.get('shard-rewards').index] }, amount: { Bps: [1000] } } });

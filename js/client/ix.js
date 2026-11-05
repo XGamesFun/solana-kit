@@ -17,13 +17,15 @@
 // enums 'Variant', { Variant: [values] } or { Variant: { field: value } }, structs with snake_case fields.
 import { addressBytes, encodeBase58, NO_ADDRESS } from '../chain/base58.js';
 import { encodeBorsh, encodeInstruction } from '../chain/borsh.js';
-import { concat, intLE, readUintLE, toBigInt, uintLE, utf8 } from '../chain/bytes.js';
+import { compareBytes, concat, intLE, readUintLE, toBigInt, uintLE, utf8 } from '../chain/bytes.js';
 import { addressWithSeed, ASSOCIATED_TOKEN_PROGRAM, findProgramAddress, METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { allocateWithSeedIx, createAccountWithSeedIx, initializeAccount3Ix, MINT_BYTES, TOKEN_ACCOUNT_BYTES } from '../chain/token.js';
 import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '../chain/programs.js';
 import { sha256 } from '../chain/sha256.js';
+import { MEMO_PROGRAM } from '../chain/token2022.js';
 import IDL from './idl/loot.js';
-import { lotteryOwed, lotteryStep } from './accounts.js';
+import { CLAIMED, ENDED, entryOf, placesIn, roundFinished, roundWinners, runOf, runPlaces, shareOf, ticketOfPlace } from './accounts.js';
+import { stream, TAG, weighted } from './random.js';
 import { ata, BUBBLEGUM_PROGRAM, COMPRESSION_PROGRAM, LOOT_PROGRAM, MPL_CORE_PROGRAM, NOOP_PROGRAM, pda, vault, VRF_QUEUE } from './pda.js';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -53,6 +55,17 @@ const instructionDef = (name) => {
   if (!def) throw new Error(`Unknown loot instruction ${name}`);
   return def;
 };
+
+/**
+ * An instruction's tail (`tokens::tail`): the accounts every NFT move hands Core (what a check its collection carries
+ * reads, an oracle's account) and every token transfer hands a transfer hook, after the route's own. It starts at the
+ * Memo program's account, which serves a transfer into an account that requires a memo; with none, it is empty. So
+ * `extra` (hook accounts, Core's adapters) goes after the Memo program, which this puts first.
+ */
+export function tailOf(extra = []) {
+  if (!extra.length) return [];
+  return [meta(MEMO_PROGRAM, false, false), ...extra.filter((m) => m.pubkey !== MEMO_PROGRAM)];
+}
 
 /** The accounts of an instruction in order, each with its group (`checkout`, `fee`, `side`, `piece`) or ''. */
 function leaves(list, group = '') {
@@ -258,9 +271,18 @@ export const traitTables = (item) => (item?.traits ?? []).flatMap((t) => (t.from
  * an item's id to its decoded Item, as `entryAccounts`). */
 export const boxFresh = (entries, items = {}) => entries.some((e) => e.prizes.some((p) => (items[p.Item?.[0] ?? p.Compressed?.item]?.traits ?? []).length > 0));
 
-/** What an order of `box` holds for the collectibles its roll may mint: a collectible's rent for each item the entry
- * with the most of them gives. */
-export const orderEscrow = (box) => ESCROW_LAMPORTS * BigInt(Math.max(0, ...box.entries.map((e) => e.prizes.filter((p) => p.Item).length)));
+/**
+ * What an order of `opens` opens of `box` holds for what its settle may open or grow, one unit (`ESCROW_LAMPORTS`) each,
+ * given back unspent: for each draw of each open, each prize of the entry with the most of them that opens an account
+ * (a collectible, a stash's NFT, a fresh compressed NFT's Sheet: `items` maps an item's id to its decoded Item); once an
+ * order, each source of tokens it may pay, and the fate of the NFT it rolls on.
+ */
+export function orderEscrow(box, opens = 1, items = {}) {
+  const rents = (p) => Boolean(p.Item || p.Nft || p.Stash || (p.Compressed && (items[p.Compressed.item]?.traits ?? []).length));
+  const most = Math.max(0, ...box.entries.map((e) => e.prizes.filter(rents).length));
+  const sources = new Set(box.entries.flatMap((e) => e.prizes.flatMap((p) => (p.Tokens ? [JSON.stringify(p.Tokens.from)] : []))));
+  return ESCROW_LAMPORTS * (BigInt(most * boxDraws(box) * Math.max(1, opens)) + BigInt(sources.size) + (box.subject ? 1n : 0n));
+}
 
 /**
  * The nonce the `k`th roll an order won is named by when it settles: the first 8 bytes, little
@@ -315,8 +337,8 @@ export const gateAccounts = (project, { gate, wallet, shown, listProof = [] } = 
 ];
 
 /**
- * A nonce a prize route names (its `nonce` argument), from what names the prize: a grant and its round, a lottery's
- * contribution, a contest's entry, an auction and its last bid. Any nonce works (the sender picks it); the roll's order
+ * A nonce a prize route names (its `nonce` argument), from what names the prize: a grant, its wallet and rounds, a
+ * contest and its player, an auction and its last bid. Any nonce works (the sender picks it); the roll's order
  * is then at `prizeRollNonce` of it (plus the place where the route says so), which no roll on an NFT is at.
  */
 export const prizeNonce = (...parts) => {
@@ -565,22 +587,24 @@ export function withDefaults(def) {
     args.nft_ticket ??= null;
     args.returns ??= false;
     args.min_sold ??= 0;
-    // A place is { bps, roll }; a number is a share of the pot that rolls nothing.
-    args.places = (args.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, ...p } : { bps: p, prize: null }));
+    // A run of places alike is { bps, prize, times }; a number is one place's share of the pot that gives nothing else.
+    args.places = (args.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 }));
   }
   if (kind === 'Grant') {
     args.key_root ??= new Uint8Array(32);
     args.open ??= false;
+    args.shard_bits ??= 0;
   }
   return { [kind]: { ...body, args } };
 }
 
 /**
  * The owner writes one record (`def`: { Item: { id, args } }, { Box: … }, …), at its own address. A lottery names
- * its pot's mint, its pot (which its first write opens), its ticket mint, its
- * funds and both token programs.
+ * its pot's mint, its pot (which its first write opens), its ticket mint, both token programs and its current round's
+ * record (`lotteryState`: the lottery as it is, null for a new one: a lottery made again waits while that round has a
+ * record), then its own stash when a place holds or draws an NFT of it.
  */
-export function upsertIx({ owner, project, def: given, lottery = null }) {
+export function upsertIx({ owner, project, def: given, lottery = null, lotteryState = null }) {
   const def = withDefaults(given);
   const [kind] = Object.keys(def);
   const { args } = def[kind];
@@ -601,12 +625,12 @@ export function upsertIx({ owner, project, def: given, lottery = null }) {
       meta(args.mint, false, false),
       meta(pda.pot(recordAddress(project, def)), false, true),
       meta(args.ticket_mint === NO_ADDRESS ? args.mint : args.ticket_mint, false, false),
-      meta(pda.lotteryFunds(recordAddress(project, def)), false, true),
       meta(TOKEN_PROGRAM, false, false),
       meta(TOKEN_2022_PROGRAM, false, false),
+      meta(lotteryState ? currentRound(recordAddress(project, def), lotteryState) : SYSTEM_PROGRAM, false, false),
     ];
-    // A place that holds an NFT (`Prize::Held`): the lottery's own stash, anywhere after them.
-    if (args.places.some((p) => p.prize?.Held)) remaining.push(meta(pda.lotteryStash(recordAddress(project, def)), false, false));
+    // A place that holds or draws an NFT of its own stash (`Prize::Held`, `Prize::Raffled`): that stash, after them.
+    if (args.places.some((p) => p.prize?.Held || p.prize === 'Raffled')) remaining.push(meta(pda.lotteryStash(recordAddress(project, def)), false, false));
   }
   return lootIx('upsert', { def }, { owner, project, target: recordAddress(project, def) }, { remaining });
 }
@@ -614,24 +638,21 @@ export function upsertIx({ owner, project, def: given, lottery = null }) {
 /**
  * The owner closes the record at `target`, and its rent comes back: a grant's with the funds it held. A lottery
  * (`lottery`: its decoded record) sends what its pot holds to `to`, a token account of the pot's mint (the owner's own
- * by default), and closes the pot.
+ * by default), and closes the pot, once its current round has no record.
  */
-export function closeRecordIx({ owner, project, target, lottery, schedule, programs, to, paymentTo, extra = [] }) {
+export function closeRecordIx({ owner, project, target, lottery, schedule, programs, to, extra = [] }) {
   // A sealed schedule never closes (CannotClose): its address, and its vault's, stay bound to its terms.
   if (schedule?.action?.from?.Vest) throw new Error('A sealed schedule never closes: its vault stays bound to its terms.');
   if (!lottery) return lootIx('upsert', { def: null }, { owner, project, target });
   const tokenProgram = tokenProgramOf(programs, lottery.mint);
-  const paymentMint = lotteryPaymentMint(lottery);
   const remaining = [
+    meta(currentRound(target, lottery), false, false),
     meta(pda.pot(target), false, true),
     meta(lottery.mint, false, true),
     meta(to ?? ata(owner, lottery.mint, tokenProgram), false, true),
-    meta(pda.lotteryFunds(target), false, true),
-    meta(paymentMint, false, true),
-    meta(paymentTo ?? ata(owner, paymentMint, tokenProgramOf(programs, paymentMint)), false, true),
     meta(TOKEN_PROGRAM, false, false),
     meta(TOKEN_2022_PROGRAM, false, false),
-    ...extra,
+    ...tailOf(extra),
   ];
   return lootIx('upsert', { def: null }, { owner, project, target }, { remaining });
 }
@@ -648,7 +669,7 @@ export function payIx({ player, project, mint, treasury, amount, shares = [], re
     'pay',
     { amount, shares, reference: reference(ref) },
     { player, project, mint, treasury, treasury_token: ata(treasury, mint, tokenProgram), player_token: playerToken ?? ata(player, mint, tokenProgram) },
-    { remaining: [...shareAccounts(project, shares, mint, { holders, programs, treasury }), ...extra], writable: sharesBurn(shares) ? ['mint'] : [] },
+    { remaining: [...shareAccounts(project, shares, mint, { holders, programs, treasury }), ...tailOf(extra)], writable: sharesBurn(shares) ? ['mint'] : [] },
   );
 }
 
@@ -661,7 +682,7 @@ export function payIx({ player, project, mint, treasury, amount, shares = [], re
  * item, the collectible, `chosen`) the buyer names for a share the box lets them choose. A box of one entry with
  * nothing random is rolled at once and takes no oracle accounts (a box that needs no roll at all sells with `buyIx`).
  * The player opens the project's vault for the price's mint, and for each prize's, when it is not there. A box that
- * limits each wallet counts the purchase in the player's receipt (its rent theirs).
+ * limits each wallet counts the purchase in the player's counts (`pda.counts`, its rent theirs).
  */
 export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, count = 1, items = {}, shown, listProof, subject, chosenRecipient = null, chosen = null, poolMints, playerToken, programs, extra = [] }) {
   const mint = box.currency;
@@ -697,10 +718,10 @@ export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, c
       vrf_program: rolled ? undefined : null,
       slot_hashes: rolled ? undefined : null,
       chosen,
-      receipt: limits(box.per_wallet) ? pda.receipt(address, player) : null,
+      counts: limits(box.per_wallet) ? pda.counts(project, player) : null,
       ...on.accounts,
     },
-    { remaining: [...entryAccounts(project, box.entries, items), ...prizeAccounts(project, box.entries, poolMints, programs), ...gate, ...extra], writable: on.writable },
+    { remaining: [...entryAccounts(project, box.entries, items), ...prizeAccounts(project, box.entries, poolMints, programs), ...gate, ...tailOf(extra)], writable: on.writable },
   );
 }
 
@@ -733,10 +754,10 @@ export function buyIx({ player, project, box, boxAddress, maxPrice, treasury, ch
       player, project, loot_box: address, mint,
       player_token: playerToken ?? ata(player, mint, tokenProgram),
       treasury, treasury_token: ata(treasury, mint, tokenProgram),
-      chosen, receipt: limits(box.per_wallet) ? pda.receipt(address, player) : null,
+      chosen, counts: limits(box.per_wallet) ? pda.counts(project, player) : null,
     },
     {
-      remaining: [...gateAccounts(project, { gate: box.gate, wallet: player, shown, listProof }), ...shareAccounts(project, shares, mint, { holders, programs, treasury }), ...prizes, ...extra],
+      remaining: [...gateAccounts(project, { gate: box.gate, wallet: player, shown, listProof }), ...shareAccounts(project, shares, mint, { holders, programs, treasury }), ...prizes, ...tailOf(extra)],
       writable: entry.burns || sharesBurn(box.shares) ? ['mint'] : [],
     },
   );
@@ -761,7 +782,7 @@ export function callbackRollIx({ order, orderState, box, boxAddress, randomness,
   ];
   const prizes = prizeAccounts(orderState.project, box.entries, boxPoolMints(box, poolMints), programs);
   if (prizes.length) keys.push(meta(TOKEN_PROGRAM, false, false), meta(TOKEN_2022_PROGRAM, false, false), meta(projectAddress, false, false), ...prizes);
-  keys.push(...extra);
+  keys.push(...tailOf(extra));
   return { programId: LOOT_PROGRAM, keys, data: encodeInstruction(IDL, 'callback_roll', { randomness: Uint8Array.from(randomness) }) };
 }
 
@@ -871,7 +892,7 @@ export function settleParts(box, opens = 1) {
 /** The heap a settle that moves three or more NFTs asks for (`settleHeapFrame`): all a transaction may have, 256 KiB. */
 export const LARGE_SETTLE_HEAP = 256 * 1024;
 
-/** Whether an order rolled on an NFT: its `subject` names one (the default address for none). */
+/** Whether an order rolled on an NFT: its `subject` names one (null for none). */
 const rolledOn = (order) => Boolean(order.subject) && order.subject !== NO_ADDRESS;
 
 /**
@@ -950,7 +971,7 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       player_token: Number(order.undrawn ?? 0) > 0 && end === order.won.length ? ata(order.player, order.mint, tokenProgram) : null,
     },
     {
-      remaining: [...on.proof, ...prizes, ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...extra],
+      remaining: [...on.proof, ...prizes, ...shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }), ...tailOf(extra)],
       writable: [...(burns ? ['mint'] : []), ...on.writable],
     },
   );
@@ -1019,10 +1040,10 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
       mint: order.mint,
       vault: vault(project, order.mint, tokenProgram),
       player_token: ata(order.player, order.mint, tokenProgram),
-      receipt: order.counted != null ? pda.receipt(order.loot_box, order.player) : null,
+      counts: order.counted != null ? pda.counts(project, order.player) : null,
       ...on.accounts,
     },
-    { remaining: [...on.proof, ...extra], writable: on.writable },
+    { remaining: [...on.proof, ...tailOf(extra)], writable: on.writable },
   );
 }
 
@@ -1059,29 +1080,54 @@ export function moveTokensIx({ authority, project, mint, from, to, amount, refer
     'move_tokens',
     { from, to, amount, reference: reference(ref) },
     { authority, project, mint, pool: from.Pool ? pda.pool(project, from.Pool[0]) : null },
-    { remaining: [...destinationAccounts(project, to, mint, { holders, programs, treasury }), ...extra], writable: writes ? ['mint'] : [] },
+    { remaining: [...destinationAccounts(project, to, mint, { holders, programs, treasury }), ...tailOf(extra)], writable: writes ? ['mint'] : [] },
   );
 }
 
 // ---------------------------------------------------------------- make: collectibles
 
 /**
- * The authority makes, rewrites or burns a collectible. `change`: { Make: { attributes } } (then `item` is the item id
- * it makes one of, `asset` is a new key that signs, and `owner` receives it), { Set: [attributes] } or 'Burn'. `collection`: the project's for a Make
- * or a Burn; for a Set, the asset's own (`MPL_CORE_PROGRAM` for one in none). `hasAuthority` false for a `Set` on an
- * NFT the project has no authority over (a Core asset of another collection, or a Token Metadata NFT's mint): what it
- * writes goes in the NFT's Sheet, or on the NFT itself when its Attributes plugin names the project.
+ * The authority rewrites or burns a collectible, or writes a wallet's profile. `change`: { Set: [attributes] }, 'Burn'
+ * (`owner`: whoever holds it, who gets its rent) or { Profile: [attributes] } (`asset` the wallet). `collection`: for a
+ * Burn the project's; for a Set the asset's own (`MPL_CORE_PROGRAM` for one in none). `hasAuthority` false for a `Set`
+ * on an NFT the project has no authority over (a Core asset of another collection, or a Token Metadata NFT's mint):
+ * what it writes goes in the NFT's Sheet, or on the NFT itself when its Attributes plugin names the project. A `Make`
+ * goes to `makeIx`.
  */
-export function collectibleIx({ authority, project, collection, asset, change, item = null, owner = null, hasAuthority = true, reference: ref }) {
-  const make = Boolean(change.Make);
-  const sheet = change.Set && !hasAuthority ? pda.sheet(project, asset) : null;
+export function collectibleIx({ authority, project, collection, asset, change, owner = null, hasAuthority = true, reference: ref, ...make }) {
+  if (change.Make) return makeIx({ authority, project, ...change.Make, ...make, owners: make.owners ?? [owner], reference: ref });
+  const sheet = change.Set && !hasAuthority ? pda.sheet(project, asset) : change.Profile ? pda.profile(project, asset) : null;
+  const burn = change === 'Burn' || Boolean(change.Burn);
   return lootIx(
     'collectible',
     { change, reference: reference(ref) },
-    { authority, project, collection, asset, item: make ? pda.item(project, item) : null, owner: make ? owner : null, sheet },
-    { signer: make ? ['asset'] : [], writable: change.Set || collection === MPL_CORE_PROGRAM ? [] : ['collection'] },
+    { authority, project, collection, asset, owner: burn ? owner : null, sheet },
+    { writable: change.Set || change.Profile || collection === MPL_CORE_PROGRAM ? [] : ['collection'] },
   );
 }
+
+/**
+ * The authority makes one of item `item` (`itemState`: its decoded Item, for its collection and next serial) for each
+ * of `owners`, in serial order (an owner may come more than once), with `attributes` written over the program's own: a
+ * collectible at `pda.itemAsset(item, serial)` (`madeAssets` says which), or with `tree`, a compressed NFT minted into
+ * that tree of the project's (no attributes: they go in its Sheet). A switched-off item still makes; one sold out
+ * refuses the whole call (`PrizeNotCovered`).
+ */
+export function makeIx({ authority, project, item, itemState, owners, attributes = [], tree = null, reference: ref }) {
+  if (!itemState) throw new Error(`a make of item ${item} needs the item (itemState: its decoded Item), for its collection and next serial`);
+  if (!owners?.length || owners.some((o) => !o)) throw new Error('A make names who gets each one (`owners`).');
+  const prize = tree ? { Compressed: { item, tree } } : { Item: [item] };
+  const remaining = owners.flatMap((owner, made) => [meta(owner, false, false), ...prizeMetas({ project, prize, winner: owner, items: { [item]: itemState }, made })]);
+  return lootIx(
+    'collectible',
+    { change: { Make: { item, tree, attributes } }, reference: reference(ref) },
+    { authority, project, collection: itemState.collection, asset: pda.item(project, item), owner: null, sheet: null },
+    { remaining, writable: ['collection'] },
+  );
+}
+
+/** The collectibles a `makeIx` of `count` mints (not compressed): at the item's next serials. */
+export const madeAssets = (project, item, itemState, count = 1) => Array.from({ length: count }, (_, k) => pda.itemAsset(pda.item(project, item), Number(itemState.issued) + 1 + k));
 
 // ---------------------------------------------------------------- decide
 
@@ -1093,48 +1139,61 @@ export function collectibleIx({ authority, project, collection, asset, change, i
  * (`piece`): `asset` and `collection` for a Core asset, with `tokenMetadata` for a Token Metadata NFT, or `compressed`
  * (after a `proveLeafIx`).
  */
-export function releaseIx({ signer, project, collection, asset, tokenMetadata: tm, compressed, hold, to, reference: ref }) {
+export function releaseIx({ signer, project, collection, asset, tokenMetadata: tm, compressed, hold, to, reference: ref, more = [] }) {
   const receiver = to ?? hold.player;
   // Never to the project's own address, nor any account of the program, where nothing could move it again (ToTheProject).
   if (receiver === project) throw new Error('A held NFT can’t go to the project’s own address: name a wallet.');
-  const p = piece({ project, asset, wallet: receiver, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  return lootIx('release', { reference: reference(ref) }, { signer, project, ...p.accounts, hold: pda.hold(p.accounts.asset, hold.free_at), player: hold.player, to: receiver }, { remaining: p.proof, writable: p.writable });
+  // Several holds of one player's with one end, payer and rent wallet (`more`: each { asset, collection, tokenMetadata,
+  // compressed }) go to one `to` together, in ascending order of their holds' addresses.
+  const [first, ...rest] = ascending([{ asset, collection, tokenMetadata: tm, compressed }, ...more].map((n) => {
+    const p = piece({ project, asset: n.asset, wallet: receiver, collection: n.collection, tokenMetadata: n.tokenMetadata, compressed: n.compressed, ...ONLY_MOVES });
+    return { p, hold: pda.hold(p.accounts.asset, hold.free_at) };
+  }), (x) => x.hold);
+  const p = withPrograms(first.p, rest.map((x) => x.p));
+  const groups = rest.flatMap((x) => [meta(x.hold, false, true), ...anotherMetas(x.p)]);
+  // The hold's rent goes back to whoever made it (`payer`), a Token Metadata NFT's emptied account's to whoever paid it.
+  return lootIx('release', { reference: reference(ref) }, { signer, project, ...p.accounts, hold: first.hold, payer: hold.payer, rent_to: hold.rent_to, to: receiver }, { remaining: [...p.proof, ...groups], writable: p.writable });
 }
 
 /** The mint of a contest's split prize (its `prize`, tokens): minted, or a pool's (`poolMint`). */
 const splitMint = (prize, poolMint) => prize?.Tokens?.from.Mint?.[0] ?? poolMint;
 
 /**
- * The authority opens contest `id` in `mint`. `args`: { sides, closes_at, result_by, shares, gate, deciders,
- * min_pot, stake, prize, nft, prize_split }: `prize`, what each winning entry gets when it is claimed (`prizeMetas`);
- * `nft`, a rule an NFT each entry stakes passes, in place of tokens (no shares then, no stake: the NFTs are the pot).
- * With `args.prize_split`, its token prize is set aside whole when it is
- * decided, in the contest's own vault (`pda.prizeVault`, opened now at the authority's rent), and each winning entry
+ * The authority opens contest `id` in `mint` (`projectState`: the decoded Project, whose next incarnation names the
+ * contest's list of entries). `args`: { sides, closes_at, result_by, shares, gate, deciders, min_pot, stake, prize, nft,
+ * prize_split, cap }: `prize`, what each winning entry gets with its first claim (`prizeMetas`); `nft`, a rule an NFT
+ * each entry stakes passes, in place of tokens (no shares then, no stake: the NFTs are the pot), each winner sharing the
+ * losers' NFTs, at most `cap` each (null: no cap). With `args.prize_split`, its token prize is set aside whole when it
+ * is decided, in the contest's own vault (`pda.prizeVault`, opened now at the authority's rent), and each winning entry
  * takes its part by what it put in: `prizeMint` names the prize's mint when it comes from a pool.
  */
-export const openContestIx = ({ authority, project, id, mint, args, prizeMint }) => {
+export const openContestIx = ({ authority, project, projectState, id, mint, args, prizeMint }) => {
   const contest = pda.contest(project, id);
   const split = Boolean(args.prize_split);
-  return lootIx('open_contest', { id, args: { deciders: [], min_pot: 0, stake: 0, prize: null, nft: null, prize_split: false, ...args, gate: args.gate ?? null } }, {
+  return lootIx('open_contest', { id, args: { deciders: [], min_pot: 0, stake: 0, prize: null, nft: null, prize_split: false, cap: null, ...args, gate: args.gate ?? null } }, {
     authority, project, mint, contest,
     prize_mint: split ? splitMint(args.prize, prizeMint) : null, prize_vault: split ? pda.prizeVault(contest) : null,
+    entries: pda.entries(contest, BigInt(projectState.incarnations) + 1n),
   });
 };
 
+/** A contest's list of entries, from its decoded Contest. */
+export const contestEntries = (contestAddress, contest) => pda.entries(contestAddress, contest.incarnation);
+
 /** The prefix of a contest's verdict (`verdictBytes`). */
-export const VERDICT_DOMAIN = 'loot-verdict-v3';
+export const VERDICT_DOMAIN = 'loot-verdict-v4';
 
 /**
- * The bytes a contest's decider key signs: "loot-verdict-v3" | program (32) | contest (32) | incarnation (u64 LE) |
- * side (1; 255 calls it off) | expires (i64 LE), then | recipient (32) when the verdict names the wallet the
- * contest's chosen share pays. `incarnation` is the contest's (the decoded Contest's), so a verdict decides only the
- * contest it was signed for, never one opened later at the same id. `decide` rebuilds them from its own accounts and
- * arguments.
+ * The bytes a contest's decider key signs: "loot-verdict-v4" | sha256(program (32) | contest (32) | incarnation (u64
+ * LE) | side (u16 LE; 65535 calls it off) | expires (i64 LE), then | recipient (32) when the verdict names the wallet
+ * the contest's chosen share pays). `incarnation` is the contest's (the decoded Contest's), so a verdict decides only
+ * the contest it was signed for, never one opened later at the same id. `decide` rebuilds them from its own accounts
+ * and arguments.
  */
 export function verdictBytes({ program = LOOT_PROGRAM, contest, incarnation, side, expires, recipient = null }) {
   if (incarnation == null) throw new Error('A verdict signs the contest’s incarnation (the decoded Contest’s).');
   const named = recipient == null ? new Uint8Array(0) : addressBytes(recipient);
-  return concat(utf8(VERDICT_DOMAIN), addressBytes(program), addressBytes(contest), uintLE(incarnation, 8), uintLE(side ?? 255, 1), intLE(expires, 8), named);
+  return concat(utf8(VERDICT_DOMAIN), sha256(concat(addressBytes(program), addressBytes(contest), uintLE(incarnation, 8), uintLE(side ?? 0xffff, 2), intLE(expires, 8), named)));
 }
 
 /**
@@ -1154,7 +1213,7 @@ export function decideIx({ signer, project, projectState, contestAddress, contes
   // called off before anyone entered.
   const split = Boolean(contest.prize_split);
   const from = contest.prize?.Tokens?.from;
-  const closes = side == null && Number(contest.entries) === 0;
+  const closes = side == null && Number(contest.owed) === 0;
   return lootIx(
     'decide',
     { side: side ?? null, expires: toBigInt(verdict?.expires ?? 0), reference: reference(ref), incarnation: contest.incarnation, recipient },
@@ -1163,10 +1222,11 @@ export function decideIx({ signer, project, projectState, contestAddress, contes
       prize_mint: split ? splitMint(contest.prize, prizeMint) : null,
       prize_pool: split && side != null && from?.Pool ? pda.pool(project, from.Pool[0]) : null,
       prize_vault: split ? pda.prizeVault(address) : null,
+      entries: contestEntries(address, contest),
     },
     // The mint is written by a burn share, or by closing the pot of a contest nobody entered; the prize's mint when it
     // is minted, or when its vault closes.
-    { remaining: [...shares, ...extra], writable: [...((side == null ? closes : sharesBurn(contest.shares)) ? ['mint'] : []), ...(split && ((side != null && from?.Mint) || closes) ? ['prize_mint'] : [])] },
+    { remaining: [...shares, ...tailOf(extra)], writable: [...((side == null ? closes : sharesBurn(contest.shares)) ? ['mint'] : []), ...(split && ((side != null && from?.Mint) || closes) ? ['prize_mint'] : [])] },
   );
 }
 
@@ -1183,131 +1243,226 @@ export const callbackRandomIx = ({ project, reference: ref, randomness }) => ({
 // ---------------------------------------------------------------- schedules and lotteries
 
 /**
- * Anyone (`payer`) runs a schedule that is due, and opens the account it pays into when that is not there.
+ * Anyone (`payer`) runs a schedule that is due, every run due in one call, and opens the account it pays into when that
+ * is not there.
  * `poolMint`: the mint of the pool it moves from (when it moves from one). `extra`: a hook's or a memo's accounts.
  */
-export function runScheduleIx({ payer, project, id, schedule, poolMint, holders, programs, treasury, extra = [] }) {
+export function runScheduleIx({ payer, project, id, schedule, poolMint, holders, programs, treasury, upto = 0, extra = [] }) {
   const { from, to } = schedule.action;
   const address = pda.schedule(project, id);
   // A sealed schedule pays from its own vault (`pda.vest`), passed where a pool would be.
   const mint = from.Mint?.[0] ?? from.Vest?.[0] ?? poolMint;
   const writes = Boolean(from.Mint) || to === 'Burn';
   const pool = from.Pool ? pda.pool(project, from.Pool[0]) : from.Vest ? pda.vest(address) : null;
+  // Every run due, in one call: up to `upto` runs made (the runs it has plus those due, `runsDue`; 0: no bound).
   return lootIx(
     'run_schedule',
-    {},
+    { upto },
     { payer, project, schedule: address, pool, mint },
-    { remaining: [...destinationAccounts(project, to, mint, { holders, programs, treasury }), ...extra], writable: writes ? ['mint'] : [] },
+    { remaining: [...destinationAccounts(project, to, mint, { holders, programs, treasury }), ...tailOf(extra)], writable: writes ? ['mint'] : [] },
   );
 }
 
 export const lotteryPaymentMint = (lottery) => lottery.ticket_mint && lottery.ticket_mint !== NO_ADDRESS ? lottery.ticket_mint : lottery.mint;
 
+// A lottery's rounds (`accounts.js`: `decodeRound`, `partsOwed`): each round is a record of its own, opened by its
+// first purchase; `settle_round` gives its places' prizes and sweeps, `pull` pays one part of one entry, and the step that
+// leaves nothing owed closes it. Every builder takes the decoded records it acts on, so each is pure.
+
+/** The address of a lottery's current round's record (there or not), from its decoded Lottery. */
+export const currentRound = (lotteryAddress, lottery) => pda.round(lotteryAddress, lottery.incarnation, lottery.round);
+
 /**
- * `player` buys `count` tickets: a contribution of their own at `nonce` (any number they have no contribution at in
- * this lottery), whose rent they pay and get back once it is finished. The ticket money waits in the lottery's
- * escrow until the draw. Whoever holds a collectible a fixed share pays is fixed now, from that collectible. It buys
- * only at the `lottery`'s incarnation and revision (`TermsChanged` once the owner edits or recreates it). A lottery
- * whose ticket costs an NFT (`lottery.nft_ticket`) sells one at a time, for `nft` ({ asset, collection, tokenMetadata,
- * compressed }, as `piece` takes it), which the project holds until the round is drawn (then it goes where its `then`
- * says, `spentTo`) or cancelled (then back to its buyer).
+ * `player` buys `count` tickets of lottery `id`'s current round (`lottery` decoded; `round` its decoded record, null when
+ * nobody bought into it yet: then this purchase opens it, and the buyer fronts its header, back at the close). It buys
+ * only at the lottery's incarnation and the revision the round copied (`TermsChanged` otherwise; a purchase that lands
+ * as the round moves on fails, and is sent again). Each share a buyer's own entry names comes with its wallet: a fixed
+ * holder's collectible and its holder (`holders`), or the buyer's choice (`chosenRecipient`, a wallet, or the
+ * collectible `chosen` whose holder is paid). A lottery whose ticket costs an NFT sells one at a time, for `nft` ({ asset,
+ * collection, tokenMetadata, compressed }, as `piece` takes it).
  */
-export function buyTicketsIx({ player, project, id, lottery, mint, count, nonce, shown, listProof, chosenRecipient = null, chosen = null, nft, playerToken, programs, extra = [] }) {
+export function buyTicketsIx({ player, project, id, lottery, round = null, mint, count, shown, listProof, chosenRecipient = null, chosen = null, nft, holders = {}, playerToken, programs, extra = [] }) {
   const address = pda.lottery(project, id);
-  mint ??= lotteryPaymentMint(lottery);
-  const holderAssets = (lottery.shares ?? []).flatMap((s) => (s.to.Holder ? [meta(s.to.Holder[0], false, false)] : []));
+  const key = currentRound(address, lottery);
+  mint ??= round ? round.pay_mint : lotteryPaymentMint(lottery);
+  const shares = round ? round.shares : lottery.shares ?? [];
+  // A round of burned tickets whose places share the pot opens its account of the pot's mint at its first purchase.
+  const opensPot = !round && mint !== lottery.mint && lottery.places.some((p) => Number(p.bps) > 0);
+  const holderOf = (asset) => (holders[asset] && holders[asset] !== project ? [meta(holders[asset], false, false)] : []);
+  const recipients = shares.flatMap((s) => {
+    if (s.to.Holder) return [meta(s.to.Holder[0], false, false), ...holderOf(s.to.Holder[0])];
+    if (!s.to.Chosen || !chosenRecipient) return [];
+    if (s.to.Chosen.item != null) return holderOf(chosenRecipient);
+    return [meta(chosenRecipient, false, false), meta(ata(chosenRecipient, mint, tokenProgramOf(programs, mint)), false, false)];
+  });
   const held = lottery.nft_ticket ? piece({ project, wallet: player, ...nft, ...ONLY_MOVES, reads: true }) : null;
-  const paid = held ? [...pieceMetas(held), ...held.proof] : [];
   return lootIx(
     'buy_tickets',
-    { nonce, count, chosen_recipient: chosenRecipient, incarnation: lottery.incarnation, revision: lottery.revision },
+    { count, chosen_recipient: chosenRecipient, incarnation: lottery.incarnation, revision: round ? round.revision : lottery.revision },
     {
-      player, project, lottery: address, contribution: pda.contribution(address, player, nonce),
+      player, project, lottery: address, round: key,
       player_token: playerToken ?? ata(player, mint, tokenProgramOf(programs, mint)),
-      payment_vault: pda.lotteryFunds(address), mint, chosen,
-      receipt: Number(lottery.per_wallet) ? pda.lotteryReceipt(address, lottery.incarnation, player) : null,
+      payment_vault: pda.roundTokens(key, mint), mint, chosen,
+      pot_mint: opensPot ? lottery.mint : null, pot_vault: opensPot ? pda.roundTokens(key, lottery.mint) : null,
+      counts: Number(lottery.per_wallet) ? pda.counts(project, player) : null,
     },
-    { remaining: [...gateAccounts(project, { gate: lottery.gate, wallet: player, shown, listProof }), ...holderAssets, ...paid, ...extra] },
+    { remaining: [...gateAccounts(project, { gate: lottery.gate, wallet: player, shown, listProof }), ...recipients, ...(held ? [...pieceMetas(held), ...held.proof] : []), ...tailOf(extra)] },
   );
 }
 
-/** Anyone asks for a lottery's draw once it is due. */
-export const drawLotteryIx = ({ payer, project, id }) => lootIx('draw_lottery', {}, { payer, lottery: pda.lottery(project, id) });
-
-/** The oracle's answer to a draw (for a local simulation). Every request of a round names the round's ticket, fixed
- * at its first ask (`asked_first`): a re-ask keeps it, so the first answer to land draws the round. */
-export function callbackLotteryIx({ project, id, lottery, askedFirst = lottery?.asked_first, randomness }) {
+/** Anyone asks for the draw of a lottery's current round once it is due (`lottery` decoded). A round nobody bought into
+ * moves on (or ends a lottery that draws once) with no ask. */
+export const drawLotteryIx = ({ payer, project, id, lottery }) => {
   const address = pda.lottery(project, id);
-  return {
-    programId: LOOT_PROGRAM,
-    keys: [meta(pda.oracleIdentity(), true, false), meta(address, false, true), meta(ticketOf(address, askedFirst), false, false)],
-    data: encodeInstruction(IDL, 'callback_lottery', { randomness: Uint8Array.from(randomness) }),
-  };
-}
+  return lootIx('draw_lottery', {}, { payer, lottery: address, round: currentRound(address, lottery) });
+};
 
-export const cancelLotteryIx = ({ project, id }) => lootIx('cancel_lottery', {}, { lottery: pda.lottery(project, id) });
+/** The oracle's answer to a round's draw (for a local simulation): the round's record is its only account. */
+export const callbackLotteryIx = ({ round, randomness }) => ({
+  programId: LOOT_PROGRAM,
+  keys: [meta(pda.oracleIdentity(), true, false), meta(round, false, true)],
+  data: encodeInstruction(IDL, 'callback_lottery', { randomness: Uint8Array.from(randomness) }),
+});
 
-/** Where a decoded contribution's shares go: as fixed when it was bought. */
-export function lotteryContributionShares(lottery, contribution) {
-  return (lottery.shares ?? []).flatMap((share, i) => {
-    const recipient = contribution.recipients[i];
-    if (recipient.kind === 2) return [];
-    const to = recipient.kind === 1 ? { Wallet: [recipient.wallet] } : share.to?.Chosen ? 'Treasury' : share.to;
-    return [{ ...share, to }];
-  });
+/** Anyone cancels a round whose draw the oracle never answered: every entry's refund is then pulled. */
+export const cancelLotteryIx = ({ project, id, lottery }) => {
+  const address = pda.lottery(project, id);
+  return lootIx('cancel_lottery', {}, { lottery: address, round: currentRound(address, lottery) });
+};
+
+/** The accounts a round's close takes after a step's own: each of its token accounts, its mint and who opened it. */
+export const roundCloseMetas = (key, r) => r.accounts.filter((o) => o.mint !== NO_ADDRESS).flatMap((o) => [meta(pda.roundTokens(key, o.mint), false, true), meta(o.mint, false, true), meta(o.by, false, true)]);
+
+/** The NFT a raffle's place draws from the lottery's own stash (`stash` decoded, as it is now) with the round's answer. */
+export const raffledNft = (stash, answer, place) => stash?.nfts[weighted(stream(answer, [TAG.LOTTERY, place]), stash.weights)] ?? null;
+
+/**
+ * Anyone (`payer`) sends the next part of `settle_round` on the round at `roundAddress` (`round` decoded): from its
+ * cursor, each token prize's run, and the next `places` places whose prize goes to a winner (its winner, then the
+ * prize's accounts: `prizeMetas`, `collection`, `poolMints`, `items`, `nfts`; a held or raffled NFT's from the lottery's
+ * own stash, `stash` its decoded stash for a raffle's draw); its last part sweeps (the shares, the pot), given
+ * `projectState` (the treasury) and `holders`. With `hold`, the next NFT prize becomes a hold for its winner (anyone),
+ * or the project's authority marks a pool's run, or the sweep's pot, that can't move. A finished round that owes nothing
+ * closes.
+ */
+export function settleRoundIx({ payer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints = {}, projectMint, items, nfts = {}, collection, stash, places = 1, nonce = 0n, hold = false, extra = [] }) {
+  const rest = [];
+  const entries = [];
+  let [sweeps, took] = [false, 0];
+  const own = pda.lotteryStash(r.lottery);
+  const poolMint = (index) => poolMints[index] ?? projectMint ?? r.mint;
+  if (r.status === 'Drawn') {
+    const winners = roundWinners(r);
+    let place = Number(r.cursor);
+    while (place < winners) {
+      const [run] = runOf(r, place);
+      const end = runPlaces(r, run)[1];
+      const prize = r.places[run].prize;
+      if (!prize) {
+        place = end;
+        continue;
+      }
+      const from = prize.Tokens?.from;
+      if (from?.Pool && hold) {
+        rest.push(meta(poolMint(from.Pool[0]), false, false), meta(pda.pool(project, from.Pool[0]), false, false));
+        place = end;
+        break;
+      }
+      if (from) {
+        if (from.Pool) rest.push(meta(poolMint(from.Pool[0]), false, false), meta(pda.pool(project, from.Pool[0]), false, true), meta(pda.roundTokens(key, poolMint(from.Pool[0])), false, true));
+        else rest.push(meta(from.Mint?.[0] ?? from.Vest[0], false, true));
+        place = end;
+        continue;
+      }
+      if (took >= places) break;
+      took += 1;
+      const i = entryOf(r, ticketOfPlace(r, place));
+      entries.push(i);
+      const winner = r.entries[i].buyer;
+      rest.push(meta(winner, false, true));
+      const named = prize.Held?.[0] ?? (hold ? prize.Nft?.nft : undefined);
+      const nft = prize.Raffled !== undefined || prize === 'Raffled' ? raffledNft(stash, r.answer, place) : named;
+      if (nft !== undefined) {
+        rest.push(meta(prize.Nft && hold ? pda.stash(project, prize.Nft.stash) : own, false, true));
+        if (nft && hold) rest.push(meta(pda.hold(nft, 0), false, true));
+        else if (nft) {
+          const p = piece({ project, asset: nft, wallet: winner, ...nfts[nft], ...ONLY_MOVES });
+          rest.push(...pieceMetas(p), ...p.proof);
+        }
+      } else rest.push(...prizeMetas({ project, collection, prize, winner, nonce: BigInt.asUintN(64, toBigInt(nonce) + BigInt(place)), poolMints, items, nft: nfts[prize.Nft?.nft], programs, projectMint }));
+      place += 1;
+      if (hold) break;
+    }
+    if (place >= winners) {
+      sweeps = true;
+      const common = r.shares.flatMap((s) => (s.to.Holder || s.to.Chosen?.item != null || s.to === 'Burn' ? [] : [s.to.Chosen ? { ...s, to: 'Treasury' } : s]));
+      rest.push(
+        meta(pda.pot(r.lottery), false, true), meta(r.mint, false, false), meta(pda.roundTokens(key, r.mint), false, true),
+        meta(r.pay_mint, false, true), meta(pda.roundTokens(key, r.pay_mint), false, true),
+        ...shareAccounts(project, common, r.pay_mint, { holders, programs, treasury: projectState?.treasury }),
+      );
+    }
+  }
+  // The sweep may leave nothing owed, and opens the pot's account when the places take from it: the close names it.
+  const closes = sweeps || roundFinished(r);
+  if (closes) {
+    rest.push(...roundCloseMetas(key, r));
+    if (sweeps && !r.accounts.some((o) => o.mint === r.mint)) rest.push(meta(pda.roundTokens(key, r.mint), false, true), meta(r.mint, false, true), meta(payer, false, true));
+  }
+  return lootIx(
+    'settle_round',
+    { nonce: toBigInt(nonce), entries, hold },
+    { payer, project, lottery: sweeps ? r.lottery : null, round: key, opener: closes ? r.opener : null, treasury: closes ? projectState?.treasury : null },
+    { remaining: [...rest, ...tailOf(extra)] },
+  );
 }
 
 /**
- * Anyone (`payer`) sends a contribution's next step (`lotteryStep`; `contributionAddress`, decoded `contribution`):
- *   - a drawn round gives every place's prize first: the step of a contribution that won a place with a prize gives
- *     the first such prize not given yet to its buyer, one place a call (`prizeMetas`: `collection`, `poolMints`, `items`, `nfts` as it takes them; a roll's
- *     order at `nonce` plus the place, `prizeNonce(contributionAddress)` by default), and nothing else moves;
- *   - once every prize is given, it is routed through its shares into the pot (or its tickets burned, or its NFT ticket
- *     spent); a cancelled round's, or a lottery's that returns its tickets, goes back to its buyer, never waiting;
- *   - one that holds a winning ticket stays (`done`): once every contribution is finished, it pays its buyer every
- *     place's share of the pot it won, into their account of the pot's mint.
- * `payer` opens any account it pays into that is not there. `treasury`: the project's treasury wallet, for a share
- * that names it. A ticket an NFT paid for passes that NFT (`ticket`: its kind, as `piece` takes it); `handBack` when the
- * wallet its price gives it to is an account of the loot program (`handsBack`), where it goes back to its buyer (a
- * Token Metadata NFT into the buyer's token account).
+ * Anyone (`payer`) pulls `part` of entry `entry` of the round at `roundAddress` (`round` decoded; `partsOwed` says what
+ * is owed): its own ('Own': a refund, a no-loss ticket's price, its NFT ticket back or where its price sends it, `ticket`
+ * its kind as `piece` takes it, `handBack` when the wallet its price gives it to is an account of the loot program), a
+ * recipient's ({ Share: [k] }), or its places' parts of a run ({ Pot: [run] }, { Prize: [run] }). It pays into the
+ * payee's own account, opened by `payer` when it is not there. With `hold`, an NFT ticket that can't move becomes a hold
+ * for whoever it is owed to. The pull that leaves nothing owed closes the round (`projectState`: its treasury).
  */
-export function finishLotteryContributionIx({ payer, project, id, lottery, contributionAddress, contribution, treasury, nonce, collection, poolMints, items, nfts = {}, ticket = {}, handBack = false, programs, extra = [] }) {
-  const address = pda.lottery(project, id);
-  const step = lotteryStep(lottery, contribution) ?? (contribution.done ? 'pay' : lottery.status === 'Drawn' ? 'finish' : 'refund');
-  nonce = toBigInt(nonce ?? prizeNonce(contributionAddress));
-  const accounts = { payer, project, lottery: address, contribution: contributionAddress, payment_vault: pda.lotteryFunds(address), pot: pda.pot(address), player: contribution.player };
-  if (step === 'prizes') {
-    // One place a call: the first it won whose prize is not given yet. The places go in order, so collectibles of one
-    // item are made in place order, each at the next serial.
-    const [place] = lotteryOwed(lottery, contribution);
-    const prize = lottery.places[place].prize;
-    const prizes = prizeMetas({ project, collection, prize, winner: contribution.player, nonce: BigInt.asUintN(64, nonce + BigInt(place)), poolMints, items, nft: nfts[prize.Nft?.nft ?? prize.Held?.[0]], programs, lottery: address });
-    return lootIx('finish_lottery_contribution', { nonce }, { ...accounts, to: null, mint: lottery.mint }, { remaining: [...prizes, ...extra] });
+export function pullIx({ payer, project, roundAddress: key, round: r, entry, part, projectState, ticket = {}, handBack = false, hold = false, programs, extra = [] }) {
+  const e = r.entries[entry];
+  const rest = [];
+  let [mint, to, settled] = [null, null, 1];
+  const account = (m, wallet) => ata(wallet, m, tokenProgramOf(programs, m));
+  if (part === 'Own' && e.nft !== NO_ADDRESS) {
+    const back = r.status === 'Cancelled' || r.returns;
+    const then = back ? null : r.nft_ticket?.then;
+    if (hold) {
+      rest.push(meta(pda.hold(e.nft, 0), false, true));
+      if (then?.Give) rest.push(meta(then.Give[0], false, true));
+    } else {
+      // Where its price sends it (a stash keeps it where it is), or back to its buyer.
+      const receiver = then ? spentTo(project, then) : null;
+      const holder = then?.Stash || (handBack && then?.Give) ? e.buyer : receiver ?? e.buyer;
+      const p = piece({ project, asset: e.nft, wallet: holder, ...ticket, moves: !then?.Stash, locks: false, burns: then === 'Burn' || Boolean(then?.Burn), reads: false });
+      rest.push(...pieceMetas(p), ...p.proof, ...(receiver ? [meta(receiver, false, true)] : []));
+    }
+  } else if (part === 'Own') [mint, to] = [r.pay_mint, account(r.pay_mint, e.buyer)];
+  else if (part.Share) {
+    const wallet = e.to[part.Share[0]];
+    [mint, to] = [r.pay_mint, account(r.pay_mint, wallet)];
+    rest.push(meta(wallet, false, true));
+  } else {
+    const run = Number((part.Pot ?? part.Prize)[0]);
+    const p = part.Prize ? r.prizes.find((x) => Number(x.run) === run) : null;
+    mint = p ? p.mint : r.mint;
+    to = account(mint, e.buyer);
+    settled = placesIn(r, run, e.start, e.end).length;
   }
-  if (step === 'pay') {
-    return lootIx('finish_lottery_contribution', { nonce }, { ...accounts, to: ata(contribution.player, lottery.mint, tokenProgramOf(programs, lottery.mint)), mint: lottery.mint }, { remaining: extra });
-  }
-  const mint = lotteryPaymentMint(lottery);
-  // Drawn, its tickets go through the shares into the pot; in a lottery that returns them, back to the buyer.
-  const routed = step === 'finish';
-  const burns = routed && lottery.ticket_mint !== NO_ADDRESS;
-  // Burning the tickets, or a share that burns, writes the mint's supply.
-  const writesMint = burns || (routed && sharesBurn(lottery.shares ?? []));
-  const nft = contribution.asset && contribution.asset !== NO_ADDRESS;
-  let remaining = routed && !burns ? shareAccounts(project, lotteryContributionShares(lottery, contribution), mint, { programs, treasury }) : [];
-  if (nft) {
-    // Drawn: where its price sends it (it stays with the project in a stash); cancelled: back to its buyer.
-    const then = routed ? lottery.nft_ticket?.then : null;
-    const receiver = then ? spentTo(project, then) : null;
-    const burned = then === 'Burn' || Boolean(then?.Burn);
-    // Given to a wallet that is an account of the loot program (`handBack`), it goes back to its buyer instead.
-    const holder = then?.Stash || (handBack && then?.Give) ? contribution.player : receiver ?? contribution.player;
-    const p = piece({ project, asset: contribution.asset, wallet: holder, ...ticket, moves: !then?.Stash, locks: false, burns: burned, reads: false });
-    remaining = [...pieceMetas(p), ...p.proof, ...(receiver ? [meta(receiver, false, Boolean(then.Stash))] : [])];
-  }
-  // A free ticket gives nothing back, and needs no account to give it into.
-  const back = !routed && !nft && BigInt(contribution.amount ?? 0) > 0n;
-  return lootIx('finish_lottery_contribution', { nonce }, { ...accounts, to: back ? ata(contribution.player, mint, tokenProgramOf(programs, mint)) : null, mint }, { remaining: [...remaining, ...extra], writable: writesMint ? ['mint'] : [] });
+  const closes = (r.status === 'Swept' || r.status === 'Cancelled') && Number(r.owed) <= settled;
+  if (closes) rest.push(...roundCloseMetas(key, r));
+  return lootIx(
+    'pull',
+    { entry, part, hold },
+    { payer, project, round: key, buyer: e.buyer, mint, vault: mint ? pda.roundTokens(key, mint) : null, to, opener: closes ? r.opener : null, treasury: closes ? projectState?.treasury : null },
+    { remaining: [...rest, ...tailOf(extra)] },
+  );
 }
 
 // ---------------------------------------------------------------- farms
@@ -1371,7 +1526,7 @@ function tokenSeat({ player, project, id, farm, programs, paid = false }) {
  * the seat before it, in the same transaction.
  */
 export const stakeTokensIx = ({ player, project, id, farm, amount, tier = 0, programs, shown, extra = [] }) =>
-  lootIx('stake_tokens', { amount, tier }, tokenSeat({ player, project, id, farm, programs }), { remaining: [...shownAccounts(project, shown), ...extra], writable: [...farmWrites(farm), ...tollWrites(farm)] });
+  lootIx('stake_tokens', { amount, tier }, tokenSeat({ player, project, id, farm, programs }), { remaining: [...shownAccounts(project, shown), ...tailOf(extra)], writable: [...farmWrites(farm), ...tollWrites(farm)] });
 
 /**
  * `player` takes `amount` out (0: only collects what is owed, and takes out tokens whose unbonding wait is over);
@@ -1381,7 +1536,7 @@ export const stakeTokensIx = ({ player, project, id, farm, amount, tier = 0, pro
  */
 export const unstakeTokensIx = ({ player, project, id, farm, amount, forfeit = false, programs, extra = [] }) =>
   lootIx('unstake_tokens', { amount, forfeit }, tokenSeat({ player, project, id, farm, programs, paid: !forfeit }), {
-    remaining: extra,
+    remaining: tailOf(extra),
     // An exit fee that burns writes the staked mint; a toll that burns, the rewards' mint.
     writable: [...farmWrites(farm), ...tollWrites(farm), ...(farm.exit_to === 'Burn' ? ['mint'] : [])],
   });
@@ -1437,6 +1592,7 @@ export function piece({ project, asset, wallet, collection, hasAuthority = true,
       ? { collection: c.collection ?? null, tree_config: pda.treeConfig(c.tree), leaf_delegate: delegate, bubblegum_program: BUBBLEGUM_PROGRAM, compression_program: COMPRESSION_PROGRAM, log_wrapper: NOOP_PROGRAM }
       : {};
     return {
+      kind: 'compressed',
       accounts: { ...NO_PIECE, asset: c.id, sheet: sheetOf(c.id), leaf: pda.leaf(c.id), tree: c.tree, ...bubblegum },
       proof: c.proof.map((node) => meta(typeof node === 'string' ? node : encodeBase58(node), false, false)),
       writable: calls ? ['leaf', 'tree', 'tree_config'] : [],
@@ -1452,6 +1608,7 @@ export function piece({ project, asset, wallet, collection, hasAuthority = true,
     const calls = moves || locks;
     const records = calls && pnft;
     return {
+      kind: 'tokenMetadata',
       accounts: {
         ...NO_PIECE, asset, sheet: sheetOf(asset), metadata: tokenMetadata.metadata(asset), token,
         edition: calls ? tokenMetadata.edition(asset) : null,
@@ -1474,6 +1631,7 @@ export function piece({ project, asset, wallet, collection, hasAuthority = true,
   const inNone = !collection || collection === MPL_CORE_PROGRAM;
   const calls = moves || locks || writes || burns;
   return {
+    kind: 'core',
     accounts: {
       ...NO_PIECE, asset, sheet: hasAuthority ? null : sheetOf(asset),
       collection: calls && !inNone ? collection : null, mpl_core_program: calls ? MPL_CORE_PROGRAM : null,
@@ -1482,6 +1640,41 @@ export function piece({ project, asset, wallet, collection, hasAuthority = true,
     writable: burns && !inNone ? ['collection'] : [],
   };
 }
+
+/** The accounts a further NFT of a call of several takes (`Piece::another`), after the first NFT's: only what its kind
+ * needs, the program's own address for one left out, then its proof. The first NFT passes every program any needs. */
+const ANOTHER = {
+  core: ['asset', 'sheet', 'collection'],
+  tokenMetadata: ['asset', 'sheet', 'metadata', 'edition', 'token', 'token_record', 'project_token', 'project_record', 'rule_set'],
+  compressed: ['asset', 'sheet', 'collection', 'leaf', 'tree', 'tree_config', 'leaf_delegate'],
+};
+export function anotherMetas(p) {
+  const writable = new Set([...p.writable, ...PIECE.filter((a) => a.writable).map((a) => a.name)]);
+  return [...ANOTHER[p.kind].map((name) => (p.accounts[name] == null ? meta(LOOT_PROGRAM, false, false) : meta(p.accounts[name], false, writable.has(name)))), ...p.proof];
+}
+
+/** The programs every NFT of a call of several needs, on the first NFT's piece (the call's own): Core, Token Metadata's
+ * and Bubblegum's, by what the others are. */
+function withPrograms(first, others) {
+  const kinds = new Set(others.map((p) => p.kind));
+  const a = { ...first.accounts };
+  if (kinds.has('core')) a.mpl_core_program ??= MPL_CORE_PROGRAM;
+  if (kinds.has('tokenMetadata')) {
+    a.token_metadata_program ??= TOKEN_METADATA_PROGRAM;
+    a.spl_token_program ??= TOKEN_PROGRAM;
+    a.spl_ata_program ??= ASSOCIATED_TOKEN_PROGRAM;
+    a.instructions ??= SYSVAR_INSTRUCTIONS;
+    a.rules_program ??= others.some((p) => p.accounts.rule_set && p.accounts.rule_set !== TOKEN_METADATA_PROGRAM) ? AUTH_RULES_PROGRAM : others.some((p) => p.accounts.token_record) ? TOKEN_METADATA_PROGRAM : null;
+  }
+  if (kinds.has('compressed')) Object.assign(a, { bubblegum_program: a.bubblegum_program ?? BUBBLEGUM_PROGRAM, compression_program: a.compression_program ?? COMPRESSION_PROGRAM, log_wrapper: a.log_wrapper ?? NOOP_PROGRAM });
+  return { ...first, accounts: a };
+}
+
+/**
+ * Several NFTs on one call (a hold, a stash, a farm's seats): their groups sorted by key (`keyOf`), the first the
+ * call's own and each further one after it, in ascending order (`OutOfOrder` otherwise). Returns [first, ...rest].
+ */
+const ascending = (items, keyOf) => [...items].sort((a, b) => compareBytes(addressBytes(keyOf(a)), addressBytes(keyOf(b))));
 
 /** The account an NFT paid goes to: the wallet it is given to, the stash it goes into, or the
  * incinerator for a burn (any account stands in for a Core asset, which Core burns). `then`: 'Burn', { Give: [wallet] }
@@ -1529,7 +1722,7 @@ export function payNftIx({ player, project, asset, to = null, collection, hasAut
   if (to === project) throw new Error('An NFT paid can’t go to the project’s own address: name a wallet, or burn it.');
   const receiver = to ?? INCINERATOR;
   const p = passedOn({ project, owner: player, receiver, burns: receiver === INCINERATOR, asset, collection, hasAuthority, tokenMetadata: tm, compressed });
-  return lootIx('pay_nft', { reference: reference(ref) }, { player, project, ...p.accounts, to: receiver }, { remaining: [...p.proof, ...extra], writable: p.writable });
+  return lootIx('pay_nft', { reference: reference(ref) }, { player, project, ...p.accounts, to: receiver }, { remaining: [...p.proof, ...tailOf(extra)], writable: p.writable });
 }
 
 /**
@@ -1597,7 +1790,14 @@ const ONLY_MOVES = { moves: true, locks: false, writes: false, reads: false };
 const standIn = (at) => ({ accounts: { ...NO_PIECE, asset: at }, proof: [], writable: [] });
 
 /** Anyone closes a compressed NFT's record (`pda.leaf`) that no longer matches its tree; its rent goes to `payer`, who paid it. */
-export const closeLeafIx = ({ asset, tree, payer }) => lootIx('close_leaf', {}, { record: pda.leaf(asset), tree, payer });
+export const closeLeafIx = ({ asset, tree, payer }) => lootIx('close_leaf', {}, { record: pda.leaf(asset), tree, payer, project: null });
+
+/**
+ * Anyone closes the Sheet of an NFT that is burned: `burned` is what shows it (the Core asset's own address, burned to
+ * one byte; a Token Metadata mint holding none; or a compressed NFT's record proving its leaf burned). Its rent goes to
+ * the project's `treasury` wallet.
+ */
+export const closeSheetIx = ({ project, nft, burned = nft, treasury }) => lootIx('close_leaf', {}, { record: pda.sheet(project, nft), tree: burned, payer: treasury, project });
 
 /**
  * Anyone proves a compressed NFT's leaf (`compressed` from `compressedFromDas`): put it before the instruction that
@@ -1633,6 +1833,7 @@ function nftSeat({ player, project, id, farm, asset, collection, hasAuthority = 
   const p = piece({ project, asset, wallet: player, collection, hasAuthority, tokenMetadata: tm, compressed, ...keeps });
   const key = compressed ? compressed.id : asset;
   return {
+    kind: p.kind,
     accounts: {
       ...farmSide(project, id, farm),
       player,
@@ -1647,61 +1848,92 @@ function nftSeat({ player, project, id, farm, asset, collection, hasAuthority = 
   };
 }
 
+/** A further seat's group of a call of several (`NftSeat`): the seat, its NFT's accounts (`anotherMetas`), its box and
+ * order leaving a mission that rolls (the program's address for none), then its proof (and an unstake's prize's). */
+const seatGroup = (seat, p, box = null, order = null) => [meta(seat, false, true), ...anotherMetas({ ...p, proof: [] }), meta(box ?? LOOT_PROGRAM, false, false), meta(order ?? LOOT_PROGRAM, false, Boolean(order)), ...p.proof];
+
 /**
  * `player` stakes an NFT: on a seat of its own in a farm of collectibles, or as the booster of the player's token seat
  * in a farm of tokens. Any kind (`piece`): a Core asset, a Token Metadata NFT's mint with `tokenMetadata`, or
  * `compressed` (after a `proveLeafIx` in the same transaction). `previous`: in a farm that watches, the last staker of
- * an NFT that changed hands, whose seat this takes over. `extra` carries reward token hooks/memos and Core transfer
- * adapter accounts.
+ * an NFT that changed hands, whose seat this takes over (alone). In a farm of collectibles, `more` NFTs (each { asset,
+ * collection, hasAuthority, tokenMetadata, compressed }) go in the same call at the same tier, one fee, by their seats'
+ * addresses. `extra` carries reward token hooks/memos and Core transfer adapter accounts.
  */
-export const stakeNftIx = ({ player, project, id, farm, asset, collection, hasAuthority = true, tokenMetadata: tm, compressed, previous = null, tier = 0, programs, extra = [] }) => {
+export const stakeNftIx = ({ player, project, id, farm, asset, collection, hasAuthority = true, tokenMetadata: tm, compressed, previous = null, tier = 0, programs, more = [], extra = [] }) => {
   // Its lock's end, when the farm keeps one, is written on it.
   const keeps = farmKeeps(farm, { writes: Boolean(farm.lock_key) });
-  const seat = nftSeat({ player, project, id, farm, asset, collection, hasAuthority, tokenMetadata: tm, compressed, previous, programs, keeps });
-  return lootIx('stake_nft', { tier }, { ...seat.accounts, toll_pool: farmSinks(project, farm).toll_pool }, { remaining: [...seat.proof, ...extra], writable: [...farmWrites(farm), ...tollWrites(farm), ...seat.writable] });
+  const [first, ...rest] = ascending([{ asset, collection, hasAuthority, tokenMetadata: tm, compressed }, ...more].map((n) => nftSeat({ player, project, id, farm, ...n, previous, programs, keeps })), (x) => x.accounts.seat);
+  const seat = withPrograms({ ...first, kind: first.kind }, rest);
+  const groups = rest.flatMap((x) => seatGroup(x.accounts.seat, x));
+  return lootIx('stake_nft', { tier }, { ...seat.accounts, toll_pool: farmSinks(project, farm).toll_pool }, { remaining: [...seat.proof, ...groups, ...tailOf(extra)], writable: [...farmWrites(farm), ...tollWrites(farm), ...seat.writable] });
 };
 
 /**
  * `player` takes an NFT out once its lock has run: it grows on its way out (a farm with growth writes on it, or on its
  * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. Leaving a tier
  * that rolls (`roll`: its box id), the NFT is rolled on that box, in an order at `nonce` (anyone then asks the oracle,
- * `askRollIx`, and settles); a box that can burn it or give it away keeps it in the project's hands until then.
+ * `askRollIx`, and settles); a box that can burn it or give it away keeps it in the project's hands until then. `more`
+ * NFTs of the player's in the farm (each { asset, collection, hasAuthority, tokenMetadata, compressed, tier, roll }) leave
+ * in the same call, one fee, one transfer of rewards: by their seats' addresses, the `i`th's roll at `nonce + 2i` and its
+ * prize's at `nonce + 2i + 1` (`seatNonces` says which NFT has which). One still locked refuses the whole call.
  */
-export const unstakeNftIx = ({ player, project, id, farm, asset, collection, hasAuthority = true, tokenMetadata: tm, compressed, forfeit = false, roll = null, nonce = 0n, tier, projectCollection, poolMints, items, nft, programs, extra = [] }) => {
-  // It grows on its way out; a mission that rolls may hand it to the project.
-  const keeps = farmKeeps(farm, { writes: Boolean(farm.growth?.length), rolls: roll != null });
-  const seat = nftSeat({ player, project, id, farm, asset, collection, hasAuthority, tokenMetadata: tm, compressed, programs, leaving: true, keeps });
-  // Leaving a mission that rolls (its tier's `roll`, a box id): the box, and the order the roll is made in.
-  const rolls = roll != null ? { loot_box: pda.box(project, roll), order: pda.order(project, player, nonce) } : { loot_box: null, order: null };
-  // A mission's prize (its tier's, `tier` the seat's): its accounts after the proof, unread when it is not earned; a
-  // roll's order at `nonce` plus 1. A forfeit takes neither the prize nor the rewards (the program reads neither), so it
-  // passes neither: the smallest way out.
-  const prize = tier != null && !forfeit ? farm.tiers[tier]?.prize : null;
-  const prized = prize ? prizeMetas({ project, collection: projectCollection ?? collection, prize, winner: player, nonce: toBigInt(nonce) + 1n, poolMints, items, nft, programs }) : [];
+export const unstakeNftIx = ({ player, project, id, farm, asset, collection, hasAuthority = true, tokenMetadata: tm, compressed, forfeit = false, roll = null, nonce = 0n, tier, projectCollection, poolMints, items, nft, programs, more = [], extra = [] }) => {
+  const seats = ascending([{ asset, collection, hasAuthority, tokenMetadata: tm, compressed, tier, roll }, ...more].map((n) => {
+    // It grows on its way out; a mission that rolls may hand it to the project.
+    const keeps = farmKeeps(farm, { writes: Boolean(farm.growth?.length), rolls: n.roll != null });
+    return { n, seat: nftSeat({ player, project, id, farm, ...n, programs, leaving: true, keeps }) };
+  }), (x) => x.seat.accounts.seat);
+  const several = seats.length > 1;
+  // Each seat's mission: the box and the order its roll is made in, at `nonce + 2i`; its prize (its tier's) after its
+  // proof, a roll's order at `nonce + 2i + 1`. A forfeit takes neither the prize nor the rewards (the program reads
+  // neither), so a call of one passes neither: the smallest way out. In a call of several each seat with a prize passes
+  // its accounts, given or not, so the next seat's start where the program looks.
+  const parts = seats.map(({ n, seat }, i) => {
+    const at = toBigInt(nonce) + 2n * BigInt(i);
+    const prize = n.tier != null && (!forfeit || several) ? farm.tiers[n.tier]?.prize : null;
+    const prized = prize ? prizeMetas({ project, collection: projectCollection ?? n.collection, prize, winner: player, nonce: at + 1n, poolMints, items, nft, programs }) : [];
+    const rolls = n.roll != null ? { box: pda.box(project, n.roll), order: pda.order(project, player, at) } : { box: null, order: null };
+    return { seat, prize, prized, rolls };
+  });
+  const [first, ...rest] = parts;
+  const seat = withPrograms(first.seat, rest.map((x) => x.seat));
   if (forfeit) seat.accounts.player_rewards = null;
-  return lootIx('unstake_nft', { forfeit, nonce }, { ...seat.accounts, ...rolls, associated_token_program: prize?.Tokens ? ASSOCIATED_TOKEN_PROGRAM : null, toll_pool: farmSinks(project, farm).toll_pool }, {
-    remaining: [...seat.proof, ...prized, ...extra],
+  const groups = rest.flatMap((x) => [...seatGroup(x.seat.accounts.seat, x.seat, x.rolls.box, x.rolls.order), ...x.prized]);
+  return lootIx('unstake_nft', { forfeit, nonce }, { ...seat.accounts, loot_box: first.rolls.box, order: first.rolls.order, associated_token_program: parts.some((x) => x.prize?.Tokens) ? ASSOCIATED_TOKEN_PROGRAM : null, toll_pool: farmSinks(project, farm).toll_pool }, {
+    remaining: [...seat.proof, ...first.prized, ...groups, ...tailOf(extra)],
     writable: [...farmWrites(farm), ...tollWrites(farm), ...seat.writable],
   });
 };
 
+/** The nonce of each NFT's mission roll in an `unstakeNftIx` of several (`assets`), in the order the call takes them:
+ * the `i`th by its seat's address at `nonce + 2i`, its prize's roll at `nonce + 2i + 1`. */
+export const seatNonces = (project, id, farm, player, assets, nonce = 0n) =>
+  Object.fromEntries(ascending(assets, (a) => pda.seat(pda.farm(project, id), farm.farmed.Tokens ? player : a)).map((a, i) => [a, toBigInt(nonce) + 2n * BigInt(i)]));
+
 /**
  * `player` collects what the seat of `by` owes (their own address for tokens, a collectible's asset). `held`: in a farm
  * that watches, what shows the player still holds the seat's NFT (the Core asset, their token account of a Token
- * Metadata NFT, or a compressed NFT's record, `pda.leaf`, with its `tree`), which such a farm refuses to go without.
+ * Metadata NFT, or a compressed NFT's record, `pda.leaf`, with its `tree`), which such a farm refuses to go without
+ * (`NotProven`). `more` seats of the player's in the farm (each { by, held, tree }) collect in the same call, one fee,
+ * one transfer.
  */
-export const harvestIx = ({ player, project, id, farm, by = player, held = null, tree = null, compound = false, programs, extra = [] }) =>
-  lootIx('harvest', { compound }, {
+export const harvestIx = ({ player, project, id, farm, by = player, held = null, tree = null, compound = false, programs, more = [], extra = [] }) => {
+  const farmAddress = pda.farm(project, id);
+  const [first, ...rest] = ascending([{ by, held, tree }, ...more].map((x) => ({ ...x, seat: pda.seat(farmAddress, x.by) })), (x) => x.seat);
+  const groups = rest.flatMap((x) => [meta(x.seat, false, true), meta(x.held ?? LOOT_PROGRAM, false, false), meta(x.tree ?? LOOT_PROGRAM, false, false)]);
+  return lootIx('harvest', { compound }, {
     ...farmSide(project, id, farm),
     player,
-    seat: pda.seat(pda.farm(project, id), by),
+    seat: first.seat,
     player_rewards: ata(player, farm.rewards_mint, tokenProgramOf(programs, farm.rewards_mint)),
-    held,
-    tree,
+    held: first.held,
+    tree: first.tree,
     // Compounding moves what is owed into the staked vault (a farm of tokens whose rewards are the staked token).
-    staked_vault: compound ? pda.staked(pda.farm(project, id)) : null,
+    staked_vault: compound ? pda.staked(farmAddress) : null,
     toll_pool: farmSinks(project, farm).toll_pool,
-  }, { remaining: extra, writable: [...farmWrites(farm), ...tollWrites(farm)] });
+  }, { remaining: [...groups, ...tailOf(extra)], writable: [...farmWrites(farm), ...tollWrites(farm)] });
+};
 
 /**
  * Anyone (`signer`) writes what a seat's NFT grew (a farm with growth), then reads its boosts again. `seat` is the
@@ -1717,7 +1949,7 @@ export const refreshSeatIx = ({ signer, project, id, farm, by, seat, collection,
   const p = seat.asset === NO_ADDRESS
     ? standIn(address)
     : piece({ project, asset: seat.asset, wallet: holder, collection, hasAuthority, tokenMetadata: tm, compressed, ...farmKeeps(farm, { writes: Boolean(farm.growth?.length) }), moves: false, locks: false });
-  return lootIx('refresh_seat', {}, { signer, ...farmSide(project, id, farm), seat: address, ...p.accounts }, { remaining: extra, writable: [...farmWrites(farm), ...p.writable] });
+  return lootIx('refresh_seat', {}, { signer, ...farmSide(project, id, farm), seat: address, ...p.accounts }, { remaining: tailOf(extra), writable: [...farmWrites(farm), ...p.writable] });
 };
 
 // ---------------------------------------------------------------- recipes and holds
@@ -1793,8 +2025,8 @@ export function craftIx({ player, project, collection, id, recipe, assets = [], 
     }
   }
   const address = pda.recipe(project, id);
-  const receipt = limits(recipe.per_wallet) ? pda.receipt(address, player) : null;
-  return lootIx('craft', { version: recipe.version, times, nonce }, { player, project, recipe: address, receipt }, { remaining: [...remaining, ...extra] });
+  const counts = limits(recipe.per_wallet) ? pda.counts(project, player) : null;
+  return lootIx('craft', { version: recipe.version, times, nonce }, { player, project, recipe: address, counts }, { remaining: [...remaining, ...tailOf(extra)] });
 }
 
 function take(list, what) {
@@ -1810,9 +2042,16 @@ export const craftNewAssets = (recipe) => recipe.outputs.filter((o) => o.Prize?.
  * asset (`collection` its own, Core's address for none), a Token Metadata NFT (`tokenMetadata`), or `compressed` (after
  * a `proveLeafIx`).
  */
-export function holdIx({ player, project, collection, asset, tokenMetadata: tm, compressed, freeAt, reference: ref }) {
-  const p = piece({ project, asset, wallet: player, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  return lootIx('hold', { free_at: toBigInt(freeAt), reference: reference(ref) }, { player, project, ...p.accounts, hold: pda.hold(p.accounts.asset, freeAt) }, { remaining: p.proof, writable: p.writable });
+export function holdIx({ player, project, collection, asset, tokenMetadata: tm, compressed, freeAt, reference: ref, more = [] }) {
+  // Several NFTs (`more`: each { asset, collection, tokenMetadata, compressed }) go on holds of their own with one end, one
+  // fee: by their holds' addresses, the first the call's own.
+  const [first, ...rest] = ascending([{ asset, collection, tokenMetadata: tm, compressed }, ...more].map((n) => {
+    const p = piece({ project, asset: n.asset, wallet: player, collection: n.collection, tokenMetadata: n.tokenMetadata, compressed: n.compressed, ...ONLY_MOVES });
+    return { p, hold: pda.hold(p.accounts.asset, freeAt) };
+  }), (x) => x.hold);
+  const p = withPrograms(first.p, rest.map((x) => x.p));
+  const groups = rest.flatMap((x) => [meta(x.hold, false, true), ...anotherMetas(x.p)]);
+  return lootIx('hold', { free_at: toBigInt(freeAt), reference: reference(ref) }, { player, project, ...p.accounts, hold: first.hold }, { remaining: [...p.proof, ...groups], writable: p.writable });
 }
 
 // ---------------------------------------------------------------- stashes
@@ -1824,7 +2063,7 @@ export function holdIx({ player, project, collection, asset, tokenMetadata: tm, 
  * by, and gets back the rent it no longer needs. Taken out with `out` the project's own address, the entry is only dropped
  * from the stash and the NFT stays where it is. `out` is never another account of the program (`ToTheProject`).
  */
-export function stashIx({ signer, project, id, lottery = null, asset, out = null, weight = 1, collection, tokenMetadata: tm, compressed }) {
+export function stashIx({ signer, project, id, lottery = null, lotteryState = null, asset, out = null, weight = 1, collection, tokenMetadata: tm, compressed, more = [] }) {
   const to = out ?? signer;
   // A lottery's own stash (`lottery`: the lottery's id): an NFT its place names leaves only as that prize, or once the
   // lottery has ended; taking one out passes the lottery.
@@ -1835,9 +2074,17 @@ export function stashIx({ signer, project, id, lottery = null, asset, out = null
   // refused before sending, and the program refuses any other (js/play only takes one out to the signer's wallet).
   if (out && out !== project && [stash, own, pda.fees(project), pda.platform()].includes(out))
     throw new Error('An NFT taken out of a stash can’t go to an account of the program: name a wallet, or the project’s own address to only drop it from the stash.');
-  const p = piece({ project, asset, wallet: to, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  // Put in, it weighs `weight` in the stash's draws.
-  return lootIx('stash', { of: own ? { Lottery: [lottery] } : { Project: [id] }, out: Boolean(out), weight }, { signer, project, stash, to, ...p.accounts, lottery: own && out ? own : null }, { remaining: p.proof, writable: p.writable });
+  // Several NFTs (`more`: each { asset, weight, collection, tokenMetadata, compressed }) go in or out in one call, one
+  // fee, in ascending order of their addresses; put in, each weighs its `weight` in the stash's draws.
+  const [first, ...rest] = ascending([{ asset, weight, collection, tokenMetadata: tm, compressed }, ...more].map((n) => ({
+    n, p: piece({ project, asset: n.asset, wallet: to, collection: n.collection, tokenMetadata: n.tokenMetadata, compressed: n.compressed, ...ONLY_MOVES }),
+  })), (x) => x.p.accounts.asset);
+  const p = withPrograms(first.p, rest.map((x) => x.p));
+  const weights = out ? [] : [first, ...rest].map((x) => x.n.weight ?? 1);
+  // A lottery's own stash names the lottery, and its current round's record (`lotteryState`: the decoded Lottery; none
+  // for one never written), whose places say what it locks.
+  const round = own && lotteryState ? pda.round(own, lotteryState.incarnation, lotteryState.round) : null;
+  return lootIx('stash', { of: own ? { Lottery: [lottery] } : { Project: [id] }, out: Boolean(out), weights }, { signer, project, stash, to, ...p.accounts, lottery: own, round }, { remaining: [...p.proof, ...rest.flatMap((x) => anotherMetas(x.p))], writable: p.writable });
 }
 
 // ---------------------------------------------------------------- contests
@@ -1846,7 +2093,7 @@ export function stashIx({ signer, project, id, lottery = null, asset, out = null
  * `player` backs `side` with `amount`, naming the contest's incarnation (which fixes its terms). `contest` is the
  * decoded Contest. A contest of NFTs (`contest.nft`) takes one NFT instead (`nft`: { asset, collection, tokenMetadata,
  * compressed }, as `piece` takes it), which the contest holds until it is claimed. `shown`/`listProof` pass its gate.
- * `extra`: a hook's accounts.
+ * A new entry's record is the player's to pay (not refunded). `extra`: a hook's accounts.
  */
 export function enterIx({ player, project, id, contest, side, amount, shown, listProof, nft, playerToken, programs, extra = [] }) {
   const address = pda.contest(project, id);
@@ -1859,53 +2106,65 @@ export function enterIx({ player, project, id, contest, side, amount, shown, lis
       player,
       project,
       contest: address,
-      entry: pda.entry(address, player),
+      entries: contestEntries(address, contest),
       player_token: playerToken ?? ata(player, contest.mint, tokenProgramOf(programs, contest.mint)),
       mint: contest.mint,
     },
-    { remaining: [...gateAccounts(project, { gate: contest.gate, wallet: player, shown, listProof }), ...(staked ? [...pieceMetas(staked), ...staked.proof] : []), ...extra] },
+    { remaining: [...gateAccounts(project, { gate: contest.gate, wallet: player, shown, listProof }), ...(staked ? [...pieceMetas(staked), ...staked.proof] : []), ...tailOf(extra)] },
   );
 }
 
 /**
- * Anyone (`payer`) claims `player`'s entry on `side`, into the player's account of the mint, which `payer` opens when
- * it is not there (the last entry's claim closes the pot and writes the mint). A winning entry of a contest with a
- * prize (`contest.prize`) also gets it (`prizeMetas`: `collection`, `poolMints`, `items`, `nft`; a roll's order at
- * `nonce`, `prizeNonce(entry)` by default), `payer` paying what it opens. For a contest of NFTs, `entry` is the decoded
- * Entry: its own NFT (`own`, its kind as `piece` takes it) goes back to its player, or to the opener for a loser's NFT
- * no winner took; a winner, while losers' NFTs are left, also takes one (`taking`: { player, side } of a losing entry
- * that still holds one, and `kind`, its NFT's kind). While losers' NFTs are left only the winner sends their claim, and
- * picks which (`payer` the player; `WinnerPicks` otherwise). `extra`: a hook's accounts.
+ * Anyone (`payer`) claims `player`'s entry (`entries`: the contest's decoded entries, `decodeEntries`), into the
+ * player's account of the mint, which `payer` opens when it is not there. A winner's first claim also gives the
+ * contest's prize (`prizeMetas`: `collection`, `poolMints`, `items`, `nft`; a roll's order at `nonce`, `prizeNonce` of the
+ * contest and the player by default), unless the player (signing) `forgo`es it. In a contest of NFTs it moves the NFTs of
+ * the entries `nfts` names by their place in the list (the player's own by default, while the contest holds it): an
+ * entry's own back to its player (anyone sends it); a loser's to the winner while it has picks left of its share (only
+ * the winner sends it, and picks which: `WinnerPicks`), or to the opener once no winner has picks left. `kinds` maps an
+ * NFT to its kind, as `piece` takes it. With `giveUp`, each becomes a hold for the wallet it goes to (an NFT that can't
+ * move now); with `end`, the winner leaves the rest of its share to the opener. The claim that leaves nothing owed
+ * closes the contest (`projectState`: its treasury). `extra`: a hook's accounts.
  */
-export function claimIx({ payer, project, id, contest, player, side, entry, own = {}, taking, nonce, collection, poolMints, items, nft, prizeMint, forgo = false, programs, extra = [] }) {
+export function claimIx({ payer, project, projectState, id, contest, entries, player, nfts, kinds = {}, nonce, collection, poolMints, items, nft, prizeMint, forgo = false, end = false, giveUp = false, programs, extra = [] }) {
   const address = pda.contest(project, id);
-  const entryAddress = pda.entry(address, player);
-  nonce = toBigInt(nonce ?? prizeNonce(entryAddress));
-  const won = contest.verdict === 'Won' && Number(contest.winner) === Number(side);
-  // A winning entry of a contest with a prize: the prize's accounts, after the NFTs'.
-  // A split prize is paid from the contest's vault (named accounts below), not given as a prize line.
+  const i = entries.findIndex((e) => e.player === player);
+  if (i < 0) throw new Error(`${player} has no entry in this contest.`);
+  const me = entries[i];
+  nonce = toBigInt(nonce ?? prizeNonce(address, player));
+  const won = contest.verdict === 'Won' && Number(contest.winner) === Number(me.side);
+  const first = won && !(me.bits & CLAIMED);
+  // A winner's first claim of a contest with a prize: the prize's accounts, after the NFTs'. A split prize is paid from
+  // the contest's vault (named accounts below), not given as a prize line.
   const split = Boolean(contest.prize_split);
-  const prize = contest.prize != null && won && !split && !forgo ? prizeMetas({ project, collection, prize: contest.prize, winner: player, nonce, poolMints, items, nft, programs }) : [];
+  const prize = contest.prize != null && first && !split && !forgo ? prizeMetas({ project, collection, prize: contest.prize, winner: player, nonce, poolMints, items, nft, programs }) : [];
   const pMint = split ? splitMint(contest.prize, prizeMint ?? poolMints?.[contest.prize?.Tokens?.from.Pool?.[0]]) : null;
-  const nfts = [];
-  if (contest.nft && entry && entry.asset !== NO_ADDRESS) {
-    const lost = contest.verdict === 'Won' && !won;
-    const mine = piece({ project, asset: entry.asset, wallet: lost ? contest.opener : player, ...own, ...ONLY_MOVES });
-    nfts.push(...pieceMetas(mine), ...mine.proof);
-    if (won && taking) {
-      const theirs = pda.entry(address, taking.player);
-      const p = piece({ project, asset: taking.asset, wallet: player, ...taking.kind, ...ONLY_MOVES });
-      nfts.push(meta(theirs, false, true), ...pieceMetas(p), ...p.proof);
+  nfts ??= contest.nft && Number(me.amount) === 1 ? [i] : [];
+  const moved = [];
+  let taken = Number(me.taken);
+  for (const j of nfts) {
+    const theirs = entries[j];
+    let to = contest.opener;
+    if (contest.verdict !== 'Won' || Number(theirs.side) === Number(contest.winner)) to = theirs.player;
+    else if (won && payer === player && !(me.bits & ENDED) && taken < shareOf(contest, me)) [to, taken] = [player, taken + 1];
+    moved.push(meta(theirs.player, false, true));
+    if (giveUp) moved.push(meta(pda.hold(theirs.nft, 0), false, true));
+    else {
+      const p = piece({ project, asset: theirs.nft, wallet: to, ...kinds[theirs.nft], ...ONLY_MOVES });
+      moved.push(...pieceMetas(p), ...p.proof);
     }
   }
+  // What it leaves owed: at 0 it closes the contest, burning what its pot (and a split prize's vault) still hold.
+  const owed = BigInt(contest.owed);
+  const left = !contest.nft ? owed - (contest.verdict === 'Won' ? (first ? BigInt(me.amount) : 0n) : 1n) : owed - BigInt(nfts.length) - (first && contest.prize ? 1n : 0n);
   return lootIx(
     'claim',
-    { nonce, forgo },
+    { entry: i, nonce, forgo, end, give_up: giveUp, nfts },
     {
       payer,
       project,
       contest: address,
-      entry: entryAddress,
+      entries: contestEntries(address, contest),
       player,
       opener: contest.opener,
       to: ata(player, contest.mint, tokenProgramOf(programs, contest.mint)),
@@ -1913,9 +2172,9 @@ export function claimIx({ payer, project, id, contest, player, side, entry, own 
       prize_mint: pMint,
       prize_vault: split ? pda.prizeVault(address) : null,
       prize_to: split ? ata(player, pMint, tokenProgramOf(programs, pMint)) : null,
+      treasury: projectState?.treasury ?? null,
     },
-    // The last claim closes the pot (and a split prize's vault), writing their mints.
-    { writable: Number(contest.entries) === 1 ? ['mint', ...(split ? ['prize_mint'] : [])] : [], remaining: [...nfts, ...prize, ...extra] },
+    { writable: left <= 0n ? ['mint', ...(split ? ['prize_mint'] : [])] : [], remaining: [...moved, ...prize, ...tailOf(extra)] },
   );
 }
 
@@ -2011,7 +2270,7 @@ export function bidIx({ bidder, project, id, auction, amount, shown, listProof, 
       mint: auction.mint,
     },
     // The vault takes a bid in tokens; NFT bids leave it alone, unlocked.
-    { remaining: [...gateAccounts(project, { gate: auction.gate, wallet: bidder, shown, listProof }), ...bundle, ...extra], writable: auction.nft_bids ? [] : ['vault'] },
+    { remaining: [...gateAccounts(project, { gate: auction.gate, wallet: bidder, shown, listProof }), ...bundle, ...tailOf(extra)], writable: auction.nft_bids ? [] : ['vault'] },
   );
 }
 
@@ -2068,7 +2327,7 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
       order: roll !== undefined ? pda.order(project, auction.high_bidder, prizeRollNonce(nonce)) : null,
     },
     {
-      remaining: [...p.proof, ...(sold ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury }) : []), ...winning, ...extra],
+      remaining: [...p.proof, ...(sold ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury }) : []), ...winning, ...tailOf(extra)],
       writable: [...(sold && sharesBurn(auction.shares) ? ['mint'] : []), ...(sold && !auction.nft_bids ? ['vault'] : []), ...p.writable],
     },
   );
@@ -2100,7 +2359,7 @@ export function openOfferIx({ maker, project, id, mint, args, makerToken, progra
     'open_offer',
     { id, args: { shares: [], ...args } },
     { maker, project, offer: pda.offer(project, maker, id), mint, maker_token: makerToken ?? ata(maker, mint, tokenProgram), vault: vault(project, mint, tokenProgram) },
-    { remaining: extra },
+    { remaining: tailOf(extra) },
   );
 }
 
@@ -2111,7 +2370,7 @@ export function closeOfferIx({ maker, project, id, offer, programs, extra = [] }
     'close_offer',
     {},
     { maker, project, offer: pda.offer(project, maker, id), mint: offer.mint, vault: vault(project, offer.mint, tokenProgram), maker_token: ata(maker, offer.mint, tokenProgram) },
-    { remaining: extra },
+    { remaining: tailOf(extra) },
   );
 }
 
@@ -2129,7 +2388,7 @@ export function sellToOfferIx({ seller, project, projectState, id, offer, asset,
     { terms: offerTerms(offer) },
     { seller, project, offer: pda.offer(project, offer.maker, id), maker: offer.maker, ...p.accounts, mint: offer.mint, vault: vault(project, offer.mint, tokenProgram), seller_token: ata(seller, offer.mint, tokenProgram) },
     {
-      remaining: [...p.proof, ...shareAccounts(project, offer.shares, offer.mint, { holders, programs, treasury: projectState?.treasury }), ...extra],
+      remaining: [...p.proof, ...shareAccounts(project, offer.shares, offer.mint, { holders, programs, treasury: projectState?.treasury }), ...tailOf(extra)],
       writable: [...(sharesBurn(offer.shares) ? ['mint'] : []), ...p.writable],
     },
   );
@@ -2151,7 +2410,7 @@ export function borrowIx({ borrower, project, id, offer, due, asset, collection,
       borrower, project, offer: pda.offer(project, offer.maker, id), maker: offer.maker, hold: pda.hold(p.accounts.asset, due), ...p.accounts,
       mint: offer.mint, vault: vault(project, offer.mint, tokenProgram), borrower_token: ata(borrower, offer.mint, tokenProgram),
     },
-    { remaining: [...p.proof, ...extra], writable: p.writable },
+    { remaining: [...p.proof, ...tailOf(extra)], writable: p.writable },
   );
 }
 
@@ -2171,7 +2430,7 @@ export function repayIx({ payer, project, hold, payerToken, programs, extra = []
       payer, project, hold: pda.hold(hold.asset, hold.free_at), lender,
       lender_token: ata(lender, mint, tokenProgram), payer_token: payerToken ?? ata(payer, mint, tokenProgram), mint,
     },
-    { remaining: extra },
+    { remaining: tailOf(extra) },
   );
 }
 
@@ -2193,7 +2452,7 @@ export function listingTerms(listing) {
  */
 export function openListingIx({ maker, project, asset, mint, deal, shares = [], collection, hasAuthority, tokenMetadata: tm, compressed, extra = [] }) {
   const p = piece({ project, asset, wallet: maker, collection, hasAuthority, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  return lootIx('open_listing', { deal, shares }, { maker, project, listing: pda.listing(project, p.accounts.asset), ...p.accounts, mint }, { remaining: [...p.proof, ...extra], writable: p.writable });
+  return lootIx('open_listing', { deal, shares }, { maker, project, listing: pda.listing(project, p.accounts.asset), ...p.accounts, mint }, { remaining: [...p.proof, ...tailOf(extra)], writable: p.writable });
 }
 
 /**
@@ -2219,7 +2478,7 @@ export function takeListingIx({ taker, project, projectState, listing, periods =
       ...p.accounts, mint: listing.mint, taker_token: takerToken ?? ata(taker, listing.mint, tokenProgram),
     },
     {
-      remaining: [...p.proof, ...shareAccounts(project, listing.shares ?? [], listing.mint, { holders, programs, treasury: projectState?.treasury }), ...extra],
+      remaining: [...p.proof, ...shareAccounts(project, listing.shares ?? [], listing.mint, { holders, programs, treasury: projectState?.treasury }), ...tailOf(extra)],
       writable: [...(sharesBurn(listing.shares ?? []) ? ['mint'] : []), ...p.writable],
     },
   );
@@ -2231,7 +2490,7 @@ export function takeListingIx({ taker, project, projectState, listing, periods =
  */
 export function closeListingIx({ maker, project, listing, collection, hasAuthority, tokenMetadata: tm, compressed, extra = [] }) {
   const p = piece({ project, asset: listing.asset, wallet: maker, collection, hasAuthority, tokenMetadata: tm, compressed, ...ONLY_MOVES });
-  return lootIx('close_listing', {}, { maker, project, listing: pda.listing(project, listing.asset), ...p.accounts }, { remaining: [...p.proof, ...extra], writable: p.writable });
+  return lootIx('close_listing', {}, { maker, project, listing: pda.listing(project, listing.asset), ...p.accounts }, { remaining: [...p.proof, ...tailOf(extra)], writable: p.writable });
 }
 
 // ---------------------------------------------------------------- Token Metadata NFTs

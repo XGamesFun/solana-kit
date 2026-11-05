@@ -15,23 +15,6 @@ const NOBODY = '11111111111111111111111111111111';
 const CHEST = 5;
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
 const stashOf = (w, id) => loot.decodeStash(w.chain.get(pda.stash(w.project, id))?.data)?.nfts ?? [];
-const contributionsOf = (w, lottery) => w.chain.svm.getProgramAccounts(loot.LOOT_PROGRAM)
-  .filter((a) => a.data[0] === loot.TAGS.LotteryContribution)
-  .map((a) => ({ address: a.address, value: loot.decode('LotteryContribution', a.data) }))
-  .filter(({ value }) => value.lottery === lottery)
-  .sort((x, y) => Number(x.value.first_ticket - y.value.first_ticket));
-
-/** Sends each contribution's next step until the round is done: prizes first, then the money, then the pot's shares. */
-function finishRound(w, address, opts = {}) {
-  for (let sent = 0; sent < 50; sent++) {
-    const lottery = w.read('Lottery', address);
-    const next = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value));
-    if (!next) return;
-    const items = opts.items?.();
-    w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery, contributionAddress: next.address, contribution: next.value, treasury: w.treasury, ...opts, items })]);
-  }
-  throw new Error('the round never finished');
-}
 
 /** A project with three of its collectibles in stash 1, and `CHEST`, switched off, a box of that stash alone. */
 function stocked(seed) {
@@ -100,17 +83,18 @@ t('a lottery’s place gives a roll of a box', () => {
   w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   let lottery = w.read('Lottery', address);
-  assert.deepEqual(lottery.places, [{ bps: 7000, prize: null }, { bps: 0, prize: { Roll: [CHEST] } }], 'its places as written');
+  assert.deepEqual(lottery.places, [{ bps: 7000, prize: null, times: 1 }, { bps: 0, prize: { Roll: [CHEST] }, times: 1 }], 'its places as written');
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 1n, nonce: 1n })]);
-  w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, mint: w.mint, count: 1n, nonce: 1n })]);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 1n })]);
+  w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, round: w.round(1).round, mint: w.mint, count: 1n })]);
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
-  lottery = w.read('Lottery', address);
-  const second = loot.contributionOf(contributionsOf(w, address), loot.ticketOfPlace(lottery, 1));
-  finishRound(w, address);
-  const order = pda.order(w.project, second.value.player, loot.prizeRollNonce(loot.prizeNonce(second.address) + 1n));
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  const r = w.round(1).round;
+  const second = r.entries[loot.entryOf(r, loot.ticketOfPlace(r, 1))].buyer;
+  w.finishRound(1);
+  // A place's roll is made at the step's nonce plus its place (0 by default).
+  const order = pda.order(w.project, second, loot.prizeRollNonce(1n));
   assert.ok(nfts.includes(rollAndSettle(w, order)));
 });
 
@@ -118,7 +102,7 @@ t('a contest’s winning entry gets a roll of a box with its part of the pot', (
   const { w, nfts } = stocked('prizes-contest');
   const now = w.chain.now();
   const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, prize: { Roll: [CHEST] } };
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 1, mint: w.mint, args })]);
+  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args })]);
   let contest = w.read('Contest', pda.contest(w.project, 1));
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
@@ -127,11 +111,9 @@ t('a contest’s winning entry gets a roll of a box with its part of the pot', (
   w.chain.warp(now + 150);
   w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, 1)), side: 0 })]);
   contest = w.read('Contest', pda.contest(w.project, 1));
-  w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 1, contest, player: rival, side: 1 })]);
-  contest = w.read('Contest', pda.contest(w.project, 1));
-  w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 1, contest, player: w.player, side: 0 })]);
-  const entry = pda.entry(pda.contest(w.project, 1), w.player);
-  assert.ok(nfts.includes(rollAndSettle(w, pda.order(w.project, w.player, loot.prizeRollNonce(loot.prizeNonce(entry))))));
+  // The loser sends nothing; the winner's claim pays its part and makes its roll.
+  w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player })]);
+  assert.ok(nfts.includes(rollAndSettle(w, pda.order(w.project, w.player, loot.prizeRollNonce(loot.prizeNonce(pda.contest(w.project, 1), w.player))))));
 });
 
 t('an auction sells a roll of a box', () => {
@@ -168,21 +150,21 @@ t('a specific NFT and a collectible are given at once, by a grant’s claim and 
   w.chain.send(wallet, [computeUnitLimit(400_000), loot.claimGrantIx({ project: w.project, id: 2, grant: w.read('Grant', pda.grant(w.project, 2)), wallet, signer: wallet, projectState: w.projectState(), item })]);
   assert.equal(ownerOf(w, pda.itemAsset(pda.item(w.project, 2), 1)), wallet);
 
-  // A lottery: first place takes the pot, second the artwork, both paid by finishing the winners' contributions.
+  // A lottery: first place takes the pot, second the artwork: the cursor gives the artwork, a pull pays the pot.
   const places = [10_000, { bps: 0, prize: { Nft: { stash: 1, nft: nfts[1] } } }];
   w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
-  let lottery = w.read('Lottery', address);
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 1n, nonce: 1n })]);
-  w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, mint: w.mint, count: 1n, nonce: 1n })]);
+  const lottery = w.read('Lottery', address);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 1n })]);
+  w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, round: w.round(1).round, mint: w.mint, count: 1n })]);
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
-  lottery = w.read('Lottery', address);
-  const second = loot.contributionOf(contributionsOf(w, address), loot.ticketOfPlace(lottery, 1));
-  finishRound(w, address, { collection: w.collection, nfts: { [nfts[1]]: { collection: w.collection } } });
-  assert.equal(ownerOf(w, nfts[1]), second.value.player, 'given with the place');
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  const round = w.round(1).round;
+  const second = round.entries[loot.entryOf(round, loot.ticketOfPlace(round, 1))].buyer;
+  w.finishRound(1, { kinds: { [nfts[1]]: { collection: w.collection } } });
+  assert.equal(ownerOf(w, nfts[1]), second, 'given with the place');
 });
 
 t('one buyer who wins two places of the same collectible gets two, each at its own serial', () => {
@@ -191,10 +173,11 @@ t('one buyer who wins two places of the same collectible gets two, each at its o
   const medal = { bps: 0, prize: { Item: [9] } };
   w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places: [5000, medal, medal], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery: w.read('Lottery', address), mint: w.mint, count: 3n, nonce: 1n })]);
+  const lottery = w.read('Lottery', address);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 3n })]);
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
-  finishRound(w, address, { items: () => ({ 9: w.read('Item', pda.item(w.project, 9)) }) });
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  w.finishRound(1, { items: () => ({ 9: w.read('Item', pda.item(w.project, 9)) }) });
   const medals = [1, 2].map((serial) => pda.itemAsset(pda.item(w.project, 9), serial));
   assert.deepEqual(medals.map((m) => ownerOf(w, m)), [w.player, w.player]);
 });

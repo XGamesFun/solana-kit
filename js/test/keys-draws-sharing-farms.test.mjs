@@ -52,35 +52,35 @@ test('a project\'s authority and treasury come with their accounts, and one nobo
   assert.equal(w.read('Project', project).treasury, fresh);
 });
 
-test('an open grant gated by an NFT counts the NFT at a badge\'s address, never a person\'s', () => {
+test('an open grant gated by an NFT counts the NFT by a badge\'s key, never a person\'s', () => {
   const [project, wallet, nft] = ['So11111111111111111111111111111111111111112', 'Vote111111111111111111111111111111111111111', 'Stake11111111111111111111111111111111111111'];
-  const grant = { incarnation: 3n, open: true, gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } }, limits: { per_person: 0, per_key: 0 }, gives: { Item: [1] } };
+  const grant = { incarnation: 3n, shard_bits: 8, open: true, gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } }, limits: { per_person: 1, per_key: 0 }, gives: { Item: [1] } };
   const address = loot.pda.grant(project, 1);
   const ix = loot.claimGrantIx({ project, id: 1, grant, wallet, signer: wallet, shown: { asset: nft }, item: null });
   const keys = ix.keys.map((k) => k.pubkey);
-  assert.ok(keys.includes(loot.pda.badge(address, 3n, nft)));
-  assert.ok(!keys.includes(loot.pda.person(address, 3n, addressBytes(nft))));
+  assert.ok(keys.includes(loot.pda.claims(address, 3n, loot.shardOf(loot.limitKey('badge', nft), 8))));
+  assert.notDeepEqual(loot.limitKey('badge', nft), loot.limitKey('person', addressBytes(nft)), 'a badge and a person with the same bytes are kept apart by kind');
 });
 
-test('a draw asked again after the oracle went stale is answered on the ticket of its first ask', { skip }, () => {
+test('a draw asked again after the oracle went stale keeps its first ask, and any answer lands on the round', { skip }, () => {
   const w = world({ seed: 'guards-ticket' });
   const id = 9;
   const address = loot.pda.lottery(w.project, id);
   w.upsert({ Lottery: { id, args: { price: 1000n, mint: w.mint, shares: [], places: [10_000], ticket_mint: SYSTEM_PROGRAM, every: 0n, draws_at: BigInt(w.chain.now() + 60), gate: null, per_wallet: 0 } } });
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery: w.read('Lottery', address), count: 1n, nonce: 1n })]);
+  const lottery = w.read('Lottery', address);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n })]);
   w.chain.warp(w.chain.now() + 61);
-  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id })]); // the oracle never answers
-  const first = w.read('Lottery', address);
+  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // the oracle never answers
+  const first = w.round(id).round;
   w.chain.nextSlot(Number(loot.STALE_SLOTS) + 1);
-  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id })]); // asked again, no answer yet
-  const asked = w.read('Lottery', address);
-  assert.equal(asked.asked_first, first.asked_first, 'the round keeps the ticket of its first ask');
-  assert.ok(asked.asked_slot > asked.asked_first);
-  // An answer to either request names the round's ticket, and the first to land draws the round.
-  const answer = loot.callbackLotteryIx({ project: w.project, id, lottery: asked, randomness: new Uint8Array(32).fill(7) });
-  assert.equal(answer.keys[2].pubkey, loot.ticketOf(address, first.asked_first));
-  w.chain.sendRaw(w.chain.oracle, [answer]);
-  assert.notEqual(w.read('Lottery', address).status, 'Drawing');
+  assert.ok(loot.lotteryDrawStuck(first, w.chain.slot()));
+  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // asked again, no answer yet
+  const asked = w.round(id);
+  assert.equal(asked.round.asked_first, first.asked_first, 'the round keeps its first ask');
+  assert.ok(asked.round.asked_slot > asked.round.asked_first);
+  // The round's record is the request's only account: the first answer to land draws it.
+  w.chain.sendRaw(w.chain.oracle, [loot.callbackLotteryIx({ round: asked.address, randomness: new Uint8Array(32).fill(7) })]);
+  assert.equal(w.round(id).round.status, 'Drawn');
 });
 
 test('an auction refuses a mint whose freeze authority could switch its default account state to frozen', { skip }, () => {

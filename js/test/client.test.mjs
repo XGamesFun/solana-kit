@@ -3,8 +3,9 @@
 import assert from 'node:assert/strict';
 import { createPrivateKey, createPublicKey, sign } from 'node:crypto';
 import { describe, test } from 'node:test';
-import { encodeBase58 } from '../chain/base58.js';
+import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
+import { sha256 } from '../chain/sha256.js';
 import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { closeTokenAccount, computeUnitLimit, meta } from '../chain/programs.js';
@@ -18,12 +19,6 @@ const t = (name, fn) => test(name, { skip: skip ?? false }, fn);
 const pda = loot.pda;
 const fails = (fn, why) => assert.throws(fn, (e) => (why ? String(e.message).includes(why) || (e.logs ?? []).join('\n').includes(why) : true), why);
 const names = (record) => record.receipts.map((r) => r.name);
-/** A lottery's open contributions, in ticket order: [{ address, value }]. */
-const contributionsOf = (w, lottery) => w.chain.svm.getProgramAccounts(loot.LOOT_PROGRAM)
-  .filter((a) => a.data[0] === loot.TAGS.LotteryContribution)
-  .map((a) => ({ address: a.address, value: loot.decode('LotteryContribution', a.data) }))
-  .filter(({ value }) => value.lottery === lottery)
-  .sort((x, y) => Number(x.value.first_ticket - y.value.first_ticket));
 
 /** A Core asset of any collection, made by its update authority `maker` for `owner` (Core CreateV2). */
 function coreAsset(w, collection, maker, owner, name = 'Outside Ape') {
@@ -235,8 +230,12 @@ describe('the authority', () => {
     w.upsert({ Item: { id: 1, args: collectible('Pet', 0, { burnable: true }) } });
     const pet = w.make(1, w.player, [{ key: 'level', value: '2' }]);
     w.chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: w.collection, asset: pet, change: { Set: [[{ key: 'level', value: '3' }]] } })]);
-    w.chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: w.collection, asset: pet, change: 'Burn' })]);
+    // A burn names whoever holds it, who gets its rent.
+    fails(() => w.chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: w.collection, asset: pet, change: 'Burn', owner: w.cranker })]), 'NotTheirAccount');
+    const had = w.chain.get(w.player).lamports;
+    w.chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: w.collection, asset: pet, change: 'Burn', owner: w.player })]);
     assert.ok(w.chain.get(pet).data.length <= 1, 'burned');
+    assert.ok(w.chain.get(w.player).lamports > had, 'its rent to its holder');
   });
 
   t('roll asks the oracle; its answer lands', () => {
@@ -277,7 +276,7 @@ describe('offers', () => {
     offer = w.read('Offer', pda.offer(w.project, maker, 2));
     w.chain.send(w.player, [loot.borrowIx({ borrower: w.player, project: w.project, id: 2, offer, due: due - 1, asset: y, collection: w.collection })]);
     assert.equal(w.chain.get(pda.offer(w.project, maker, 2)), null, 'both loans made');
-    assert.equal(w.chain.get(pda.hold(x, due)).data.length, loot.ACCOUNT_BYTES.Hold);
+    assert.equal(w.chain.get(pda.hold(x, due)).data.length, loot.ACCOUNT_BYTES.Loan);
     const friend = w.who();
     w.fund(friend, w.mint, 2n * PRICE);
     const hold = w.read('Hold', pda.hold(x, due));
@@ -317,32 +316,34 @@ describe('holds and contests', () => {
     const w = world();
     const now = w.chain.now();
     const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [{ to: 'Burn', bps: 500 }], gate: null };
-    w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 1, mint: w.mint, args })]);
+    w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args })]);
     let contest = w.read('Contest', pda.contest(w.project, 1));
+    const list = () => loot.decodeEntries(w.chain.get(loot.contestEntries(pda.contest(w.project, 1), w.read('Contest', pda.contest(w.project, 1)))).data);
     const rival = w.who();
     w.fund(rival, w.mint, 10n * PRICE);
     w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id: 1, contest, side: 0, amount: PRICE })]);
-    assert.equal(w.chain.get(pda.entry(pda.contest(w.project, 1), w.player)).data.length, loot.ACCOUNT_BYTES.Entry);
+    assert.deepEqual(list().map((e) => [e.player, e.side, e.amount]), [[w.player, 0, PRICE]], 'one record a player, in the contest’s list');
     w.chain.send(rival, [loot.enterIx({ player: rival, project: w.project, id: 1, contest, side: 1, amount: PRICE })]);
     w.chain.warp(now + 150);
     contest = w.read('Contest', pda.contest(w.project, 1));
     w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest, side: 0 })]);
     const had = w.balance(w.player);
     contest = w.read('Contest', pda.contest(w.project, 1));
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 1, contest, player: w.player, side: 0 })]);
+    // The winner's claim pays its part and, the last owed, closes the contest and its list; the loser sends nothing.
+    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]);
     assert.equal(w.balance(w.player) - had, (2n * PRICE * 95n) / 100n);
-    contest = w.read('Contest', pda.contest(w.project, 1));
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 1, contest, player: rival, side: 1 })]);
+    assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'closed');
 
     const args2 = { ...args, closes_at: BigInt(now + 1000), result_by: BigInt(now + 2000) };
-    w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 2, mint: w.mint, args: args2 })]);
+    w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 2, mint: w.mint, args: args2 })]);
     let c2 = w.read('Contest', pda.contest(w.project, 2));
     w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id: 2, contest: c2, side: 1, amount: PRICE })]);
     c2 = w.read('Contest', pda.contest(w.project, 2));
     w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: c2, side: null })]);
     const before = w.balance(w.player);
     c2 = w.read('Contest', pda.contest(w.project, 2));
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 2, contest: c2, player: w.player, side: 1 })]);
+    const entries2 = loot.decodeEntries(w.chain.get(loot.contestEntries(pda.contest(w.project, 2), c2)).data);
+    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 2, contest: c2, entries: entries2, player: w.player })]);
     assert.equal(w.balance(w.player) - before, PRICE);
   });
 
@@ -352,7 +353,7 @@ describe('holds and contests', () => {
     const server = keyFromSeed(new Uint8Array(32).fill(7));
     const args = { sides: 1, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [{ to: { Chosen: { item: null } }, bps: 9_000 }], gate: null, deciders: [server.publicKey] };
     for (const id of [1, 2]) {
-      w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id, mint: w.mint, args })]);
+      w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id, mint: w.mint, args })]);
       w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id, contest: w.read('Contest', pda.contest(w.project, id)), side: 0, amount: PRICE })]);
     }
     w.chain.warp(now + 150);
@@ -460,76 +461,79 @@ describe('mechanics that run by themselves', () => {
     assert.equal(w.chain.tokens(pda.pool(w.project, 1)), PRICE);
   });
 
-  t('a lottery: tickets, a draw on its timer, the oracle, then each place paid', () => {
+  t('a lottery: tickets, a draw on its timer, the oracle, then the places by a cursor and each part pulled', () => {
     const w = world();
     const args = { price: 1000n, mint: w.mint, shares: [{ to: 'Treasury', bps: 1000 }], places: [7000, 3000], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null };
     w.upsert({ Lottery: { id: 1, args } });
-    let lottery = w.read('Lottery', pda.lottery(w.project, 1));
+    const address = pda.lottery(w.project, 1);
+    const lottery = w.read('Lottery', address);
     const rival = w.who();
     w.fund(rival, w.mint, 10n * PRICE);
-    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 5n, nonce: 1n })]);
-    w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, mint: w.mint, count: 5n, nonce: 1n })]);
+    // The round's first purchase opens its record; every later one names it.
+    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, round: null, mint: w.mint, count: 5n })]);
+    const key = loot.currentRound(address, lottery);
+    w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, round: w.round(1).round, mint: w.mint, count: 5n })]);
+    assert.deepEqual(w.round(1).round.entries.map((e) => [e.buyer, e.start, e.end]), [[w.player, 0n, 5n], [rival, 5n, 10n]]);
     w.chain.warp(w.chain.now() + 3601);
-    const d = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
+    const d = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
     assert.equal(d.answers.length, 1);
-    lottery = w.read('Lottery', pda.lottery(w.project, 1));
-    assert.equal(lottery.status, 'Drawn');
-    const bought = contributionsOf(w, pda.lottery(w.project, 1));
-    assert.equal(lottery.pending, 2n);
-    for (const { address, value } of bought) {
-      w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery, contributionAddress: address, contribution: value, treasury: w.treasury })]);
+    assert.equal(w.round(1).round.status, 'Drawn');
+    // The sweep (no place gives a prize) pays the treasury's share, and moves the lottery to its next round.
+    const swept = w.chain.send(w.cranker, [loot.settleRoundIx({ payer: w.cranker, project: w.project, roundAddress: key, round: w.round(1).round, projectState: w.projectState() })]);
+    assert.equal(w.round(1).round.status, 'Swept');
+    assert.equal(w.read('Lottery', address).round, 1);
+    assert.ok(swept);
+    // Five tickets each, places five apart: each buyer won one place, a pull each; the last closes the round.
+    let r = w.round(1).round;
+    const owed = r.entries.map((_, i) => loot.partsOwed(r, i));
+    const first = loot.entryOf(r, loot.ticketOfPlace(r, 0));
+    assert.deepEqual(owed, [0, 1].map((i) => [{ Pot: [i === first ? 0 : 1] }]), 'each owes its place');
+    for (const i of [0, 1]) {
+      r = w.round(1).round;
+      const pulled = w.chain.send(w.cranker, [loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: r, entry: i, part: loot.partsOwed(r, i)[0], projectState: w.projectState() })]);
+      assert.ok(names(pulled).includes('LotteryPulled'));
     }
-    // Five tickets each, places five apart: each buyer won one place, and finishing their contribution again pays it.
-    lottery = w.read('Lottery', pda.lottery(w.project, 1));
-    const winners = contributionsOf(w, pda.lottery(w.project, 1));
-    assert.deepEqual(winners.map(({ value }) => value.done), [true, true]);
-    for (const place of [0, 1]) assert.ok(loot.contributionOf(winners, loot.ticketOfPlace(lottery, place)));
-    for (const { address, value } of winners) {
-      const r = w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery: w.read('Lottery', pda.lottery(w.project, 1)), contributionAddress: address, contribution: value })]);
-      assert.deepEqual(names(r), ['LotteryPaid']);
-    }
-    assert.deepEqual(contributionsOf(w, pda.lottery(w.project, 1)), [], 'every contribution closed, its rent back to its buyer');
+    assert.equal(w.chain.get(key), null, 'the last pull closed the round, its deposit back to its first buyer');
+    assert.equal(w.chain.tokens(loot.ata(w.player, w.mint)) + w.chain.tokens(loot.ata(rival, w.mint)), 100n * PRICE + 10n * PRICE - 10_000n + 9_000n, 'the winners took the pot, the treasury its tenth');
   });
 
-  t('a lottery timeout refunds fixed buyers and rejects stale terms and repeated completion', () => {
+  t('a lottery timeout refunds its buyers by pulls and rejects stale terms', () => {
     const w = world();
     const args = { price: 1000n, mint: w.mint, shares: [], places: [], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 5 };
     w.upsert({ Lottery: { id: 2, args } });
     const address = pda.lottery(w.project, 2);
     let lottery = w.read('Lottery', address);
-    const stale = loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, count: 1n, nonce: 1n });
+    const stale = loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, count: 1n });
     w.upsert({ Lottery: { id: 2, args: { ...args, price: 2000n } } });
     fails(() => w.chain.send(w.player, [stale]), 'TermsChanged');
     lottery = w.read('Lottery', address);
     const before = w.chain.tokens(loot.ata(w.player, w.mint));
-    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, count: 1n, nonce: 1n })]);
-    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery: w.read('Lottery', address), count: 1n, nonce: 2n })]);
-    const bought = contributionsOf(w, address);
-    assert.deepEqual(bought.map(({ value }) => [value.first_ticket, value.end, value.amount, value.done]), [[0n, 1n, 2000n, false], [1n, 2n, 2000n, false]]);
-    assert.ok(w.chain.get(pda.lotteryReceipt(address, lottery.incarnation, w.player)));
+    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, count: 1n })]);
+    w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, round: w.round(2).round, count: 1n })]);
+    const key = loot.currentRound(address, lottery);
+    assert.deepEqual(w.round(2).round.entries.map((e) => [e.start, e.end, e.amount]), [[0n, 1n, 2000n], [1n, 2n, 2000n]]);
+    // The wallet's tickets this round are counted in its counts, keyed by the lottery and its incarnation.
+    const counts = loot.readListAccount(w.chain.get(pda.counts(w.project, w.player)));
+    assert.equal(loot.readLimit(counts, loot.countKey(address, lottery.incarnation)).inWindow, 2);
     assert.equal(w.chain.tokens(pda.pot(address)), 0n);
-    assert.equal(w.chain.tokens(pda.lotteryFunds(address)), 4000n);
-    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2 })]), 'NotDue');
+    assert.equal(w.chain.tokens(pda.roundTokens(key, w.mint)), 4000n, 'the round holds its own money');
+    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
     // A round nobody draws waits; one whose draw the oracle never answers is refunded.
     w.chain.warp(Number(lottery.draws_at) + 30 * 86_400);
-    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2 })]), 'NotDue');
-    w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2 })]); // the oracle never answers
+    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
+    w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery })]); // the oracle never answers
     w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
-    assert.ok(loot.lotteryCancellable(w.read('Lottery', address), w.chain.slot()));
-    w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2 })]);
-    lottery = w.read('Lottery', address);
-    assert.equal(lottery.status, 'Cancelled');
-    const [first, second] = bought;
-    const finish = loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 2, lottery, contributionAddress: first.address, contribution: first.value });
-    assert.deepEqual(finish.keys.filter((key) => key.isSigner).map((key) => key.pubkey), [w.cranker], 'only whoever sends it signs');
-    const wrong = { ...finish, keys: finish.keys.map((key, index) => (index === 6 ? { ...key, pubkey: w.cranker } : key)) };
-    fails(() => w.chain.send(w.cranker, [wrong]), 'ConstraintHasOne');
-    w.chain.send(w.cranker, [finish]);
-    fails(() => w.chain.send(w.cranker, [finish]));
-    w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 2, lottery, contributionAddress: second.address, contribution: second.value })]);
+    assert.ok(loot.lotteryCancellable(w.round(2).round, w.chain.slot()));
+    w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]);
+    const r = w.round(2).round;
+    assert.equal(r.status, 'Cancelled');
+    const pull = loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: r, entry: 0, part: 'Own', projectState: w.projectState() });
+    assert.deepEqual(pull.keys.filter((k) => k.isSigner).map((k) => k.pubkey), [w.cranker], 'only whoever sends it signs');
+    w.chain.send(w.cranker, [pull]);
+    fails(() => w.chain.send(w.cranker, [pull]), 'NothingOwed');
+    w.finishRound(2);
     assert.equal(w.chain.tokens(loot.ata(w.player, w.mint)), before);
-    assert.equal(w.chain.tokens(pda.lotteryFunds(address)), 0n);
-    assert.deepEqual(contributionsOf(w, address), []);
+    assert.equal(w.chain.get(key), null, 'every refund pulled, the round closed');
   });
 
   t('a token farm with two tiers: stake, rewards arrive, harvest, unstake after the lock', () => {
@@ -664,7 +668,10 @@ describe('grants', () => {
     const r = w.chain.send(w.cranker, [check, claim]);
     assert.deepEqual(names(r), ['PrizeGiven', 'GrantClaimed']);
     assert.equal(w.chain.get(pda.itemAsset(pda.item(w.project, 7), 1)).owner, MPL_CORE_PROGRAM);
-    assert.ok(loot.decodeReceipt(w.chain.get(pda.grantReceipt(grantAddress, grant.incarnation, wallet)).data).claimed(round));
+    // The round is recorded in the wallet's shard of the grant's rounds, and the wallet's claims counted in its claims.
+    const paid = loot.readListAccount(w.chain.get(pda.rounds(grantAddress, grant.incarnation, loot.walletShard(grant, wallet))));
+    assert.ok(loot.roundPaid(paid, wallet, round));
+    assert.equal(loot.readLimit(loot.readListAccount(w.chain.get(pda.claims(grantAddress, grant.incarnation, 0))), loot.limitKey('wallet', wallet)).count, 1);
     // The same voucher again is refused, and so is the same round signed again with a later date.
     fails(() => w.chain.send(w.cranker, [check, claim]));
     const later = BigInt(w.chain.now() + 6_000);
@@ -707,23 +714,33 @@ describe('grants', () => {
     fails(() => w.chain.send(w.cranker, [check, claim]), 'WrongVoucherBytes');
     const fresh = loot.voucherBytes({ ...fields, incarnation: next.incarnation });
     w.chain.send(w.cranker, [loot.ed25519Ix({ publicKey: signer.publicKey, signature: signer.sign(fresh), message: fresh }), claim]);
-    for (const incarnation of [first.incarnation, next.incarnation]) assert.equal(loot.decodeReceipt(w.chain.get(pda.grantReceipt(address, incarnation, wallet)).data).count, 1);
+    for (const incarnation of [first.incarnation, next.incarnation]) assert.equal(loot.readLimit(loot.readListAccount(w.chain.get(pda.claims(address, incarnation, 0))), loot.limitKey('wallet', wallet)).count, 1);
+    // Anyone closes the old incarnation's shards, their rent to the project's owner; the live one's stay.
+    const owner = w.chain.get(w.creator).lamports;
+    w.chain.send(w.cranker, [loot.closeShardIx({ project: w.project, id: 3, incarnation: first.incarnation, rounds: true, shard: 0, owner: w.creator }), loot.closeShardIx({ project: w.project, id: 3, incarnation: first.incarnation, shard: 0, owner: w.creator })]);
+    assert.ok(w.chain.get(w.creator).lamports > owner);
+    fails(() => w.chain.send(w.cranker, [loot.closeShardIx({ project: w.project, id: 3, incarnation: next.incarnation, shard: 0, owner: w.creator })]), 'GrantLive');
     assert.equal(w.balance(wallet), 10n);
   });
 
   test('the voucher and list test vectors: a voucher’s bytes and signature, a list’s root and proof', () => {
-    const message = loot.voucherBytes({
+    const fields = {
       grant: new Uint8Array(32).fill(0x22),
       incarnation: 7n,
       wallet: new Uint8Array(32).fill(0x33),
       personHash: new Uint8Array(32).fill(0x44),
-      round: new Uint8Array(16).fill(0x55),
+      rounds: [{ id: new Uint8Array(16).fill(0x55), amount: 0n }, { id: new Uint8Array(16).fill(0x56), amount: 9n }],
       expires: 1_767_225_600n,
-    });
-    assert.equal(Buffer.from(message).toString('hex'), '6c6f6f742d6772616e742d763402354a42305cb625d57a3039efafbd8b8fe0ac361da56671aefbbad058d158e722222222222222222222222222222222222222222222222222222222222222220700000000000000333333333333333333333333333333333333333333333333333333333333333344444444444444444444444444444444444444444444444444444444444444445555555555555555555555555555555500b95569000000000000000000000000');
+    };
+    // "loot-grant-v5" | sha256(program | grant | incarnation | wallet | person | expires | count | (round | amount) × count).
+    const body = concat(addressBytes(loot.LOOT_PROGRAM), fields.grant, uintLE(7, 8), fields.wallet, fields.personHash, uintLE(1_767_225_600, 8), uintLE(2, 4), fields.rounds[0].id, uintLE(0, 8), fields.rounds[1].id, uintLE(9, 8));
+    assert.deepEqual(loot.voucherBody(fields), body);
+    const message = loot.voucherBytes(fields);
+    assert.equal(Buffer.from(message).toString('hex'), Buffer.from(concat(utf8('loot-grant-v5'), sha256(body))).toString('hex'));
+    assert.equal(message.length, loot.VOUCHER_BYTES);
+    assert.deepEqual(loot.readVoucher(body).rounds.map((r) => r.amount), [0n, 9n]);
     const key = keyFromSeed(new Uint8Array(32).fill(1));
     assert.equal(key.publicKey, 'AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9');
-    assert.equal(Buffer.from(key.sign(message)).toString('hex'), '809021b02d5a442f72eb63de9acf0fc7fb5256f78987684e7130b51248455e2c831a54a39b303cd49dbc0b9f7faa7861e2530645cbf8cda9b81c5269bc01f505');
     const leaves = [0x33, 0x34, 0x35].map((b) => loot.listLeaf(new Uint8Array(32).fill(b), null));
     assert.equal(Buffer.from(loot.merkleRoot(leaves)).toString('hex'), '7e7139369d9451ae178d9bdcb87322669db7533a0482e197fbcffc96c5b357cf');
     assert.deepEqual(loot.merkleProof(leaves, 1).map((p) => Buffer.from(p).toString('hex')), [

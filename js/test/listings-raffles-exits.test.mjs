@@ -5,7 +5,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
-import { computeUnitLimit } from '../chain/programs.js';
 import { mintToIx } from '../chain/token.js';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import * as loot from '../client/index.js';
@@ -17,23 +16,6 @@ const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
 const fails = (fn, error) => assert.throws(fn, (e) => (e.logs ?? []).some((l) => l.includes(error)) || String(e.message).includes(error));
-const contributionsOf = (w, lottery) => w.chain.svm.getProgramAccounts(loot.LOOT_PROGRAM)
-  .filter((a) => a.data[0] === loot.TAGS.LotteryContribution)
-  .map((a) => ({ address: a.address, value: loot.decode('LotteryContribution', a.data) }))
-  .filter(({ value }) => value.lottery === lottery)
-  .sort((x, y) => Number(x.value.first_ticket - y.value.first_ticket));
-
-/** Each contribution's next step until the round is done (prizes first, then the money, then the pot's shares). */
-function finishRound(w, id, opts = {}) {
-  const address = pda.lottery(w.project, id);
-  for (let sent = 0; sent < 50; sent++) {
-    const lottery = w.read('Lottery', address);
-    const next = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value));
-    if (!next) return;
-    w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id, lottery, contributionAddress: next.address, contribution: next.value, treasury: w.treasury, collection: w.collection, ...opts })]);
-  }
-  throw new Error('the round never finished');
-}
 
 t('a listing sells an NFT at its price, and rents another by the period to one renter at a time', () => {
   const w = world({ seed: 'exits-listings' });
@@ -77,48 +59,49 @@ t('a listing sells an NFT at its price, and rents another by the period to one r
   assert.equal(ownerOf(w, cabin), maker, 'home');
 });
 
-t('a raffle: the NFT is locked in the lottery’s own stash, given before the seller is paid; a short round refunds', () => {
+t('a raffle: the NFT is locked in the lottery’s own stash, given by the round’s cursor before its sweep; a short round refunds', () => {
   const w = world({ seed: 'exits-raffle' });
   w.upsert({ Item: { id: 1, args: collectible('Artwork') } });
   const art = w.make(1, w.creator);
+  const lotteryState = (id) => (w.chain.get(pda.lottery(w.project, id)) ? w.read('Lottery', pda.lottery(w.project, id)) : null);
   // The NFT goes into lottery 1's own stash, then the lottery is written naming it.
-  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, asset: art, collection: w.collection })]);
+  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, lotteryState: lotteryState(1), asset: art, collection: w.collection })]);
   const lotteryArgs = (more = {}) => ({ price: PRICE, mint: w.mint, shares: [{ to: 'Treasury', bps: 9000 }], places: [{ bps: 0, prize: { Held: [art] } }], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, ...more });
   w.upsert({ Lottery: { id: 1, args: lotteryArgs() } });
   // Promised: it can't leave while a place names it.
-  fails(() => w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, asset: art, out: w.creator, collection: w.collection })]), 'Promised');
+  fails(() => w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, lotteryState: lotteryState(1), asset: art, out: w.creator, collection: w.collection })]), 'Promised');
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
   const address = pda.lottery(w.project, 1);
-  for (const buyer of [w.player, rival]) w.chain.send(buyer, [loot.buyTicketsIx({ player: buyer, project: w.project, id: 1, lottery: w.read('Lottery', address), mint: w.mint, count: 2n, nonce: 1n })]);
+  for (const buyer of [w.player, rival]) w.chain.send(buyer, [loot.buyTicketsIx({ player: buyer, project: w.project, id: 1, lottery: lotteryState(1), round: w.round(1)?.round ?? null, mint: w.mint, count: 2n })]);
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
-  const lottery = w.read('Lottery', address);
-  assert.equal(lottery.status, 'Drawn');
-  // Money waits for the prize: finishing a contribution that won nothing is refused until the NFT is given.
-  const loser = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value) !== 'prizes');
-  fails(() => w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery: { ...lottery, given: Uint8Array.of(1) }, contributionAddress: loser.address, contribution: loser.value, treasury: w.treasury })]), 'PrizesFirst');
-  const winner = contributionsOf(w, address).find(({ value }) => loot.lotteryStep(lottery, value) === 'prizes').value.player;
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery: lotteryState(1) })]);
+  const { address: key, round: r } = w.round(1);
+  assert.equal(r.status, 'Drawn');
+  // The sweep waits for the prize: a part of the treasury's money can't be pulled before it.
+  assert.deepEqual(r.entries.map((_, i) => loot.partsOwed(r, i)), [[], []], 'nothing to pull before the sweep');
+  const winner = r.entries[loot.entryOf(r, loot.ticketOfPlace(r, 0))].buyer;
   const treasuryBefore = w.balance(w.treasury);
-  finishRound(w, 1, { nfts: { [art]: { collection: w.collection } } });
+  w.finishRound(1, { kinds: { [art]: { collection: w.collection } } });
   assert.equal(ownerOf(w, art), winner, 'the winner has the NFT');
-  assert.equal(w.balance(w.treasury) - treasuryBefore, 3_600_000n, 'then the seller is paid (90% of 4 tickets)');
+  assert.equal(w.balance(w.treasury) - treasuryBefore, 3_600_000n, 'and the seller is paid (90% of 4 tickets) at the sweep');
+  assert.equal(w.chain.get(key), null, 'the round closed');
 
   // A least sale: 5 tickets wanted, 1 sold, so the draw cancels the round and the buyer is refunded.
   const art2 = w.make(1, w.creator);
-  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 2, asset: art2, collection: w.collection })]);
+  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 2, lotteryState: lotteryState(2), asset: art2, collection: w.collection })]);
   w.upsert({ Lottery: { id: 2, args: lotteryArgs({ places: [{ bps: 0, prize: { Held: [art2] } }], min_sold: 5n }) } });
-  const second = pda.lottery(w.project, 2);
   const held = w.balance(w.player);
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery: w.read('Lottery', second), mint: w.mint, count: 1n, nonce: 2n })]);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery: lotteryState(2), mint: w.mint, count: 1n })]);
   w.chain.warp(w.chain.now() + 3601);
-  const short = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2 })]);
+  const short = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery: lotteryState(2) })]);
   assert.equal(short.receipts.find((r) => r.name === 'LotteryCancelled').data.short, true);
   assert.equal(short.answers?.length ?? 0, 0, 'no oracle asked');
-  finishRound(w, 2);
+  w.finishRound(2);
   assert.equal(w.balance(w.player), held, 'refunded');
-  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 2, asset: art2, out: w.creator, collection: w.collection })]);
+  w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 2, lotteryState: lotteryState(2), asset: art2, out: w.creator, collection: w.collection })]);
   assert.equal(ownerOf(w, art2), w.creator, 'the seller takes it back once the lottery has ended');
+  assert.ok(address);
 });
 
 t('a contest’s token prize is set aside at the decision and split by what each winner put in', () => {
@@ -127,7 +110,7 @@ t('a contest’s token prize is set aside at the decision and split by what each
   const prize = { Tokens: { from: { Pool: [2] }, amount: { Fixed: [600n] } } };
   const now = w.chain.now();
   const args = { sides: 1, closes_at: BigInt(now + 100), result_by: BigInt(now + 1000), shares: [{ to: 'Treasury', bps: 10_000 }], gate: null, prize, prize_split: true };
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 1, mint: w.mint, args, prizeMint: w.mint })]);
+  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args, prizeMint: w.mint })]);
   let contest = w.read('Contest', pda.contest(w.project, 1));
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
@@ -140,7 +123,7 @@ t('a contest’s token prize is set aside at the decision and split by what each
   const [p0, r0] = [w.balance(w.player), w.balance(rival)];
   for (const player of [rival, w.player]) {
     contest = w.read('Contest', pda.contest(w.project, 1));
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, id: 1, contest, player, side: 0, prizeMint: w.mint })]);
+    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player, prizeMint: w.mint })]);
   }
   assert.equal(w.balance(w.player) - p0, 200n, 'one part in three');
   assert.equal(w.balance(rival) - r0, 400n, 'two parts in three');
@@ -207,8 +190,8 @@ t('a sealed schedule pays from its own vault, catches up in one transaction, and
   const schedule = w.read('Schedule', address);
   const due = loot.runsDue(schedule, w.chain.now());
   assert.equal(due, 3);
-  const run = () => loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule });
-  w.chain.send(w.cranker, Array.from({ length: due }, run));
+  // One call makes every run due.
+  w.chain.send(w.cranker, [loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule, upto: Number(schedule.runs) + due })]);
   assert.equal(w.balance(teammate), 1_000n, 'two runs of 300, then the last pays the rest');
   assert.equal(w.chain.tokens(pda.vest(address)), 0n);
 });

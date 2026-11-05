@@ -86,7 +86,8 @@ test('a sealed schedule pays a key someone holds, its last run within 10 years; 
 
 test('sealed runs capped, a contest in a default-frozen mint refused, warnings for outside NFT bids, a heavy box that fits', () => {
   const vesting = example('team-vesting');
-  assert.ok(edit(vesting, (s) => Object.assign(s.schedules[0], { maxRuns: 10_001, every: '1h' })).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'));
+  assert.ok(edit(vesting, (s) => Object.assign(s.schedules[0], { maxRuns: 100_001, every: '1h' })).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'));
+  assert.ok(!edit(vesting, (s) => Object.assign(s.schedules[0], { maxRuns: 35_040, every: '1h' })).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'), 'four years of hourly runs');
   const presale = example('fair-presale');
   const frozen = edit(presale, (s) => (s.tokens[0] = { key: 'sol', source: 'existing', mint: WALLET, decimals: 9, powers: { defaultFrozen: true } }));
   assert.ok(frozen.refused.includes('E-CONTEST economy.contests.raise.currency'), frozen.refused.join());
@@ -123,23 +124,24 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
   assert.ok(!keys.includes(pda.identity()), 'no proof: a rental moves nothing');
 });
 
-test('a drawn round’s prizes go in place order across purchases (PlacesInOrder)', () => {
-  const roll = { bps: 0, prize: { Roll: [1] } };
-  const lottery = { status: 'Drawn', places: [roll, roll], sold: 2n, first_ticket: 0n, given: new Uint8Array(1), pending: 2n };
-  const first = { first_ticket: 0n, end: 1n, done: false };
-  const second = { first_ticket: 1n, end: 2n, done: false };
-  assert.equal(loot.lotteryStep(lottery, first), 'prizes', 'first place first');
-  assert.equal(loot.lotteryStep(lottery, second), null, 'second place waits for the first');
-  assert.equal(loot.lotteryStep({ ...lottery, given: Uint8Array.of(1) }, second), 'prizes');
-  assert.equal(loot.lotteryStep({ ...lottery, given: Uint8Array.of(3) }, second), 'finish', 'then the money');
+/** A round's record as `decodeRound` reads it, for the parts it owes. */
+const round = (more = {}) => ({
+  status: 'Drawn', returns: false, burns: false, shares: [], places: [{ bps: 10_000, prize: null, times: 1 }], sold: 2n, first: 0n, cursor: 0, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n,
+  paid: new Uint8Array(1), prizes: [], entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }],
+  ...more,
 });
 
-test('in a lottery that returns its tickets, a winner’s ticket goes back before its prize', () => {
-  const roll = { bps: 0, prize: { Roll: [1] } };
-  const lottery = { status: 'Drawn', returns: true, places: [roll], sold: 1n, first_ticket: 0n, given: new Uint8Array(1), pending: 1n };
-  const winner = { first_ticket: 0n, end: 1n, done: false };
-  assert.equal(loot.lotteryStep(lottery, winner), 'refund');
-  assert.equal(loot.lotteryStep({ ...lottery, pending: 0n }, { ...winner, done: true }), 'prizes', 'then its prize');
+test('a drawn round’s places are paid once it is swept, each place once', () => {
+  assert.deepEqual(loot.partsOwed(round(), 0), [], 'drawn: the sweep comes first');
+  assert.deepEqual(loot.partsOwed(round({ status: 'Swept' }), 0), [{ Pot: [0] }], 'first place\'s part of the pot');
+  assert.deepEqual(loot.partsOwed(round({ status: 'Swept' }), 1), [], 'the other ticket won nothing');
+  assert.deepEqual(loot.partsOwed(round({ status: 'Swept', paid: Uint8Array.of(1) }), 0), [], 'paid once');
+});
+
+test('in a lottery that returns its tickets, a ticket goes back from the draw, before the sweep', () => {
+  assert.deepEqual(loot.partsOwed(round({ returns: true }), 1, { places: false }), ['Own']);
+  assert.deepEqual(loot.partsOwed(round({ returns: true, status: 'Cancelled' }), 0), ['Own'], 'a cancelled round refunds every ticket');
+  assert.deepEqual(loot.partsOwed(round({ returns: true, status: 'Swept' }), 0), ['Own', { Pot: [0] }], 'and its winner\'s place once swept');
 });
 
 test('every claim is signed by its winning wallet, whatever proves it; anyone may pay its fees', () => {

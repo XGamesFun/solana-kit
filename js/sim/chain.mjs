@@ -262,11 +262,12 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
         restoreQueue();
         answers.push(sendRaw(oracle, [callbackRollIx({ order, orderState, box, randomness, poolMints, items })], { label: `${label} (oracle)`, role: 'oracle' }));
       } else if (known.name === 'draw_lottery') {
-        const lottery = account('lottery');
-        const l = decode('Lottery', get(lottery).data);
+        // The round's record is the request's only account: one nobody bought into asks nothing.
+        const round = account('round');
+        const held = get(round);
         restoreQueue();
-        if (l.status !== 'Drawing') continue;
-        answers.push(sendRaw(oracle, [callbackLotteryIx({ project: l.project, id: l.id, lottery: l, randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
+        if (!held?.data?.length || held.owner !== LOOT_PROGRAM || decode('LotteryRound', held.data).status !== 'Drawing') continue;
+        answers.push(sendRaw(oracle, [callbackLotteryIx({ round, randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
       } else {
         const project = account('project');
         restoreQueue();

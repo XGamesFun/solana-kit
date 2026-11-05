@@ -110,7 +110,7 @@
           "name": "outbid",
           "docs": [
             "(`Tokens::wallet_account`): the bid this one tops goes back there (and, for NFTs, the rent of",
-            "the project's token account a Token Metadata NFT of theirs emptied)."
+            "its bytes and of the project's token account a Token Metadata NFT of theirs emptied)."
           ],
           "writable": true,
           "optional": true
@@ -504,9 +504,9 @@
           "optional": true
         },
         {
-          "name": "receipt",
+          "name": "counts",
           "docs": [
-            "what one wallet buys. Made at their first purchase, its rent theirs."
+            "wallet buys. Made at their first count, its rent theirs."
           ],
           "writable": true,
           "optional": true
@@ -570,6 +570,10 @@
       "accounts": [
         {
           "name": "player",
+          "docs": [
+            "Pays for the tickets and the bytes their entry adds; the round's first buyer also fronts its",
+            "header and its account of the payment mint, back at the close."
+          ],
           "writable": true,
           "signer": true
         },
@@ -581,44 +585,11 @@
           "writable": true
         },
         {
-          "name": "contribution",
+          "name": "round",
           "docs": [
-            "This purchase: any `nonce` the player has no contribution at in this lottery."
+            "round's first purchase."
           ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  116,
-                  114,
-                  105,
-                  98,
-                  117,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "lottery"
-              },
-              {
-                "kind": "account",
-                "path": "player"
-              },
-              {
-                "kind": "arg",
-                "path": "nonce"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "player_token",
@@ -626,39 +597,25 @@
         },
         {
           "name": "payment_vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  111,
-                  116,
-                  116,
-                  101,
-                  114,
-                  121,
-                  95,
-                  102,
-                  117,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "lottery"
-              }
-            ]
-          }
+          "docs": [
+            "payment (checked in the handler)."
+          ],
+          "writable": true
         },
         {
-          "name": "mint",
+          "name": "mint"
+        },
+        {
+          "name": "pot_mint",
           "docs": [
-            "tickets are burned. The token program refuses another: the vault is of that mint."
-          ]
+            "pot's mint and the round's account of it, which it opens."
+          ],
+          "optional": true
+        },
+        {
+          "name": "pot_vault",
+          "writable": true,
+          "optional": true
         },
         {
           "name": "token_program",
@@ -701,19 +658,15 @@
           "optional": true
         },
         {
-          "name": "receipt",
+          "name": "counts",
           "docs": [
-            "when it limits the tickets one wallet holds. Made at their first purchase, its rent theirs."
+            "tickets one wallet holds in a round. Made at their first count, its rent theirs."
           ],
           "writable": true,
           "optional": true
         }
       ],
       "args": [
-        {
-          "name": "nonce",
-          "type": "u64"
-        },
         {
           "name": "count",
           "type": "u32"
@@ -758,14 +711,11 @@
           "signer": true
         },
         {
-          "name": "lottery",
-          "writable": true
-        },
-        {
-          "name": "ticket",
+          "name": "round",
           "docs": [
-            "An earlier round's answer, or an earlier incarnation's, is refused."
-          ]
+            "older round, one drawn already, a lottery made again) is refused."
+          ],
+          "writable": true
         }
       ],
       "args": [
@@ -890,6 +840,10 @@
         {
           "name": "lottery",
           "writable": true
+        },
+        {
+          "name": "round",
+          "writable": true
         }
       ],
       "args": []
@@ -897,9 +851,11 @@
     {
       "name": "claim",
       "docs": [
-        "Anyone pays a decided or called-off contest's entry to its player; the last claim",
-        "closes the contest. With `forgo` (the player only), a winner takes its part of the pot",
-        "without its prize."
+        "Anyone pays a decided or called-off contest's entry `entry` to its player, and moves the",
+        "NFTs of the entries `nfts` names where they go; the claim that leaves nothing owed closes",
+        "the contest. With `forgo` (the player only), a winner's first claim goes without its prize;",
+        "with `end` (the winner only), it leaves the rest of its share of the losers' NFTs to the",
+        "opener; with `give_up`, each NFT becomes a hold for the wallet it goes to."
       ],
       "discriminator": [
         62,
@@ -928,7 +884,7 @@
           "writable": true
         },
         {
-          "name": "entry",
+          "name": "entries",
           "writable": true
         },
         {
@@ -937,6 +893,9 @@
         },
         {
           "name": "opener",
+          "docs": [
+            "contest, its list's header and its pot at the close."
+          ],
           "writable": true
         },
         {
@@ -1007,9 +966,18 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "optional": true
         }
       ],
       "args": [
+        {
+          "name": "entry",
+          "type": "u32"
+        },
         {
           "name": "nonce",
           "type": "u64"
@@ -1017,16 +985,31 @@
         {
           "name": "forgo",
           "type": "bool"
+        },
+        {
+          "name": "end",
+          "type": "bool"
+        },
+        {
+          "name": "give_up",
+          "type": "bool"
+        },
+        {
+          "name": "nfts",
+          "type": {
+            "vec": "u32"
+          }
         }
       ]
     },
     {
       "name": "claim_grant",
       "docs": [
-        "Claims a grant's reward for a wallet, with a voucher (the Ed25519 check right before) or a",
-        "proof that it is on the approved list, or of an open grant. The wallet signs its own claim,",
-        "whatever proves it (`WalletMustSign`); anyone may pay its fees beside it. `amount`: the tokens the voucher or the list names for this claim,",
-        "up to the grant's own (0: the grant's prize as it is)."
+        "Claims a grant's reward for a wallet, for each of the `rounds` a voucher (the Ed25519 check",
+        "right before) or the approved list names that it was not paid yet; or once, with no rounds,",
+        "of an open grant. The wallet signs its own claim, whatever proves it (`WalletMustSign`);",
+        "anyone may pay its fees beside it. `proofs`: a voucher key's under the grant's key root, or",
+        "each round's on the approved list."
       ],
       "discriminator": [
         125,
@@ -1052,8 +1035,8 @@
         {
           "name": "signer",
           "docs": [
-            "Sends the claim. Pays its receipts, the collectible and the token account with the grant's",
-            "funds as far as they go, and the player fee with its own SOL."
+            "Sends the claim. Pays its records, the collectible and the token account with the grant's",
+            "funds as far as they go, and a roll's order and the player fee with its own SOL."
           ],
           "writable": true,
           "signer": true
@@ -1062,51 +1045,9 @@
           "name": "wallet"
         },
         {
-          "name": "wallet_receipt",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  99,
-                  101,
-                  105,
-                  112,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "grant"
-              },
-              {
-                "kind": "account",
-                "path": "grant.incarnation",
-                "account": "Grant"
-              },
-              {
-                "kind": "account",
-                "path": "wallet"
-              }
-            ]
-          }
-        },
-        {
-          "name": "person_receipt",
+          "name": "rounds",
           "docs": [
-            "person and the grant limits them; on an open claim of a grant gated by an NFT, the badge's,",
-            "`[\"badge\", grant, incarnation, nft]` (checked below)."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "code_receipt",
-          "docs": [
-            "(checked below)."
+            "a claim by voucher or list (checked below). Made at its first round."
           ],
           "writable": true,
           "optional": true
@@ -1153,12 +1094,13 @@
       ],
       "args": [
         {
-          "name": "round",
+          "name": "rounds",
           "type": {
-            "array": [
-              "u8",
-              16
-            ]
+            "vec": {
+              "defined": {
+                "name": "ClaimRound"
+              }
+            }
           }
         },
         {
@@ -1175,17 +1117,15 @@
           }
         },
         {
-          "name": "amount",
-          "type": "u64"
-        },
-        {
-          "name": "proof",
+          "name": "proofs",
           "type": {
             "vec": {
-              "array": [
-                "u8",
-                32
-              ]
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
             }
           }
         },
@@ -1199,7 +1139,7 @@
       "name": "close_leaf",
       "docs": [
         "Anyone closes a compressed NFT's record that no longer reads (its leaf changed, or its root left the change log); its rent goes back",
-        "to whoever paid it."
+        "to whoever paid it. Anyone closes a Sheet whose NFT is burned, its rent to the project's treasury."
       ],
       "discriminator": [
         168,
@@ -1217,11 +1157,21 @@
           "writable": true
         },
         {
-          "name": "tree"
+          "name": "tree",
+          "docs": [
+            "(read below)."
+          ]
         },
         {
           "name": "payer",
           "writable": true
+        },
+        {
+          "name": "project",
+          "docs": [
+            "For a Sheet, its project, for its treasury."
+          ],
+          "optional": true
         }
       ],
       "args": []
@@ -1479,6 +1429,79 @@
       "args": []
     },
     {
+      "name": "close_shard",
+      "docs": [
+        "Anyone closes a shard of a grant's claims or rounds once the grant is closed or made again;",
+        "its rent goes to the project's owner."
+      ],
+      "discriminator": [
+        18,
+        225,
+        167,
+        168,
+        223,
+        60,
+        73,
+        176
+      ],
+      "accounts": [
+        {
+          "name": "project"
+        },
+        {
+          "name": "grant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  114,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "project"
+              },
+              {
+                "kind": "arg",
+                "path": "id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "shard",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "id",
+          "type": "u16"
+        },
+        {
+          "name": "incarnation",
+          "type": "u64"
+        },
+        {
+          "name": "rounds",
+          "type": "bool"
+        },
+        {
+          "name": "shard",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "collect_fees",
       "discriminator": [
         164,
@@ -1525,7 +1548,7 @@
         {
           "name": "authority",
           "docs": [
-            "Pays a new asset's rent and a longer attribute list, or gets the rent of a burned asset."
+            "Pays a new asset's rent and a longer attribute list."
           ],
           "writable": true,
           "signer": true
@@ -1534,18 +1557,8 @@
           "name": "project"
         },
         {
-          "name": "item",
-          "docs": [
-            "For `Make`: the item, of this project."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
           "name": "asset",
           "docs": [
-            "creates it, and the runtime refuses the call when it did not sign);",
-            "otherwise one in `collection`, which Core checks. For `Set`, any NFT: one the project has no",
             "authority over is a Core asset of another collection, or a Token Metadata NFT's mint. For",
             "`Profile`, the wallet whose profile it writes (nothing is written on it)."
           ],
@@ -1553,6 +1566,7 @@
         },
         {
           "name": "owner",
+          "writable": true,
           "optional": true
         },
         {
@@ -1588,7 +1602,8 @@
         {
           "name": "sheet",
           "docs": [
-            "the first time; for `Profile`, the wallet's profile (`profile.rs`), checked by its address."
+            "the first time; for `Profile`, the wallet's profile",
+            "(`sheet.rs`), checked by its address."
           ],
           "writable": true,
           "optional": true
@@ -1685,9 +1700,9 @@
           ]
         },
         {
-          "name": "receipt",
+          "name": "counts",
           "docs": [
-            "what one wallet crafts. Made at their first craft, its rent theirs."
+            "wallet crafts. Made at their first count, its rent theirs."
           ],
           "writable": true,
           "optional": true
@@ -1945,13 +1960,17 @@
           "name": "prize_vault",
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "entries",
+          "writable": true
         }
       ],
       "args": [
         {
           "name": "side",
           "type": {
-            "option": "u8"
+            "option": "u16"
           }
         },
         {
@@ -2008,6 +2027,10 @@
           "writable": true
         },
         {
+          "name": "round",
+          "writable": true
+        },
+        {
           "name": "oracle_queue",
           "docs": [
             "whoever MagicBlock lets serve it could answer."
@@ -2020,8 +2043,8 @@
         {
           "name": "vrf_program",
           "docs": [
-            "(and fails there when it is no program), so a round that asks nothing (nothing sold, short of",
-            "its least sale) ends or is cancelled even with the oracle gone."
+            "a round that asks nothing (nothing sold, short of its least sale) moves on even with the",
+            "oracle gone."
           ],
           "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
         },
@@ -2076,7 +2099,8 @@
         {
           "name": "bidder",
           "docs": [
-            "project's token accounts its Token Metadata NFT bids emptied. Unread with no bid."
+            "bytes, and the rent of the project's token accounts its Token Metadata NFT bids emptied.",
+            "Unread with no bid."
           ],
           "writable": true
         },
@@ -2330,30 +2354,8 @@
           "writable": true
         },
         {
-          "name": "entry",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  110,
-                  116,
-                  114,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "contest"
-              },
-              {
-                "kind": "account",
-                "path": "player"
-              }
-            ]
-          }
+          "name": "entries",
+          "writable": true
         },
         {
           "name": "pot",
@@ -2415,7 +2417,7 @@
       "args": [
         {
           "name": "side",
-          "type": "u8"
+          "type": "u16"
         },
         {
           "name": "amount",
@@ -2423,137 +2425,6 @@
         },
         {
           "name": "incarnation",
-          "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "finish_lottery_contribution",
-      "docs": [
-        "Anyone routes a successful contribution or refunds a cancelled one to its buyer. A",
-        "winning one stays, and finishing it again pays its buyer its places once every",
-        "contribution is finished. The last place paid opens the next round."
-      ],
-      "discriminator": [
-        223,
-        174,
-        41,
-        249,
-        73,
-        174,
-        215,
-        99
-      ],
-      "accounts": [
-        {
-          "name": "payer",
-          "docs": [
-            "Anyone. Opens the accounts the contribution pays into that are not there yet."
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "project"
-        },
-        {
-          "name": "lottery",
-          "writable": true
-        },
-        {
-          "name": "contribution",
-          "writable": true
-        },
-        {
-          "name": "payment_vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  111,
-                  116,
-                  116,
-                  101,
-                  114,
-                  121,
-                  95,
-                  102,
-                  117,
-                  110,
-                  100,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "lottery"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pot",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "lottery"
-              }
-            ]
-          }
-        },
-        {
-          "name": "player",
-          "writable": true
-        },
-        {
-          "name": "to",
-          "docs": [
-            "of the pot's mint for a prize (left out when the places won take nothing of the pot)."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "mint",
-          "docs": [
-            "program refuses another: both vaults are of their mint."
-          ]
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "token_2022_program",
-          "docs": [
-            "account here only makes the call fail."
-          ]
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "associated_token_program",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-        }
-      ],
-      "args": [
-        {
-          "name": "nonce",
           "type": "u64"
         }
       ]
@@ -2669,8 +2540,8 @@
         {
           "name": "held",
           "docs": [
-            "asset, their token account of a Token Metadata NFT, or a compressed NFT's record, with its",
-            "`tree` (`holds_nft`)."
+            "asset, their token account of a Token Metadata NFT (or its mint, once burned), or a compressed",
+            "NFT's record, with its `tree` (`held`: refused without evidence either way)."
           ],
           "optional": true
         },
@@ -2702,7 +2573,7 @@
     {
       "name": "hold",
       "docs": [
-        "A player hands an NFT to the project until `free_at`; `reference` is the project's label."
+        "A player hands NFTs to the project until `free_at`; `reference` is the project's label."
       ],
       "discriminator": [
         83,
@@ -3590,9 +3461,9 @@
           "optional": true
         },
         {
-          "name": "receipt",
+          "name": "counts",
           "docs": [
-            "what one wallet buys. Made at their first purchase, its rent theirs."
+            "wallet buys. Made at their first count, its rent theirs."
           ],
           "writable": true,
           "optional": true
@@ -3736,6 +3607,10 @@
           "name": "prize_vault",
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "entries",
+          "writable": true
         }
       ],
       "args": [
@@ -4280,7 +4155,28 @@
         },
         {
           "name": "pool",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "project"
+              },
+              {
+                "kind": "arg",
+                "path": "index"
+              }
+            ]
+          }
         },
         {
           "name": "token_program",
@@ -4315,7 +4211,7 @@
       "args": [
         {
           "name": "index",
-          "type": "u8"
+          "type": "u16"
         }
       ]
     },
@@ -4843,6 +4739,108 @@
       ]
     },
     {
+      "name": "pull",
+      "docs": [
+        "Anyone settles one part of a round's entry: a refund, its recipients' parts, its places'",
+        "pot parts or token prizes. The last part owed closes the round."
+      ],
+      "discriminator": [
+        78,
+        119,
+        161,
+        115,
+        9,
+        167,
+        75,
+        125
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone. Opens the accounts the part pays into that are not there yet."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "project"
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "buyer",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Writable for a minted prize."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "to",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "docs": [
+            "account here only makes the call fail."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "opener",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "entry",
+          "type": "u32"
+        },
+        {
+          "name": "part",
+          "type": {
+            "defined": {
+              "name": "Part"
+            }
+          }
+        },
+        {
+          "name": "hold",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "refresh_seat",
       "docs": [
         "Anyone counts a seat's weight again from its collectible as it is now."
@@ -5139,9 +5137,9 @@
           "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "receipt",
+          "name": "counts",
           "docs": [
-            "gives the count back (checked below)."
+            "the box's limit: the refund gives the count back (checked below)."
           ],
           "writable": true,
           "optional": true
@@ -5283,8 +5281,8 @@
     {
       "name": "release",
       "docs": [
-        "A held collectible leaves the project: to whoever the authority names while its hold runs,",
-        "home to its player by anyone once it is over."
+        "Held collectibles leave the project: to whoever the authority names while their holds run,",
+        "home to their player by anyone once they are over."
       ],
       "discriminator": [
         253,
@@ -5444,10 +5442,11 @@
           ]
         },
         {
-          "name": "player",
-          "docs": [
-            "account's of the project."
-          ],
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "rent_to",
           "writable": true
         },
         {
@@ -5633,7 +5632,7 @@
     {
       "name": "run_schedule",
       "docs": [
-        "Anyone runs a schedule that is due."
+        "Anyone runs a schedule that is due: every run due, up to `upto` runs made (0: no bound)."
       ],
       "discriminator": [
         179,
@@ -5691,7 +5690,12 @@
           "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "upto",
+          "type": "u32"
+        }
+      ]
     },
     {
       "name": "sell_to_offer",
@@ -6326,6 +6330,93 @@
       ]
     },
     {
+      "name": "settle_round",
+      "docs": [
+        "Anyone moves a drawn round on: its places' prizes in place order, a part at a time, then the",
+        "sweep (its shares, and its pot netted), which opens the next round. A finished round that",
+        "owes nothing closes."
+      ],
+      "discriminator": [
+        40,
+        101,
+        18,
+        1,
+        31,
+        129,
+        52,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone. Pays what a prize opens or makes, and the round's account of a mint it opens."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "project"
+        },
+        {
+          "name": "lottery",
+          "docs": [
+            "The round's lottery, for the sweep: its pot, and its next round."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "docs": [
+            "account here only makes the call fail."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "opener",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "entries",
+          "type": {
+            "vec": "u32"
+          }
+        },
+        {
+          "name": "hold",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "stake_nft",
       "docs": [
         "A player stakes an NFT of any kind in a farm at a lock tier: on a seat of its",
@@ -6833,8 +6924,9 @@
     {
       "name": "stash",
       "docs": [
-        "The project's owner or authority puts an NFT into a stash (`out` false), to be given away as",
-        "a prize, or takes one out: one of the project's stashes, or a lottery's own (`StashOf`)."
+        "The project's owner or authority puts NFTs into a stash (`out` false), each with its weight, to",
+        "be given away as prizes, or takes them out: one of the project's stashes, or a lottery's own",
+        "(`StashOf`)."
       ],
       "discriminator": [
         166,
@@ -7022,7 +7114,14 @@
         {
           "name": "lottery",
           "docs": [
-            "id]`: an account there holding no lottery (never written, or closed) promises nothing."
+            "there holding no lottery (never written, or closed) promises nothing."
+          ],
+          "optional": true
+        },
+        {
+          "name": "round",
+          "docs": [
+            "places are read)."
           ],
           "optional": true
         }
@@ -7041,8 +7140,10 @@
           "type": "bool"
         },
         {
-          "name": "weight",
-          "type": "u32"
+          "name": "weights",
+          "type": {
+            "vec": "u32"
+          }
         }
       ]
     },
@@ -7976,12 +8077,6 @@
       ]
     },
     {
-      "name": "Entry",
-      "discriminator": [
-        11
-      ]
-    },
-    {
       "name": "Farm",
       "discriminator": [
         17
@@ -7990,7 +8085,7 @@
     {
       "name": "Grant",
       "discriminator": [
-        14
+        24
       ]
     },
     {
@@ -8021,12 +8116,6 @@
       "name": "Lottery",
       "discriminator": [
         7
-      ]
-    },
-    {
-      "name": "LotteryContribution",
-      "discriminator": [
-        16
       ]
     },
     {
@@ -8334,19 +8423,6 @@
       ]
     },
     {
-      "name": "LotteryContributionFinished",
-      "discriminator": [
-        66,
-        171,
-        95,
-        142,
-        44,
-        144,
-        41,
-        20
-      ]
-    },
-    {
       "name": "LotteryDrawn",
       "discriminator": [
         38,
@@ -8370,6 +8446,19 @@
         6,
         174,
         127
+      ]
+    },
+    {
+      "name": "LotteryPulled",
+      "discriminator": [
+        133,
+        151,
+        254,
+        155,
+        78,
+        140,
+        26,
+        203
       ]
     },
     {
@@ -8643,6 +8732,19 @@
         162,
         11,
         192
+      ]
+    },
+    {
+      "name": "RoundClosed",
+      "discriminator": [
+        45,
+        243,
+        28,
+        22,
+        132,
+        70,
+        175,
+        226
       ]
     },
     {
@@ -8923,12 +9025,12 @@
     {
       "code": 6026,
       "name": "BadLottery",
-      "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, places that each take something and together 100% or less, and a held prize in its own stash, once, on a lottery that draws once"
+      "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, places that each take something and together 100% or less, runs of places alike, a header that one instruction makes, and a held prize or a raffle in its own stash, on a lottery that draws once"
     },
     {
       "code": 6027,
       "name": "RoundRunning",
-      "msg": "A lottery can't be changed while tickets of its round are sold"
+      "msg": "A lottery can't be closed or made again while its current round has a record"
     },
     {
       "code": 6028,
@@ -9133,7 +9235,7 @@
     {
       "code": 6068,
       "name": "AlreadyClaimed",
-      "msg": "This wallet was already paid for this round, or claimed this list"
+      "msg": "This wallet was already paid for every round this claim names"
     },
     {
       "code": 6069,
@@ -9322,8 +9424,8 @@
     },
     {
       "code": 6106,
-      "name": "WrongReceipt",
-      "msg": "Not the canonical counter for this record, incarnation and subject"
+      "name": "WrongCounts",
+      "msg": "This is not the list of counts, claims or rounds at the address its record, incarnation and subject name"
     },
     {
       "code": 6107,
@@ -9347,8 +9449,8 @@
     },
     {
       "code": 6111,
-      "name": "ContributionsPending",
-      "msg": "Finish every ticket contribution before paying the winners"
+      "name": "NothingOwed",
+      "msg": "This entry is owed nothing of this part: paid already, not owed, or not yet"
     },
     {
       "code": 6112,
@@ -9367,88 +9469,88 @@
     },
     {
       "code": 6115,
-      "name": "WinnersFirst",
-      "msg": "A loser's NFT goes to the opener only once every winning entry has claimed"
-    },
-    {
-      "code": 6116,
       "name": "CompressedBid",
       "msg": "A bid can't be a compressed NFT: bid Core or Token Metadata NFTs"
     },
     {
-      "code": 6117,
+      "code": 6116,
       "name": "OverPrize",
       "msg": "A claim's own amount is of a grant of a fixed amount of tokens, at most that amount, and named by a voucher or a list"
     },
     {
-      "code": 6118,
+      "code": 6117,
       "name": "NoSolForFee",
       "msg": "The signer holds too little SOL for the fee"
     },
     {
-      "code": 6119,
+      "code": 6118,
       "name": "BadOffer",
       "msg": "An offer takes a rule it can keep, at least one taker, a price or a loan above 0 (repaid with at least as much, within 5 years), shares only on a price, all its money as it arrives, and a mint whose accounts can't turn a payment away"
     },
     {
-      "code": 6120,
+      "code": 6119,
       "name": "WinnerPicks",
       "msg": "While losers' NFTs are left, only the winner claims, and picks which one they take"
     },
     {
-      "code": 6121,
+      "code": 6120,
       "name": "SubjectNonce",
       "msg": "A roll that moves an NFT's numbers is at the NFT's own nonce (its address's first 8 bytes): one at a time"
     },
     {
-      "code": 6122,
+      "code": 6121,
       "name": "NotALoan",
       "msg": "This hold is no loan, or it is repaid"
     },
     {
-      "code": 6123,
+      "code": 6122,
       "name": "LoanDue",
       "msg": "This loan is due: it can't be repaid, and its NFT goes to its lender"
     },
     {
-      "code": 6124,
+      "code": 6123,
       "name": "OwedToLender",
       "msg": "A loan that is due goes to its lender"
     },
     {
-      "code": 6125,
+      "code": 6124,
       "name": "Rented",
       "msg": "This NFT is rented: a rental runs until its end, and nobody takes the listing before (its maker may stop it)"
     },
     {
-      "code": 6126,
+      "code": 6125,
       "name": "BadListing",
       "msg": "A listing asks for a price above 0, and a rental for 1 period or more of a length above 0, all of them within 5 years"
     },
     {
-      "code": 6127,
+      "code": 6126,
       "name": "NotCompoundable",
       "msg": "Only a farm of tokens whose rewards are the staked token compounds"
     },
     {
-      "code": 6128,
+      "code": 6127,
       "name": "Sealed",
       "msg": "A sealed schedule is written once: nobody edits, switches off or re-seals it"
     },
     {
-      "code": 6129,
+      "code": 6128,
       "name": "NotInStash",
       "msg": "A lottery's held prize must be in its own stash when the lottery is written"
     },
     {
-      "code": 6130,
+      "code": 6129,
       "name": "Promised",
       "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended"
     },
     {
+      "code": 6130,
+      "name": "WrongEntry",
+      "msg": "This entry doesn't hold the ticket of the place"
+    },
+    {
       "code": 6131,
-      "name": "PrizesFirst",
-      "msg": "A drawn round gives every place's prize before any ticket money moves"
+      "name": "NotStuck",
+      "msg": "The authority marks only a transfer that can be seen to be stuck: a frozen account, a paused mint, or a mint with a transfer hook"
     },
     {
       "code": 6132,
@@ -9472,58 +9574,83 @@
     },
     {
       "code": 6136,
-      "name": "PlacesInOrder",
-      "msg": "A round's prizes go in place order: give the lower places' prizes first"
-    },
-    {
-      "code": 6137,
       "name": "ExitWhileLocked",
       "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
     },
     {
-      "code": 6138,
+      "code": 6137,
       "name": "HarvestFirst",
       "msg": "This seat is owed rewards it may take now: harvest before moving to, or topping up on, a tier whose rewards wait for its lock"
     },
     {
-      "code": 6139,
+      "code": 6138,
       "name": "WalletMustSign",
       "msg": "A grant's claim needs its wallet's signature"
     },
     {
-      "code": 6140,
+      "code": 6139,
       "name": "BurnLocked",
       "msg": "This Token-2022 mint's issuer keeps a burn authority (permissioned burn), so the program could never burn it later: it is refused before any money comes in"
     },
     {
-      "code": 6141,
+      "code": 6140,
       "name": "WrongProfile",
       "msg": "This needs the player's own profile in this project: it is missing, or another wallet's or another project's"
     },
     {
-      "code": 6142,
+      "code": 6141,
       "name": "WrongTable",
       "msg": "This is not the project's table at the address its id names"
     },
     {
-      "code": 6143,
+      "code": 6142,
       "name": "BadTable",
       "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
     },
     {
-      "code": 6144,
+      "code": 6143,
       "name": "BadItem",
       "msg": "A trait's key is the project's own (not item_id, rarity, serial, made, used or used_at), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
     },
     {
-      "code": 6145,
+      "code": 6144,
       "name": "NeedsRoll",
       "msg": "A fresh item's traits are drawn by a roll: give it by a box (open_box), or by a roll of one"
     },
     {
-      "code": 6146,
+      "code": 6145,
       "name": "WrongRow",
       "msg": "This row is not the committed table's row whose range holds the number drawn: its path doesn't lead to the table's root, or its range doesn't hold the number"
+    },
+    {
+      "code": 6146,
+      "name": "BadList",
+      "msg": "This is not a list of records of this width, or no record is at this place"
+    },
+    {
+      "code": 6147,
+      "name": "GrantLive",
+      "msg": "A grant's shards close only once the grant is closed or made again"
+    },
+    {
+      "code": 6148,
+      "name": "ShardsFixed",
+      "msg": "A grant keeps its shard bits (0 to 8) for its incarnation: an edit can't change them"
+    },
+    {
+      "code": 6149,
+      "name": "BadRounds",
+      "msg": "A claim by voucher or list names one round or more; an open claim names none"
+    },
+    {
+      "code": 6150,
+      "name": "NotBurned",
+      "msg": "This NFT is not burned: a Sheet closes once its Core asset is burned, its mint holds none, or a record proves its leaf burned"
+    },
+    {
+      "code": 6151,
+      "name": "OutOfOrder",
+      "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
     }
   ],
   "types": [
@@ -10309,6 +10436,16 @@
             "name": "Make",
             "fields": [
               {
+                "name": "item",
+                "type": "u32"
+              },
+              {
+                "name": "tree",
+                "type": {
+                  "option": "pubkey"
+                }
+              },
+              {
                 "name": "attributes",
                 "type": {
                   "vec": {
@@ -10402,6 +10539,36 @@
       }
     },
     {
+      "name": "ClaimRound",
+      "docs": [
+        "One round a claim names: the win, and the tokens it gives."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "docs": [
+              "The win: the project round, draw or giveaway it was won in."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "The tokens it gives, up to the grant's fixed amount; 0: the grant's prize as it is."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Claimed",
       "docs": [
         "An entry was paid `amount` and closed."
@@ -10427,7 +10594,7 @@
           },
           {
             "name": "side",
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "amount",
@@ -10503,19 +10670,23 @@
             "docs": [
               "The side that won, once the verdict is `Won`."
             ],
-            "type": "u8"
+            "type": "u16"
           },
           {
-            "name": "entries",
+            "name": "owed",
             "docs": [
-              "Entries not yet claimed."
+              "What it still owes; at 0 it closes. Before a result, and once off, its entries not yet",
+              "refunded. Won: in a contest of tokens, what the winning side put in and has not claimed; in",
+              "a contest of NFTs, the NFTs it still holds, and with a prize, the winners whose first claim",
+              "has not come."
             ],
-            "type": "u32"
+            "type": "u64"
           },
           {
             "name": "unclaimed",
             "docs": [
-              "What the winning side put in and has not yet claimed for."
+              "What the winning side put in and has not yet claimed for (in a contest of NFTs, its winners",
+              "whose first claim has not come): what the pot, and a split prize, are shared by."
             ],
             "type": "u64"
           },
@@ -10596,9 +10767,9 @@
             "name": "nft",
             "docs": [
               "When set, an entry stakes one NFT that passes this rule, in place of tokens (`price.rs`),",
-              "and the NFTs are the pot: each winning entry takes its own back and one of the losers', in",
-              "the order they are claimed, and what the winners leave goes to the opener. Called off, each",
-              "takes its own back. Its sides count NFTs."
+              "and the NFTs are the pot: each winner takes its own back and its share of the losers', which",
+              "it picks, and what the winners leave goes to the opener. Called off, each takes its own",
+              "back. Its sides count NFTs."
             ],
             "type": {
               "option": {
@@ -10609,9 +10780,31 @@
             }
           },
           {
-            "name": "losers",
+            "name": "cap",
             "docs": [
-              "The losers' NFTs not taken yet, once a side won."
+              "The most losers' NFTs one winner takes (`None`: no cap)."
+            ],
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "share",
+            "docs": [
+              "Fixed when a contest of NFTs is decided: each winner's share of the losers' NFTs,",
+              "`min(cap, losers ÷ winners)`. Below the cap, the winners whose place on their side is below",
+              "`extras` (`losers mod winners`) take one more."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "extras",
+            "type": "u32"
+          },
+          {
+            "name": "picks",
+            "docs": [
+              "The winners' picks not yet taken nor left by an early end. The opener's part opens at 0."
             ],
             "type": "u32"
           },
@@ -10635,9 +10828,9 @@
           {
             "name": "sides",
             "docs": [
-              "How many sides there are to back."
+              "How many sides there are to back: `u16::MAX` is not a side count, as it calls a contest off."
             ],
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "closes_at",
@@ -10725,6 +10918,15 @@
               "The token `prize` is split among the winning entries by stake (`Contest::prize_split`)."
             ],
             "type": "bool"
+          },
+          {
+            "name": "cap",
+            "docs": [
+              "In a contest of NFTs, the most losers' NFTs one winner takes (`None`: no cap; never 0)."
+            ],
+            "type": {
+              "option": "u32"
+            }
           }
         ]
       }
@@ -10927,7 +11129,7 @@
           {
             "name": "side",
             "type": {
-              "option": "u8"
+              "option": "u16"
             }
           },
           {
@@ -11185,49 +11387,11 @@
           },
           {
             "name": "side",
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "amount",
             "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Entry",
-      "docs": [
-        "At `[\"entry\", contest, player]`: what one player put on the one side they back. A wallet backs",
-        "one side of a contest, so a prize given to each winning entry (a trophy, a pick's prize) goes",
-        "to a wallet that backed the side that won, never to one that backed every side. They pay its",
-        "rent and get it back when it is claimed."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "contest",
-            "type": "pubkey"
-          },
-          {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
-            "name": "side",
-            "type": "u8"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "asset",
-            "docs": [
-              "The NFT it staked, while the contest holds it (the default address for tokens, and for a",
-              "loser's NFT a winner took)."
-            ],
-            "type": "pubkey"
           }
         ]
       }
@@ -11311,7 +11475,7 @@
             "docs": [
               "The pool rewards arrive in, and the mint it had when the farm was opened."
             ],
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "rewards_mint",
@@ -11533,7 +11697,7 @@
           },
           {
             "name": "rewards_pool",
-            "type": "u8"
+            "type": "u16"
           },
           {
             "name": "tiers",
@@ -11859,7 +12023,7 @@
           {
             "name": "gives",
             "docs": [
-              "What each claim gives (`prize.rs`)."
+              "What each round gives (`prize.rs`)."
             ],
             "type": {
               "defined": {
@@ -11945,6 +12109,14 @@
                 }
               }
             }
+          },
+          {
+            "name": "shard_bits",
+            "docs": [
+              "Its claims and its rounds are each kept in `2^shard_bits` lists (0 to 8), fixed for the",
+              "incarnation: a record never moves to another shard, so no round can pay twice."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -11957,7 +12129,7 @@
           {
             "name": "gives",
             "docs": [
-              "What each claim gives (`prize.rs`)."
+              "What each round gives (`prize.rs`)."
             ],
             "type": {
               "defined": {
@@ -12023,6 +12195,14 @@
                 }
               }
             }
+          },
+          {
+            "name": "shard_bits",
+            "docs": [
+              "Its claims and rounds are each kept in `2^shard_bits` lists (0 to 8), set when it is made: the",
+              "fewest that keep each list under ~100,000 records over its life (wallets × rounds)."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -12030,7 +12210,7 @@
     {
       "name": "GrantClaimed",
       "docs": [
-        "A grant gave its reward to `wallet`: a collectible (`asset`, `serial`) or tokens (`amount`)."
+        "A grant gave its reward to `wallet` for one round: a claim logs one for each round it paid."
       ],
       "type": {
         "kind": "struct",
@@ -12153,7 +12333,7 @@
           {
             "name": "profile",
             "docs": [
-              "Written on the seat's player's profile (`profile.rs`) instead of the collectible: every seat",
+              "Written on the seat's player's profile (`sheet.rs`) instead of the collectible: every seat",
               "the player holds adds its own points. A token seat grows it with or without a booster. No",
               "streak (`BadFarm`): one seat leaving would wipe what the others grew."
             ],
@@ -12255,7 +12435,8 @@
       "name": "Hold",
       "docs": [
         "At `[\"hold\", asset, free_at]`. The player pays its rent and gets it back when the hold ends.",
-        "Its label is in its receipt (`Held`)."
+        "Its label is in its receipt (`Held`). A hold the player asked for has no room for a debt",
+        "(`Hold::PLAIN`); a loan's has (`offer.rs`)."
       ],
       "type": {
         "kind": "struct",
@@ -12272,6 +12453,22 @@
             "name": "player",
             "docs": [
               "Who handed it in, and who it goes back to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "docs": [
+              "Who made the hold, and gets its rent back at the release: its player, or whoever made a hold",
+              "of an NFT a record owed (`owe`)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "rent_to",
+            "docs": [
+              "Who paid for the project's account of a Token Metadata NFT, and gets its rent back at the",
+              "release: its player, or for an NFT a record owed, whoever paid it then."
             ],
             "type": "pubkey"
           },
@@ -12756,7 +12953,7 @@
     {
       "name": "Limits",
       "docs": [
-        "Counts of claims, not amounts. 0 switches a limit off."
+        "Counts of claims, not amounts: each round paid is one. 0 switches a limit off."
       ],
       "type": {
         "kind": "struct",
@@ -13213,7 +13410,7 @@
           {
             "name": "per_wallet",
             "docs": [
-              "How many one wallet may buy, in all and in each window (`Receipt`)."
+              "How many one wallet may buy, in all and in each window (`counter.rs`)."
             ],
             "type": {
               "defined": {
@@ -13297,35 +13494,25 @@
           {
             "name": "pot_bump",
             "docs": [
-              "The bumps of its prize pot and its payment vault."
+              "The bump of its prize pot."
             ],
-            "type": "u8"
-          },
-          {
-            "name": "funds_bump",
             "type": "u8"
           },
           {
             "name": "incarnation",
             "docs": [
-              "A creation identity allocated by the persistent Project."
+              "A creation identity allocated by the persistent Project: written again as a new lottery, it",
+              "takes a new one, so its rounds are at new addresses."
             ],
             "type": "u64"
           },
           {
             "name": "revision",
             "docs": [
-              "Configuration edits within this incarnation. A purchase names the incarnation and the",
-              "revision it saw: together they fix every term but the draw date."
+              "Configuration edits within this incarnation. A round's first purchase names it, and the",
+              "round keeps a copy of the terms it saw."
             ],
             "type": "u32"
-          },
-          {
-            "name": "pending",
-            "docs": [
-              "Contributions of this round not finished yet: routed, or refunded once it is cancelled."
-            ],
-            "type": "u64"
           },
           {
             "name": "price",
@@ -13337,7 +13524,7 @@
           {
             "name": "mint",
             "docs": [
-              "The mint of the pot, the lottery's own token account at `[\"pot\", lottery]`."
+              "The mint of the pot, the lottery's own token account at `[\"pot\", lottery]`. Fixed."
             ],
             "type": "pubkey"
           },
@@ -13357,7 +13544,7 @@
           {
             "name": "places",
             "docs": [
-              "What each place wins, first place first: as many as the owner writes."
+              "What each place wins, first place first, as runs of places alike (`Place::times`)."
             ],
             "type": {
               "vec": {
@@ -13370,8 +13557,9 @@
           {
             "name": "ticket_mint",
             "docs": [
-              "When set, a ticket costs `price` of this mint and is burned, and no ticket money",
-              "reaches the pot. The default address means there is none: tickets pay into the pot."
+              "When set, a ticket costs `price` of this mint and is burned, and no ticket money reaches",
+              "the pot. The default address means there is none: tickets pay into the pot. It may change",
+              "between rounds: each round has its own account of it."
             ],
             "type": "pubkey"
           },
@@ -13385,74 +13573,22 @@
           {
             "name": "draws_at",
             "docs": [
-              "Unix time this round's draw is due. Sales stop then."
+              "Unix time the next round's draw is due. A round keeps its own copy from its first purchase."
             ],
             "type": "i64"
           },
           {
             "name": "round",
             "docs": [
-              "Counts the rounds: up by one each time a round ends."
+              "Counts the rounds: up by one each time a round is swept or cancelled. A lottery that draws",
+              "once has ended past round 0."
             ],
             "type": "u32"
           },
           {
-            "name": "status",
-            "type": {
-              "defined": {
-                "name": "Round"
-              }
-            }
-          },
-          {
-            "name": "sold",
-            "docs": [
-              "Tickets sold this round. They are numbered from 0."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "asked_first",
-            "docs": [
-              "The slot the draw was first asked in this round. A cancel counts from it, and it names the",
-              "round's ticket: every request of the round answers to it, so the first answer to land draws",
-              "the round, whichever request it answers."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "asked_slot",
-            "docs": [
-              "The slot the draw was last asked in. A re-ask counts from it."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "first_ticket",
-            "docs": [
-              "The ticket that won first place."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "paid",
-            "docs": [
-              "The places paid this round, one bit each (`bit`), a byte for every eight places."
-            ],
-            "type": "bytes"
-          },
-          {
-            "name": "pot_at_payout",
-            "docs": [
-              "What the pot held when the first place of this round was paid. The shares are of this."
-            ],
-            "type": "u64"
-          },
-          {
             "name": "gate",
             "docs": [
-              "Who may buy tickets: a player who shows a collectible that passes, or one of a list of",
-              "wallets (`rules.rs`). Written with the rest of the lottery, between rounds."
+              "Who may buy tickets: read at each purchase, so an edit applies to the running round."
             ],
             "type": {
               "option": {
@@ -13465,7 +13601,7 @@
           {
             "name": "per_wallet",
             "docs": [
-              "The most tickets one wallet holds in a round (`Receipt`). 0: no limit."
+              "The most tickets one wallet holds in a round (`counter.rs`), read at each purchase. 0: no limit."
             ],
             "type": "u32"
           },
@@ -13473,9 +13609,8 @@
             "name": "nft_ticket",
             "docs": [
               "When set, a ticket costs one NFT that passes its rule, in place of tokens (`price.rs`):",
-              "handed to the project as it is bought, then burned, given on or put in a stash when its",
-              "contribution is finished (back to its buyer when the round is cancelled). Such a lottery has no price and no",
-              "shares, and its pot is what the owner and its prizes put in."
+              "handed to the project as it is bought, then sent where its price says once the round is",
+              "swept (back to its buyer when it is cancelled). Such a lottery has no price and no shares."
             ],
             "type": {
               "option": {
@@ -13497,17 +13632,9 @@
             "name": "min_sold",
             "docs": [
               "The least tickets a round sells to be drawn: a due round that sold fewer is cancelled at its",
-              "draw, and every contribution refunded. 0: no least."
+              "draw. 0: no least."
             ],
             "type": "u64"
-          },
-          {
-            "name": "given",
-            "docs": [
-              "The places of this drawn round whose prize has been given (or found not there to give), one",
-              "bit each: no ticket money moves before every place's prize has (`PrizesFirst`)."
-            ],
-            "type": "bytes"
           }
         ]
       }
@@ -13531,8 +13658,8 @@
           {
             "name": "shares",
             "docs": [
-              "Where ticket money goes before the pot (one may be the buyer's",
-              "choice). Empty when tickets are burned."
+              "Where ticket money goes before the pot (one may be the buyer's choice). Empty when tickets",
+              "are burned."
             ],
             "type": {
               "vec": {
@@ -13545,8 +13672,8 @@
           {
             "name": "places",
             "docs": [
-              "What each place wins, first place first: a share of the pot, a roll, or both. Empty means",
-              "one winner who takes all."
+              "What each run of places wins, first place first: a share of the pot, a prize, or both. Empty",
+              "means one winner who takes all."
             ],
             "type": {
               "vec": {
@@ -13621,7 +13748,7 @@
     {
       "name": "LotteryCancelled",
       "docs": [
-        "The oracle never answered a round's draw: every contribution is refunded."
+        "The oracle never answered a round's draw, or it sold too few: every entry is refunded."
       ],
       "type": {
         "kind": "struct",
@@ -13654,111 +13781,6 @@
       }
     },
     {
-      "name": "LotteryContribution",
-      "docs": [
-        "One purchase of tickets, at `[\"contribution\", lottery, player, nonce]`: tickets",
-        "`first_ticket..end` of the lottery's current round (none outlives its round), what arrived of",
-        "their price, and who its shares pay. Its buyer pays its rent and gets it back when it is",
-        "finished, or, holding a winning ticket, once its places are paid."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "lottery",
-            "type": "pubkey"
-          },
-          {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
-            "name": "first_ticket",
-            "type": "u64"
-          },
-          {
-            "name": "end",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "done",
-            "docs": [
-              "Routed, and kept because it holds a winning ticket."
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "recipients",
-            "docs": [
-              "One for each of the lottery's shares."
-            ],
-            "type": {
-              "vec": {
-                "defined": {
-                  "name": "LotteryRecipient"
-                }
-              }
-            }
-          },
-          {
-            "name": "asset",
-            "docs": [
-              "The NFT its ticket was paid with, which the project holds until the round is drawn (then it",
-              "goes where the lottery's price says) or cancelled (then back to its buyer); none for tokens."
-            ],
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "LotteryContributionFinished",
-      "docs": [
-        "One contribution completed without needing its buyer or beneficiary to sign."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "project",
-            "type": "pubkey"
-          },
-          {
-            "name": "id",
-            "type": "u32"
-          },
-          {
-            "name": "incarnation",
-            "type": "u64"
-          },
-          {
-            "name": "round",
-            "type": "u32"
-          },
-          {
-            "name": "contribution",
-            "type": "pubkey"
-          },
-          {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "refunded",
-            "type": "bool"
-          }
-        ]
-      }
-    },
-    {
       "name": "LotteryDrawn",
       "docs": [
         "A lottery's round was drawn."
@@ -13785,8 +13807,8 @@
           {
             "name": "winning_ticket",
             "docs": [
-              "First place's ticket. The others follow at even steps (`Lottery::ticket_of_place`); each",
-              "place's winner is the buyer of the contribution that holds its ticket."
+              "First place's ticket. The others follow at even steps (`LotteryRound::ticket_of_place`); each",
+              "place's winner is the buyer of the entry that holds its ticket."
             ],
             "type": "u64"
           },
@@ -13805,7 +13827,7 @@
     {
       "name": "LotteryPaid",
       "docs": [
-        "One place of a lottery was paid its share of the pot."
+        "A winner was paid their places of one run: their part of the pot, or their token prize."
       ],
       "type": {
         "kind": "struct",
@@ -13828,6 +13850,9 @@
           },
           {
             "name": "place",
+            "docs": [
+              "The run's first place."
+            ],
             "type": "u32"
           },
           {
@@ -13842,22 +13867,44 @@
       }
     },
     {
-      "name": "LotteryRecipient",
+      "name": "LotteryPulled",
       "docs": [
-        "Only buyer-dependent destinations are stored on a contribution. Common destinations stay",
-        "in the round terms: 0 uses that rule (an unchosen share uses treasury), 1 fixes a wallet,",
-        "2 fixes an unavailable holder whose share joins the prize pot."
+        "One part of a round's entry was settled."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "kind",
-            "type": "u8"
+            "name": "project",
+            "type": "pubkey"
           },
           {
-            "name": "wallet",
+            "name": "id",
+            "type": "u32"
+          },
+          {
+            "name": "incarnation",
+            "type": "u64"
+          },
+          {
+            "name": "round",
+            "type": "u32"
+          },
+          {
+            "name": "entry",
+            "type": "u32"
+          },
+          {
+            "name": "buyer",
             "type": "pubkey"
+          },
+          {
+            "name": "part",
+            "type": {
+              "defined": {
+                "name": "Part"
+              }
+            }
           }
         ]
       }
@@ -14392,7 +14439,7 @@
               "The rows fresh items' table traits drew at the roll (`Won::Fresh`)."
             ],
             "type": {
-              "vec": "u64"
+              "vec": "u32"
             }
           },
           {
@@ -14414,7 +14461,7 @@
           {
             "name": "counted",
             "docs": [
-              "It counts against its player's limit on its box (`Receipt`), in this window. A refund",
+              "It counts against its player's limit on its box (`counter.rs`), in this window. A refund",
               "gives it back."
             ],
             "type": {
@@ -14424,10 +14471,12 @@
           {
             "name": "subject",
             "docs": [
-              "The NFT the roll is on (the default address for none), and whether the project holds it until",
-              "the order ends (its box can burn it or give it away)."
+              "The NFT the roll is on (only a box that rolls on an NFT has one), and whether the project holds",
+              "it until the order ends (its box can burn it or give it away)."
             ],
-            "type": "pubkey"
+            "type": {
+              "option": "pubkey"
+            }
           },
           {
             "name": "held",
@@ -14863,6 +14912,38 @@
       }
     },
     {
+      "name": "Part",
+      "docs": [
+        "Which part of an entry a pull settles."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Own"
+          },
+          {
+            "name": "Share",
+            "fields": [
+              "u8"
+            ]
+          },
+          {
+            "name": "Pot",
+            "fields": [
+              "u16"
+            ]
+          },
+          {
+            "name": "Prize",
+            "fields": [
+              "u16"
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "Payload",
       "docs": [
         "What a table's rows carry."
@@ -14917,8 +14998,8 @@
     {
       "name": "Place",
       "docs": [
-        "What one place wins: `bps` of the pot (basis points), and a prize for its winner (`prize.rs`):",
-        "a raffled NFT, a collectible, tokens, a roll of a box."
+        "A run of places alike: `times` places, each taking `bps` of the pot (basis points) and a prize",
+        "for its winner (`prize.rs`): a raffled NFT, a collectible, tokens, a roll of a box."
       ],
       "type": {
         "kind": "struct",
@@ -14936,6 +15017,10 @@
                 }
               }
             }
+          },
+          {
+            "name": "times",
+            "type": "u32"
           }
         ]
       }
@@ -15067,6 +15152,9 @@
             "fields": [
               "pubkey"
             ]
+          },
+          {
+            "name": "Raffled"
           }
         ]
       }
@@ -15118,7 +15206,7 @@
     {
       "name": "ProfileWritten",
       "docs": [
-        "Numbers were written on a wallet's profile (`profile.rs`): by the project's authority",
+        "Numbers were written on a wallet's profile (`sheet.rs`): by the project's authority",
         "(`collectible`), a farm's growth, or a recipe the player crafted."
       ],
       "type": {
@@ -15516,7 +15604,7 @@
           {
             "name": "per_wallet",
             "docs": [
-              "How many times one wallet may craft it, in all and in each window (`Receipt`)."
+              "How many times one wallet may craft it, in all and in each window (`counter.rs`)."
             ],
             "type": {
               "defined": {
@@ -15925,24 +16013,28 @@
       }
     },
     {
-      "name": "Round",
+      "name": "RoundClosed",
+      "docs": [
+        "A finished round that owed nothing more closed."
+      ],
       "type": {
-        "kind": "enum",
-        "variants": [
+        "kind": "struct",
+        "fields": [
           {
-            "name": "Open"
+            "name": "project",
+            "type": "pubkey"
           },
           {
-            "name": "Drawing"
+            "name": "id",
+            "type": "u32"
           },
           {
-            "name": "Drawn"
+            "name": "incarnation",
+            "type": "u64"
           },
           {
-            "name": "Ended"
-          },
-          {
-            "name": "Cancelled"
+            "name": "round",
+            "type": "u32"
           }
         ]
       }
@@ -16072,7 +16164,8 @@
     {
       "name": "ScheduleRan",
       "docs": [
-        "A schedule ran: it minted, burned or moved `amount`."
+        "A schedule ran runs `from` to `run`, counted from 1: together they minted, burned or moved",
+        "`amount`. A sealed schedule's run after its last (`from` and `run` the last) pays what arrived since."
       ],
       "type": {
         "kind": "struct",
@@ -16086,10 +16179,11 @@
             "type": "u32"
           },
           {
+            "name": "from",
+            "type": "u32"
+          },
+          {
             "name": "run",
-            "docs": [
-              "Which run this was, counted from 1."
-            ],
             "type": "u32"
           },
           {
@@ -16362,7 +16456,7 @@
           {
             "name": "Pool",
             "fields": [
-              "u8"
+              "u16"
             ]
           }
         ]
@@ -16710,11 +16804,11 @@
             "type": "u32"
           },
           {
-            "name": "contribution",
+            "name": "entry",
             "docs": [
-              "The contribution these tickets are (`LotteryContribution`)."
+              "The entry these tickets are in the round's record (`LotteryRound`)."
             ],
-            "type": "pubkey"
+            "type": "u32"
           },
           {
             "name": "received",
@@ -16802,7 +16896,7 @@
           {
             "name": "Pool",
             "fields": [
-              "u8"
+              "u16"
             ]
           },
           {
@@ -16851,7 +16945,7 @@
           {
             "name": "Pool",
             "fields": [
-              "u8"
+              "u16"
             ]
           },
           {
@@ -17315,16 +17409,6 @@
       "value": "[97, 117, 99, 116, 105, 111, 110]"
     },
     {
-      "name": "BADGE_SEED",
-      "docs": [
-        "`[\"badge\", grant, incarnation, nft]`: how many times the NFT an open grant's gate asks for",
-        "claimed it the open way. A seed of its own: a voucher's person (32 bytes its key chooses) never",
-        "names a badge's count."
-      ],
-      "type": "bytes",
-      "value": "[98, 97, 100, 103, 101]"
-    },
-    {
       "name": "BOX_SEED",
       "docs": [
         "`[\"box\", project, box id]`"
@@ -17333,29 +17417,32 @@
       "value": "[98, 111, 120]"
     },
     {
-      "name": "CODE_SEED",
+      "name": "CLAIMS_SEED",
       "docs": [
-        "`[\"code\", grant, incarnation, key]`: how many claims one voucher key signed (a promo code's)."
+        "`[\"claims\", grant, incarnation, shard]` and `[\"rounds\", grant, incarnation, shard]`: a grant's",
+        "limit records and the rounds it paid, each in `2^shard_bits` lists (`instructions/grant.rs`)."
       ],
       "type": "bytes",
-      "value": "[99, 111, 100, 101]"
+      "value": "[99, 108, 97, 105, 109, 115]"
     },
     {
       "name": "CONTEST_SEED",
       "docs": [
-        "`[\"contest\", project, id]`, its pot at `[\"pot\", contest]`, and one player's stake at",
-        "`[\"entry\", contest, player]` (a wallet backs one side, `OtherSide`)."
+        "`[\"contest\", project, id]`, its pot at `[\"pot\", contest]`, and its entries, a list with one",
+        "record a player (a wallet backs one side, `OtherSide`), at `[\"entries\", contest, incarnation,",
+        "page]` (page 0)."
       ],
       "type": "bytes",
       "value": "[99, 111, 110, 116, 101, 115, 116]"
     },
     {
-      "name": "CONTRIBUTION_SEED",
+      "name": "COUNTS_SEED",
       "docs": [
-        "`[\"contribution\", lottery, player, nonce]`: one purchase of a lottery's tickets."
+        "`[\"counts\", project, wallet]`: how many times a wallet bought from each box, crafted each recipe",
+        "and held tickets in each lottery's round that limits it (`instructions/counter.rs`)."
       ],
       "type": "bytes",
-      "value": "[99, 111, 110, 116, 114, 105, 98, 117, 116, 105, 111, 110]"
+      "value": "[99, 111, 117, 110, 116, 115]"
     },
     {
       "name": "DAY_SECONDS",
@@ -17366,9 +17453,9 @@
       "value": "86400"
     },
     {
-      "name": "ENTRY_SEED",
+      "name": "ENTRIES_SEED",
       "type": "bytes",
-      "value": "[101, 110, 116, 114, 121]"
+      "value": "[101, 110, 116, 114, 105, 101, 115]"
     },
     {
       "name": "ESCROW_LAMPORTS",
@@ -17442,14 +17529,6 @@
       "value": "[108, 105, 115, 116, 105, 110, 103]"
     },
     {
-      "name": "LOTTERY_FUNDS_SEED",
-      "docs": [
-        "Ticket consideration, kept apart from the prize pot until the round is drawn."
-      ],
-      "type": "bytes",
-      "value": "[108, 111, 116, 116, 101, 114, 121, 95, 102, 117, 110, 100, 115]"
-    },
-    {
       "name": "LOTTERY_SEED",
       "type": "bytes",
       "value": "[108, 111, 116, 116, 101, 114, 121]"
@@ -17500,12 +17579,12 @@
     {
       "name": "MAX_SEALED_RUNS",
       "docs": [
-        "The most runs a sealed schedule may have. Each call is one run, so a last run thousands of",
-        "millions of calls away would never come and its vault would keep what is left: 10,000 runs is a",
-        "run a day for over 27 years, or one an hour for over a year."
+        "The most runs a sealed schedule may have, so its last run comes within a few calls of being due",
+        "(`MAX_SCHEDULE_STEPS`) and its vault never keeps what is left: 100,000 runs is one an hour for",
+        "over 11 years."
       ],
       "type": "u32",
-      "value": "10000"
+      "value": "100000"
     },
     {
       "name": "NOTICE_SECONDS",
@@ -17531,14 +17610,6 @@
       ],
       "type": "bytes",
       "value": "[111, 114, 100, 101, 114]"
-    },
-    {
-      "name": "PERSON_SEED",
-      "docs": [
-        "`[\"person\", grant, incarnation, person_hash]`: how many times one person claimed a grant."
-      ],
-      "type": "bytes",
-      "value": "[112, 101, 114, 115, 111, 110]"
     },
     {
       "name": "PLATFORM_SEED",
@@ -17570,7 +17641,7 @@
     {
       "name": "PROFILE_SEED",
       "docs": [
-        "`[\"profile\", project, wallet]`: what the project writes about a wallet (`profile.rs`)."
+        "`[\"profile\", project, wallet]`: what the project writes about a wallet (`sheet.rs`)."
       ],
       "type": "bytes",
       "value": "[112, 114, 111, 102, 105, 108, 101]"
@@ -17584,16 +17655,6 @@
       "value": "[112, 114, 111, 106, 101, 99, 116]"
     },
     {
-      "name": "RECEIPT_SEED",
-      "docs": [
-        "`[\"receipt\", record, wallet]`: how many times a wallet used a box or recipe. Grant and lottery",
-        "receipts add their incarnation before the wallet; grants retain paid rounds and list revision",
-        "(`instructions/counter.rs`)."
-      ],
-      "type": "bytes",
-      "value": "[114, 101, 99, 101, 105, 112, 116]"
-    },
-    {
       "name": "RECIPE_SEED",
       "type": "bytes",
       "value": "[114, 101, 99, 105, 112, 101]"
@@ -17602,6 +17663,25 @@
       "name": "REWARDS_SEED",
       "type": "bytes",
       "value": "[114, 101, 119, 97, 114, 100, 115]"
+    },
+    {
+      "name": "ROUNDS_SEED",
+      "type": "bytes",
+      "value": "[114, 111, 117, 110, 100, 115]"
+    },
+    {
+      "name": "ROUND_SEED",
+      "docs": [
+        "`[\"round\", lottery, incarnation, round]`: one round of a lottery (`LotteryRound`), its token",
+        "accounts at `[\"round-tokens\", round, mint]`."
+      ],
+      "type": "bytes",
+      "value": "[114, 111, 117, 110, 100]"
+    },
+    {
+      "name": "ROUND_TOKENS_SEED",
+      "type": "bytes",
+      "value": "[114, 111, 117, 110, 100, 45, 116, 111, 107, 101, 110, 115]"
     },
     {
       "name": "SCHEDULE_SEED",

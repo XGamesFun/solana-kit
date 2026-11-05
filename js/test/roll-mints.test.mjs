@@ -168,7 +168,7 @@ t('a grant claim of a roll of a box paying in a hooked coin is refused and the r
     const order = pda.order(w.project, wallet, loot.prizeRollNonce(nonce));
     if (hooked) {
       assert.throws(() => w.chain.send(wallet, claim), /PrizeHasHook/);
-      assert.equal(w.chain.get(pda.grantReceipt(address, grant.incarnation, wallet)), null, 'the round is not spent');
+      assert.equal(w.chain.get(pda.rounds(address, grant.incarnation, loot.walletShard(grant, wallet))), null, 'the round is not spent');
       assert.equal(w.chain.get(order), null);
     } else {
       w.chain.send(wallet, claim);

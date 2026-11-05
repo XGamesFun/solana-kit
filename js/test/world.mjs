@@ -13,7 +13,7 @@ import { encodeBase58 } from '../chain/base58.js';
 import { fromBase64 } from '../chain/bytes.js';
 import { createCollectionInstruction } from '../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
-import { createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx } from '../chain/token.js';
 import { readTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
@@ -238,7 +238,10 @@ export function world({ seed = 'world', platform = true, project = true, compres
   w.upsert = (def) => {
     if (def.Item?.args.kind === 'Collectible') def = { Item: { ...def.Item, args: { collection: w.collection, ...def.Item.args } } };
     if (def.Box && !def.Box.args.currency) def = { Box: { ...def.Box, args: { ...def.Box.args, currency: w.mint } } };
-    return chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def })]);
+    // A lottery written again names its current round's record (its own, as it is now).
+    const lottery = def.Lottery ? chain.get(loot.pda.lottery(w.project, def.Lottery.id)) : null;
+    const lotteryState = lottery?.data?.length ? chain.account('Lottery', loot.pda.lottery(w.project, def.Lottery.id)) : null;
+    return chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState })]);
   };
   /** The owner opens pool `index` of `mint` and puts `amount` in it. */
   w.pool = (index, mint = w.mint, amount = 0n) => {
@@ -255,10 +258,47 @@ export function world({ seed = 'world', platform = true, project = true, compres
   /** A decoded account. */
   w.read = (name, address) => chain.account(name, address);
   w.projectState = () => w.read('Project', w.project);
+  /** Lottery `id`'s latest round with a record (its current one, or the one before, swept or cancelled and still paying
+   * out): { address, round } (`loot.decodeRound`), or null. */
+  w.round = (id) => {
+    const lottery = loot.pda.lottery(w.project, id);
+    const l = chain.account('Lottery', lottery);
+    for (const n of [l.round, l.round - 1].filter((n) => n >= 0)) {
+      const address = loot.pda.round(lottery, l.incarnation, n);
+      const held = chain.get(address);
+      if (held?.owner === loot.LOOT_PROGRAM && held.data.length) return { address, round: loot.decodeRound(held.data) };
+    }
+    return null;
+  };
+  /** Anyone moves lottery `id`'s latest round on as a keeper does: settle_round until it is swept (one place a call),
+   * then every part owed pulled (with `places`, the places' parts too), the last pull closing it. Returns the records. */
+  w.finishRound = (id, { places = true, payer = w.cranker, extra = {}, kinds = {}, items } = {}) => {
+    const out = [];
+    for (let at = w.round(id); at && at.round.status === 'Drawn'; at = w.round(id)) out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.settleRoundIx({ payer, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState(), nfts: kinds, collection: w.collection, items: typeof items === 'function' ? items() : items, ...extra })]));
+    for (let at = w.round(id); at; at = w.round(id)) {
+      const i = at.round.entries.findIndex((_, j) => loot.partsOwed(at.round, j, { places }).length);
+      if (i < 0) {
+        if (loot.roundFinished(at.round)) out.push(chain.send(payer, [loot.settleRoundIx({ payer, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState() })]));
+        break;
+      }
+      const [part] = loot.partsOwed(at.round, i, { places });
+      out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.pullIx({ payer, project: w.project, roundAddress: at.address, round: at.round, entry: i, part, projectState: w.projectState(), ticket: kinds[at.round.entries[i].nft] ?? {} })]));
+    }
+    return out;
+  };
+
+  /** Contest `id`'s entries (`loot.decodeEntries`), in the list's order, and where a player's is. */
+  w.entries = (id) => {
+    const contest = chain.account('Contest', loot.pda.contest(w.project, id));
+    return loot.decodeEntries(chain.get(loot.contestEntries(loot.pda.contest(w.project, id), contest)).data);
+  };
+  w.entryOf = (id, player) => w.entries(id).findIndex((e) => e.player === player);
+
   /** The authority mints one of `itemId` to `owner`; returns the asset. */
   w.make = (itemId, owner, attributes = []) => {
-    const asset = newAddress(random);
-    chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: w.collection, asset, item: itemId, owner, change: { Make: { attributes } } })]);
+    const itemState = chain.account('Item', loot.pda.item(w.project, itemId));
+    const [asset] = loot.madeAssets(w.project, itemId, itemState);
+    chain.send(w.authority, [loot.makeIx({ authority: w.authority, project: w.project, item: itemId, itemState, owners: [owner], attributes })]);
     return asset;
   };
 

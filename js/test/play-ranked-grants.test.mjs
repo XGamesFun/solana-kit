@@ -109,23 +109,19 @@ test('Stakers’ Draw: race rewards by rank from one grant, a draw only locked s
   const pot = await held(w, loot.pda.pot(lotteryAddress));
   assert.equal(pot, 100_000_000n + 10_000_000n, 'the seed and half a badge');
 
-  // The draw: every ticket goes back to its buyer, and the two places share the pot.
+  // The draw: every ticket goes back to its buyer, and the two places share the pot. A stranger reveals it, moves it on
+  // (its sweep), and pays each buyer what they are owed: their tickets back, and a place's part of the pot.
   const wrapped = (k) => held(w, associatedTokenAddress(k.address, NATIVE_MINT));
   const before = { alice: await wrapped(alice), bob: await wrapped(bob) };
+  const round = loot.currentRound(lotteryAddress, lottery());
   w.chain.warp(Number(lottery().draws_at));
   await k.claim((await k.claims()).find((c) => c.kind === 'reveal'));
-  while (lottery().pending > 0) await k.claim((await k.claims()).find((c) => c.kind === 'complete-draw'));
-  const back = { alice: (await wrapped(alice)) - before.alice, bob: (await wrapped(bob)) - before.bob };
-  assert.equal(back.alice, 30_000_000n, 'three 0.01 SOL tickets back');
-  assert.equal(back.bob, 20_000_000n, 'two 0.01 SOL tickets back');
-  for (;;) {
-    const c = (await k.claims()).find((x) => x.kind === 'payout');
-    if (!c) break;
-    await k.claim(c);
-  }
+  await k.claim((await k.claims()).find((c) => c.kind === 'settle-round'));
+  // The stranger pays everyone, a few pulls a transaction, so what comes back lands in each buyer's account untouched.
+  for (let c = (await k.claims()).find((x) => x.kind === 'payout'); c; c = (await k.claims()).find((x) => x.kind === 'payout')) await k.claim(c);
   const won = (await wrapped(alice)) + (await wrapped(bob)) - before.alice - before.bob - 50_000_000n;
-  assert.ok(won > 0n && won <= pot, `the winners take the pot: ${won}`);
-  assert.equal(await held(w, loot.pda.lotteryFunds(lotteryAddress)), 0n, 'no ticket money left behind');
+  assert.ok(won > 0n && won <= pot, `the tickets back, and the winners take the pot: ${won}`);
+  assert.equal(w.chain.get(round), null, 'every part pulled: the round closed, no ticket money left behind');
 
   // A week on, the 7-day lock is over: the stake no longer counts.
   await assert.rejects(a.buy('badge', { listing: (await a.shop()).find((l) => l.key === 'badge') }), /counts only while it is locked/);

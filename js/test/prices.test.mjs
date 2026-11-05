@@ -45,8 +45,7 @@ t('a project takes a second collection, and each item is minted into its own', (
   assert.deepEqual(w.projectState().collections, [w.collection, second]);
   assert.equal(w.chain.get(w.project).data.length, loot.projectBytes(2));
   w.upsert({ Item: { id: 5, args: collectible('Banner', 0, { collection: second }) } });
-  const banner = newAddress(w.random);
-  w.chain.send(w.authority, [loot.collectibleIx({ authority: w.authority, project: w.project, collection: second, asset: banner, item: 5, owner: w.player, change: { Make: { attributes: [] } } })]);
+  const banner = w.make(5, w.player);
   assert.equal(parseCoreAsset(w.chain.get(banner).data).collection, second);
   // A second project of the same owner, numbered 1, with no collection at all.
   w.chain.send(w.creator, [loot.createProjectIx({ owner: w.creator, id: 1, authority: w.authority, treasury: w.treasury })]);
@@ -86,7 +85,8 @@ t('a rolled bundle: the roll sets each prize aside, settle hands them all over a
   // The bundle all but always: a weight of 1,000,000 against 1.
   w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted, { Roll: [9] }], 1_000_000), drop([])]) } });
   const box = w.read('LootBox', pda.box(w.project, 1));
-  assert.equal(loot.orderEscrow(box), loot.ESCROW_LAMPORTS);
+  // A unit for the collectible, and one for the coin it may pay (the player's account of it).
+  assert.equal(loot.orderEscrow(box), 2n * loot.ESCROW_LAMPORTS);
   const r = w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box, nonce: 1n })]);
   assert.equal(r.answers.length, 1);
   const orderAddress = pda.order(w.project, w.player, 1n);
@@ -154,29 +154,26 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   const rule = { of: { Collection: [collection] }, key: '', test: 'Any' };
   w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, nft_ticket: { rule, then: 'Burn' } } } });
   const lottery = w.read('Lottery', pda.lottery(w.project, 1));
-  const bought = w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, count: 1n, nonce: 1n, nft: { asset: nfts[3], ...kind } })]);
+  const bought = w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, count: 1n, nft: { asset: nfts[3], ...kind } })]);
   assert.equal(bought.receipts.find((x) => x.name === 'TicketsBought').data.asset, nfts[3]);
   assert.equal(ownerOf(w, nfts[3]), w.project, 'held until the draw');
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1 })]);
-  const contributionAddress = pda.contribution(pda.lottery(w.project, 1), w.player, 1n);
-  const contribution = w.read('LotteryContribution', contributionAddress);
-  w.chain.send(w.cranker, [computeUnitLimit(400_000), loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id: 1, lottery: w.read('Lottery', pda.lottery(w.project, 1)), contributionAddress, contribution, ticket: kind })]);
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  w.finishRound(1, { kinds: { [nfts[3]]: kind } });
   assert.ok(w.chain.get(nfts[3]).data.length <= 1, 'drawn, the ticket burned it');
 
   // A contest of NFTs: the winner takes its own back and the loser's.
   const [a, b] = [mint(w.player), mint(w.cranker)];
   const now = w.chain.now();
   const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule };
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 1, mint: w.mint, args })]);
+  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args })]);
   let contest = w.read('Contest', pda.contest(w.project, 1));
   w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id: 1, contest, side: 0, nft: { asset: a, ...kind } })]);
   w.chain.send(w.cranker, [loot.enterIx({ player: w.cranker, project: w.project, id: 1, contest, side: 1, nft: { asset: b, ...kind } })]);
   w.chain.warp(now + 150);
   w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, 1)), side: 0 })]);
   contest = w.read('Contest', pda.contest(w.project, 1));
-  const entry = (player) => w.read('Entry', pda.entry(pda.contest(w.project, 1), player));
-  w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, id: 1, contest, player: w.player, side: 0, entry: entry(w.player, 0), own: kind, taking: { player: w.cranker, side: 1, asset: b, kind } })]);
+  w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player, nfts: [w.entryOf(1, w.player), w.entryOf(1, w.cranker)], kinds: { [a]: kind, [b]: kind } })]);
   assert.deepEqual([ownerOf(w, a), ownerOf(w, b)], [w.player, w.player]);
 
   // An auction whose bids are NFTs: a bundle of two tops one of one, which goes back.

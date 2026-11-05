@@ -102,7 +102,7 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   const now = w.chain.now();
   w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
   w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(now + 3600), gate: null, nft_ticket: { rule, then: { Stash: [3] } } } } });
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, id: 1, mint: w.mint, args: { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule } })]);
+  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args: { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule } })]);
   w.upsert({ Box: { id: 9, args: boxArgs(0n, [drop([{ Item: [2] }])], { active: false }) } });
   const lot = { lot: { Roll: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
   w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
@@ -122,7 +122,7 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   await p.app.buyTickets('raffle', 1, { nft: ticket, listing: (await p.app.lotteries()).find((l) => l.key === 'raffle') });
   assert.equal(ownerOf(w, ticket), w.project, 'held until the draw');
   assert.equal(w.chain.get(pda.stash(w.project, 3)), null);
-  assert.equal(w.read('Lottery', pda.lottery(w.project, 1)).sold, 1n);
+  assert.equal(w.round(1).round.sold, 1n);
 
   // A contest of NFTs: the winner's claim takes its own back and the loser's.
   const [mine, theirs] = [mint(me), mint(rival)];
@@ -131,12 +131,12 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   assert.deepEqual([ownerOf(w, mine), ownerOf(w, theirs)], [w.project, w.project]);
   w.chain.warp(now + 150);
   w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, 1)), side: 0 })]);
-  assert.deepEqual((await q.app.claims()).filter((c) => c.kind === 'contest'), [], 'the loser waits for the winner');
+  // A loser sends nothing: the winner's claim takes its own back and picks the loser's, which closes the contest.
+  assert.deepEqual((await q.app.claims()).filter((c) => c.kind === 'contest'), [], 'the loser has nothing to claim');
   const [win] = (await p.app.claims()).filter((c) => c.kind === 'contest');
   await p.app.claim(win);
   assert.deepEqual([ownerOf(w, mine), ownerOf(w, theirs)], [me, me]);
-  const [closing] = (await q.app.claims()).filter((c) => c.kind === 'contest');
-  await q.app.claim(closing);
+  assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'closed');
 
   // An auction of NFT bids: two top one, which goes back at once; the winner takes the lot.
   const [c, d, e] = [mint(me), mint(rival), mint(rival)];

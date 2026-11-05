@@ -187,6 +187,8 @@ export function prizeArgs(p, m) {
   if (line.gives === 'item') return { Item: [m.item.get(line.item)?.id ?? 0] };
   // An NFT a lottery's place holds in the lottery's own stash (a raffle), or one of a project stash.
   if (line.gives === 'nft' && line.held) return { Held: [line.nft] };
+  // An NFT drawn at random from the lottery's own stash (a raffle of many NFTs).
+  if (line.gives === 'raffled') return 'Raffled';
   if (line.gives === 'nft') return { Nft: { stash: m.stash.get(line.stash)?.id ?? 0, nft: line.nft } };
   if (line.gives === 'roll') return { Roll: [m.box.get(line.box)?.id ?? 0] };
   const pool = prizePool(line);
@@ -219,7 +221,8 @@ export function lotteryArgs(l, m) {
     mint: `@mint:${potKey}`,
     shares: shares(lotterySplit(l), m),
     // A place takes a share of the pot, a prize for its winner, or both.
-    places: (l.places ?? []).map(placeOf).map((p) => ({ bps: Math.round(p.percent * 100), prize: prizeOrNull(p.prize, m) })),
+    // A run of `times` places alike: "places 2 to 201 each take 1%" is one.
+    places: (l.places ?? []).map(placeOf).map((p) => ({ bps: Math.round(p.percent * 100), prize: prizeOrNull(p.prize, m), times: p.times })),
     ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : '11111111111111111111111111111111',
     every: BigInt(every),
     draws_at: BigInt(l.firstDraw ? toTime(l.firstDraw, m.now) : m.now + every),
@@ -260,8 +263,10 @@ export function contestArgs(c, m, at = m.now) {
     prize: prizeOrNull(c.prize, m),
     // A token prize set aside whole at the decision and split among the winners by what each put in.
     prize_split: Boolean(c.prize?.split),
-    // Each entry stakes one NFT that passes this rule, and the NFTs are the pot.
+    // Each entry stakes one NFT that passes this rule, and the NFTs are the pot: each winner shares the losers', at most
+    // `losersEach` of them (none: no cap).
     nft: c.stakeNft ? ruleOf(c.stakeNft, m) : null,
+    cap: c.stakeNft && c.losersEach ? c.losersEach : null,
   };
 }
 
@@ -351,6 +356,8 @@ export function grantArgs(g, m) {
     },
     active: g.active !== false,
     gate: gateOf(g.gate, m),
+    // Its records in 2^bits lists, the fewest that keep each under ~100,000 over its life (wallets × rounds).
+    shard_bits: loot.shardBitsFor(g.wallets ?? list.length ?? 0, g.rounds ?? 1),
   };
 }
 
@@ -509,8 +516,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   const record = (part, def, says, kind, what, options = () => ({})) => {
     const [variant] = Object.keys(def);
     const bytes = recordBytesOf(kind, def[variant]);
-    // A lottery's first write opens its pot: a token account as well as the record.
-    const pot = kind === 'Lottery' ? [{ what: `${what}’s pot`, bytes: 165 }, { what: `${what}’s ticket escrow`, bytes: 165 }] : def.Schedule?.args.action.from.Vest ? [{ what: `${what}’s sealed vault`, bytes: 165 }] : [];
+    // A lottery's first write opens its pot: a token account as well as the record (each round holds its own money).
+    const pot = kind === 'Lottery' ? [{ what: `${what}’s pot`, bytes: 165 }] : def.Schedule?.args.action.from.Vest ? [{ what: `${what}’s sealed vault`, bytes: 165 }] : [];
     add({ id: `${part}:${kind}`, part, says, creates: [{ what, bytes }, ...pot], build: (ctx) => [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), ...options(ctx) })] });
   };
   // Each table, a batch of rows a transaction (`TABLE_BATCH_BYTES` of rows at most), sealed with its last batch.
@@ -575,18 +582,20 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     });
   }
   for (const l of m.lotteries) {
-    // A raffle's NFT goes into the lottery's own stash first: the lottery is written naming an NFT already there.
-    for (const p of (l.places ?? []).map(placeOf).filter((p) => p.prize?.held)) {
-      const id = `stash:lottery-${l.key}:${p.prize.nft}`;
-      if ((live?.landed ?? []).includes(id) || live?.published?.lotteries?.some((x) => x.key === l.key)) continue;
+    // A raffle's NFTs go into the lottery's own stash first, several a call: the lottery is written naming NFTs already
+    // there, or drawing from as many as its places.
+    const raffled = [...(l.places ?? []).map(placeOf).filter((p) => p.prize?.held).map((p) => ({ nft: p.prize.nft, collection: p.prize.collection })), ...(l.nfts ?? []).map((n) => (typeof n === 'string' ? { nft: n } : n))];
+    const opened = live?.published?.lotteries?.some((x) => x.key === l.key);
+    groupsOf(raffled.filter((n) => !(live?.landed ?? []).includes(`stash:lottery-${l.key}:${n.nft}`)), STASH_GROUP).forEach((group, i) => {
+      if (opened) return;
       add({
-        id,
+        id: `stash:lottery-${l.key}:${group.map((n) => n.nft).join(',')}`,
         part: `lottery:${l.key}`,
-        says: `Put your NFT ${p.prize.nft} in the lottery “${l.name}”: it stays there until its winner takes it, and nobody, you included, can take it out before`,
-        creates: [{ what: `the lottery “${l.name}”’s stash`, bytes: stashBytes(1) }],
-        build: (ctx) => [loot.stashIx({ signer: ctx.owner, project: project(ctx), lottery: l.id, asset: p.prize.nft, collection: p.prize.collection ?? ctx.collection })],
+        says: `Put your NFT${group.length === 1 ? ` ${group[0].nft}` : `s ${group.map((n) => n.nft).join(', ')}`} in the lottery “${l.name}”: ${group.length === 1 ? 'it stays' : 'they stay'} there until ${group.length === 1 ? 'its winner takes it' : 'their winners take them'}, and nobody, you included, can take ${group.length === 1 ? 'it' : 'them'} out before`,
+        creates: i === 0 ? [{ what: `the lottery “${l.name}”’s stash`, bytes: stashBytes(raffled.length) }] : [],
+        build: (ctx) => [loot.stashIx({ signer: ctx.owner, project: project(ctx), lottery: l.id, asset: group[0].nft, collection: group[0].collection ?? ctx.collection, more: group.slice(1).map((n) => ({ asset: n.nft, collection: n.collection ?? ctx.collection })) })],
       });
-    }
+    });
     record(`lottery:${l.key}`, { Lottery: { id: l.id, args: lotteryArgs(l, m) } }, `Start the ${l.raffle ? 'raffle' : 'lottery'} “${l.name}”`, 'Lottery', `the lottery “${l.name}”`);
   }
   for (const g of m.grants) record(`grant:${g.key}`, { Grant: { id: g.id, args: grantArgs(g, m) } }, `Write the grant “${g.name}”`, 'Grant', `the grant “${g.name}”`);
@@ -620,30 +629,34 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   // What is in a live stash already: what its last publish listed, and the steps of this one that landed.
   const stashed = new Set([
     ...(live?.published?.stashes ?? []).flatMap((s) => stashNfts(s).map((n) => `${s.key}:${n.asset}`)),
-    ...(live?.landed ?? []).filter((id) => id.startsWith('stash:')).map((id) => id.slice(6)),
+    // A step puts in a group of NFTs: `stash:<key>:<asset>,<asset>…`.
+    ...(live?.landed ?? []).filter((id) => id.startsWith('stash:')).flatMap((id) => {
+      const [key, assets = ''] = id.slice(6).split(/:(.*)/s);
+      return assets.split(',').map((asset) => `${key}:${asset}`);
+    }),
   ]);
   for (const s of m.stashes) {
     const nfts = stashNfts(s);
     const putting = nfts.filter((n) => n.kind !== 'compressed' && !stashed.has(`${s.key}:${n.asset}`));
     // The first NFT this plan puts in names the stash's rent: all of it for a new stash, what it grows by for one live already.
     const fresh = !nfts.some((n) => stashed.has(`${s.key}:${n.asset}`));
-    for (const [i, n] of putting.entries()) {
+    // Several NFTs a call, each with its weight: Core NFTs a group of `STASH_GROUP`, Token Metadata ones two (each takes
+    // more accounts).
+    const kindOf = (n) => ({ asset: n.asset, weight: n.weight, collection: n.kind === 'core' ? n.collection : undefined, tokenMetadata: n.kind === 'token-metadata' ? { programmable: n.programmable, ruleSet: n.ruleSet ?? undefined } : undefined });
+    const groups = [...groupsOf(putting.filter((n) => n.kind === 'core'), STASH_GROUP), ...groupsOf(putting.filter((n) => n.kind !== 'core'), 2)];
+    for (const [i, group] of groups.entries()) {
       add({
-        id: `stash:${s.key}:${n.asset}`,
+        id: `stash:${s.key}:${group.map((n) => n.asset).join(',')}`,
         part: `stash:${s.key}`,
-        says: `Put your NFT ${n.asset} in the stash “${s.name}”: the project holds it until a prize or a roll gives it away`,
+        says: `Put your NFT${group.length === 1 ? ` ${group[0].asset}` : `s ${group.map((n) => n.asset).join(', ')}`} in the stash “${s.name}”: the project holds ${group.length === 1 ? 'it' : 'them'} until a prize or a roll gives ${group.length === 1 ? 'it' : 'them'} away`,
         creates: i > 0 ? [] : fresh ? [{ what: `the stash “${s.name}”, with ${putting.length} NFT${putting.length === 1 ? '' : 's'}`, bytes: stashBytes(putting.length) }] : [{ what: `room for ${putting.length} more NFT${putting.length === 1 ? '' : 's'} in “${s.name}”`, bytes: 36 * putting.length, grows: true }],
-        build: (ctx) => [
-          loot.stashIx({
-            signer: ctx.owner,
-            project: project(ctx),
-            id: s.id,
-            asset: n.asset,
-            weight: n.weight,
-            collection: n.kind === 'core' ? n.collection ?? ctx.collection : undefined,
-            tokenMetadata: n.kind === 'token-metadata' ? { programmable: n.programmable, ruleSet: n.ruleSet ?? undefined } : undefined,
-          }),
-        ],
+        build: (ctx) => {
+          const [first, ...more] = group.map((n) => {
+            const k = kindOf(n);
+            return { ...k, collection: n.kind === 'core' ? k.collection ?? ctx.collection : undefined };
+          });
+          return [loot.stashIx({ signer: ctx.owner, project: project(ctx), id: s.id, ...first, more })];
+        },
       });
     }
   }
@@ -725,6 +738,11 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   return { steps, model: m };
 }
 
+/** How many Core NFTs one `stash` call puts in (`Piece::another`: three accounts each after the first). */
+const STASH_GROUP = 6;
+/** `list` in groups of `n`. */
+const groupsOf = (list, n) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
+
 /** A stash's bytes with `n` NFTs: a table of NFTs (`table.rs`): its 51-byte header, a total for each group of 4,096
  * rows and each block of 64, and 36 bytes an NFT (its weight and its address). */
 export const stashBytes = (n) => (n ? loot.tableRowAt(36, n - 1) + 36 : 51);
@@ -739,18 +757,17 @@ export const recordBytesOf = (kind, body) => {
     LootBox: () => ({ project: NOBODY, box_id: 0, ...placeholders(args), version: 0 }),
     Recipe: () => ({ project: NOBODY, id: 0, version: 0, ...placeholders(args) }),
     Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),
-    // Its places as written, and which are paid and given: a bit a place (`lottery::bits_for`).
+    // Its terms and its round number: each round keeps the rest in a record of its own.
     Lottery: () => {
-      const places = (args.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, ...p } : { bps: p, prize: null }));
-      const bits = new Uint8Array(Math.ceil(places.length / 8));
-      return { project: NOBODY, id: 0, pot_bump: 0, funds_bump: 0, incarnation: 0n, revision: 0, pending: 0, ...placeholders(args), places, round: 0, status: 'Open', sold: 0n, asked_first: 0n, asked_slot: 0n, first_ticket: 0n, paid: bits, pot_at_payout: 0n, given: bits };
+      const places = (args.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 }));
+      return { project: NOBODY, id: 0, pot_bump: 0, incarnation: 0n, revision: 0, ...placeholders(args), places, round: 0 };
     },
     Grant: () => ({ project: NOBODY, id: 0, incarnation: 0n, ...placeholders(args), counters: { claimed: 0, today: 0, day: 0n } }),
   }[kind];
   return encodedSize(kind, base());
 };
 /** Exact initial contest record size for its configured shares, gate, sides and deciders. */
-export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, entries: 0, unclaimed: 0n, sides: Array(contest.sides).fill(0n), losers: 0 });
+export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, owed: 0n, unclaimed: 0n, sides: Array(contest.sides).fill(0n), share: 0, extras: 0, picks: 0 });
 /** Args with "@mint:" names standing in as addresses, for sizing. */
 const placeholders = (args) => resolve(args, { project: placeholderKey('project'), collection: placeholderKey('new:collection'), tree: placeholderKey('new:tree'), treasury: placeholderKey('treasury'), mints: new Proxy({}, { get: (_, k) => placeholderKey(`mint/${String(k)}`) }) });
 /** The token program of each Token-2022 mint a context names (the program's account lists name it). */
@@ -911,7 +928,7 @@ export function playSteps(economy) {
   }
   for (const r of m.recipes) add(`recipe:${r.key}`, 'craft', 'player', `craft “${r.name}”`);
   for (const s of m.schedules) add(`schedule:${s.key}`, 'run_schedule', 'anyone', `run “${s.name ?? s.key}” when it is due`);
-  for (const l of m.lotteries) add(`lottery:${l.key}`, 'buy_tickets', 'player', 'buy tickets'), add(`lottery:${l.key}`, 'draw_lottery', 'anyone', 'ask for the draw when it is due'), add(`lottery:${l.key}`, 'finish_lottery_contribution', 'anyone', 'finish each purchase, then pay each winner');
+  for (const l of m.lotteries) add(`lottery:${l.key}`, 'buy_tickets', 'player', 'buy tickets'), add(`lottery:${l.key}`, 'draw_lottery', 'anyone', 'ask for the draw when it is due'), add(`lottery:${l.key}`, 'settle_round', 'anyone', 'give the places’ prizes, then sweep the round'), add(`lottery:${l.key}`, 'pull', 'anyone', 'pay one entry its part: a refund, a place, a recipient’s share');
   for (const f of m.farms) {
     if (f.stakes === 'collectibles') add(`farm:${f.key}`, 'stake_nft', 'player', 'stake a collectible'), add(`farm:${f.key}`, 'unstake_nft', 'player', 'take it out once its lock has run');
     else add(`farm:${f.key}`, 'stake_tokens', 'player', 'stake'), add(`farm:${f.key}`, 'unstake_tokens', 'player', 'unstake or collect'), add(`farm:${f.key}`, 'stake_nft', 'player', 'put a collectible on as a booster');

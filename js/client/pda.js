@@ -27,7 +27,6 @@ const i64 = (n) => intLE(n, 8);
 /** The PDA of these seeds under the loot program, with its bump. */
 export const lootAddress = (seeds, program = LOOT_PROGRAM) => findProgramAddress(seeds, program);
 const at = (...seeds) => lootAddress(seeds)[0];
-const keyReceipt = (grant, incarnation, voucherKey) => at(seed('code'), key(grant), u64(incarnation), key(voucherKey));
 
 export const pda = {
   platform: () => at(seed('platform')),
@@ -36,7 +35,7 @@ export const pda = {
   project: (creator, id = 0) => at(seed('project'), key(creator), u64(id)),
   /** The project's fee box: where the platform's fees on its transactions wait. */
   fees: (project) => at(seed('fees'), key(project)),
-  pool: (project, index) => at(seed('pool'), key(project), u8(index)),
+  pool: (project, index) => at(seed('pool'), key(project), u16(index)),
   item: (project, id) => at(seed('item'), key(project), u32(id)),
   box: (project, id) => at(seed('box'), key(project), u32(id)),
   /** NFTs the project holds to give away as prizes: a box entry of a stash gives one of them at random. */
@@ -59,12 +58,12 @@ export const pda = {
   itemAsset: (item, serial) => at(seed('asset'), key(item), u32(serial)),
   /** A contest's pot, or a lottery's: `["pot", contest or lottery]`. */
   pot: (record) => at(seed('pot'), key(record)),
-  lotteryFunds: (lottery) => at(seed('lottery_funds'), key(lottery)),
-  lotteryReceipt: (lottery, incarnation, wallet) => at(seed('receipt'), key(lottery), u64(incarnation), key(wallet)),
-  /** One purchase of a lottery's tickets, at a nonce of its buyer's. */
-  contribution: (lottery, player, nonce) => at(seed('contribution'), key(lottery), key(player), u64(nonce)),
-  /** A wallet's entry in a contest: one, on one side (another side is `OtherSide`). */
-  entry: (contest, player) => at(seed('entry'), key(contest), key(player)),
+  /** One round of a lottery: its record, opened by the round's first purchase (`["round", lottery, incarnation, round]`). */
+  round: (lottery, incarnation, round) => at(seed('round'), key(lottery), u64(incarnation), u32(round)),
+  /** A lottery round's own token account of `mint`, which the round's record owns. */
+  roundTokens: (round, mint) => at(seed('round-tokens'), key(round), key(mint)),
+  /** A contest's list of entries, one record a player (page 0). */
+  entries: (contest, incarnation, page = 0) => at(seed('entries'), key(contest), u64(incarnation), u8(page)),
   /** A hold names its NFT and its end (Unix seconds): a release sent late never finds a later hold of the NFT. */
   hold: (asset, freeAt) => at(seed('hold'), key(asset), i64(freeAt)),
   /** An offer: an id is its maker's own. Its money waits in the project's vault for its mint (`vault`). */
@@ -91,14 +90,13 @@ export const pda = {
   treeConfig: (tree) => findProgramAddress([key(tree)], BUBBLEGUM_PROGRAM)[0],
   /** A compressed NFT's asset id: Bubblegum's `["asset", tree, nonce]`, `nonce` the count minted before it. */
   compressedAsset: (tree, nonce) => findProgramAddress([seed('asset'), key(tree), u64(nonce)], BUBBLEGUM_PROGRAM)[0],
-  /** A wallet's counter on a box or recipe. Grants and lotteries also name their incarnation. */
-  receipt: (record, wallet) => at(seed('receipt'), key(record), key(wallet)),
-  grantReceipt: (grant, incarnation, wallet) => at(seed('receipt'), key(grant), u64(incarnation), key(wallet)),
-  person: (grant, incarnation, personHash) => at(seed('person'), key(grant), u64(incarnation), Uint8Array.from(personHash)),
-  /** How many times an NFT shown claimed an open grant its gate asks for one of: an address of its own, never a person's. */
-  badge: (grant, incarnation, nft) => at(seed('badge'), key(grant), u64(incarnation), key(nft)),
-  /** A voucher key's counter on a grant (a promo code's). */
-  code: keyReceipt,
+  /** A wallet's counts in a project: how many times it bought from each box, crafted each recipe or held tickets in
+   * a lottery's round that limits it (`decodeCounts`). */
+  counts: (project, wallet) => at(seed('counts'), key(project), key(wallet)),
+  /** Shard `shard` of a grant's limit records: what each wallet, person, badge and voucher key claimed. */
+  claims: (grant, incarnation, shard) => at(seed('claims'), key(grant), u64(incarnation), u8(shard)),
+  /** Shard `shard` of the rounds a grant paid. */
+  rounds: (grant, incarnation, shard) => at(seed('rounds'), key(grant), u64(incarnation), u8(shard)),
   /** The program's identity, which signs its requests to the oracle. */
   identity: () => at(seed('identity')),
   /** The identity the oracle signs callbacks with: the VRF program's PDA for this program. */

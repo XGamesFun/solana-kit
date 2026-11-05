@@ -60,20 +60,21 @@ test('an NFT lottery ticket whose price gives it to the fee box goes back to its
   const address = pda.lottery(w.project, id);
   const rule = { of: { Collection: [club] }, key: '', test: 'Any' };
   w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, shares: [], places: [10_000], ticket_mint: NOBODY, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: { Give: [feeBox] } }, min_sold: 1n } } });
-  w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery: w.read('Lottery', address), count: 1n, nonce: 1n, nft: { asset: ticket, ...tm } })]);
+  const lottery = w.read('Lottery', address);
+  w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n, nft: { asset: ticket, ...tm } })]);
   assert.equal(w.chain.tokens(loot.ata(w.project, ticket)), 1n, 'the project holds the ticket');
   w.chain.warp(w.chain.now() + DAY);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id })]);
-  assert.equal(w.read('Lottery', address).status, 'Drawn');
-  const contributionAddress = pda.contribution(address, w.player, 1n);
-  // Built as before (the fee box's token account), the step fails and moves nothing.
-  const finish = (handBack) => [computeUnitLimit(1_400_000), loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id, lottery: w.read('Lottery', address), contributionAddress, contribution: w.read('LotteryContribution', contributionAddress), treasury: w.treasury, ticket: tm, handBack })];
-  assert.equal(loot.lotteryStep(w.read('Lottery', address), w.read('LotteryContribution', contributionAddress)), 'finish');
-  assert.throws(() => w.chain.send(w.cranker, finish(false)));
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]);
+  const { address: round, round: r } = w.round(id);
+  assert.equal(r.status, 'Drawn');
+  assert.deepEqual(loot.partsOwed(r, 0, { places: false }), ['Own'], 'its NFT ticket is owed where its price sends it, from the draw');
+  // Built as before (the fee box's token account), the pull fails and moves nothing.
+  const pull = (handBack) => [computeUnitLimit(1_400_000), loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: round, round: r, entry: 0, part: 'Own', projectState: w.projectState(), ticket: tm, handBack })];
+  assert.throws(() => w.chain.send(w.cranker, pull(false)));
   assert.equal(w.chain.tokens(loot.ata(w.project, ticket)), 1n);
   // js/play's claim reads the fee box's owner and passes the buyer's token account.
   const player = app(w, { lotteries: [{ key: 'raffle', name: 'Raffle', id }] });
-  const step = (await player.claims()).find((c) => c.kind === 'complete-draw');
+  const step = (await player.claims()).find((c) => c.kind === 'pull');
   assert.ok(step);
   await player.claim(step);
   assert.equal(w.chain.tokens(loot.ata(w.player, ticket)), 1n, 'the ticket is back with its buyer');

@@ -27,7 +27,7 @@ const spoil = (w, who, mint, to) => w.chain.send(who, [
   setAuthorityIx({ account: loot.ata(who, mint), current: who, kind: 2, newAuthority: to }),
 ]);
 
-test('a cancelled NFT-ticket lottery is held by a buyer who spoiled their account, until the ticket goes into a fresh one', { skip }, async () => {
+test('a cancelled NFT-ticket lottery waits on a buyer who spoiled their account only for that ticket, which goes into a fresh one', { skip }, async () => {
   const { w, maker, club } = setup('handout-lottery');
   const [a, b] = [w.who(), w.who()];
   const [ta, tb] = [nftOf(w, maker, a, club), nftOf(w, maker, b, club)];
@@ -36,46 +36,43 @@ test('a cancelled NFT-ticket lottery is held by a buyer who spoiled their accoun
   const rule = { of: { Collection: [club] }, key: '', test: 'Any' };
   w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: 'Burn' }, min_sold: 3n } } });
   const tm = { tokenMetadata: { programmable: false } };
-  const buy = (who, asset, nonce) => w.chain.send(who, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: who, project: w.project, id, lottery: w.read('Lottery', address), count: 1n, nonce, nft: { asset, ...tm } })]);
-  buy(a, ta, 1n);
-  buy(b, tb, 1n);
+  const buy = (who, asset) => w.chain.send(who, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: who, project: w.project, id, lottery: w.read('Lottery', address), round: w.round(id)?.round ?? null, count: 1n, nft: { asset, ...tm } })]);
+  // B buys first: B opens the round and fronts its header, back once everyone is paid.
+  buy(b, tb);
+  buy(a, ta);
   assert.equal(w.chain.tokens(loot.ata(w.project, ta)), 1n, 'the project holds the ticket');
   // A hands their (empty) account of the ticket to a key nobody uses.
   const z = newAddress(w.random);
   spoil(w, a, ta, z);
   assert.equal(ownerOf(w, loot.ata(a, ta)), z);
   w.chain.warp(w.chain.now() + DAY);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id })]);
-  let lottery = w.read('Lottery', address);
-  assert.equal(lottery.status, 'Cancelled', 'two tickets of the least three: cancelled');
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery: w.read('Lottery', address) })]);
+  const { address: key, round: r } = w.round(id);
+  assert.equal(r.status, 'Cancelled', 'two tickets of the least three: cancelled');
+  assert.equal(w.read('Lottery', address).round, 1, 'the next round opens at once');
 
-  const contribution = (who) => loot.pda.contribution(address, who, 1n);
-  const finish = (who, ticket = tm) => loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id, lottery: w.read('Lottery', address), contributionAddress: contribution(who), contribution: w.read('LotteryContribution', contribution(who)), ticket });
-  w.chain.send(w.cranker, [computeUnitLimit(1_400_000), finish(b)]);
+  const pull = (who) => loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: w.round(id).round, entry: r.entries.findIndex((e) => e.buyer === who), part: 'Own', projectState: w.projectState(), ticket: tm });
+  w.chain.send(w.cranker, [computeUnitLimit(1_400_000), pull(b)]);
   assert.equal(w.chain.tokens(loot.ata(b, tb)), 1n, 'B\'s ticket is home');
 
-  // With the standard accounts (A's associated account), Token Metadata refuses the hand-out: the round stays open.
-  assert.throws(() => w.chain.send(w.cranker, [computeUnitLimit(1_400_000), finish(a)]), (e) => (e.logs ?? []).some((l) => l.includes(TM)));
-  lottery = w.read('Lottery', address);
-  assert.deepEqual([lottery.status, Number(lottery.pending)], ['Cancelled', 1], 'nothing pending reaches 0: the next round never opens');
+  // With the standard accounts (A's associated account), Token Metadata refuses the hand-out: only A's part waits.
+  assert.throws(() => w.chain.send(w.cranker, [computeUnitLimit(1_400_000), pull(a)]), (e) => (e.logs ?? []).some((l) => l.includes(TM)));
   const other = w.who();
   const t2 = nftOf(w, maker, other, club);
-  assert.throws(() => buy(other, t2, 1n), 'nobody buys into the next round meanwhile');
+  buy(other, t2);
+  assert.equal(w.round(id).round.sold, 1n, 'the next round sells meanwhile');
 
-  // The client: anyone returning the ticket (here B, through the player module) finds A's account can't take it, and
-  // opens a fresh one of A's in the same transaction, which the NFT goes into.
+  // The client: the round's opener (B, through the player module) pays everyone, finds A's account can't take the
+  // ticket, and opens a fresh one of A's in the same transaction, which the NFT goes into; the round then closes.
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, lotteries: [{ key: 'raffle', name: 'Raffle', id }] };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: b, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   const claims = await app.claims();
-  const refund = claims.find((c) => c.kind === 'ticket-refund' && c.contribution === contribution(a));
-  assert.ok(refund, claims.map((c) => c.kind).join());
-  await app.claim(refund);
+  const payout = claims.find((c) => c.kind === 'payout' && c.round === key);
+  assert.ok(payout, claims.map((c) => c.kind).join());
+  await app.claim(payout);
   const fresh = loot.freshNftAccount({ payer: b, holder: a, mint: ta }).address;
   assert.deepEqual([w.chain.tokens(fresh), ownerOf(w, fresh)], [1n, a], 'A\'s ticket is in a fresh account A owns');
-  lottery = w.read('Lottery', address);
-  assert.deepEqual([lottery.status, Number(lottery.pending)], ['Open', 0], 'the next round opens');
-  buy(other, t2, 2n);
-  assert.equal(w.read('Lottery', address).sold, 1n);
+  assert.equal(w.chain.get(key), null, 'the last pull closed the cancelled round');
 });
 
 test('a topped NFT bid goes back into a fresh account when its bidder\'s own can\'t take it', { skip }, async () => {

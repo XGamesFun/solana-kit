@@ -23,7 +23,7 @@ const LOOT_BY_DISC = new Map(IDL.instructions.map((i) => [Buffer.from(i.discrimi
  * What a player may sign, and what an owner may sign while setting an economy up (`open_auction` hands the seller's own
  * collectible to the game, inside the loot program, for an auction of it).
  */
-const PLAYER_LOOT = new Set(['pay', 'pay_nft', 'buy', 'open_box', 'settle', 'refund', 'buy_tickets', 'draw_lottery', 'finish_lottery_contribution', 'stake_tokens', 'unstake_tokens', 'stake_nft', 'unstake_nft', 'harvest', 'refresh_seat', 'craft', 'hold', 'release', 'enter', 'claim', 'claim_grant', 'run_schedule', 'open_auction', 'bid', 'end_auction',
+const PLAYER_LOOT = new Set(['pay', 'pay_nft', 'buy', 'open_box', 'settle', 'refund', 'buy_tickets', 'draw_lottery', 'settle_round', 'pull', 'stake_tokens', 'unstake_tokens', 'stake_nft', 'unstake_nft', 'harvest', 'refresh_seat', 'craft', 'hold', 'release', 'enter', 'claim', 'claim_grant', 'run_schedule', 'open_auction', 'bid', 'end_auction',
   // What the program lets anyone send: asking the oracle for a waiting roll, cancelling an unanswered draw, proving a
   // compressed NFT or its traits, closing a stale leaf record.
   'ask_roll', 'cancel_lottery', 'prove_leaf', 'close_leaf', 'prove_traits']);

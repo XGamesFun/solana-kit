@@ -16,7 +16,7 @@ test('js/client/idl matches the program build', { skip: built && existsSync(buil
 
 test('one builder for every instruction', () => {
   const builders = {
-    bid: 'bidIx', buy_tickets: 'buyTicketsIx', callback_lottery: 'callbackLotteryIx', cancel_lottery: 'cancelLotteryIx', finish_lottery_contribution: 'finishLotteryContributionIx',
+    bid: 'bidIx', buy_tickets: 'buyTicketsIx', callback_lottery: 'callbackLotteryIx', cancel_lottery: 'cancelLotteryIx', settle_round: 'settleRoundIx', pull: 'pullIx', close_shard: 'closeShardIx',
     callback_random: 'callbackRandomIx', callback_roll: 'callbackRollIx', claim: 'claimIx', claim_grant: 'claimGrantIx',
     collect_fees: 'collectFeesIx', collectible: 'collectibleIx', craft: 'craftIx',
     create_project: 'createProjectIx', buy: 'buyIx', pay_nft: 'payNftIx', decide: 'decideIx', draw_lottery: 'drawLotteryIx', end_auction: 'endAuctionIx', enter: 'enterIx', harvest: 'harvestIx',

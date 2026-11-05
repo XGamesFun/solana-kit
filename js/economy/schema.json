@@ -1559,12 +1559,18 @@
                   "prize": {
                     "$ref": "#/$defs/prize",
                     "description": "What its winner gets besides its share of the pot: a raffled NFT, a collectible, tokens, a roll of a box."
+                  },
+                  "times": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 40960,
+                    "description": "How many places in a row are alike (a run): \"places 2 to 201 each take 1%\" is one { \"percent\": 1, \"times\": 200 }. Not for a named NFT, a roll or a share of a pool, which one place gives. Default 1."
                   }
                 }
               }
             ]
           },
-          "description": "What each place wins, first place first: a percent of the pot, or { \"percent\", \"prize\" }: a share of the pot and a prize for its winner (either, or both). Default: one winner takes all."
+          "description": "What each place wins, first place first: a percent of the pot, or { \"percent\", \"prize\", \"times\" }: a share of the pot and a prize for its winner (either, or both), for `times` places in a row. Default: one winner takes all."
         },
         "every": {
           "$ref": "#/$defs/duration",
@@ -1631,6 +1637,33 @@
             }
           ],
           "description": "A raffle: this NFT (one the owner holds, put in the lottery's own stash at go-live) is first place's prize, held so that nothing but the draw can give it, and the lottery draws once. The same as a first place { \"prize\": { \"gives\": \"nft\", \"nft\": <address>, \"held\": true } }. An NFT of another collection is { \"nft\", \"collection\" }."
+        },
+        "nfts": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/address"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "nft"
+                ],
+                "properties": {
+                  "nft": {
+                    "$ref": "#/$defs/address"
+                  },
+                  "collection": {
+                    "$ref": "#/$defs/address"
+                  }
+                }
+              }
+            ]
+          },
+          "description": "NFTs the lottery's own stash holds for its places that give { \"gives\": \"raffled\" } (each draws one at random with the round's answer): a raffle of many NFTs. Your wallet puts them in at go-live, a group a transaction, before the lottery is written; at least as many as such places. The lottery draws once."
         }
       },
       "description": "Tickets into a pot of the lottery's own, one random draw, the winners paid. Nothing but its winners' payouts takes from the pot: not the authority, a schedule, a farm or a recipe. Anything sold or paid can send it a share (\"lottery:<key>\" in a split); a schedule can't pay a lottery."
@@ -1712,6 +1745,11 @@
         "stakeNft": {
           "$ref": "#/$defs/rule",
           "description": "Each entry stakes one NFT that passes this rule, in place of tokens, and the NFTs are the pot: each winning entry takes its own back and one of the losers', in the order they are claimed; what the winners leave goes to whoever opened it. Called off, each takes its own back. No split and no stake."
+        },
+        "losersEach": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "In a contest of NFTs (`stakeNft`), the most losers' NFTs one winner takes; what the winners leave goes to whoever opened it. Default: no cap, the winners share every loser's NFT (the first to enter on the winning side take one more when they don't divide evenly), each picking which."
         }
       }
     },
@@ -2598,6 +2636,16 @@
         "prize": {
           "$ref": "#/$defs/prize",
           "description": "What each claim gives (a prize). The grant's funds pay what it opens."
+        },
+        "wallets": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "About how many wallets will claim it over its life (with `rounds`, how many rounds each): it sizes how its records are kept (one list up to ~100,000, more lists above). Default: its list's length."
+        },
+        "rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "About how many rounds each wallet will be paid over its life. Default 1."
         }
       }
     },
@@ -2850,7 +2898,7 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random).",
+      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`).",
       "properties": {
         "gives": {
           "enum": [
@@ -2858,7 +2906,8 @@
             "tokens",
             "share",
             "nft",
-            "roll"
+            "roll",
+            "raffled"
           ]
         },
         "item": {

@@ -38,7 +38,12 @@ export function allocationBytes(name) {
 
 /** The exact bytes of a dynamically allocated account. */
 export const accountBytes = (name, value) => encodeAccount(IDL, name, value).length;
-export const ACCOUNT_BYTES = Object.freeze({ ...Object.fromEntries(['Seat', 'Hold', 'Entry'].map((name) => [name, allocationBytes(name)])) });
+/** A seat; a loan's hold (with room for its debt); a hold a player asks for, made without one (`Hold::PLAIN`). */
+export const ACCOUNT_BYTES = Object.freeze({
+  Seat: allocationBytes('Seat'),
+  Loan: allocationBytes('Hold'),
+  Hold: allocationBytes('Hold') - maximum({ defined: { name: 'Debt' } }, 'Debt'),
+});
 
 /** A project's bytes with `collections` collections, as the program sizes the account. */
 export const projectBytes = (collections = 0) => 153 + 32 * collections;
@@ -62,19 +67,16 @@ export function orderBytes(lootBox, shares = 0, opens = 1) {
     burns: false, paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
     opens: 0, settled: 0, undrawn: 0, drew: 0, answer: new Uint8Array(32), drawn: [],
-    requested_slot: 0n, asked_first: 0n, counted: 0, subject: ZERO, held: false, fate,
+    requested_slot: 0n, asked_first: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
   };
   return encodeAccount(IDL, 'Order', largest).length;
 }
 
-/** A purchase of lottery tickets' bytes, with a recipient kept for each of the lottery's `shares` shares. */
-export const contributionBytes = (shares = 0) => 1 + 32 + 32 + 8 + 8 + 8 + 1 + 4 + shares * maximum({ defined: { name: 'LotteryRecipient' } }, 'LotteryRecipient') + 32;
-
-// A receipt is not in the IDL and is read by hand: a 17-byte head (its tag, counts and how many rounds), then 8 bytes
-// for each round it holds (see docs/program.md). It holds as many rounds as its claims' heap reads.
-export const RECEIPT_BASE_BYTES = 17;
-export const RECEIPT_ROUND_BYTES = 8;
-export function receiptBytes(rounds = 0) {
-  if (!Number.isInteger(rounds) || rounds < 0) throw new RangeError('A receipt holds a whole number of rounds');
-  return RECEIPT_BASE_BYTES + RECEIPT_ROUND_BYTES * rounds;
-}
+// Lists of records (tag 26, `list.rs`): a tag byte and a 6-byte header, then fixed-width records.
+export const LIST_HEAD_BYTES = 7;
+/** A limit record (a wallet's count of a box, a recipe or a lottery round; a grant's claim count): key, count, window, in it. */
+export const LIMIT_RECORD_BYTES = 28;
+/** A round a grant paid a wallet: its key alone. */
+export const ROUND_RECORD_BYTES = 16;
+/** A contest's entry: of tokens, and of NFTs (the NFT, its place on its side, the picks taken). */
+export const CONTEST_ENTRY_BYTES = Object.freeze({ tokens: 43, nfts: 83 });

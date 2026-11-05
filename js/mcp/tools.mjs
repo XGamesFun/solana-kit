@@ -466,7 +466,7 @@ export const tools = [
         '  loot.openBoxIx({ player, project, box, nonce }), loot.buyIx({ player, project, box, items }) …   one builder per instruction; each returns { programId, keys, data }',
         '  loot.payNftIx({ player, project, asset, to })             pay with an NFT (burned, or given to `to`): the app admits by the receipt',
         '  loot.openListingIx / takeListingIx / closeListingIx, loot.listingTerms(listing), loot.pda.listing(project, asset), loot.renterOf(listing, now)',
-        '  loot.lotteryStep(lottery, contribution) then loot.finishLotteryContributionIx(...)   a drawn round’s prizes first, then its money',
+        '  loot.decodeRound(data), loot.settleRoundIx(...) then loot.partsOwed(round, entry) and loot.pullIx(...)   a drawn round’s prizes and sweep, then each part pulled',
         '  loot.withdrawable(seat, now), loot.runsDue(schedule, now, vaultBalance), loot.pda.vest(schedule), loot.pda.prizeVault(contest), loot.pda.lotteryStash(lottery)',
         '  loot.decode("LootBox", data), loot.receipts(tx)            accounts, and the receipts of a getTransaction result (none when meta.err is set)',
         'IDL: @xgamesfun/solana/idl.json (Anchor 1.x format).',

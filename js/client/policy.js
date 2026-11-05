@@ -37,12 +37,13 @@ export function contestOff(contest, now) {
   return BigInt(now) > BigInt(contest.result_by) || (BigInt(now) >= BigInt(contest.closes_at) && total < BigInt(contest.min_pot ?? 0));
 }
 
-/** Whether a lottery's draw was asked for and the oracle has not answered within `STALE_SLOTS`: anyone may ask again. */
-export const lotteryDrawStuck = (lottery, slot) => lottery.status === 'Drawing' && BigInt(slot) > BigInt(lottery.asked_slot) + STALE_SLOTS;
+/** Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
+ * `STALE_SLOTS`: anyone may ask again. */
+export const lotteryDrawStuck = (round, slot) => round?.status === 'Drawing' && BigInt(slot) > BigInt(round.asked_slot) + STALE_SLOTS;
 
 /**
- * Whether a lottery's draw was asked for and the oracle has not answered within `LOTTERY_TIMEOUT_SLOTS` of the first
- * ask (asking again doesn't move it): anyone may cancel the round and refund it. A round nobody asked to draw is never
- * cancelled.
+ * Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
+ * `LOTTERY_TIMEOUT_SLOTS` of the first ask (asking again doesn't move it): anyone may cancel the round and refund it. A
+ * round nobody asked to draw is never cancelled.
  */
-export const lotteryCancellable = (lottery, slot) => lottery.status === 'Drawing' && BigInt(slot) > BigInt(lottery.asked_first) + LOTTERY_TIMEOUT_SLOTS;
+export const lotteryCancellable = (round, slot) => round?.status === 'Drawing' && BigInt(slot) > BigInt(round.asked_first) + LOTTERY_TIMEOUT_SLOTS;

@@ -167,7 +167,7 @@ export function openBoxSize(b, m, { detail = false } = {}) {
     ...piece, ...Array.from({ length: PIECE_SLOTS - piece.length }, () => none),
     ...(rolls ? ['vrf:queue', 'pda:identity', 'program:vrf', 'sysvar:slot-hashes'] : [none, none, none, none]),
     chosenItem ? 'asset:chosen' : none,
-    limited ? `pda:receipt/${b.key}` : none,
+    limited ? 'pda:counts/player' : none,
   ];
   const rest = [];
   const prizeMints = [];
@@ -361,7 +361,7 @@ export function buySize(b, m, { detail = false } = {}) {
   const chosenItem = (b.split ?? []).some((s) => /^chosen:./.test(String(s.to)));
   const own = [
     'wallet:player', 'pda:project', `pda:box/${b.key}`, `mint:${currency}`, `ata:player/${currency}`, 'wallet:treasury', `ata:treasury/${currency}`,
-    'program:token', 'program:token-2022', 'program:associated-token', chosenItem ? 'asset:chosen' : none, limited ? `pda:receipt/${b.key}` : none,
+    'program:token', 'program:token-2022', 'program:associated-token', chosenItem ? 'asset:chosen' : none, limited ? 'pda:counts/player' : none,
     'pda:platform', 'pda:fees', 'program:system',
   ];
   const rest = [...listProof(b.gate)];
@@ -643,6 +643,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       else if (st && !stashNfts(st).some((n) => n.asset === line.nft))
         refuse(code, `${at}.nft`, `${what} gives the NFT ${line.nft}, which ${label(st)} does not list: a prize gives only an NFT a stash of the game holds, so it would never be given.`, `List it in ${label(st)}'s "nfts", which puts it in when the economy goes live.`);
     } else if (line.gives === 'roll') prizeBox(line.box, `${at}.box`, what, code);
+    else if (line.gives === 'raffled' && code !== 'E-LOTTERY') refuse(code, `${at}.gives`, `${what} gives an NFT drawn from a lottery's own stash: only a lottery's place does (BadPrize).`, 'Give an NFT of a stash through a box\'s roll ("gives": "stash"), or raffle them in a lottery.');
     else refuse(code, `${at}.gives`, `${what} gives “${line.gives}”, which no prize is.`, 'Use "item", "tokens", "share", "nft" or "roll".');
     return line;
   };
@@ -941,7 +942,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (listed.has(n.asset)) refuse('E-STASH', at, `${label(s)} lists ${n.asset}, which ${listed.get(n.asset)} lists too: an NFT can be handed to the game once.`, 'List each NFT in one stash, once.');
       listed.set(n.asset, label(s));
       if (n.kind === 'compressed')
-        refuse('E-STASH', at, `${label(s)} lists a compressed NFT: putting one in needs a proof of its leaf fetched when it is signed, which going live does not do.`, 'Leave it out here; once the economy is live, put it in with `loot.proveLeafIx` then `loot.stashIx` (both in one transaction, signed by the owner or the authority who holds it). A compressed prize NFT can’t move in the same instruction as another move on its tree (a mission whose staked NFTs share that tree, a lottery contribution winning two places of one tree): the second proof is stale and the unstake or the payment fails until it is sent again. Keep prize NFTs on a tree of their own, or give them through a roll.');
+        refuse('E-STASH', at, `${label(s)} lists a compressed NFT: putting one in needs a proof of its leaf fetched when it is signed, which going live does not do.`, 'Leave it out here; once the economy is live, put it in with `loot.proveLeafIx` then `loot.stashIx` (both in one transaction, signed by the owner or the authority who holds it). A compressed prize NFT can’t move in the same instruction as another move on its tree (a mission whose staked NFTs share that tree, a lottery entry winning two places of one tree): the second proof is stale and the unstake or the payment fails until it is sent again. Keep prize NFTs on a tree of their own, or give them through a roll.');
       if (n.kind === 'core' && !n.collection && !m.live.project)
         refuse('E-STASH', at, `${label(s)} lists an NFT of the game’s own collection, which is only made when the economy goes live: there is none to put in yet.`, 'Give the collection it is in ("collection"), or put it in once the economy is live and your wallet holds it.');
     }
@@ -1486,14 +1487,23 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       const raw = (l.places ?? [])[i];
       if (!places[i] && !p.prize) refuse('E-LOTTERY', `${where}.places[${i}]`, `${label(l)}’s place ${i + 1} wins nothing: no share of the pot and no prize (BadLottery).`, 'Give it a "percent" above 0, a "prize", or remove it.');
       if (typeof raw === 'object' && raw?.prize) prizeCheck(raw.prize, `${where}.places[${i}].prize`, `${label(l)}’s place ${i + 1}`, 'E-LOTTERY');
+      // A run holds places alike: a named NFT, a roll or a share of a pool is one place's.
+      if (p.times > 1 && ((p.prize?.gives === 'nft') || p.prize?.gives === 'roll' || p.prize?.gives === 'share'))
+        refuse('E-LOTTERY', `${where}.places[${i}].times`, `${label(l)}’s place ${i + 1} repeats ${p.times} times a prize one place gives (a named NFT, a roll, a share of a pool) (BadLottery).`, 'Give it to one place, or make it a prize places can share alike (tokens, an item, an NFT drawn from the lottery’s stash).');
     }
+    // A raffle of many NFTs: its places draw from the lottery's own stash, which holds at least as many; it draws once,
+    // and never also names NFTs of it (lottery.rs).
+    const raffled = placed.filter((p) => p.prize?.gives === 'raffled').reduce((n, p) => n + p.times, 0);
+    if (raffled && l.every) refuse('E-LOTTERY', `${where}.every`, `${label(l)} draws NFTs from its own stash, so it draws once (BadLottery).`, 'Leave "every" out.');
+    if (raffled && placed.some((p) => p.prize?.held)) refuse('E-LOTTERY', `${where}.places`, `${label(l)} both names NFTs of its own stash and draws from it: a draw could take a named one (BadLottery).`, 'Raffle them all at random, or name each one.');
+    if (raffled > (l.nfts ?? []).length) refuse('E-LOTTERY', `${where}.nfts`, `${label(l)} draws ${raffled} NFTs from its own stash, which holds ${(l.nfts ?? []).length} (NotInStash).`, 'List at least as many in "nfts".');
     // A raffle's NFT: one place each, and a lottery that holds one draws once (lottery.rs).
     const held = placed.map((p) => (p.prize?.held ? p.prize.nft : null)).filter(Boolean);
     if (held.length && l.every) refuse('E-LOTTERY', `${where}.every`, `${label(l)} holds an NFT as a prize, so it draws once: a next round would sell a prize already won (BadLottery).`, 'Leave "every" out.');
     if (new Set(held).size < held.length) refuse('E-LOTTERY', `${where}.places`, `${label(l)} gives the same NFT on two places: the second could never be given (BadLottery).`, 'Name each NFT once.');
     if (held.length) warn('W-RAFFLE', `${where}.places`, `${label(l)} holds ${held.length === 1 ? 'its NFT' : 'its NFTs'} in its own stash: nobody, the owner included, can take ${held.length === 1 ? 'it' : 'them'} out while a place names ${held.length === 1 ? 'it' : 'them'}, and the winner gets ${held.length === 1 ? 'it' : 'them'} before any ticket money moves. If the NFT's collection lets someone freeze or move it (a permanent freeze, transfer or burn delegate), they could stop the prize, and every ticket's money would wait in the lottery until they let it go.`);
     if (l.minSold && l.perWallet && !l.every && l.minSold > l.perWallet * 1000) warn('W-LOTTERY', `${where}.minSold`, `${label(l)} needs ${l.minSold} tickets sold, and each wallet may hold ${l.perWallet}: it takes at least ${Math.ceil(l.minSold / l.perWallet)} wallets.`);
-    const total = places.reduce((a, b) => a + b, 0);
+    const total = places.reduce((a, b, i) => a + b * placed[i].times, 0);
     if (total > 10_000) refuse('E-LOTTERY', `${where}.places`, `${label(l)}’s places add up to ${total / 100}% of the pot, more than all of it.`, 'Make them add up to 100% or less.');
     else if (total < 10_000) warn('W-LOTTERY', `${where}.places`, `${label(l)}’s places add up to ${total / 100}%: the other ${(10_000 - total) / 100}% of each pot stays in it for the next round, as do places nobody won.`);
     const ticketSplit = lotterySplit(l);

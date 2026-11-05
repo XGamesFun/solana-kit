@@ -19,24 +19,21 @@ test('a full per-round ticket allowance does not exhaust future rounds', { skip 
   } } });
   w.fund(w.player, w.mint, BigInt(cap));
   let lottery = w.read('Lottery', address);
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: BigInt(cap), nonce: 1n })]);
-  const receipt = loot.pda.lotteryReceipt(address, lottery.incarnation, w.player);
-  assert.equal(loot.decodeReceipt(w.chain.get(receipt).data).count, 0);
-  assert.equal(loot.decodeReceipt(w.chain.get(receipt).data).inWindow, cap);
+  // The tickets of a round are counted in a window that is the round, in the wallet's counts. Its count in all (a u32)
+  // counts every round's too: 2^32 tickets in all would refuse the wallet's next purchase (Overflow).
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: BigInt(cap - 1) })]);
+  const count = () => loot.readLimit(loot.readListAccount(w.chain.get(loot.pda.counts(w.project, w.player))), loot.countKey(address, lottery.incarnation));
+  assert.deepEqual(count(), { count: cap - 1, window: 1, inWindow: cap - 1 });
   w.chain.warp(Number(lottery.draws_at));
-  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id })]); // the oracle never answers
+  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // the oracle never answers
   w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
-  w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id })]);
-  lottery = w.read('Lottery', address);
-  const contribution = loot.pda.contribution(address, w.player, 1n);
-  w.chain.send(w.cranker, [loot.finishLotteryContributionIx({ payer: w.cranker, project: w.project, id, lottery, contributionAddress: contribution, contribution: w.read('LotteryContribution', contribution) })]);
+  w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id, lottery })]);
+  w.finishRound(id);
   lottery = w.read('Lottery', address);
   assert.equal(lottery.round, 1);
-  assert.equal(lottery.status, 'Open');
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n, nonce: 2n })]);
-  assert.equal(w.read('Lottery', address).sold, 1n);
-  assert.equal(loot.decodeReceipt(w.chain.get(receipt).data).inWindow, 1);
-  assert.equal(loot.decodeReceipt(w.chain.get(receipt).data).count, 0);
+  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n })]);
+  assert.equal(w.round(id).round.sold, 1n);
+  assert.deepEqual(count(), { count: cap, window: 2, inWindow: 1 });
 });
 
 test('treasury remainder receipts distinguish explicit treasury shares from the remainder', { skip }, () => {
@@ -73,10 +70,11 @@ test('an unbid auction ends at its configured time even with a large extension',
 
 test('an open grant gated by an NFT counts a compressed NFT shown, as it does any other', () => {
   const [project, wallet, nft, tree] = ['So11111111111111111111111111111111111111112', 'Vote111111111111111111111111111111111111111', 'Stake11111111111111111111111111111111111111', 'Config1111111111111111111111111111111111111'];
-  const grant = { incarnation: 3n, open: true, gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } }, limits: { per_person: 0, per_key: 0 }, gives: { Item: [1] } };
-  const badge = loot.pda.badge(loot.pda.grant(project, 1), 3n, nft);
+  const grant = { incarnation: 3n, shard_bits: 8, open: true, gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } }, limits: { per_person: 0, per_key: 0 }, gives: { Item: [1] } };
+  // The badge's record is in its own shard of the grant's claims, beside the wallet's.
+  const shard = loot.pda.claims(loot.pda.grant(project, 1), 3n, loot.shardOf(loot.limitKey('badge', nft), 8));
   for (const shown of [{ asset: nft }, { compressed: nft, tree }]) {
     const ix = loot.claimGrantIx({ project, id: 1, grant, wallet, signer: wallet, shown, item: null });
-    assert.ok(ix.keys.some((k) => k.pubkey === badge), `the badge's receipt is passed for ${Object.keys(shown)[0]}`);
+    assert.ok(ix.keys.some((k) => k.pubkey === shard), `the badge's shard is passed for ${Object.keys(shown)[0]}`);
   }
 });

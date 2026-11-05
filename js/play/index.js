@@ -576,7 +576,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         }
       }
       // The NFT the roll was on: its kind, and for a compressed one a proof first.
-      const { before: subjectProof, ...subject } = order.subject !== NOBODY ? await nftOf(order.subject, signer) : { before: [] };
+      const { before: subjectProof, ...subject } = order.subject && order.subject !== NOBODY ? await nftOf(order.subject, signer) : { before: [] };
       const ix = loot.settleIx({ signer, orderAddress, order, projectState: g, items, nfts, putBack, subject, handBack, holders, programs, upto, ...(await treeOf()) });
       return { ix, nfts, before: [...subjectProof, ...proving].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM) };
     };
@@ -886,19 +886,55 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   }
 
   /**
-   * A lottery's current round: the lottery, its purchases ([{ address, value }], each a LotteryContribution; every one
-   * still there is of this round), and for a drawn round whose purchases are all finished, the winning purchases still
-   * to be paid ([{ contribution, winner }]).
+   * A lottery and its rounds that have a record: the current one (null when nobody bought into it yet), and the one
+   * before it while it still pays out (swept or cancelled, some part owed). Each { address, round } (`loot.decodeRound`).
    */
   async function roundOf(l) {
     const address = loot.pda.lottery(project, l.id);
     const lottery = await read('Lottery', address);
-    const found = await client.programAccounts(loot.LOOT_PROGRAM, [{ memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.LotteryContribution)) } }, { memcmp: { offset: 1, bytes: address } }]);
-    const contributions = found.map(({ pubkey, account }) => ({ address: pubkey, value: loot.decode('LotteryContribution', account.data) }));
-    if (lottery.status !== 'Drawn' || BigInt(lottery.pending) > 0n) return { lottery, contributions, winners: [] };
-    // Once every purchase is finished, those left are the winners not paid yet.
-    const winners = contributions.filter(({ value }) => value.done).map((contribution) => ({ contribution, winner: contribution.value.player }));
-    return { lottery, contributions, winners };
+    const keys = [loot.currentRound(address, lottery), ...(lottery.round > 0 ? [loot.pda.round(address, lottery.incarnation, lottery.round - 1)] : [])];
+    const found = await client.accounts(keys);
+    const rounds = keys.map((key, i) => ({ address: key, round: found[i]?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found[i].data) : null }));
+    return { address, lottery, current: rounds[0].round, rounds: rounds.filter((r) => r.round) };
+  }
+
+  /** What one settle_round part of a drawn round needs, and the instruction (the next place's prize, or the sweep). */
+  async function settleRoundStep(key, r, signer) {
+    const winner = r.entries[loot.entryOf(r, loot.ticketOfPlace(r, Math.min(Number(r.cursor), Math.max(0, loot.roundWinners(r) - 1))))]?.buyer ?? signer;
+    const given = await prizeInputs(r.places.map((p) => p.prize), signer, winner);
+    const raffles = r.places.some((p) => p.prize === 'Raffled');
+    const stash = raffles ? loot.decodeStash((await client.account(loot.pda.lotteryStash(r.lottery)))?.data ?? null) : null;
+    // A raffled NFT is drawn now: its kind, for its move.
+    const drawn = stash ? loot.raffledNft(stash, r.answer, Number(r.cursor)) : null;
+    if (drawn && !given.nfts[drawn]) {
+      const { before, hasAuthority: _, ...nft } = await nftOf(drawn, signer, { to: winner });
+      given.nfts[drawn] = nft;
+      given.before.push(...before);
+    }
+    const shares = r.shares.filter((x) => !x.to.Holder && !x.to.Chosen);
+    const ix = loot.settleRoundIx({ payer: signer, project, roundAddress: key, round: r, projectState: await projectNow(), holders: await holdersOf(shares), programs, poolMints: given.poolMints, projectMint: mintOf(), items: given.items, nfts: given.nfts, collection: given.collection, stash });
+    return [computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+  }
+
+  /** The pulls of `parts` of entry `i` of a round (`partsOwed`), signed by `signer`. */
+  async function pulls(key, r, i, parts, signer) {
+    const e = r.entries[i];
+    const out = [];
+    for (const part of parts) {
+      let ticket = {};
+      let handBack = false;
+      if (part === 'Own' && e.nft !== NOBODY) {
+        const then = r.status === 'Cancelled' || r.returns ? null : r.nft_ticket?.then;
+        handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
+        const to = !then || handBack ? e.buyer : then.Give ? then.Give[0] : undefined;
+        const { before = [], hasAuthority: _, ...kind } = await nftOf(e.nft, signer, { to });
+        out.push(...before);
+        ticket = kind;
+      }
+      // No pull carries the close: the step that leaves nothing owed closes the round after them (`claim`).
+      out.push(loot.pullIx({ payer: signer, project, roundAddress: key, round: { ...r, owed: Number.MAX_SAFE_INTEGER }, entry: i, part, projectState: await projectNow(), ticket, handBack, programs }));
+    }
+    return out;
   }
 
   return {
@@ -1020,16 +1056,21 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      */
     async lotteries() {
       const list = spec.lotteries ?? [];
-      const accounts = await client.accounts(list.map((l) => loot.pda.lottery(project, l.id)));
-      return list.map((l, i) => {
-        const lottery = accounts[i]?.owner === loot.LOOT_PROGRAM ? loot.decode('Lottery', accounts[i].data) : null;
+      const out = [];
+      for (const l of list) {
+        const there = await client.account(loot.pda.lottery(project, l.id));
+        // The terms on sale are the round's own copy once someone bought into it, the lottery's before.
+        const { lottery, current } = there?.owner === loot.LOOT_PROGRAM ? await roundOf(l) : { lottery: null, current: null };
+        const terms = current ?? lottery;
         const currency = lottery ? ticketCurrencyOf(l, lottery) : l.ticketCurrency ?? currencyKey;
-        return {
-          key: l.key, name: l.name, price: lottery ? show(lottery.price, decimalsOf(currency)) : null, priceUnits: lottery?.price ?? null,
-          currency: tokens.get(currency)?.symbol ?? currency, status: lottery?.status ?? null, round: lottery?.round ?? null, sold: lottery?.sold ?? null,
-          drawsAt: lottery ? Number(lottery.draws_at) : null, nftTicket: Boolean(lottery?.nft_ticket), incarnation: lottery?.incarnation ?? null, revision: lottery?.revision ?? null,
-        };
-      });
+        const ended = lottery && Number(lottery.every) === 0 && lottery.round > 0;
+        out.push({
+          key: l.key, name: l.name, price: terms ? show(terms.price, decimalsOf(currency)) : null, priceUnits: terms?.price ?? null,
+          currency: tokens.get(currency)?.symbol ?? currency, status: !lottery ? null : ended ? 'Ended' : current?.status ?? 'Open', round: lottery?.round ?? null, sold: lottery ? current?.sold ?? 0n : null,
+          drawsAt: terms ? Number(terms.draws_at) : null, nftTicket: Boolean(lottery?.nft_ticket), incarnation: lottery?.incarnation ?? null, revision: terms?.revision ?? null,
+        });
+      }
+      return out;
     },
 
     /**
@@ -1048,15 +1089,17 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (listing && listing.key !== undefined && listing.key !== l.key) throw new Error(`That listing is “${listing.key}”, not “${l.key}”.`);
       const given = maxPrice ?? listing?.priceUnits;
       if (given === undefined || given === null) throw new Error(`Say the terms the player was shown for “${name}”: pass the lottery lotteries() showed (listing), or maxPrice (a ticket's most, in base units). The price read now is never the bound.`);
-      const current = await read('Lottery', loot.pda.lottery(project, l.id));
-      // The terms signed are those shown: a lottery written again or changed since is refused here, and by the
-      // program (TermsChanged) if it changes after this read.
+      const { lottery: current, current: round } = await roundOf(l);
+      // The terms signed are those shown: the round's own copy once someone bought into it, the lottery's before. A
+      // lottery written again or changed since is refused here, and by the program (TermsChanged) if it changes after
+      // this read.
+      const terms = round ?? current;
       if (listing && (listing.incarnation == null || listing.revision == null)) throw new Error(`That listing of “${name}” names no terms (incarnation, revision): pass the lottery lotteries() showed.`);
-      if (listing && (BigInt(listing.incarnation) !== BigInt(current.incarnation) || Number(listing.revision) !== Number(current.revision))) throw new Error(`“${name}” has changed since the player was shown it: show them the lottery as it is now first.`);
-      const lottery = listing ? { ...current, incarnation: BigInt(listing.incarnation), revision: Number(listing.revision) } : current;
+      if (listing && (BigInt(listing.incarnation) !== BigInt(current.incarnation) || Number(listing.revision) !== Number(terms.revision))) throw new Error(`“${name}” has changed since the player was shown it: show them the lottery as it is now first.`);
+      const lottery = current;
       const currency = ticketCurrencyOf(l, lottery);
-      if (BigInt(lottery.price) > BigInt(given)) throw new Error(`A ticket of “${name}” now costs ${show(lottery.price, decimalsOf(currency))}, more than the ${show(BigInt(given), decimalsOf(currency))} the player was shown: show them the new price first.`);
-      if (lottery.status === 'Ended') throw new Error(`“${l.name}” has drawn and ended.`);
+      if (BigInt(terms.price) > BigInt(given)) throw new Error(`A ticket of “${name}” now costs ${show(terms.price, decimalsOf(currency))}, more than the ${show(BigInt(given), decimalsOf(currency))} the player was shown: show them the new price first.`);
+      if (Number(lottery.every) === 0 && lottery.round > 0) throw new Error(`“${l.name}” has drawn and ended.`);
       shown ??= await passing(lottery.gate, 'buy a ticket');
       listProof = listProofOf(lottery.gate, l.gate?.list, listProof);
       let nft;
@@ -1068,26 +1111,27 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         nft = { asset: paidWith, ...kind };
         before.push(...proof);
       }
-      const mint = l.ticketCurrency ? mintOf(l.ticketCurrency) : lottery.mint;
-      const choosesHolder = lottery.shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
-      const nonce = freshNonce();
-      const ix = loot.buyTicketsIx({ player: wallet.address, project, id: l.id, lottery, mint, count: BigInt(count), nonce, shown, listProof, chosenRecipient, chosen: choosesHolder ? chosenRecipient : null, nft, programs });
-      // A round that reached its date with no ticket sold moves on by itself when a ticket is bought.
-      const due = lottery.status === 'Open' && BigInt(now()) >= BigInt(lottery.draws_at);
-      if (due && BigInt(lottery.sold) > 0n) throw new Error('This round’s draw is due: reveal it first (claims() lists it), then buy for the next one.');
-      // A ticket paid with an NFT: its way out must land too, the NFT handed on at the draw or back to its
-      // buyer when the round is cancelled, each sized before the NFT goes in.
+      const mint = round ? round.pay_mint : l.ticketCurrency ? mintOf(l.ticketCurrency) : lottery.mint;
+      const shares = round ? round.shares : lottery.shares;
+      const choosesHolder = shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
+      // Who holds each collectible a share pays now (and the one the buyer chose): fixed at purchase.
+      const holders = await holdersOf([...shares, ...(choosesHolder && chosenRecipient ? [{ to: { Holder: [chosenRecipient] } }] : [])]);
+      const ix = loot.buyTicketsIx({ player: wallet.address, project, id: l.id, lottery, round, mint, count: BigInt(count), shown, listProof, chosenRecipient, chosen: choosesHolder ? chosenRecipient : null, nft, holders, programs });
+      // An overdue round nobody bought into moves to its next date by itself when a ticket is bought.
+      if (round?.status === 'Open' && BigInt(now()) >= BigInt(round.draws_at)) throw new Error('This round’s draw is due: reveal it first (claims() lists it), then buy for the next one.');
+      // A ticket paid with an NFT: its way out must land too, the NFT handed on once the round is drawn or back to its
+      // buyer when it is cancelled, each sized before the NFT goes in.
       if (nft) {
         const g = await projectNow();
-        const contribution = { player: wallet.address, asset: paidWith, done: false, round: lottery.round, count: 1n, shares: lottery.shares };
-        const contributionAddress = loot.pda.contribution(loot.pda.lottery(project, l.id), wallet.address, nonce);
-        for (const status of ['Drawn', 'Cancelled']) {
-          const exit = [computeUnitLimit(1_400_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.finishLotteryContributionIx({ payer: wallet.address, project, id: l.id, lottery: { ...lottery, status }, contributionAddress, contribution, treasury: g.treasury, ticket: kindOnly(nft), programs })];
+        const entry = { buyer: wallet.address, nft: paidWith, start: 0n, end: 1n, amount: 0n, to: [], paid: 0n };
+        for (const status of ['Swept', 'Cancelled']) {
+          const r = { lottery: loot.pda.lottery(project, l.id), status, returns: lottery.returns, nft_ticket: lottery.nft_ticket, pay_mint: mint, mint: lottery.mint, accounts: [], owed: 2, opener: wallet.address, entries: [entry] };
+          const exit = [computeUnitLimit(1_400_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.pullIx({ payer: wallet.address, project, roundAddress: loot.currentRound(r.lottery, lottery), round: r, entry: 0, part: 'Own', projectState: g, ticket: kindOnly(nft), programs })];
           if (!sendPlan({ payer: wallet.address, instructions: exit, alone: isProveLeaf }))
-            throw new Error(`Not bought: this NFT couldn't come out of “${l.name}” again (${status === 'Drawn' ? 'handed on at the draw' : 'back to you if the round is cancelled'}): that transaction would lock more accounts than one can (${transactionLocks(wallet.address, exit, { asV0: true })} with its lookup table; at most 64), so it would stay with the lottery.`);
+            throw new Error(`Not bought: this NFT couldn't come out of “${l.name}” again (${status === 'Swept' ? 'handed on once the round is drawn' : 'back to you if the round is cancelled'}): that transaction would lock more accounts than one can (${transactionLocks(wallet.address, exit, { asV0: true })} with its lookup table; at most 64), so it would stay with the lottery.`);
         }
       }
-      return send([...before, ...withSolWrap(wallet.address, mint, lottery.price * BigInt(count), [ix])]);
+      return send([...before, ...withSolWrap(wallet.address, mint, BigInt((round ?? lottery).price) * BigInt(count), [ix])]);
     },
 
     /**
@@ -1640,11 +1684,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     },
 
     /**
-     * Runs a schedule that is due (an emission into a pool, a rent or a drip): anyone may, and nothing is paid to
-     * whoever sends it but the network fee. `holders`: asset → holder, for a schedule that pays a collectible's holder.
+     * Runs a schedule that is due (an emission into a pool, a rent or a drip), every run due in one call: anyone may,
+     * and nothing is paid to whoever sends it but the network fee. `holders`: asset → holder, for a schedule that pays a collectible's holder.
      * Returns null when it isn't due yet.
      */
-    async runSchedule(scheduleKey, { holders, most = 20, ...others } = NO_OPTIONS) {
+    async runSchedule(scheduleKey, { holders, most, ...others } = NO_OPTIONS) {
       only(others, ['holders', 'most'], 'runSchedule');
       const sc = part('schedules', scheduleKey);
       const address = loot.pda.schedule(project, sc.id);
@@ -1653,13 +1697,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // A sealed schedule's vault: past its last run, whatever arrived since is due once more.
       const vault = from.Vest ? await client.account(loot.pda.vest(address)) : null;
       const held = vault ? vault.data.subarray(64, 72).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n) : 0n;
-      // Runs due by the chain's clock, each its own instruction: one too many would fail them all.
-      const due = Math.min(loot.runsDue(schedule, await chainNow(), held), most);
+      // Every run due by the chain's clock, in one call (`most`: at most that many); a long backlog takes a few calls.
+      const due = Math.min(loot.runsDue(schedule, await chainNow(), held), most ?? Infinity);
       if (!due) return null;
       const poolMint = from.Pool ? encodeBase58((await client.account(loot.pda.pool(project, from.Pool[0]))).data.subarray(0, 32)) : null;
       holders ??= await holdersOf([{ to: schedule.action.to }]);
       const treasury = (await projectNow()).treasury;
-      return send(Array.from({ length: due }, () => loot.runScheduleIx({ payer: wallet.address, project, id: sc.id, schedule, poolMint, holders, programs, treasury })));
+      return send([loot.runScheduleIx({ payer: wallet.address, project, id: sc.id, schedule, poolMint, holders, programs, treasury, upto: Number(schedule.runs) + due })]);
     },
 
     // ---------------------------------------------------------------- listings
@@ -1760,18 +1804,20 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       only(others, ['price', 'currency', 'drawsAt', 'minSold', 'perWallet', 'shares'], 'raffle');
       const kind = await nftOf(nft);
       const { before, hasAuthority: _, ...piece } = kind;
-      await send([...before, loot.stashIx({ signer: wallet.address, project, lottery: id, asset: nft, ...piece })]);
+      const lotteryState = await readMaybe('Lottery', loot.pda.lottery(project, id));
+      await send([...before, loot.stashIx({ signer: wallet.address, project, lottery: id, lotteryState, asset: nft, ...piece })]);
       const args = {
         price: units(price, decimalsOf(currency)), mint: mintOf(currency), shares, places: [{ bps: 0, prize: { Held: [nft] } }],
         ticket_mint: NOBODY, every: 0n, draws_at: BigInt(drawsAt), gate: null, per_wallet: perWallet, min_sold: BigInt(minSold),
       };
-      return send([loot.upsertIx({ owner: wallet.address, project, def: { Lottery: { id, args } } })]);
+      return send([loot.upsertIx({ owner: wallet.address, project, def: { Lottery: { id, args } }, lotteryState })]);
     },
 
     /** The raffle's owner takes the NFT back out of lottery `id`'s own stash once nothing promises it (the lottery ended, or no place names it). */
     async unraffle(id, nft) {
       const { before, hasAuthority: _, ...piece } = await nftOf(nft, wallet.address, { to: wallet.address });
-      return send([...before, loot.stashIx({ signer: wallet.address, project, lottery: id, asset: nft, out: wallet.address, ...piece })]);
+      const lotteryState = await readMaybe('Lottery', loot.pda.lottery(project, id));
+      return send([...before, loot.stashIx({ signer: wallet.address, project, lottery: id, lotteryState, asset: nft, out: wallet.address, ...piece })]);
     },
 
     /** Turns what waits in the player's wrapped-SOL account (a bid that was topped) into plain SOL. */
@@ -1784,7 +1830,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     /**
      * Claims a grant for the connected wallet: from the approved list (the proof comes from xsolana.json, or is given:
      * `proof`, `personHash` and the `round` the list pays, as a results server's list answers them), or with a voucher
-     * a server signed ({ publicKey, signature, incarnation, round, expires, personHash, amount }). A list in xsolana.json names
+     * a server signed ({ publicKey, signature, incarnation, round and amount, or rounds: [{ id, amount }], expires, personHash }). A list in xsolana.json names
      * no round (zeros). `amount` (a voucher's, or `options.amount` for a list's leaf): the tokens this claim gives, in
      * base units, up to the grant's own, for a grant of a fixed amount of tokens (a reward by rank); absent or 0 gives
      * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
@@ -1798,8 +1844,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const grant = await read('Grant', address);
       shown ??= await passing(grant.gate, 'claim this');
       const gateProof = listProofOf(grant.gate, gspec.gate?.list, options.listProof);
-      const receipt = await client.account(loot.pda.grantReceipt(address, grant.incarnation, wallet.address));
-      const count = loot.readReceiptAccount(receipt)?.count ?? 0;
+      // What the grant has paid this wallet: its count of claims (an open claim's roll is named by it), and the rounds
+      // paid (one paid already is skipped).
+      const bits = grant.shard_bits;
+      const [claimsShard, roundsShard] = await client.accounts([loot.pda.claims(address, grant.incarnation, loot.shardOf(loot.limitKey('wallet', wallet.address), bits)), loot.pda.rounds(address, grant.incarnation, loot.walletShard(grant, wallet.address))]);
+      const count = loot.readLimit(loot.readListAccount(claimsShard), loot.limitKey('wallet', wallet.address)).count;
+      const paidRounds = loot.readListAccount(roundsShard);
       // What its prize needs: a pool's mint, the item, an NFT's kind (a compressed one proven first).
       const prized = await prizeInputs([grant.gives]);
       const pool = grant.gives.Tokens?.from.Pool?.[0];
@@ -1810,7 +1860,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const keys = gspec.keys ?? [];
       if (voucher) {
         if (voucher.incarnation == null || BigInt(voucher.incarnation) !== grant.incarnation) throw new Error('This voucher belongs to a different grant incarnation.');
-        const message = loot.voucherBytes({ grant: address, incarnation: grant.incarnation, wallet: wallet.address, personHash: voucher.personHash, round: voucher.round, expires: voucher.expires, amount: BigInt(voucher.amount ?? 0) });
+        const message = loot.voucherBytes({ grant: address, incarnation: grant.incarnation, wallet: wallet.address, personHash: voucher.personHash, rounds: voucher.rounds, round: voucher.round, expires: voucher.expires, amount: BigInt(voucher.amount ?? 0) });
         const signature = typeof voucher.signature === 'string' ? decodeBase58(voucher.signature) : voucher.signature;
         instructions.push(loot.ed25519Ix({ publicKey: voucher.publicKey, signature, message }));
         // A key under the grant's key root (a promo code's) proves it is one of them.
@@ -1843,8 +1893,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const amount = BigInt((voucher ? voucher.amount : listAmount) ?? 0);
       const most = grant.gives.Tokens?.amount.Fixed?.[0];
       if (amount > 0n && (most === undefined || amount > BigInt(most))) throw new Error(`This claim names ${amount} tokens, more than this grant gives${most === undefined ? ' (it gives no fixed amount of tokens)' : ` (${most})`}.`);
-      instructions.push(loot.claimGrantIx({ project, id: gspec.id, grant, wallet: wallet.address, signer: wallet.address, count, round: voucher?.round ?? listRound, expires: voucher?.expires, personHash: voucher?.personHash ?? listPerson, amount, proof, poolMint, item, nft: prized.nft, boxes: prized.boxes, rollPools: prized.rollPools, shown, listProof: gateProof, programs, voucherKey: voucher?.publicKey }));
-      return send(instructions);
+      instructions.push(loot.claimGrantIx({ project, id: gspec.id, grant, wallet: wallet.address, signer: wallet.address, count, rounds: voucher?.rounds, round: voucher?.round ?? listRound, expires: voucher?.expires, personHash: voucher?.personHash ?? listPerson, amount, proof, paidRounds, poolMint, item, nft: prized.nft, boxes: prized.boxes, rollPools: prized.rollPools, shown, listProof: gateProof, programs, voucherKey: voucher?.publicKey }));
+      // A claim's records and prizes can pass the 200,000 compute units a transaction has by default.
+      return send([computeUnitLimit(loot.CLAIM_COMPUTE_UNITS), ...instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)]);
     },
 
     /**
@@ -1900,9 +1951,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         }
       };
       const claimed = async (grantId, incarnation, round) => {
-        const grant = loot.pda.grant(project, grantId);
-        incarnation ??= (await read('Grant', grant)).incarnation;
-        return loot.readReceiptAccount(await client.account(loot.pda.grantReceipt(grant, incarnation, wallet.address)))?.claimed(round) ?? false;
+        const address = loot.pda.grant(project, grantId);
+        const grant = await read('Grant', address);
+        if (incarnation != null && BigInt(incarnation) !== BigInt(grant.incarnation)) return false;
+        const shard = await client.account(loot.pda.rounds(address, grant.incarnation, loot.walletShard(grant, wallet.address)));
+        return loot.roundPaid(loot.readListAccount(shard), wallet.address, round);
       };
       const out = [];
       const take = async (round, grant, claim) => {
@@ -1966,18 +2019,23 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         else if (o.status === 'Rolled' && slot > opened) out.push({ kind: 'settle', order: pubkey, says: 'What your box rolled.' });
         else if (loot.rollAskable(o, slot)) out.push({ kind: 'settle', order: pubkey, says: 'A roll you won (a mission’s, a recipe’s, a prize’s): ask for it and see what it gives (one whose box has nothing left to give waits until it has).' });
       }
-      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Entry'), at(33, me)])) {
-        const entry = loot.decode('Entry', account.data);
-        const c = await client.account(entry.contest);
-        if (!c) continue;
-        const contest = loot.decode('Contest', c.data);
+      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Contest'), at(1, project)])) {
+        const contest = loot.decode('Contest', account.data);
         const off = loot.contestOff(contest, time);
-        if (contest.project !== project || !(off || contest.verdict === 'Won')) continue;
-        const won = contest.winner === entry.side;
-        // A loser's NFT waits for the winners: it goes to the opener once they have all claimed.
-        if (contest.nft && !off && !won && entry.asset !== NOBODY && BigInt(contest.unclaimed) > 0n) continue;
-        const says = off ? 'Your entry back: the contest is off.' : won ? (contest.nft ? 'Your NFT back, and one of the losers’.' : contest.prize != null ? 'Your share of the pot, and your prize.' : 'Your share of the pot.') : 'Close your entry (your side lost).';
-        out.push({ kind: 'contest', entry: pubkey, id: contest.id, side: entry.side, says });
+        if (!(off || contest.verdict === 'Won')) continue;
+        const list = await client.account(loot.contestEntries(pubkey, contest));
+        const entry = list?.owner === loot.LOOT_PROGRAM ? loot.decodeEntries(list.data).find((e) => e.player === me) : null;
+        if (!entry) continue;
+        const won = !off && Number(contest.winner) === Number(entry.side);
+        const first = won && !(entry.bits & loot.CLAIMED);
+        // Owed: its money back (off) or its part of the pot (won), its own NFT while the contest holds it, a winner's
+        // prize with its first claim, and the losers' NFTs its share still lets it pick. A loser of a contest of tokens
+        // is owed nothing, and never sends a transaction.
+        const picks = won && contest.nft && !(entry.bits & loot.ENDED) && Number(entry.taken) < loot.shareOf(contest, entry);
+        const owed = (contest.nft ? Number(entry.amount) === 1 && (off || won) : BigInt(entry.amount) > 0n && (off || first)) || first || picks;
+        if (!owed) continue;
+        const says = off ? 'Your entry back: the contest is off.' : contest.nft ? `Your NFT back${picks ? ', and your pick of the losers’' : ''}.` : contest.prize != null ? 'Your share of the pot, and your prize.' : 'Your share of the pot.';
+        out.push({ kind: 'contest', id: contest.id, side: entry.side, says });
       }
       for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project), at(65, me)])) {
         const hold = loot.decode('Hold', account.data);
@@ -1995,30 +2053,24 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       for (const l of spec.lotteries ?? []) {
         // A lottery the page names but nobody has written yet (a raffle still to open) has nothing to finish.
         if (!(await client.account(loot.pda.lottery(project, l.id)))) continue;
-        const { lottery, contributions, winners } = await roundOf(l);
-        if (loot.lotteryCancellable(lottery, slot)) out.push({ kind: 'cancel-draw', key: l.key, says: `The oracle never answered the draw of “${l.name}”: make ticket payments refundable.` });
-        else if (lottery.status === 'Open' && time >= BigInt(lottery.draws_at) && BigInt(lottery.sold) > 0n) out.push({ kind: 'reveal', key: l.key, says: `The draw of “${l.name}” is due: reveal the winners.` });
-        else if (loot.lotteryDrawStuck(lottery, slot)) out.push({ kind: 'reveal', key: l.key, says: `The oracle never answered the draw of “${l.name}”: ask it again.` });
-        const open = contributions.filter(({ value }) => !value.done);
-        // A drawn round gives every place's prize first; its money moves after.
-        const owed = contributions.filter(({ value }) => loot.lotteryStep(lottery, value) === 'prizes');
-        if (owed.length) {
-          const mine = owed.find(({ value }) => value.player === me);
-          out.push({ kind: 'lottery-prize', key: l.key, contribution: (mine ?? owed[0]).address,
-            says: mine ? `Take your prize in “${l.name}”.` : `Give the winners of “${l.name}” their prizes, so its draw can complete.` });
-        } else if (lottery.status === 'Drawn' && open.length) {
-          out.push({ kind: 'complete-draw', key: l.key, contribution: open[0].address, says: `Complete the draw of “${l.name}” so its winners can collect.` });
-        }
-        if (lottery.status === 'Cancelled' && open.length) {
-          const mine = open.find(({ value }) => value.player === me) ?? open[0];
-          out.push({ kind: 'ticket-refund', key: l.key, contribution: mine.address,
-            says: mine.value.player === me ? `Recover your ticket payment for “${l.name}”.` : `Return a ticket payment for “${l.name}” so its next round can open.` });
-        }
-        if (winners.some((w) => w.winner === me)) out.push({ kind: 'prize', key: l.key, says: `You won a place in “${l.name}”.` });
-        else if (winners.length) {
-          // A place that rolls makes its winner's roll, whose order the payer funds (its rent and SOL go to the winner).
-          const rolls = lottery.places.some((p) => p.prize?.Roll) ? ', and about 0.005 SOL (0.011 when its box can give an item) for each place won that gives a roll, which goes to the winner' : '';
-          out.push({ kind: 'payout', key: l.key, says: `Pay the winners of “${l.name}” so its next round can open (about 0.002 SOL of account rent for each winner who has no account for the prize yet${rolls}; it stays with the winner).` });
+        const { current, rounds } = await roundOf(l);
+        if (loot.lotteryCancellable(current, slot)) out.push({ kind: 'cancel-draw', key: l.key, says: `The oracle never answered the draw of “${l.name}”: make ticket payments refundable.` });
+        else if (current?.status === 'Open' && time >= BigInt(current.draws_at)) out.push({ kind: 'reveal', key: l.key, says: `The draw of “${l.name}” is due: reveal the winners.` });
+        else if (loot.lotteryDrawStuck(current, slot)) out.push({ kind: 'reveal', key: l.key, says: `The oracle never answered the draw of “${l.name}”: ask it again.` });
+        for (const { address: round, round: r } of rounds) {
+          // A drawn round gives its places' prizes, a part at a time, then sweeps; anyone may move it on.
+          if (r.status === 'Drawn') out.push({ kind: 'settle-round', key: l.key, round, says: `Complete the draw of “${l.name}” so its winners can collect.` });
+          // What this wallet is owed: a refund, its NFT ticket, its places' parts of the pot and token prizes, a recipient's part.
+          const mine = r.entries.flatMap((e, i) => {
+            const parts = loot.partsOwed(r, i).filter((part) => (part.Share ? e.to[part.Share[0]] === me : e.buyer === me));
+            return parts.length ? [{ entry: i, parts }] : [];
+          });
+          if (mine.length) out.push({ kind: 'pull', key: l.key, round, pulls: mine, says: r.status === 'Cancelled' ? `Recover your ticket payment for “${l.name}”.` : `Take what you are owed in “${l.name}”.` });
+          // Anyone may pay everyone else what they are owed (about 0.002 SOL of account rent for each who has no account
+          // for it yet, which stays with them): the last pull closes the round, and its opener's deposit comes back.
+          const others = r.entries.flatMap((e, i) => (loot.partsOwed(r, i).length && !mine.some((m) => m.entry === i) ? [i] : []));
+          if ((r.status === 'Swept' || r.status === 'Cancelled') && (others.length || (loot.roundFinished(r) && r.opener === me)))
+            out.push({ kind: 'payout', key: l.key, round, says: r.opener === me ? `Pay everyone of “${l.name}” what they are owed: the round then closes, and your deposit for it comes back.` : `Pay the others of “${l.name}” what they are owed, so its round can close.` });
         }
       }
       // Tokens whose unbonding wait is over, in a farm of tokens.
@@ -2075,30 +2127,36 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (c.kind === 'contest') {
         const contestAddress = loot.pda.contest(project, c.id);
         const contest = await read('Contest', contestAddress);
-        const won = contest.verdict === 'Won' && contest.winner === c.side;
-        const given = await prizeInputs([won ? contest.prize : null]);
-        // A contest of NFTs: the entry's own NFT, and for a winner while losers' NFTs are left, a losing entry's.
-        const nfts = {};
+        const entries = loot.decodeEntries((await client.account(loot.contestEntries(contestAddress, contest))).data);
+        const i = entries.findIndex((e) => e.player === me);
+        const own = entries[i];
+        const won = contest.verdict === 'Won' && Number(contest.winner) === Number(own.side);
+        const given = await prizeInputs([won && !(own.bits & loot.CLAIMED) ? contest.prize : null]);
+        // A contest of NFTs: the entry's own NFT while the contest holds it, and for a winner the losers' NFTs its share
+        // lets it pick (`take`: one asset, or several; the first left by default), as many as fit.
+        const nfts = [];
+        const kinds = {};
         if (contest.nft) {
-          const entry = await read('Entry', loot.pda.entry(contestAddress, me));
-          nfts.entry = entry;
-          const kindOf = async (asset, to = me) => {
+          const kindOf = async (asset, to) => {
             const { before, hasAuthority: _, ...kind } = await nftOf(asset, me, { to });
             given.before.push(...before);
-            return kind;
+            kinds[asset] = kind;
           };
-          // A losing entry's own NFT goes to the contest's opener once winners have taken theirs.
-          const lost = contest.verdict === 'Won' && !won;
-          if (entry.asset !== NOBODY) nfts.own = await kindOf(entry.asset, lost ? contest.opener : me);
-          if (won && Number(contest.losers) > 0) {
-            const found = await client.programAccounts(loot.LOOT_PROGRAM, [{ memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.Entry)) } }, { memcmp: { offset: 1, bytes: contestAddress } }]);
-            const left = found.map(({ account }) => loot.decode('Entry', account.data)).filter((e) => e.side !== contest.winner && e.asset !== NOBODY);
-            const losing = take ? left.find((e) => e.asset === take) : left[0];
-            if (take && !losing) throw new Error(`${take} is not a loser’s NFT left in this contest.`);
-            if (losing) nfts.taking = { player: losing.player, side: losing.side, asset: losing.asset, kind: await kindOf(losing.asset) };
+          if (Number(own.amount) === 1) {
+            nfts.push(i);
+            await kindOf(own.nft, me);
+          }
+          const share = won && !(own.bits & loot.ENDED) ? loot.shareOf(contest, own) - Number(own.taken) : 0;
+          const left = entries.map((e, j) => ({ e, j })).filter(({ e }) => Number(e.side) !== Number(contest.winner) && Number(e.amount) === 1);
+          const wanted = take ? [take].flat() : [];
+          const picked = (wanted.length ? left.filter(({ e }) => wanted.includes(e.nft)) : left).slice(0, Math.min(share, 4));
+          if (wanted.length && picked.length < Math.min(wanted.length, share)) throw new Error(`${wanted.join(', ')} is not a loser’s NFT left in this contest for you to pick.`);
+          for (const { e, j } of picked) {
+            nfts.push(j);
+            await kindOf(e.nft, me);
           }
         }
-        return send([computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, id: c.id, contest, player: me, side: c.side, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, ...nfts, programs })]);
+        return send([computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, projectState: g, id: c.id, contest, entries, player: me, nfts: contest.nft ? nfts : undefined, kinds, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, programs })]);
       }
       if (c.kind === 'release') {
         const hold = await read('Hold', c.hold);
@@ -2115,41 +2173,24 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         if (!step || step === 'cooling') return null;
         return send([step === 'close' ? closeTableIx({ table: c.table, authority: me }) : deactivateTableIx({ table: c.table, authority: me })], [], { keepWrapped: true });
       }
+      if (!['reveal', 'cancel-draw', 'settle-round', 'pull', 'payout'].includes(c.kind)) throw new Error(`Nothing to do for a claim of kind ${c.kind}.`);
       const l = part('lotteries', c.key);
-      if (c.kind === 'reveal') return send([loot.drawLotteryIx({ payer: me, project, id: l.id })]);
-      if (c.kind === 'cancel-draw') return send([loot.cancelLotteryIx({ project, id: l.id })]);
-      if (c.kind === 'lottery-prize') {
-        const { lottery, contributions } = await roundOf(l);
-        const found = contributions.find(({ address }) => address === c.contribution);
-        if (!found || loot.lotteryStep(lottery, found.value) !== 'prizes') return null;
-        const given = await prizeInputs(lottery.places.map((p) => p.prize), me, found.value.player);
-        return send([computeUnitLimit(600_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.finishLotteryContributionIx({ payer: me, project, id: l.id, lottery, contributionAddress: found.address, contribution: found.value, collection: given.collection, poolMints: given.poolMints, items: given.items, nfts: given.nfts, programs })]);
-      }
-      if (c.kind === 'complete-draw' || c.kind === 'ticket-refund') {
-        const { lottery, contributions } = await roundOf(l);
-        const found = contributions.find(({ address }) => address === c.contribution);
-        if (!found || found.value.done || lottery.status !== (c.kind === 'ticket-refund' ? 'Cancelled' : 'Drawn') || !loot.lotteryStep(lottery, found.value)) return null;
-        // A ticket an NFT paid for passes that NFT, which the project holds: back to its buyer when the round is
-        // cancelled or gives tickets back, to the wallet its price names when it is given on.
-        const then = lottery.status === 'Drawn' ? lottery.nft_ticket?.then : null;
-        // Given to a wallet that is an account of the loot program, it goes back to its buyer.
-        const handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
-        const to = !then || handBack ? found.value.player : then.Give ? then.Give[0] : undefined;
-        const { before = [], hasAuthority: _, ...ticket } = found.value.asset !== NOBODY ? await nftOf(found.value.asset, me, { to }) : {};
-        return send([...before, loot.finishLotteryContributionIx({ payer: me, project, id: l.id, lottery, contributionAddress: found.address, contribution: found.value, treasury: g.treasury, ticket, handBack, programs })]);
-      }
-      if (c.kind === 'prize' || c.kind === 'payout') {
-        // Every unpaid winner, three a transaction, each paid every place's share of the pot they won (their prizes went
-        // first): the round ends once all are paid, and the next opens. Each winner's account of the pot's mint is
-        // opened when they have none, paid by whoever sends it.
-        const { lottery, winners } = await roundOf(l);
-        const mine = winners.filter((w) => w.winner === me);
-        const chosen = [...mine, ...winners.filter((w) => w.winner !== me)].slice(0, 3);
-        if (!chosen.length) return null;
-        const pay = (w) => loot.finishLotteryContributionIx({ payer: me, project, id: l.id, lottery, contributionAddress: w.contribution.address, contribution: w.contribution.value, treasury: g.treasury, programs });
-        return send(chosen.map(pay));
-      }
-      throw new Error(`Nothing to do for a claim of kind ${c.kind}.`);
+      const lottery = await read('Lottery', loot.pda.lottery(project, l.id));
+      if (c.kind === 'reveal') return send([loot.drawLotteryIx({ payer: me, project, id: l.id, lottery })]);
+      if (c.kind === 'cancel-draw') return send([loot.cancelLotteryIx({ project, id: l.id, lottery })]);
+      const found = await client.account(c.round);
+      const r = found?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found.data) : null;
+      if (!r) return null;
+      if (c.kind === 'settle-round') return r.status === 'Drawn' ? send(await settleRoundStep(c.round, r, me)) : null;
+      // Pulls: this wallet's own parts, or (`payout`) everyone's, a few to a transaction; the last pull closes the round.
+      const owed = c.kind === 'pull' ? c.pulls : r.entries.flatMap((_, i) => (loot.partsOwed(r, i).length ? [{ entry: i, parts: loot.partsOwed(r, i) }] : []));
+      if (!owed.length) return loot.roundFinished(r) ? send([loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: r, projectState: g, programs })]) : null;
+      const instructions = [];
+      for (const { entry, parts } of owed.slice(0, 4)) instructions.push(...(await pulls(c.round, r, entry, parts, me)));
+      // When these pulls leave nothing owed, the round closes in the same transaction (its deposit back to its opener).
+      const everyone = r.entries.every((_, i) => !loot.partsOwed(r, i).length || owed.slice(0, 4).some((x) => x.entry === i && x.parts.length === loot.partsOwed(r, i).length));
+      if (everyone && (r.status === 'Swept' || r.status === 'Cancelled')) instructions.push(loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: { ...r, owed: 0 }, projectState: g, programs }));
+      return send(instructions);
     },
 
     /** The player's collectibles of this project: [{ asset, item, itemId, name, uri, attributes, frozen }]. `item` is its key in the spec. */

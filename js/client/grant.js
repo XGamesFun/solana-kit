@@ -1,11 +1,12 @@
 // Grants: the bytes every voucher signer signs and `claim_grant` rebuilds, the approved list's Merkle tree, the
 // Ed25519 precompile instruction that carries a voucher's signature, and the claim itself. Browser-safe.
 //
-//   voucherBytes   "loot-grant-v4" | program (32) | grant (32) | incarnation (u64 LE) | wallet (32) | person_hash (32) | round (16) | expires (i64 LE) | amount (u64 LE)
+//   voucherBytes   "loot-grant-v5" | sha256(program (32) | grant (32) | incarnation (u64 LE) | wallet (32) | person_hash (32) |
+//                  expires (i64 LE) | count (u32 LE) | (round (16) | amount (u64 LE)) × count): a wallet's wins of several rounds
 //   listLeaf       sha256("loot-list-v3" | wallet (32) | person_hash (32) | round (16) | amount (u64 LE)): a wallet's win of one round
 //
-// `amount`: the tokens this claim gives, up to the grant's fixed amount (a rank's reward, a share); 0 for the grant's
-// prize as it is.
+// `amount`: the tokens a round gives, up to the grant's fixed amount (a rank's reward, a share); 0 for the grant's
+// prize as it is. A round pays a wallet once per grant incarnation, whoever signs it again, whenever.
 //   keyLeaf        sha256("loot-key-v1" | voucher key (32)): a key under a grant's key root (a promo code's)
 //   merkleRoot     a node = sha256(min(a, b) | max(a, b)) (byte-wise); an odd node at a level goes up unchanged
 //   merkleProof    the siblings from the leaf up (a promoted level adds none)
@@ -15,16 +16,20 @@
 // the tests (js/test/client.test.mjs).
 import { addressBytes } from '../chain/base58.js';
 import { compareBytes, concat, fromHex, intLE, readUintLE, toBigInt, uintLE, utf8 } from '../chain/bytes.js';
+import { meta } from '../chain/programs.js';
 import { sha256 } from '../chain/sha256.js';
-import { ASSOCIATED_TOKEN_PROGRAM, gateAccounts, lootIx, prizeMetas, prizeNonce } from './ix.js';
+import { recordKey16 } from './accounts.js';
+import { ASSOCIATED_TOKEN_PROGRAM, gateAccounts, lootIx, prizeMetas, prizeNonce, tailOf } from './ix.js';
 import { LOOT_PROGRAM, pda } from './pda.js';
 import IDL from './idl/loot.js';
 
-export const VOUCHER_DOMAIN = 'loot-grant-v4';
+export const VOUCHER_DOMAIN = 'loot-grant-v5';
 export const LIST_DOMAIN = 'loot-list-v3';
 export const KEY_DOMAIN = 'loot-key-v1';
-/** 13 + 32 × 4 + 8 + 16 + 8. */
-export const VOUCHER_BYTES = 181;
+/** What a voucher key signs: the prefix (13 bytes), then the sha256 of the voucher's body. */
+export const VOUCHER_BYTES = 45;
+/** A grant claim's compute limit: its rounds' records and prizes can pass the 200,000 a transaction has by default. */
+export const CLAIM_COMPUTE_UNITS = 400_000;
 export const ZERO_HASH = new Uint8Array(32);
 export const ED25519_PROGRAM = 'Ed25519SigVerify111111111111111111111111111';
 /** The seconds of the day a grant's daily limit counts claims in (the IDL's `DAY_SECONDS`). */
@@ -54,26 +59,33 @@ function roundBytes(value) {
 /** An i64 little-endian (two's complement), as the program reads `expires`. */
 export const i64LE = (value) => intLE(value, 8);
 
-/**
- * The 181 bytes a voucher key signs and `claim_grant` rebuilds from its own accounts and arguments. `round` names the
- * win (the project round, draw or giveaway it was won in): the program pays a wallet each round once per grant incarnation.
- */
-export function voucherBytes({ program = LOOT_PROGRAM, grant, incarnation, wallet, personHash, round, expires, amount = 0n }) {
-  const out = concat(utf8(VOUCHER_DOMAIN), bytes32(program, 'program'), bytes32(grant, 'grant'), uintLE(incarnation, 8), bytes32(wallet, 'wallet'), personBytes(personHash), roundBytes(round), i64LE(expires), uintLE(amount, 8));
-  if (out.length !== VOUCHER_BYTES) throw new Error(`a voucher is ${VOUCHER_BYTES} bytes, not ${out.length}`);
-  return out;
+/** A claim's rounds: [{ id (16 bytes or 32 hex characters), amount }], or one `round` and its `amount`. */
+const roundsOf = (rounds, round, amount) => (rounds ?? [{ id: round, amount }]).map((r) => ({ id: roundBytes(r.id ?? r.round ?? new Uint8Array(16)), amount: toBigInt(r.amount ?? 0) }));
+
+/** A voucher's body, which its key signs the sha256 of (`voucherBytes`). */
+export function voucherBody({ program = LOOT_PROGRAM, grant, incarnation, wallet, personHash, expires, rounds, round, amount = 0n }) {
+  const list = roundsOf(rounds, round, amount);
+  return concat(bytes32(program, 'program'), bytes32(grant, 'grant'), uintLE(incarnation, 8), bytes32(wallet, 'wallet'), personBytes(personHash), i64LE(expires), uintLE(list.length, 4), ...list.flatMap((r) => [r.id, uintLE(r.amount, 8)]));
 }
 
-/** The fields back from voucher bytes (addresses as bytes). */
-export function readVoucher(bytes) {
-  if (!(bytes instanceof Uint8Array) || bytes.length !== VOUCHER_BYTES) throw new RangeError(`a voucher is ${VOUCHER_BYTES} bytes`);
-  const n = VOUCHER_DOMAIN.length;
-  if (new TextDecoder().decode(bytes.subarray(0, n)) !== VOUCHER_DOMAIN) throw new Error(`not a ${VOUCHER_DOMAIN} voucher`);
-  const at = (i, len) => bytes.slice(i, i + len);
-  let expires = 0n;
-  for (let i = 7; i >= 0; i--) expires = (expires << 8n) | BigInt(bytes[n + 152 + i]);
+/**
+ * The 45 bytes a voucher key signs and `claim_grant` rebuilds from its own accounts and arguments: the prefix, then the
+ * sha256 of the voucher's body (`voucherBody`), so a voucher of many rounds is as short to check as one of one. `rounds`
+ * ([{ id, amount }], or one `round` and its `amount`) names the wins (the project round, draw or giveaway each was won
+ * in): the program pays a wallet each round once per grant incarnation.
+ */
+export const voucherBytes = (fields) => concat(utf8(VOUCHER_DOMAIN), sha256(voucherBody(fields)));
+
+/** The fields back from a voucher's body (`voucherBody`; addresses as bytes, rounds as [{ id, amount }]). */
+export function readVoucher(body) {
+  if (!(body instanceof Uint8Array) || body.length < 148) throw new RangeError('a voucher body is at least 148 bytes');
+  const at = (i, len) => body.slice(i, i + len);
+  let expires = readUintLE(body, 136, 8);
   if (expires >= 1n << 63n) expires -= 1n << 64n;
-  return { program: at(n, 32), grant: at(n + 32, 32), incarnation: readUintLE(bytes, n + 64, 8), wallet: at(n + 72, 32), personHash: at(n + 104, 32), round: at(n + 136, 16), expires, amount: readUintLE(bytes, n + 160, 8) };
+  const count = Number(readUintLE(body, 144, 4));
+  if (body.length !== 148 + 24 * count) throw new RangeError('a voucher body holds 24 bytes a round');
+  const rounds = Array.from({ length: count }, (_, i) => ({ id: at(148 + 24 * i, 16), amount: readUintLE(body, 164 + 24 * i, 8) }));
+  return { program: at(0, 32), grant: at(32, 32), incarnation: readUintLE(body, 64, 8), wallet: at(72, 32), personHash: at(104, 32), expires, rounds };
 }
 
 /** A voucher key's leaf under a grant's `key_root`. */
@@ -178,63 +190,110 @@ export function ed25519Ix({ publicKey, signature, message }) {
   return { programId: ED25519_PROGRAM, keys: [], data };
 }
 
+/** The kinds of a grant's limit records (`limitKey`). */
+const KINDS = Object.freeze({ wallet: 'wallet', person: 'person', badge: 'badge', code: 'code' });
+
+/** The key of a grant's limit record of `kind` ('wallet', 'person', 'badge', 'code') for `subject` (an address or 32
+ * bytes): sha256(kind | subject)[..16]. */
+export const limitKey = (kind, subject) => recordKey16(utf8(KINDS[kind] ?? kind), bytes32(subject, 'subject'));
+
+/** The key of a wallet's record of a round a grant paid it: sha256(round | wallet)[..16]. */
+export const roundKey = (round, wallet) => recordKey16(roundBytes(round), bytes32(wallet, 'wallet'));
+
+/** The shard a record's key falls in, of a grant's `2^bits`: the top `bits` bits of its first byte. */
+export const shardOf = (key, bits) => (Number(bits) ? key[0] >> (8 - Number(bits)) : 0);
+
+/** The rounds shard a wallet's paid rounds are kept in: its own limit record's. */
+export const walletShard = (grant, wallet) => shardOf(limitKey('wallet', wallet), grant.shard_bits);
+
+/** Whether a grant paid `wallet` for `round`, from the wallet's decoded rounds shard (`decodeList`, null for none). */
+export const roundPaid = (list, wallet, round) => Boolean(list?.records.some((r) => compareBytes(r, roundKey(round, wallet)) === 0));
+
+/**
+ * The fewest shard bits (0 to 8) that keep each of a grant's lists under ~100,000 records over its life: `wallets` ×
+ * the rounds each may claim (`rounds`). A 10,000-wallet airdrop takes 0 (one shard).
+ */
+export function shardBitsFor(wallets, rounds = 1) {
+  const records = Number(wallets) * Math.max(1, Number(rounds));
+  let bits = 0;
+  while (bits < 8 && records / 2 ** bits > 100_000) bits += 1;
+  return bits;
+}
+
 /**
  * The claim of grant `id` for `wallet`, sent and signed by `signer` (anyone: the play host, the owner's server, the
- * player). The grant's funds pay its rent through the signer; what they can't cover, the signer pays. The signer pays
- * the player fee with its own SOL. `grant` is the decoded Grant; `count` the wallet's receipt count before this claim (0 for a
- * first claim); `poolMint` the mint of a Payout's pool, read from the pool.
- * A voucher claim goes right after `ed25519Ix` in the same transaction, `voucherKey` the key that signed it (its
- * counter is passed when the grant limits keys; a key under the key root carries its `proof`); a list claim carries
- * its `proof`; an open grant (no keys, no key root, no list) needs neither. What passes its gate (`shown`, or
- * `listProof` for a list gate) comes first. Its prize (`grant.gives`, `prizeMetas`)
- * follows: `poolMint` for tokens from a pool, `item` (the decoded Item) for a collectible or a compressed NFT of one, `nft` for an NFT of a stash;
- * a roll's order at `nonce` (`prizeNonce(grant, round, count)` by default), then the rolled box's prize mints
- * (`rollMints`: `boxes` maps the box's id to its decoded LootBox, null for one never written; `rollPools` each pool its
- * prizes name to its mint, null for one never opened). The grant's funds pay what it opens.
+ * player). The grant's funds pay its records through the signer; what they can't cover, the signer pays. The signer pays
+ * the player fee, and a roll's order, with its own SOL. `grant` is the decoded Grant.
+ *
+ * A voucher claim goes right after `ed25519Ix` in the same transaction, `voucherKey` the key that signed it (a key under
+ * the key root carries its proof as `proofs[0]`); a list claim carries a proof for each round (`proofs`); an open grant
+ * (no keys, no key root, no list) names no round and pays one prize (`count`: the wallet's claims before it, for its
+ * roll's nonce). `rounds` ([{ id, amount }], or one `round` and its `amount`) are the wins it names: each paid once, so
+ * one already paid is skipped (`paidRounds`: the wallet's decoded rounds shard, `decodeList`, to leave out its prize's
+ * accounts). What passes its gate (`shown`, or `listProof` for a list gate) comes first, then each shard of the grant's
+ * claims it counts in, then each round's prize (`grant.gives`, `prizeMetas`): `poolMint` for tokens from a pool, `item`
+ * (the decoded Item) for a collectible or a compressed NFT of one, `nft` for an NFT of a stash; round `i`'s roll at
+ * `prizeRollNonce(nonce + i)` (`nonce`: `prizeNonce` of the grant, the wallet and its rounds by default), then the rolled
+ * box's prize mints (`rollMints`: `boxes`, `rollPools`). Send it with a compute limit of `CLAIM_COMPUTE_UNITS`.
  */
-export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, round, expires, personHash, amount = 0n, proof = [], poolMint, item, nft, boxes = {}, rollPools = {}, shown, listProof, programs, voucherKey, nonce, extra = [] }) {
+export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, rounds, round, expires, personHash, amount = 0n, proofs, proof = [], paidRounds = null, poolMint, item, nft, boxes = {}, rollPools = {}, shown, listProof, programs, voucherKey, nonce, extra = [] }) {
   if (!signer) throw new Error('A claim needs its signer: whoever sends it');
   // Every claim is its winning wallet's own: the wallet signs it, whatever proves it (a voucher, a list, an open
   // grant), so nobody claims for a player (WalletMustSign). `signer` pays the fees and what the claim opens: the
   // wallet itself, or anyone who pays for it.
   const address = pda.grant(project, id);
   const person = personBytes(personHash);
-  const hasPerson = person.some((b) => b !== 0);
-  // A person a voucher names is counted when the grant limits persons; an open grant gated by an NFT
-  // counts the NFT shown, at a badge's address (a grant never does both; both go in `person_receipt`).
+  const listed = Uint8Array.from(grant.list_root ?? []).some((b) => b !== 0);
+  // A claim by voucher or list names its rounds; an open one names none.
+  const named = Boolean(voucherKey) || listed || rounds != null || round != null;
+  const list = named ? roundsOf(rounds, round ?? new Uint8Array(16), amount) : [];
+  // The limit records it counts in: the wallet's, a person's a voucher names, the NFT an open claim of an open grant
+  // gated by one shows (a badge), a voucher key's; each shard of the grant's claims once, by shard number.
+  const bits = Number(grant.shard_bits ?? 0);
+  const keys = [limitKey('wallet', wallet)];
+  if (person.some((b) => b !== 0) && Number(grant.limits?.per_person ?? 0) > 0) keys.push(limitKey('person', person));
   const badge = typeof shown === 'string' ? shown : shown?.asset ?? shown?.mint ?? shown?.compressed;
-  const counted = hasPerson && Number(grant.limits?.per_person ?? 0) > 0
-    ? pda.person(address, grant.incarnation, person)
-    : grant.open && grant.gate?.Holds && badge ? pda.badge(address, grant.incarnation, badge) : null;
-  const accounts = {
-    project,
-    grant: address,
-    signer,
-    wallet,
-    wallet_receipt: pda.grantReceipt(address, grant.incarnation, wallet),
-    person_receipt: counted,
-    code_receipt: voucherKey && Number(grant.limits?.per_key ?? 0) ? pda.code(address, grant.incarnation, voucherKey) : null,
-    token_program: undefined,
-    token_2022_program: undefined,
-    associated_token_program: ASSOCIATED_TOKEN_PROGRAM,
-  };
-  const roundAt = roundBytes(round ?? new Uint8Array(16));
-  nonce = toBigInt(nonce ?? prizeNonce(address, roundAt, toBigInt(count)));
-  // The prize's accounts, after an NFT the wallet shows: `poolMint` a pool's mint, `item` the decoded Item of a
-  // collectible (its next serial), `nft` an NFT's kind as `piece` takes it.
+  if (!named && grant.open && grant.gate?.Holds && badge) keys.push(limitKey('badge', badge));
+  if (voucherKey && Number(grant.limits?.per_key ?? 0) > 0) keys.push(limitKey('code', voucherKey));
+  const shards = [...new Set(keys.map((k) => shardOf(k, bits)))].sort((x, y) => x - y).map((shard) => meta(pda.claims(address, grant.incarnation, shard), false, true));
+  nonce = toBigInt(nonce ?? (named ? prizeNonce(address, wallet, ...list.map((r) => r.id)) : prizeNonce(address, wallet, toBigInt(count))));
+  // Each round not paid yet gives the grant's prize, or the amount of its tokens the round names, in order; collectibles
+  // of one item each at its next serial.
   const gives = grant.gives;
   const pool = gives.Tokens?.from.Pool?.[0];
   const itemId = gives.Item?.[0] ?? gives.Compressed?.item;
   if (pool !== undefined && !poolMint) throw new Error('A payout claim needs its pool’s mint (poolMint), read from the pool');
-  const prize = prizeMetas({
-    project, prize: gives, winner: wallet, nonce, programs,
-    poolMints: pool !== undefined ? { [pool]: poolMint } : {}, items: itemId !== undefined ? { [itemId]: item } : {}, nft,
-    strict: true, boxes, rollPools,
+  const seen = new Set();
+  const owed = (named ? list.map((r, i) => ({ ...r, i })) : [{ amount: 0n, i: 0 }]).filter((r) => {
+    if (!named) return true;
+    const hex = Array.from(r.id, (b) => b.toString(16).padStart(2, '0')).join('');
+    if (seen.has(hex) || roundPaid(paidRounds, wallet, r.id)) return false;
+    seen.add(hex);
+    return true;
   });
+  const prizes = owed.flatMap((r, made) => prizeMetas({
+    project, prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: { Fixed: [r.amount] } } } : gives, winner: wallet, nonce: BigInt.asUintN(64, nonce + BigInt(r.i)), programs,
+    poolMints: pool !== undefined ? { [pool]: poolMint } : {}, items: itemId !== undefined ? { [itemId]: item } : {}, nft, made,
+    strict: true, boxes, rollPools,
+  }));
+  proofs ??= listed && !voucherKey ? [proof] : proof.length ? [proof] : [];
   return lootIx(
     'claim_grant',
-    { round: roundAt, expires: toBigInt(expires ?? 0), person_hash: person, amount: toBigInt(amount), proof: proof.map((p) => bytes32(p, 'proof')), nonce },
-    accounts,
-    { remaining: [...gateAccounts(project, { gate: grant.gate, wallet, shown, listProof }), ...prize, ...extra], signer: ['wallet'] },
+    { rounds: list, expires: toBigInt(expires ?? 0), person_hash: person, proofs: proofs.map((p) => p.map((x) => bytes32(x, 'proof'))), nonce },
+    {
+      project, grant: address, signer, wallet,
+      rounds: named ? pda.rounds(address, grant.incarnation, shardOf(keys[0], bits)) : null,
+      token_program: undefined, token_2022_program: undefined, associated_token_program: ASSOCIATED_TOKEN_PROGRAM,
+    },
+    { remaining: [...gateAccounts(project, { gate: grant.gate, wallet, shown, listProof }), ...shards, ...prizes, ...tailOf(extra)], signer: ['wallet'] },
   );
 }
+
+/**
+ * Anyone closes shard `shard` of a grant's rounds (`rounds`) or claims once the grant is closed or made again
+ * (`incarnation` the one the shard is of): its rent goes to the project's `owner`.
+ */
+export const closeShardIx = ({ project, id, incarnation, rounds = false, shard, owner }) => {
+  const grant = pda.grant(project, id);
+  return lootIx('close_shard', { id, incarnation: toBigInt(incarnation), rounds, shard }, { project, grant, shard: (rounds ? pda.rounds : pda.claims)(grant, incarnation, shard), owner });
+};

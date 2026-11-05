@@ -6,9 +6,9 @@
 // odds as written (stock odds start where the table starts), and one ticket per lottery purchase. Shares of a
 // pool are worked out continuously, so a pool that pays a share of itself settles at a level instead of emptying.
 // It is a guide, not a promise: the full simulation (js/sim) runs the real program.
-import { contributionBytes, receiptBytes } from '../client/index.js';
+import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxOrderBytes } from './plan.mjs';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, holdsRent, outcomeBurns, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
+import { boxBuys, boxRolls, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, escrowUnits, holdsRent, outcomeBurns, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
@@ -20,16 +20,17 @@ const PROJECT_FEE = sol(FEES.project);
 const NETWORK_FEE = sol(SIGNATURE_FEE);
 /** MagicBlock's oracle, per random number: a box's open (the player), a lottery's draw, a `roll` (model.mjs ORACLE_FEE). */
 const ORACLE = sol(ORACLE_FEE);
-/** A lottery purchase's record: rent the buyer pays and gets back once the round is done with it (lottery.rs), with a
- * recipient kept for each of the lottery's `shares` shares. */
-const ticketLine = (shares) => sol((BigInt(contributionBytes(shares)) + 128n) * RENT_PER_BYTE);
+/** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
+ * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
+const ticketLine = (l) => sol(BigInt(entryWidth(lotterySplit(l).map((x) => ({ to: /^(chosen|holder)/.test(String(x.to)) ? { Chosen: {} } : 'Treasury' })), false, Boolean(l.ticketNft))) * RENT_PER_BYTE);
 /** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
 /** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps
  * the creation fee). 189 bytes × 5,080 lamports, measured by the full simulation. */
 const BURN_REFUND = 0.00096;
-/** A grant's wallet receipt at its first voucher: the current header plus one round hash. */
-const RECEIPT_RENT = sol((BigInt(receiptBytes(1)) + 128n) * RENT_PER_BYTE);
+/** What a grant's claim adds to its lists: the wallet's limit record (its first claim) and a record of the round paid
+ * (none for an open grant's claim). Back to the owner when the shards close after the grant. */
+const claimRecordsRent = (g) => sol(BigInt(LIMIT_RECORD_BYTES + ((g.vouchers ?? []).length || (g.keys ?? []).length || (g.list ?? []).length ? ROUND_RECORD_BYTES : 0)) * RENT_PER_BYTE);
 /** A wallet's token account, which a grant that pays tokens opens from its funds when the winner has none. */
 const TOKEN_ACCOUNT_RENT = sol((165n + 128n) * RENT_PER_BYTE);
 /** An order of box `b`'s rent, sized to all its box can set aside (`orderBytes`), returned at settle or refund. */
@@ -166,7 +167,7 @@ export function simulate(economy, { now = 0 } = {}) {
   const stashTakes = [];
   const prizeTakes = [];
   /** The SOL a prize's order holds while it waits (its rent, and the SOL for a collectible when the box can give one), back to the winner at settle. */
-  const orderHeld = (box) => orderRent(m.box.get(box), m) + sol(ESCROW_LAMPORTS) * Math.max(0, ...(m.box.get(box)?.outcomes ?? []).map((o) => outcomeParts(o).filter((x) => holdsRent(x, m)).length));
+  const orderHeld = (box) => orderRent(m.box.get(box), m) + sol(ESCROW_LAMPORTS) * (m.box.get(box) ? escrowUnits(m.box.get(box), m) : 0);
   /**
    * A route gives prize line `line` `times` a day (prize.rs), `payer` ({ rent, oracle }) paying what it opens: a
    * collectible's rent, the winner's token account (the bound, not the average), a roll's order (back to the winner at
@@ -334,8 +335,7 @@ export function simulate(economy, { now = 0 } = {}) {
     const isSol = Boolean(m.tokens.get(token)?.wsol);
     const oracle = rolled ? ORACLE : 0;
     // A collectible's rent comes out of the SOL the order holds when it settles: on average, the chance of one.
-    const items = drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((x) => holdsRent(x, m)).length));
-    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(ESCROW_LAMPORTS) * items + orderRent(b, m) });
+    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(ESCROW_LAMPORTS) * escrowUnits(b, m) + orderRent(b, m) });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);
     return {
@@ -527,7 +527,7 @@ export function simulate(economy, { now = 0 } = {}) {
       carryOut(split, potToken, tickets * price, `lottery:${l.key}`, `lottery:${l.key}`);
     }
     playerAction(tickets);
-    players.rent += tickets * ticketLine(split.length);
+    players.rent += tickets * ticketLine(l);
     const placed = (l.places ?? [100]).map(placeOf);
     const places = placed.map((p) => Number(p.percent));
     creator.network += (1 + places.length) * NETWORK_FEE * drawsPerDay; // the draw and each place's payment
@@ -544,7 +544,7 @@ export function simulate(economy, { now = 0 } = {}) {
     const prized = placed.filter((p) => prizeLine(p.prize)).map((p) => worthOf(prizeLine(p.prize)));
     // One ticket bought on its own: the fee and the record are per purchase, so a bundle of tickets shares them. The
     // record's rent comes back once the round is done with it, and a no-loss ticket's price after the draw: both held.
-    const realCost = realCostOf({ price, token: ticketToken, isSol: Boolean(m.tokens.get(ticketToken)?.wsol), held: ticketLine(lotterySplit(l).length), heldIs: l.noLoss ? 'the ticket’s price and the purchase record’s rent' : 'the purchase record’s rent', priceBack: Boolean(l.noLoss) });
+    const realCost = realCostOf({ price, token: ticketToken, isSol: Boolean(m.tokens.get(ticketToken)?.wsol), rent: ticketLine(l), rentIs: 'the purchase’s entry in the round', ...(l.noLoss ? { heldIs: 'the ticket’s price' } : {}), priceBack: Boolean(l.noLoss) });
     return { key: l.key, name: l.name, price, token: ticketToken, potToken, ...(l.minSold ? { minSold: l.minSold } : {}), ticketsPerDay: round(tickets, 6), ticketsPerRound: round(perRound, 4), roundDays: round(every / DAY, 4), places, placePrizes: placed.map((p) => (p.prize ? prizeWords(p.prize, m) : null)), prizeWorthPerRound: round(prized.reduce((n, w) => n + (w ?? 0), 0)), ...(prized.includes(null) ? { unpricedPrizes: true } : {}), cutPercent: num(l.cutPercent), splitPercent: round(cut * 100, 4), drawsOnce: once, ...(l.ticketNft ? { ticketNft: true } : {}), ...(l.noLoss ? { noLoss: true } : {}), realCost };
   });
 
@@ -621,15 +621,15 @@ export function simulate(economy, { now = 0 } = {}) {
     };
   });
   for (const f of m.farms) playerAction(perDay('farm', f.key));
-  // Grants: each claim's sender pays the player fee; its receipt's rent comes from the grant's funds (the owner's SOL).
+  // Grants: each claim's sender pays the player fee; its records' rent comes from the grant's funds (the owner's SOL, back when its shards close).
   const grants = m.grants.map((g) => {
     const claims = num(m.scenario.perDay?.[`grant:${g.key}`]);
     playerAction(claims);
-    creator.rent = (creator.rent ?? 0) + claims * RECEIPT_RENT;
+    creator.rent = (creator.rent ?? 0) + claims * claimRecordsRent(g);
     // Its prize, paid for by the grant's funds; a roll's order goes back to the winner at settle.
     const line = prizeLine(g.prize ?? g.gives);
     const each = givePrize(line, claims, `grant:${g.key}`, creator);
-    return { key: g.key, name: g.name, claimsPerDay: claims, gives: prizeWords(line, m), fundsPerClaimSol: round(RECEIPT_RENT + each), ...(line?.gives === 'roll' ? { orderHeldSol: round(orderHeld(line.box)) } : {}) };
+    return { key: g.key, name: g.name, claimsPerDay: claims, gives: prizeWords(line, m), fundsPerClaimSol: round(claimRecordsRent(g) + each), ...(line?.gives === 'roll' ? { orderHeldSol: round(orderHeld(line.box)) } : {}) };
   });
   for (const h of m.holds) playerAction(perDay('hold', h.key));
   for (const c of m.contests) playerAction(perDay('contest', c.key));
@@ -853,7 +853,7 @@ export function simulate(economy, { now = 0 } = {}) {
       burned: totals(burned),
       accounts: totals(accounts),
     },
-    fees: { playerSol: PLAYER_FEE, projectSol: PROJECT_FEE, oracleSol: ORACLE, networkPerSignatureSol: NETWORK_FEE, escrowSol: sol(ESCROW_LAMPORTS), ticketLineRentSol: round(ticketLine(0)), collectibleRentSol: COLLECTIBLE_RENT, burnRefundSol: BURN_REFUND },
+    fees: { playerSol: PLAYER_FEE, projectSol: PROJECT_FEE, oracleSol: ORACLE, networkPerSignatureSol: NETWORK_FEE, escrowSol: sol(ESCROW_LAMPORTS), ticketLineRentSol: round(ticketLine({})), collectibleRentSol: COLLECTIBLE_RENT, burnRefundSol: BURN_REFUND },
     notes,
   };
 }

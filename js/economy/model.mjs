@@ -452,13 +452,26 @@ export const drawsOf = (b) => ((b.slots ?? []).length ? b.slots.reduce((n, s) =>
  * fresh compressed one (its traits' Sheet). A plain compressed NFT costs no rent. */
 export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
 
+/**
+ * The units of `ESCROW_LAMPORTS` an order of box `b` holds for what its settle may open (order.rs `escrow`), given back
+ * unspent: for each draw, each part of the richest outcome that opens an account (a collectible, a fresh compressed
+ * NFT's Sheet, a stash's NFT); once an order, each source of tokens it may pay, and the fate of the NFT it rolls on.
+ */
+export function escrowUnits(b, m) {
+  const opens = (p) => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
+  const parts = (b.outcomes ?? []).map((o) => outcomeParts(o));
+  const most = Math.max(0, ...parts.map((ps) => ps.filter(opens).length));
+  const sources = new Set(parts.flat().filter((p) => ['tokens', 'pay', 'share', 'mint'].includes(p.gives)).map((p) => prizePool(p) ?? `mint:${p.currency ?? ''}`));
+  return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
+}
+
 export const boxRolls = (b, m) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
 
 /** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll, and rolls on no NFT. */
 export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn;
 
 /** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
-export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize) } : { percent: p, prize: null });
+export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 } : { percent: p, prize: null, times: 1 });
 
 /** "pool:house" → { kind: 'pool', key: 'house' }; "burn" → { kind: 'burn' }. */
 export function destination(to) {
