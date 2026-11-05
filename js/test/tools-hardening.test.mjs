@@ -326,8 +326,19 @@ describe('a loan whose token someone can freeze is shown as such, and needs the 
     const { hold } = await app.borrow(maker, 2, a, { acceptRisks: true });
     assert.equal(w.read('Hold', hold).debt.lender, maker);
     assert.equal(w.balance(kp.address, frozen), PRICE);
-    await app.borrow(maker, 1, b);
+    const loan = await app.borrow(maker, 1, b);
     assert.equal(w.balance(kp.address, w.mint), PRICE, 'a plain token needs no yes');
+    // Repaying: the wallet's one prompt repays and funds a throwaway key, which sends the NFT home and empties itself.
+    w.fund(kp.address, w.mint, PRICE);
+    let prompts = 0;
+    const counted = solanaApp({ spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } }, rpc: w.chain.rpc, wallet: { ...asWallet(kp), signTransaction: (x) => (prompts++, asWallet(kp).signTransaction(x)) }, now: () => w.chain.now() });
+    const before = w.chain.get(kp.address).lamports;
+    const { released } = await counted.repay(b, w.read('Hold', loan.hold).free_at);
+    assert.ok(released);
+    assert.equal(prompts, 1, 'one prompt: the key sends the release');
+    assert.equal(w.chain.get(loan.hold), null, 'the hold is closed');
+    assert.equal(w.balance(maker, w.mint), 10n * PRICE - PRICE + 2n * PRICE, 'the lender is repaid');
+    assert.ok(w.chain.get(kp.address).lamports > before - 1_000_000n, 'the key gave back what it was funded, less fees');
   });
 });
 

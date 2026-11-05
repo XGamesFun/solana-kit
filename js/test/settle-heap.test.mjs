@@ -68,24 +68,22 @@ test('js/play settles a roll that won three NFTs with the 256 KiB heap frame, on
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [5] }, vouchers: [SYSTEM_PROGRAM, SYSTEM_PROGRAM, SYSTEM_PROGRAM], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const player = freshKeypair();
   w.chain.airdrop(player.address, 10_000_000_000n);
-  // The wallet keeps each transaction it signs, to read what the settle asked for.
-  const signed = [];
+  // Each transaction sent is kept, to read what the settle asked for: the claim asks for the roll, and a key it funds
+  // settles it.
+  const sent = [];
+  const rpc = { ...w.chain.rpc, send: (wire) => (sent.push(readMessage(readTransaction(wire).message)), w.chain.rpc.send(wire)) };
   const wallet = { address: player.address, async signTransaction(wire) {
     const t = readTransaction(wire);
-    signed.push(readMessage(t.message));
     const sigs = [...t.signatures];
     sigs[t.signers.indexOf(player.address)] = player.sign(t.message);
     return wireTransaction(t.message, sigs);
   } };
   const spec = { version: 2, name: 'Heap', currency: 'gold', tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }], grants: [{ key: 'chest', id: 1 }], live: { project: w.project, collection: w.collection, mints: { gold: w.mint } } };
-  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
-  await app.claimGrant('chest');
-  const [roll] = (await app.claims()).filter((c) => c.kind === 'settle');
-  signed.length = 0;
-  await app.claim(roll);
+  const app = solanaApp({ spec, rpc, wallet, now: () => w.chain.now() });
+  const { rolls: [roll] } = await app.claimGrant('chest');
   assert.equal(w.chain.get(roll.order), null, 'settled: the order closed');
   assert.ok(nfts.every((nft) => parseCoreAsset(w.chain.get(nft).data).owner === player.address), 'all three NFTs are the player’s');
-  const frames = signed.flatMap((msg) => msg.instructions.filter((ix) => msg.keys[ix.programIndex] === COMPUTE_BUDGET_PROGRAM && ix.data[0] === 1));
+  const frames = sent.flatMap((msg) => msg.instructions.filter((ix) => msg.keys[ix.programIndex] === COMPUTE_BUDGET_PROGRAM && ix.data[0] === 1));
   assert.deepEqual(frames.map((ix) => [...ix.data]), [[1, 0, 0, 4, 0]], 'one RequestHeapFrame of 256 KiB, on the settle');
 });
 

@@ -202,8 +202,11 @@ t('js/play passes the rolled box’s prize mints: its craft, its bundle buy and 
       assert.equal(ownerOf(w, hero), w.player, 'the hero stays');
       assert.equal(await waiting(), 0, 'no roll made');
     } else {
-      for (const run of runs) await run();
-      assert.equal(await waiting(), 4, 'a roll from the craft, two from the bundle, one from the grant');
+      const [crafted, , claimed] = [await runs[0](), await runs[1](), await runs[2]()];
+      // The craft's roll and the grant's are asked in their own transaction and settled by a key: rolled already.
+      assert.ok(crafted.rolled?.settled);
+      assert.equal(claimed.rolls?.length, 1);
+      assert.equal(await waiting(), 2, 'the bundle’s two rolls');
     }
   }
 });

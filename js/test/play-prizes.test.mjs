@@ -13,9 +13,12 @@ const skip = cannotRun() ?? false;
 const NOBODY = '11111111111111111111111111111111';
 const CHEST = 5;
 
+/** A wallet that counts its prompts. */
 const asWallet = (kp) => ({
   address: kp.address,
+  prompts: 0,
   async signTransaction(wire) {
+    this.prompts++;
     const t = readTransaction(wire);
     const sigs = [...t.signatures];
     sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
@@ -48,26 +51,30 @@ test('a player claims a grant and wins an auction that each give a roll, and tak
     auctions: [{ key: 'mystery', id: 1, seller: w.authority, name: 'Mystery lot' }],
     live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
   };
-  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
+  const wallet = asWallet(player);
+  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
   const owner = (asset) => parseCoreAsset(w.chain.get(asset).data).owner;
 
-  // The grant's roll: listed among what the player can finish, then asked for and settled.
-  await app.claimGrant('chest');
-  const rolls = (await app.claims()).filter((c) => c.kind === 'settle');
-  assert.equal(rolls.length, 1);
-  assert.equal(loot.decode('Order', w.chain.get(rolls[0].order).data).status, 'Waiting');
-  await app.claim(rolls[0]);
-  assert.equal(w.chain.get(rolls[0].order), null, 'settled: the order closed');
+  // The grant's roll: asked for in the claim's own transaction, then settled by a key the claim funded. One prompt.
+  const prompted = () => wallet.prompts;
+  const claimed = await app.claimGrant('chest');
+  assert.equal(prompted(), 1, 'one prompt: the key settles');
+  assert.equal(claimed.rolls.length, 1);
+  assert.equal((await app.claims()).filter((c) => c.kind === 'settle').length, 0, 'nothing left waiting');
   const won = nfts.filter((nft) => owner(nft) === player.address);
   assert.equal(won.length, 1);
+  assert.equal(claimed.rolls[0].asset, won[0]);
 
-  // The auction's roll: ending it names the winner's order, which `collect` asks for and settles.
+  // The auction's roll: the winner ending it asks for it in the same transaction; a key settles it.
   await app.bid('mystery', 1);
   w.chain.warp(now + 601);
+  const before = prompted();
   const ended = await app.endAuction('mystery');
+  assert.equal(prompted(), before + 1);
   assert.equal(ended.winner, player.address);
   assert.ok(ended.order);
-  const got = await app.collect(ended.order);
+  assert.equal(w.chain.get(ended.order), null, 'settled: the order closed');
+  const got = ended.rolled;
   assert.equal(got.won.length, 1);
   assert.equal(got.won[0].Nft.stash, 1);
   assert.ok(nfts.includes(got.asset) && !won.includes(got.asset));

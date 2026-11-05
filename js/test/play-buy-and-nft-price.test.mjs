@@ -149,3 +149,33 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   assert.equal(ended.winner, rival);
   assert.deepEqual([ownerOf(w, d), ownerOf(w, e)], [w.treasury, w.treasury], 'the winning NFTs to the treasury, for the project’s roll');
 });
+
+test('claimAll signs a player’s independent claims in one prompt, and one by one with a wallet that signs one at a time', { skip }, async () => {
+  const w = world({ seed: 'play-claim-all' });
+  const now = w.chain.now();
+  for (const id of [1, 2, 3, 4]) w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id, mint: w.mint, args: { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null } })]);
+  const spec = specOf(w);
+  const p = playerOf(w, spec);
+  const q = playerOf(w, spec);
+  for (const id of [1, 2, 3, 4]) {
+    await p.app.enter(id, 0, 1);
+    await q.app.enter(id, 1, 1);
+  }
+  w.chain.warp(now + 150);
+  for (const id of [1, 2, 3, 4]) w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, id)), side: 0 })]);
+  // A wallet that signs several at once: the two wins, one prompt.
+  let prompts = 0;
+  const batching = { address: p.player.address, signTransaction: asWallet(p.player).signTransaction, async signTransactions(wires) { prompts++; return Promise.all(wires.map((x) => asWallet(p.player).signTransaction(x))); } };
+  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: batching, now: () => w.chain.now() });
+  const before = w.balance(p.player.address);
+  const wins = (await app.claims()).filter((c) => c.kind === 'contest');
+  assert.equal(wins.length, 4);
+  const done = await app.claimAll(wins.slice(0, 2));
+  assert.equal(prompts, 1);
+  assert.ok(done.every((d) => d.signature), JSON.stringify(done));
+  assert.equal(w.balance(p.player.address), before + 4n * PRICE, 'each win: the stake back and the loser’s');
+  // A wallet that signs one at a time: each its own prompt, the same result.
+  const rest = await p.app.claimAll();
+  assert.equal(rest.filter((d) => d.signature).length, 2);
+  assert.equal(w.balance(p.player.address), before + 8n * PRICE);
+});

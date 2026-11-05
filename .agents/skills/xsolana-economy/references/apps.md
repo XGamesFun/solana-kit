@@ -40,7 +40,7 @@ const recipes = await app.recipes();      // [{ key, name, active, version }]
 await app.craft('merge', [assetA, assetB], 1, { listing: recipes.find((r) => r.key === 'merge') });  // a changed recipe is refused
 await app.auctions();                     // each auction: high, nextBid, leading, secondsLeft, open, over, waiting (SOL)
 await app.bid('comet', '0.6');           // the bid it tops goes back to its bidder in the same transaction
-await app.endAuction('comet');           // once it is over, anyone: the lot to the winner { winner, asset? }
+await app.endAuction('comet');           // once it is over, anyone: the lot to the winner { winner, asset?, rolled? }
 await app.unwrap();                       // SOL back from a bid that was topped, from wrapped SOL to plain SOL
 await app.claimGrant('welcome');          // a wallet on the grant's list (or { voucher } from your server)
 await app.claimWins({ server, token });   // every prize a results server vouched for or listed, claimed by the winner; [{ round, signature | error }]
@@ -89,10 +89,13 @@ await app.balances();                     // what they hold of each of the econo
   }])` from its NFTs' metadata and publishes each NFT's `attributes` and `proof` with the page; a player (or the page,
   before a stake) calls `app.proveTraits(nft, attributes, proof)` once per NFT, and its boosts and gates read them.
 - **Rolls on an NFT**: `app.openBox(boxKey, { on: asset })` for a box that rolls on one (an enchant). Leaving a
-  mission that rolls, `app.unstakeNft` returns `{ signature, roll }`; a recipe that rolls, `app.craft` returns `roll`.
-  `app.collect(roll)` asks the oracle when nobody has yet (`app.askRoll`), waits and settles it: show what it gave
-  (`won`, each prize the roll set aside, and `order.fate`: the numbers moved and where the NFT went). A page should offer to collect any
-  roll of the player's still waiting.
+  mission that rolls, `app.unstakeNft` returns `{ signature, roll, rolled }`; a recipe that rolls, `app.craft` returns
+  `roll` and `rolled`; a grant that gives a roll, `app.claimGrant` returns `{ signature, rolls }`; the winner ending an
+  auction of a roll, `app.endAuction` returns `rolled`. Each asks the oracle in the player's one transaction, and a
+  throwaway key that transaction funds settles it: one prompt. `rolled` (and each of `rolls`) is what the roll gave
+  (`won`, each prize it set aside, and `order.fate`: the numbers moved and where the NFT went). When the step and its
+  ask can't go together, the roll waits: `app.collect(roll)` asks for it, waits and settles it, and a page should offer
+  to collect any roll of the player's still waiting.
 - **What a staking page shows**: `app.staked(farmKey)` lists the player's seats in a farm, each with what it is owed
   now (`waiting`, in `rewards`), the program's own sum from a dry run of the seat (nothing signed or sent), and
   when its lock is over (`freeAt`). Show that; don't work out rewards from the rate yourself (a sharing farm splits
@@ -130,6 +133,8 @@ await app.balances();                     // what they hold of each of the econo
 - **A lottery round** moves on in a few steps whatever its size: `app.claims()` lists the draw (`reveal`), moving a
   drawn round on (`settle-round`: its places' prizes, then its sweep), what this player is owed (`pull`) and paying
   everyone else (`payout`); `app.claim(c)` sends one. The last pull closes the round.
+- **Repaying a loan**: `app.repay(asset, due)` repays in the player's one prompt; a throwaway key that transaction
+  funds sends the NFT home (a pNFT's or a compressed NFT's release the wallet sends: a second prompt).
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

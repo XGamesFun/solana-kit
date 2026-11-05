@@ -30,6 +30,10 @@ import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js
 import * as loot from '../client/index.js';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
+/** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
+const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'settle-round', 'pull', 'payout']);
+/** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
+const BATCHED = new Set(['contest', 'release', 'lookup-table', ...LOTTERY_STEPS]);
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
 const CHAIN = 'solana:devnet';
@@ -445,6 +449,40 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     return (await sendFitting({ rpc: client, payer: wallet.address, instructions, sign, alone: isProveLeaf, first: [project], standing: await standing() }).catch(inWords)).signature;
   }
 
+  const sendNow = (...args) => send(...args);
+
+  /**
+   * Several independent steps of the player's, each one transaction (`lists`: their instructions), signed in one wallet
+   * prompt when the wallet signs several at once (`wallet.signTransactions`), then sent in order; one by one otherwise,
+   * and for a step too big for one transaction. Returns each step's { signature } or { error }.
+   */
+  async function sendBatch(lists) {
+    const settled = (p) => p.then((signature) => ({ signature }), (e) => ({ error: e.message }));
+    let signed = null;
+    let messages = [];
+    let lastValidBlockHeight = null;
+    if (wallet?.signTransactions && lists.length > 1) {
+      const latest = await client.latestBlockhash();
+      lastValidBlockHeight = latest.lastValidBlockHeight;
+      const tables = await standing();
+      for (const l of lists) messages.push(compileFitting({ payer: wallet.address, blockhash: latest.blockhash, instructions: await unwrapAfter(l), tables }));
+      const wires = messages.filter(Boolean).map((m) => wireTransaction(m));
+      const back = wires.length > 1 ? await wallet.signTransactions(wires).catch(() => null) : null;
+      if (back) signed = messages.map((m) => (m ? back.shift() : null));
+    }
+    const out = [];
+    for (const [i, l] of lists.entries()) {
+      const wire = signed?.[i];
+      const confirmed = async () => {
+        const signature = await client.send(wire).catch(inWords);
+        await client.confirm?.(signature, { lastValidBlockHeight });
+        return signature;
+      };
+      out.push(await settled(wire ? confirmed() : send(l)));
+    }
+    return out;
+  }
+
   /**
    * Throws `e` with loot's reason in words in place of a bare code: a wallet whose own dry run failed often says only
    * "custom program error: 0x17b5". A code is loot's when the logs name loot as the program that failed, or, with no
@@ -486,6 +524,72 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
 
   /** An NFT's kind as a route's `ticket` or `nft` takes it: without its asset. */
   const kindOnly = ({ asset: _, ...kind }) => kind;
+
+  /**
+   * The key job rule (AGENTS.md). A step after the wallet's prompt (a settle, an ask for a roll, a release) is sent by a
+   * throwaway key made in memory for that one job. `keyFor(pays)` makes it, and the transfer that funds it, which goes
+   * in the wallet's own transaction: what its steps pay (`pays`: their fees, an ask's oracle fee) and the rent minimum
+   * read from the cluster, plus one spare fee so it can always empty itself. A key never pays for an account with its
+   * own lamports (an order's loan may), and never makes a proof record: then the wallet sends that step. `key`: one
+   * made already (a box's open names it before it knows how many settles it funds).
+   */
+  async function keyFor(pays = SIGNATURE_FEE, key = null) {
+    key ??= await freshKey();
+    const rent = BigInt(await client.call('getMinimumBalanceForRentExemption', [0]).catch(() => Number(RENT_EMPTY)));
+    return { key, fund: transferLamports(wallet.address, key.address, rent + BigInt(pays) + SIGNATURE_FEE) };
+  }
+
+  /** Whether `instructions` would land as `payer` sends them now (a dry run, with the standing tables when they need
+   * them), and the accounts `watch` as they would be after: { ok, accounts }. */
+  async function dryRun(payer, instructions, watch = []) {
+    const { blockhash } = await client.latestBlockhash();
+    const message = compileFitting({ payer, blockhash, instructions, tables: await standing() });
+    if (!message) return { ok: false, accounts: [] };
+    const r = await client.simulate(wireTransaction(message), { accounts: watch, replaceBlockhash: true }).catch(() => null);
+    return { ok: Boolean(r), accounts: r?.accounts ?? [] };
+  }
+
+  /** A key's job: its step (`build(signer)`), simulated as the key sends it, then sent by the key, or by the wallet when
+   * the simulation fails (one more prompt); then the key empties itself back to the wallet. Returns the signature. */
+  async function keyRun(key, build) {
+    const steps = await build(key.address);
+    const signature = (await dryRun(key.address, steps)).ok ? await sendAs(key, steps).catch(() => null) : null;
+    const sent = signature ?? (await send(await build(wallet.address)));
+    const left = BigInt(await client.balance(key.address).catch(() => 0n));
+    if (left > SIGNATURE_FEE) await sendAs(key, [transferLamports(key.address, wallet.address, left - SIGNATURE_FEE)]).catch(() => null);
+    return sent;
+  }
+
+  /**
+   * Rolls in one prompt: a step that makes orders waiting for their roll (a craft, a mission left, a grant or a contest
+   * prize, a lot won) asks for each in the same transaction, and a throwaway key it funds then settles each (the key job
+   * rule). A dry run finds them: the accounts the step writes that come out as orders waiting (a limit can hold a round
+   * back, so only what it would make). When the step and its asks would not land together (a missing prize vault, too
+   * big a transaction), the step goes alone and its rolls wait in `claims()`. Returns { signature, rolls }.
+   */
+  async function sendRolling(instructions) {
+    const watch = [...new Set(instructions.filter((ix) => ix.programId === loot.LOOT_PROGRAM).flatMap((ix) => ix.keys.filter((k) => k.isWritable && !k.isSigner).map((k) => k.pubkey)))];
+    const after = (await dryRun(wallet.address, instructions, watch)).accounts;
+    const waiting = watch.flatMap((address, i) => {
+      const a = after[i];
+      if (a?.owner !== loot.LOOT_PROGRAM || loot.accountKind(a.data) !== 'Order') return [];
+      const order = loot.decode('Order', a.data);
+      return order.status === 'Waiting' && order.player === wallet.address ? [[address, order]] : [];
+    });
+    if (!waiting.length) return { signature: await send(instructions), rolls: [] };
+    const asks = [];
+    for (const [orderAddress, order] of waiting) {
+      const box = await read('LootBox', order.loot_box);
+      asks.push(...loot.askRollIx({ payer: wallet.address, orderAddress, order, box, poolMints: await poolMintsOf(box), programs }));
+    }
+    const { key, fund } = await keyFor(SIGNATURE_FEE * BigInt(2 * waiting.length));
+    const all = [...instructions, ...asks, fund];
+    if (!(await dryRun(wallet.address, all)).ok) return { signature: await send(instructions), rolls: [] };
+    const signature = await send(all);
+    const rolls = [];
+    for (const [k, [orderAddress]] of waiting.entries()) rolls.push(await collect(orderAddress, { burner: key, opened: true, keepBurner: k < waiting.length - 1 }));
+    return { signature, rolls };
+  }
 
   /** A throwaway key's leftover back to the player: all it holds (`left`, as read) less its own fee, so the key ends
    * empty. */
@@ -806,7 +910,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     }
     // The burner holds the fee of each settle part the pack may take (`settleParts`), and gives back what it doesn't use.
     const parts = orders.reduce((n, o) => n + loot.settleParts(box, o.n), 0);
-    const after = burner ? [transferLamports(wallet.address, burner.address, BURNER_LAMPORTS + SIGNATURE_FEE * BigInt(parts - 1))] : [];
+    const after = burner ? [(await keyFor(SIGNATURE_FEE * BigInt(parts), burner)).fund] : [];
     // A SOL prize, or a share of the sale, lands in the player's wrapped-SOL account, which the prompt-less settle
     // can't open: it stays open, and the player's next transaction unwraps it.
     let instructions = withSolWrap(wallet.address, mint, BigInt(box.price) * BigInt(count), [...before, ...orders.map((o) => o.ix), ...after]);
@@ -1275,9 +1379,10 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // A mission's roll on the NFT is at the NFT's nonce (`nonceOn`): one at a time on it.
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
       const ix = loot.unstakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, forfeit, roll, nonce, tier: seat.tier, projectCollection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, ...token });
-      const signature = await send([...before, ...given.before, ...token.before, ix]);
-      if (roll != null) return { signature, roll: loot.pda.order(project, wallet.address, nonce) };
-      return prize?.Roll && !forfeit ? { signature, roll: loot.pda.order(project, wallet.address, loot.prizeRollNonce(nonce + 1n)) } : signature;
+      const { signature, rolls } = await sendRolling([...before, ...given.before, ...token.before, ix]);
+      const rolled = rolls.length ? { rolled: rolls[0] } : {};
+      if (roll != null) return { signature, roll: loot.pda.order(project, wallet.address, nonce), ...rolled };
+      return prize?.Roll && !forfeit ? { signature, roll: loot.pda.order(project, wallet.address, loot.prizeRollNonce(nonce + 1n)), ...rolled } : signature;
     },
 
     /**
@@ -1505,9 +1610,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         }
       }
       for (const p of pays) instructions = withSolWrap(wallet.address, p.mint, p.amount * BigInt(times), instructions);
-      const signature = await send(instructions);
-      // A roll on a collectible kept is at its nonce; a prize's roll at `prizeRollNonce` of the craft's.
-      return { signature, made, ...(rolls ? { roll: loot.pda.order(project, wallet.address, rollOn ? nonce : loot.prizeRollNonce(nonce)) } : {}) };
+      // A roll on a collectible kept is at its nonce; a prize's roll at `prizeRollNonce` of the craft's. Asked for in the
+      // craft's own transaction and settled by a key after: one prompt.
+      const roll = rolls ? loot.pda.order(project, wallet.address, rollOn ? nonce : loot.prizeRollNonce(nonce)) : null;
+      const { signature, rolls: rolled } = await sendRolling(instructions);
+      return { signature, made, ...(roll ? { roll } : {}), ...(rolled.length ? { rolled: rolled[0] } : {}) };
     },
 
     /**
@@ -1563,6 +1670,28 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const ix = loot.borrowIx({ borrower: wallet.address, project, id, offer: loan.offer, due, asset, ...nft, collection, programs: loanPrograms, extra });
       const signature = await send([...before, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, loan.mint, loan.program), ix]);
       return { signature, due, hold: loot.pda.hold(asset, due) };
+    },
+
+    /**
+     * Repays the player's loan on `asset` (held until `due`), then sends the NFT home. The repay goes in the wallet's
+     * transaction alone, with what it opens (the borrower's Token Metadata account), so a release that fails never undoes
+     * a repay that must land before the loan is due; the same transaction funds a throwaway key that sends the release
+     * (anyone may). A pNFT's, or a compressed NFT's (its proof), the wallet sends. Returns { signature, released }.
+     */
+    async repay(asset, due, { extra = [], ...others } = NO_OPTIONS) {
+      only(others, ['extra'], 'repay');
+      const hold = await read('Hold', loot.pda.hold(asset, due));
+      if (!hold.debt || hold.debt.paid) throw new Error('This NFT is held for no loan left to repay.');
+      const { before, hasAuthority: _, ...nft } = await nftOf(asset, wallet.address, { to: hold.player });
+      const collection = nft.collection ?? (await collectionOf(asset)) ?? MPL_CORE;
+      const byWallet = before.some(isProveLeaf) || Boolean(nft.tokenMetadata?.programmable);
+      const opens = byWallet ? [] : before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM);
+      const { key, fund } = await keyFor();
+      const repaid = loot.repayIx({ payer: wallet.address, project, hold, programs, extra });
+      const signature = await send(withSolWrap(wallet.address, hold.debt.mint, BigInt(hold.debt.repay), [...opens, repaid, ...(byWallet ? [] : [fund])]));
+      const release = (signer) => [loot.releaseIx({ signer, project, asset, ...nft, collection, hold: { ...hold, debt: { ...hold.debt, paid: true } } })];
+      const released = byWallet ? await send([...before, ...release(wallet.address)]) : await keyRun(key, release);
+      return { signature, released };
     },
 
     /**
@@ -1702,10 +1831,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         }
       }
       const ix = loot.endAuctionIx({ signer: wallet.address, project, projectState: g, id: a.id, auction, item, ...nft, collection, held, holders, programs, extra: memo });
-      const signature = await send([computeUnitLimit(800_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix]);
-      // A roll lot sold: the winner's roll, made at the default nonce, waits for anyone to ask it (`collect`).
+      const all = [computeUnitLimit(800_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+      // A roll lot sold: the winner's roll, made at the default nonce, waits for anyone to ask it (`collect`); the winner
+      // ending it asks in the same transaction and a key settles it.
       const roll = sold && auction.lot.Roll ? loot.pda.order(project, auction.high_bidder, loot.prizeRollNonce(loot.prizeNonce(auctionAt(a), BigInt(auction.last_bid_at)))) : null;
-      return { signature, ...(sold ? { winner: auction.high_bidder } : {}), ...(made ? { asset: made } : {}), ...(roll ? { order: roll } : {}) };
+      const { signature, rolls } = roll && auction.high_bidder === wallet.address ? await sendRolling(all) : { signature: await send(all), rolls: [] };
+      return { signature, ...(sold ? { winner: auction.high_bidder } : {}), ...(made ? { asset: made } : {}), ...(roll ? { order: roll } : {}), ...(rolls.length ? { rolled: rolls[0] } : {}) };
     },
 
     /**
@@ -1920,7 +2051,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (amount > 0n && (most === undefined || amount > BigInt(most))) throw new Error(`This claim names ${amount} tokens, more than this grant gives${most === undefined ? ' (it gives no fixed amount of tokens)' : ` (${most})`}.`);
       instructions.push(loot.claimGrantIx({ project, id: gspec.id, grant, wallet: wallet.address, signer: wallet.address, count, rounds: voucher?.rounds, round: voucher?.round ?? listRound, expires: voucher?.expires, personHash: voucher?.personHash ?? listPerson, amount, proof, paidRounds, poolMint, item, nft: prized.nft, boxes: prized.boxes, rollPools: prized.rollPools, shown, listProof: gateProof, programs, voucherKey: voucher?.publicKey }));
       // A claim's records and prizes can pass the 200,000 compute units a transaction has by default.
-      return send([computeUnitLimit(loot.CLAIM_COMPUTE_UNITS), ...instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)]);
+      const all = [computeUnitLimit(loot.CLAIM_COMPUTE_UNITS), ...instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)];
+      if (!grant.gives.Roll) return send(all);
+      // A roll's orders are asked for in the claim's own transaction and settled by a key after: one prompt.
+      const { signature, rolls } = await sendRolling(all);
+      return rolls.length ? { signature, rolls } : signature;
     },
 
     /**
@@ -1985,7 +2120,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const out = [];
       const take = async (round, grant, claim) => {
         try {
-          out.push({ round, grant, signature: await claim() });
+          const r = await claim();
+          out.push({ round, grant, ...(typeof r === 'string' ? { signature: r } : r) });
         } catch (e) {
           out.push({ round, grant, error: e.message });
         }
@@ -2144,9 +2280,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * which loser's NFT they take (`{ take: asset }`, the NFT of a losing entry that still holds one; the first found by default):
      * only the winner can, while any are left.
      */
-    async claim(c, { take, ...others } = NO_OPTIONS) {
-      only(others, ['take'], 'claim');
+    async claim(c, { take, build = false, ...others } = NO_OPTIONS) {
+      only(others, ['take', 'build'], 'claim');
       const me = wallet.address;
+      // `build`: its instructions, unsent, for a step that is one transaction of the wallet's (`claimAll` signs several
+      // at once); null for one that is not (a roll to wait for, a refund, a step of another flow).
+      if (build && !BATCHED.has(c.kind)) return null;
+      const send = build ? async (instructions) => instructions : sendNow;
       const g = await projectNow();
       if (c.kind === 'settle') return (await collect(c.order)).settled;
       if (c.kind === 'refund') return this.refund(c.order);
@@ -2182,7 +2322,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
             await kindOf(e.nft, me);
           }
         }
-        return send([computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, projectState: g, id: c.id, contest, entries, player: me, nfts: contest.nft ? nfts : undefined, kinds, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, programs })]);
+        const claimed = [computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, projectState: g, id: c.id, contest, entries, player: me, nfts: contest.nft ? nfts : undefined, kinds, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, programs })];
+        // A prize that rolls: asked for in the claim's own transaction and settled by a key after (one prompt).
+        return contest.prize?.Roll && !build ? (await sendRolling(claimed)).signature : send(claimed);
       }
       if (c.kind === 'release') {
         const hold = await read('Hold', c.hold);
@@ -2217,6 +2359,34 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const everyone = r.entries.every((_, i) => !loot.partsOwed(r, i).length || owed.slice(0, 4).some((x) => x.entry === i && x.parts.length === loot.partsOwed(r, i).length));
       if (everyone && (r.status === 'Swept' || r.status === 'Cancelled')) instructions.push(loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: { ...r, owed: 0 }, projectState: g, programs }));
       return send(instructions);
+    },
+
+    /**
+     * Everything in `list` (by default `claims()`) taken in as few prompts as it can: each step that is one transaction
+     * of the wallet's is built first and the lot signed in one prompt when the wallet signs several at once
+     * (`wallet.signTransactions`); a lottery's steps depend on each other, so one of each lottery a call. The rest (a roll
+     * to settle, a refund, an auction to end…) go one by one after. Returns [{ claim, signature } | { claim, error }].
+     */
+    async claimAll(list) {
+      list ??= await this.claims();
+      const [built, alone, lotteries] = [[], [], new Set()];
+      const out = [];
+      for (const c of list) {
+        if (!BATCHED.has(c.kind)) {
+          alone.push(c);
+          continue;
+        }
+        const lottery = LOTTERY_STEPS.has(c.kind) ? c.key : null;
+        if (lottery !== null && lotteries.has(lottery)) continue;
+        const instructions = await this.claim(c, { build: true }).catch((e) => (out.push({ claim: c, error: e.message }), null));
+        if (!instructions?.length) continue;
+        if (lottery !== null) lotteries.add(lottery);
+        built.push([c, instructions]);
+      }
+      const sent = await sendBatch(built.map(([, instructions]) => instructions));
+      out.push(...built.map(([claim], i) => ({ claim, ...sent[i] })));
+      for (const claim of alone) out.push(await this.claim(claim).then((signature) => ({ claim, signature }), (e) => ({ claim, error: e.message })));
+      return out;
     },
 
     /** The player's collectibles of this project: [{ asset, item, itemId, name, uri, attributes, frozen }]. `item` is its key in the spec. */
