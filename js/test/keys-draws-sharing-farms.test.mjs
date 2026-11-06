@@ -74,7 +74,8 @@ test('a draw asked again after the oracle went stale keeps its first ask, and an
   const first = w.round(id).round;
   w.chain.nextSlot(Number(loot.STALE_SLOTS) + 1);
   assert.ok(loot.lotteryDrawStuck(first, w.chain.slot()));
-  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // asked again, no answer yet
+  // The first ask moved the lottery past the round: the round asked again is named by its address.
+  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery, round: first, roundAddress: w.round(id).address })]); // asked again, no answer yet
   const asked = w.round(id);
   assert.equal(asked.round.asked_first, first.asked_first, 'the round keeps its first ask');
   assert.ok(asked.round.asked_slot > asked.round.asked_first);
@@ -144,7 +145,7 @@ test('the player module offers no stake at a farm\'s end or after it, nor one wh
   w.pool(5, rewards);
   const endsAt = BigInt(w.chain.now() + 3_600);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 2, rewardsMint: rewards, stakedMint: w.mint,
-    args: { custody: 'Escrow', rewards_pool: 5, tiers: [{ lock: 0, bps: 10_000 }, { lock: 7_200, bps: 20_000 }], boosts: [], max_boost_bps: 0, gate: null, ends_at: endsAt } })]);
+    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }, { lock: 7_200, bps: 20_000 }], boosts: [], max_boost_bps: 0, gate: null, ends_at: endsAt } })]);
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'season', name: 'Season', id: 2, stakes: 'coin' }] };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: w.player, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   const farm = w.read('Farm', loot.pda.farm(w.project, 2));

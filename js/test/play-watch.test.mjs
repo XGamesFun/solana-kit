@@ -22,7 +22,7 @@ const transferCore = (asset, collection, owner, to) => ({
 test('in a watch farm the player module harvests with `held` and a new holder takes the seat over', { skip }, async () => {
   const w = world({ seed: 'watch-browser' });
   w.pool(5, w.mint);
-  w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args: { custody: 'Watch', rewards_pool: 5, tiers: [{ lock: 60, bps: 10_000 }], boosts: [], max_boost_bps: 0, gates: [] }, rewardsMint: w.mint, stakedMint: null })]);
+  w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args: { custody: 'Watch', tiers: [{ lock: 60, bps: 10_000 }], boosts: [], max_boost_bps: 0, gates: [] }, rewardsMint: w.mint, stakedMint: null })]);
   const farm = w.read('Farm', loot.pda.farm(w.project, 1));
   assert.equal(farm.custody, 'Watch', 'a variant without data decodes as its name');
   assert.equal(farm.farmed, 'Collectibles');

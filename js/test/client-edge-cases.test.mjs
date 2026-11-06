@@ -217,7 +217,7 @@ test('staked gives what a seat holds in base units exactly', { skip }, async () 
   const reward = w.newMint();
   w.pool(5, reward);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 2, rewardsMint: reward, stakedMint: w.mint,
-    args: { custody: 'Freeze', rewards_pool: 5, tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null } })]);
+    args: { custody: 'Freeze', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null } })]);
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'tokens', id: 2, stakes: 'coin' }] };
   // No dry run: the seat as written is what is read.
   const app = solanaApp({ spec, rpc: { ...w.chain.rpc, simulate: undefined }, wallet: { address: w.player, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });

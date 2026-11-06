@@ -261,7 +261,7 @@ t('the checker counts a roll given as its box and its order only, whatever the b
   assert.deepEqual(said(['a', 'b', 'c', 'd', 'e']), []);
 });
 
-t('a lottery paid in a hooked coin sweeps a step a call: its common share, then its pot; the round stays Drawn until then', () => {
+t('a lottery paid in a hooked coin: its ask and each pull carry the hook’s accounts, its common share pulled like any part', () => {
   const w = world({ seed: 'hooked-sweep' });
   const coin = hookedMint(w);
   // The test hook counts each transfer in an account its list names: a list of one.
@@ -280,19 +280,15 @@ t('a lottery paid in a hooked coin sweeps a step a call: its common share, then 
     w.chain.send(buyer, [loot.buyTicketsIx({ player: buyer, project: w.project, id: 1, lottery, round: w.round(1)?.round ?? null, count: 2n, programs, extra })]);
   }
   w.chain.warp(w.chain.now() + 3601);
-  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery, extra })]);
   const treasury = loot.ata(w.treasury, coin, TOKEN_2022_PROGRAM);
-  const steps = [];
-  for (let at = w.round(1); at.round.status === 'Drawn'; at = w.round(1)) {
-    w.chain.send(w.cranker, [computeUnitLimit(1_400_000), loot.settleRoundIx({ payer: w.cranker, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState(), programs, extra })]);
-    steps.push(w.round(1).round.status);
-    assert.ok(steps.length <= 3, 'a sweep of one share and a pot is two steps');
-  }
-  assert.deepEqual(steps, ['Drawn', 'Swept'], 'the share, then the pot');
+  assert.deepEqual(loot.commonOwed(w.round(1).round), [{ Common: [0] }], 'the treasury’s share, owed in common');
+  w.finishRound(1, { extra: { programs, extra } });
+  assert.equal(w.round(1), null, 'every part pulled, the round closed');
   assert.equal(w.chain.tokens(treasury), 400n, 'the treasury’s 10% of 4,000');
 });
 
-t('js/play buys, draws, settles and pulls a lottery paid in a hooked coin, reading the hook’s accounts itself', async () => {
+t('js/play buys, draws and pulls a lottery paid in a hooked coin, reading the hook’s accounts itself', async () => {
   const w = world({ seed: 'hooked-play' });
   const coin = hookedMint(w);
   const counter = newAddress(w.random);
@@ -305,9 +301,9 @@ t('js/play buys, draws, settles and pulls a lottery paid in a hooked coin, readi
   for (const p of players) w.chain.send(w.creator, [createAssociatedTokenAccountIdempotent(w.creator, p, coin, TOKEN_2022_PROGRAM), mintToIx({ mint: coin, to: loot.ata(p, coin, TOKEN_2022_PROGRAM), authority: w.creator, amount: 10_000n, tokenProgram: TOKEN_2022_PROGRAM })]);
   for (const app of apps) await app.buyTickets('draw', 2, { maxPrice: 1000n });
   w.chain.warp(w.chain.now() + 3601);
-  // Each step from the page, until nothing is left: the draw, the sweep a step a call, the winner's pull.
+  // Each step from the page, until nothing is left: the draw, then each part pulled.
   for (let i = 0; i < 10; i++) {
-    const steps = (await Promise.all(apps.map(async (app) => (await app.claims()).filter((c) => ['reveal', 'settle-round', 'pull', 'payout'].includes(c.kind)).map((c) => [app, c])))).flat();
+    const steps = (await Promise.all(apps.map(async (app) => (await app.claims()).filter((c) => ['reveal', 'pull', 'payout'].includes(c.kind)).map((c) => [app, c])))).flat();
     if (!steps.length) break;
     const [app, c] = steps[0];
     await app.claim(c);

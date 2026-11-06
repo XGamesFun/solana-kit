@@ -46,7 +46,7 @@ test('a mission rolls on the NFT leaving it: the roll waits for anyone to ask, t
   const dust = w.newMint(w.creator);
   w.pool(7, dust);
   const args = {
-    custody: 'Escrow', rewards_pool: 7, tiers: [{ lock: 60, bps: 10_000, roll: 6 }], boosts: [], max_boost_bps: 0,
+    custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000, roll: 6 }], boosts: [], max_boost_bps: 0,
     gates: [hero], rate: { per_day: 0n, mints: true },
   };
   w.chain.send(w.creator, [computeUnitLimit(1_400_000), loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: dust, rolls: w.rolls([6]) })]);

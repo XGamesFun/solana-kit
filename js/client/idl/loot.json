@@ -67,7 +67,7 @@
         "A player bids on an auction; the bid it tops goes back to its bidder at once."
       ],
       "discriminator": [
-        34
+        32
       ],
       "accounts": [
         {
@@ -165,7 +165,7 @@
         "A holder borrows against an NFT: it is held until `due`, and the loan paid to them."
       ],
       "discriminator": [
-        40
+        38
       ],
       "accounts": [
         {
@@ -542,7 +542,8 @@
           "name": "player",
           "docs": [
             "Pays for the tickets and the bytes their entry adds; the round's first buyer also fronts its",
-            "header and its account of the payment mint, back at the close."
+            "header and its account of the payment mint when the lottery's spare SOL can't (`funded`), back",
+            "at the close."
           ],
           "writable": true,
           "signer": true
@@ -574,18 +575,6 @@
         },
         {
           "name": "mint"
-        },
-        {
-          "name": "pot_mint",
-          "docs": [
-            "pot's mint and the round's account of it, which it opens."
-          ],
-          "optional": true
-        },
-        {
-          "name": "pot_vault",
-          "writable": true,
-          "optional": true
         },
         {
           "name": "token_program",
@@ -634,6 +623,14 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "associated_token_program",
+          "docs": [
+            "For a share the buyer chooses: opens its recipient's account of the mint when it is not there."
+          ],
+          "optional": true,
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         }
       ],
       "args": [
@@ -788,36 +785,16 @@
       ]
     },
     {
-      "name": "cancel_lottery",
-      "docs": [
-        "Anyone cancels a round whose draw the oracle never answered."
-      ],
-      "discriminator": [
-        20
-      ],
-      "accounts": [
-        {
-          "name": "lottery",
-          "writable": true
-        },
-        {
-          "name": "round",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "claim",
       "docs": [
         "Anyone pays a decided or called-off contest's entry `entry` to its player, and moves the",
         "NFTs of the entries `nfts` names where they go; the claim that leaves nothing owed closes",
         "the contest. With `forgo` (the player only), a winner's first claim goes without its prize;",
         "with `end` (the winner only), it leaves the rest of its share of the losers' NFTs to the",
-        "opener; with `give_up`, each NFT becomes a hold for the wallet it goes to."
+        "opener. An NFT passed as its hold's address becomes a hold for the wallet it goes to."
       ],
       "discriminator": [
-        46
+        44
       ],
       "accounts": [
         {
@@ -951,10 +928,6 @@
           "type": "bool"
         },
         {
-          "name": "give_up",
-          "type": "bool"
-        },
-        {
           "name": "nfts",
           "type": {
             "vec": "u32"
@@ -972,7 +945,7 @@
         "each round's on the approved list."
       ],
       "discriminator": [
-        47
+        45
       ],
       "accounts": [
         {
@@ -1110,6 +1083,9 @@
         },
         {
           "name": "payer",
+          "docs": [
+            "A record's payer who signs closes it while it still reads."
+          ],
           "writable": true
         },
         {
@@ -1136,7 +1112,7 @@
         "rental), and the NFT goes home with a later call once the rental is over."
       ],
       "discriminator": [
-        44
+        42
       ],
       "accounts": [
         {
@@ -1321,7 +1297,7 @@
         "Its maker calls an offer off: what is left goes back to them."
       ],
       "discriminator": [
-        38
+        36
       ],
       "accounts": [
         {
@@ -1375,7 +1351,7 @@
         "its rent goes to the project's owner."
       ],
       "discriminator": [
-        48
+        46
       ],
       "accounts": [
         {
@@ -1437,7 +1413,7 @@
     {
       "name": "collect_fees",
       "discriminator": [
-        55
+        53
       ],
       "accounts": [
         {
@@ -1554,7 +1530,7 @@
         "A player crafts a recipe, at the version they saw, `times` over."
       ],
       "discriminator": [
-        30
+        28
       ],
       "accounts": [
         {
@@ -1646,7 +1622,7 @@
     {
       "name": "create_project",
       "discriminator": [
-        49
+        47
       ],
       "accounts": [
         {
@@ -1758,8 +1734,7 @@
         {
           "name": "signer",
           "docs": [
-            "The project's authority; anyone sending a decider's verdict; anyone, to write down that a",
-            "contest is off by itself."
+            "The project's authority, or anyone sending a decider's verdict."
           ],
           "writable": true,
           "signer": true
@@ -1772,17 +1747,7 @@
           "writable": true
         },
         {
-          "name": "opener",
-          "docs": [
-            "called off."
-          ],
-          "writable": true
-        },
-        {
-          "name": "mint",
-          "docs": [
-            "closing the pot of a contest nobody entered burns or sweeps."
-          ]
+          "name": "mint"
         },
         {
           "name": "pot",
@@ -1843,9 +1808,6 @@
         },
         {
           "name": "prize_mint",
-          "docs": [
-            "contest nobody entered burns what its vault holds."
-          ],
           "writable": true,
           "optional": true
         },
@@ -1858,10 +1820,6 @@
           "name": "prize_vault",
           "writable": true,
           "optional": true
-        },
-        {
-          "name": "entries",
-          "writable": true
         }
       ],
       "args": [
@@ -1899,7 +1857,9 @@
     {
       "name": "draw_lottery",
       "docs": [
-        "Anyone asks the oracle for a lottery's draw once it is due."
+        "Anyone asks the oracle for a lottery's draw once it is due: the first ask fixes the round's",
+        "money and opens the next round; an unanswered one is asked again, and after a timeout the",
+        "round is cancelled. `skip_hooked` (the authority only): hooked sources give this round nothing."
       ],
       "discriminator": [
         19
@@ -1908,10 +1868,14 @@
         {
           "name": "payer",
           "docs": [
-            "Pays the oracle."
+            "Pays the oracle, and the round's token accounts the ask opens when the lottery's spare SOL",
+            "can't (`funded`)."
           ],
           "writable": true,
           "signer": true
+        },
+        {
+          "name": "project"
         },
         {
           "name": "lottery",
@@ -1919,6 +1883,9 @@
         },
         {
           "name": "round",
+          "docs": [
+            "into it), or a round of this lottery whose draw is waiting."
+          ],
           "writable": true
         },
         {
@@ -1934,8 +1901,8 @@
         {
           "name": "vrf_program",
           "docs": [
-            "a round that asks nothing (nothing sold, short of its least sale) moves on even with the",
-            "oracle gone."
+            "a round that asks nothing (nothing sold, short of its least sale, cancelled) moves on even",
+            "with the oracle gone."
           ],
           "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
         },
@@ -1945,9 +1912,24 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "docs": [
+            "account here only makes the call fail."
+          ]
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "skip_hooked",
+          "type": "bool"
+        }
+      ]
     },
     {
       "name": "end_auction",
@@ -1956,7 +1938,7 @@
         "shares, or the lot home. Its seller calls off one with no bid."
       ],
       "discriminator": [
-        35
+        33
       ],
       "accounts": [
         {
@@ -2191,7 +2173,7 @@
         {
           "name": "order",
           "docs": [
-            "hold, `[\"hold\", asset, 0]` (`hold::owe`)."
+            "whoever it goes to, its hold, `[\"hold\", asset, 0]` (`hold::owe`)."
           ],
           "writable": true,
           "optional": true
@@ -2210,10 +2192,6 @@
         {
           "name": "nonce",
           "type": "u64"
-        },
-        {
-          "name": "hold",
-          "type": "bool"
         }
       ]
     },
@@ -2223,7 +2201,7 @@
         "A player puts `amount` on one side of a contest, at the `incarnation` they saw."
       ],
       "discriminator": [
-        45
+        43
       ],
       "accounts": [
         {
@@ -2317,12 +2295,11 @@
     {
       "name": "harvest",
       "docs": [
-        "A player collects what their seat is owed, less the farm's toll, or with `compound` adds it to",
-        "their stake when the farm's rewards are its staked token. On a tier with an early exit, refused",
-        "while the seat's lock runs (`RewardsLocked`)."
+        "A player collects what their seat is owed, or with `compound` adds it to their stake when the",
+        "farm's rewards are its staked token."
       ],
       "discriminator": [
-        28
+        26
       ],
       "accounts": [
         {
@@ -2339,12 +2316,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -2373,7 +2344,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -2431,14 +2402,6 @@
           "name": "staked_vault",
           "writable": true,
           "optional": true
-        },
-        {
-          "name": "toll_pool",
-          "docs": [
-            "mint writable when the toll is burned."
-          ],
-          "writable": true,
-          "optional": true
         }
       ],
       "args": [
@@ -2454,7 +2417,7 @@
         "A player hands NFTs to the project until `free_at`; `reference` is the project's label."
       ],
       "discriminator": [
-        32
+        30
       ],
       "accounts": [
         {
@@ -2666,7 +2629,7 @@
     {
       "name": "init_platform",
       "discriminator": [
-        53
+        51
       ],
       "accounts": [
         {
@@ -2717,8 +2680,8 @@
     {
       "name": "move_tokens",
       "docs": [
-        "The authority moves the project's tokens: out of a pool or newly minted, to a pool, a token",
-        "account or a collectible's holder, or burned."
+        "The authority moves the project's tokens: out of a pool, out of what a farm holds free, or",
+        "newly minted, to a pool, a token account or a collectible's holder, or burned."
       ],
       "discriminator": [
         7
@@ -2775,6 +2738,13 @@
               "address": "11111111111111111111111111111111"
             }
           ]
+        },
+        {
+          "name": "farm",
+          "docs": [
+            "For `TokenSource::Farm`, the farm; its rewards vault is the `pool`."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -2821,7 +2791,7 @@
         "authority) a new unit of an item."
       ],
       "discriminator": [
-        33
+        31
       ],
       "accounts": [
         {
@@ -3473,10 +3443,10 @@
       "name": "open_farm",
       "docs": [
         "Open a farm: tokens or the project's collectibles staked with lock tiers, weighted by what",
-        "their collectibles say, sharing what flows into a rewards pool."
+        "their collectibles say, sharing what lands in its rewards vault, or paying a fixed rate."
       ],
       "discriminator": [
-        23
+        21
       ],
       "accounts": [
         {
@@ -3511,9 +3481,6 @@
               }
             ]
           }
-        },
-        {
-          "name": "rewards_pool"
         },
         {
           "name": "rewards_mint"
@@ -3586,10 +3553,6 @@
         {
           "name": "exit_pool",
           "optional": true
-        },
-        {
-          "name": "toll_pool",
-          "optional": true
         }
       ],
       "args": [
@@ -3614,7 +3577,7 @@
         "the listing is closed."
       ],
       "discriminator": [
-        42
+        40
       ],
       "accounts": [
         {
@@ -3843,7 +3806,7 @@
         "the project's vault, now."
       ],
       "discriminator": [
-        37
+        35
       ],
       "accounts": [
         {
@@ -3953,7 +3916,7 @@
     {
       "name": "open_pool",
       "discriminator": [
-        51
+        49
       ],
       "accounts": [
         {
@@ -4035,7 +3998,7 @@
         "The project's keys make a Bubblegum v2 tree the project alone mints compressed prizes into."
       ],
       "discriminator": [
-        36
+        34
       ],
       "accounts": [
         {
@@ -4521,17 +4484,19 @@
     {
       "name": "pull",
       "docs": [
-        "Anyone settles one part of a round's entry: a refund, its recipients' parts, its places'",
-        "pot parts or token prizes. The last part owed closes the round."
+        "Anyone settles one part of a round, in any order: an entry's refund or NFT ticket, its places'",
+        "pot parts or prizes (a roll's order at `nonce`), or a part owed in common. The last part owed",
+        "closes the round."
       ],
       "discriminator": [
-        22
+        20
       ],
       "accounts": [
         {
           "name": "payer",
           "docs": [
-            "Anyone. Opens the accounts the part pays into that are not there yet."
+            "Anyone. Opens the accounts the part pays into that are not there yet, and pays what a prize",
+            "opens or makes."
           ],
           "writable": true,
           "signer": true
@@ -4608,8 +4573,8 @@
           }
         },
         {
-          "name": "hold",
-          "type": "bool"
+          "name": "nonce",
+          "type": "u64"
         }
       ]
     },
@@ -4619,7 +4584,7 @@
         "Anyone counts a seat's weight again from its collectible as it is now."
       ],
       "discriminator": [
-        29
+        27
       ],
       "accounts": [
         {
@@ -4639,12 +4604,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -4673,7 +4632,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -4690,6 +4649,9 @@
         },
         {
           "name": "seat",
+          "docs": [
+            "Checked as this farm's by its address (`check_seat`)."
+          ],
           "writable": true
         },
         {
@@ -5249,7 +5211,7 @@
         "plain one that is over. The NFT goes home with `release`, whenever. `repay` is the amount the payer saw."
       ],
       "discriminator": [
-        41
+        39
       ],
       "accounts": [
         {
@@ -5442,7 +5404,7 @@
         "A holder sells an NFT into a bid: the NFT to the maker, the price to the seller."
       ],
       "discriminator": [
-        39
+        37
       ],
       "accounts": [
         {
@@ -5653,7 +5615,7 @@
     {
       "name": "set_platform",
       "discriminator": [
-        54
+        52
       ],
       "accounts": [
         {
@@ -5687,7 +5649,7 @@
     {
       "name": "set_suspended",
       "discriminator": [
-        56
+        54
       ],
       "accounts": [
         {
@@ -6026,93 +5988,13 @@
       ]
     },
     {
-      "name": "settle_round",
-      "docs": [
-        "Anyone moves a drawn round on: its places' prizes in place order, a part at a time, then the",
-        "sweep (its shares, and its pot netted), which opens the next round. A finished round that",
-        "owes nothing closes."
-      ],
-      "discriminator": [
-        21
-      ],
-      "accounts": [
-        {
-          "name": "payer",
-          "docs": [
-            "Anyone. Pays what a prize opens or makes, and the round's account of a mint it opens."
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "project"
-        },
-        {
-          "name": "lottery",
-          "docs": [
-            "The round's lottery, for the sweep: its pot, and its next round."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "round",
-          "writable": true
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "token_2022_program",
-          "docs": [
-            "account here only makes the call fail."
-          ]
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "associated_token_program",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-        },
-        {
-          "name": "opener",
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "treasury",
-          "writable": true,
-          "optional": true
-        }
-      ],
-      "args": [
-        {
-          "name": "nonce",
-          "type": "u64"
-        },
-        {
-          "name": "entries",
-          "type": {
-            "vec": "u32"
-          }
-        },
-        {
-          "name": "hold",
-          "type": "bool"
-        }
-      ]
-    },
-    {
       "name": "stake_nft",
       "docs": [
         "A player stakes an NFT of any kind in a farm at a lock tier: on a seat of its",
         "own in a farm of collectibles, or as the booster of their token seat in a farm of tokens."
       ],
       "discriminator": [
-        26
+        24
       ],
       "accounts": [
         {
@@ -6129,12 +6011,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -6163,7 +6039,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -6374,14 +6250,6 @@
           "optional": true
         },
         {
-          "name": "toll_pool",
-          "docs": [
-            "by address. The client marks the rewards' mint writable when the toll is burned."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
           "name": "profile",
           "docs": [
             "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
@@ -6403,7 +6271,7 @@
         "A player stakes tokens in a farm at a lock tier."
       ],
       "discriminator": [
-        24
+        22
       ],
       "accounts": [
         {
@@ -6420,12 +6288,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -6454,7 +6316,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -6570,14 +6432,6 @@
           "optional": true
         },
         {
-          "name": "toll_pool",
-          "docs": [
-            "client marks the rewards' mint writable when the toll is burned."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
           "name": "profile",
           "docs": [
             "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
@@ -6605,7 +6459,7 @@
         "(`StashOf`)."
       ],
       "discriminator": [
-        31
+        29
       ],
       "accounts": [
         {
@@ -6827,7 +6681,7 @@
         "A taker buys a listed NFT, or rents it for `periods` periods."
       ],
       "discriminator": [
-        43
+        41
       ],
       "accounts": [
         {
@@ -7077,7 +6931,7 @@
         "closes and pays what it is owed; a token seat it boosted stays, with what it is owed."
       ],
       "discriminator": [
-        27
+        25
       ],
       "accounts": [
         {
@@ -7094,12 +6948,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -7128,7 +6976,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -7339,14 +7187,6 @@
           "optional": true
         },
         {
-          "name": "toll_pool",
-          "docs": [
-            "by address. The client marks the rewards' mint writable when the toll is burned."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
           "name": "profile",
           "docs": [
             "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
@@ -7370,12 +7210,10 @@
       "name": "unstake_tokens",
       "docs": [
         "A player takes tokens out of a farm and is paid what is owed: once their lock has run, or",
-        "before it on a tier with an early exit, for its fee (what such a tier owes the seat then goes",
-        "back to the farm). With an unbonding wait, the tokens taken out wait in the seat, earning",
-        "nothing, and a later call after the wait sends them; `forfeit` gives up the rewards."
+        "before it on a tier with an early exit, for its fee; `forfeit` gives up the rewards."
       ],
       "discriminator": [
-        25
+        23
       ],
       "accounts": [
         {
@@ -7392,12 +7230,6 @@
             {
               "name": "farm",
               "writable": true
-            },
-            {
-              "name": "rewards_pool",
-              "docs": [
-                "mint: a client passes it writable there."
-              ]
             },
             {
               "name": "rewards_vault",
@@ -7426,7 +7258,7 @@
             {
               "name": "rewards_mint",
               "docs": [
-                "program refuses a mint that isn't the vault's."
+                "a farm that mints pays a seat."
               ]
             },
             {
@@ -7542,14 +7374,6 @@
           "optional": true
         },
         {
-          "name": "toll_pool",
-          "docs": [
-            "client marks the rewards' mint writable when the toll is burned."
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
           "name": "profile",
           "docs": [
             "(`Farm::uses_profile`), checked by its address (`WrongProfile`)."
@@ -7572,7 +7396,7 @@
     {
       "name": "update_project",
       "discriminator": [
-        50
+        48
       ],
       "accounts": [
         {
@@ -7648,7 +7472,7 @@
         "grant: `Def`), or (`None`) close the one at `target`."
       ],
       "discriminator": [
-        52
+        50
       ],
       "accounts": [
         {
@@ -8504,19 +8328,6 @@
         67,
         191
       ]
-    },
-    {
-      "name": "Withdrawn",
-      "discriminator": [
-        20,
-        89,
-        223,
-        198,
-        194,
-        124,
-        219,
-        13
-      ]
     }
   ],
   "errors": [
@@ -8863,7 +8674,7 @@
     {
       "code": 6068,
       "name": "BadFarm",
-      "msg": "A farm this program can't keep: 1 to 256 lock tiers each above x0 and at most x11, boosts of at most +10,000% in all, and exits, unbonding, tolls and missions only where its kind takes them"
+      "msg": "A farm this program can't keep: 1 to 256 lock tiers each above x0 and at most x11, boosts of at most +10,000% in all, and exits and missions only where its kind takes them"
     },
     {
       "code": 6069,
@@ -9143,105 +8954,85 @@
     {
       "code": 6124,
       "name": "Promised",
-      "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended"
+      "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended and its places have taken theirs"
     },
     {
       "code": 6125,
-      "name": "WrongEntry",
-      "msg": "This entry doesn't hold the ticket of the place"
-    },
-    {
-      "code": 6126,
-      "name": "NotStuck",
-      "msg": "The authority marks only a transfer that can be seen to be stuck: a frozen account, a paused mint, or a mint with a transfer hook"
-    },
-    {
-      "code": 6127,
       "name": "ListingStopped",
       "msg": "Its maker stopped this listing: it takes no more renters, and closes once the rental runs out"
     },
     {
-      "code": 6128,
+      "code": 6126,
       "name": "NotAnNft",
       "msg": "Only an NFT is taken: one token of a mint that can never mint another, not a unit of a semi-fungible item"
     },
     {
-      "code": 6129,
+      "code": 6127,
       "name": "OtherSide",
       "msg": "A wallet backs one side of a contest: it already has an entry on another side"
     },
     {
-      "code": 6130,
-      "name": "RewardsLocked",
-      "msg": "This seat's tier has an early exit, so its rewards wait for its lock: harvest once the lock has run"
-    },
-    {
-      "code": 6131,
+      "code": 6128,
       "name": "ExitWhileLocked",
       "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
     },
     {
-      "code": 6132,
-      "name": "HarvestFirst",
-      "msg": "This seat is owed rewards it may take now: harvest before moving to, or topping up on, a tier whose rewards wait for its lock"
-    },
-    {
-      "code": 6133,
+      "code": 6129,
       "name": "WalletMustSign",
       "msg": "A grant's claim needs its wallet's signature"
     },
     {
-      "code": 6134,
+      "code": 6130,
       "name": "BurnLocked",
       "msg": "This Token-2022 mint's issuer keeps a burn authority (permissioned burn), so the program could never burn it later: it is refused before any money comes in"
     },
     {
-      "code": 6135,
+      "code": 6131,
       "name": "WrongProfile",
       "msg": "This needs the player's own profile in this project: it is missing, or another wallet's or another project's"
     },
     {
-      "code": 6136,
+      "code": 6132,
       "name": "WrongTable",
       "msg": "This is not the project's table at the address its id names"
     },
     {
-      "code": 6137,
+      "code": 6133,
       "name": "BadTable",
       "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
     },
     {
-      "code": 6138,
+      "code": 6134,
       "name": "BadItem",
-      "msg": "A trait's key is the project's own (not item_id, rarity, serial, made, used or used_at), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
+      "msg": "A trait's key is the project's own (not item_id, rarity, serial or made), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
     },
     {
-      "code": 6139,
+      "code": 6135,
       "name": "BadList",
       "msg": "This is not a list of records of this width, or no record is at this place"
     },
     {
-      "code": 6140,
+      "code": 6136,
       "name": "GrantLive",
       "msg": "A grant's shards close only once the grant is closed or made again"
     },
     {
-      "code": 6141,
+      "code": 6137,
       "name": "ShardsFixed",
       "msg": "A grant keeps its shard bits (0 to 8) for its incarnation: an edit can't change them"
     },
     {
-      "code": 6142,
+      "code": 6138,
       "name": "BadRounds",
       "msg": "A claim by voucher or list names one round or more; an open claim names none"
     },
     {
-      "code": 6143,
+      "code": 6139,
       "name": "NotBurned",
       "msg": "This NFT is not burned: a Sheet closes once its Core asset is burned, its mint holds none, or a record proves its leaf burned"
     },
     {
-      "code": 6144,
+      "code": 6140,
       "name": "OutOfOrder",
       "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
     }
@@ -10461,7 +10252,7 @@
           {
             "name": "deciders",
             "docs": [
-              "Keys whose signed verdict decides it, besides the authority (at most 3)."
+              "Keys whose signed verdict decides it, besides the authority."
             ],
             "type": {
               "vec": "pubkey"
@@ -11055,14 +10846,10 @@
             }
           },
           {
-            "name": "rewards_pool",
-            "docs": [
-              "The pool rewards arrive in, and the mint it had when the farm was opened."
-            ],
-            "type": "u16"
-          },
-          {
             "name": "rewards_mint",
+            "docs": [
+              "The mint of its rewards, kept in its rewards vault, `[\"rewards\", farm]`."
+            ],
             "type": "pubkey"
           },
           {
@@ -11113,7 +10900,7 @@
           {
             "name": "rate",
             "docs": [
-              "A fixed rate, instead of sharing what the pool receives."
+              "A fixed rate, instead of sharing what lands in the vault."
             ],
             "type": {
               "option": {
@@ -11124,16 +10911,19 @@
             }
           },
           {
-            "name": "rate_at",
+            "name": "rate_carry",
             "docs": [
-              "When the rate last paid, and what it owes that is not yet a whole base unit (times one day",
-              "and `NFT_UNIT`)."
+              "What the rate owes that is not yet a whole base unit (times one day, and `NFT_UNIT` unless",
+              "shared)."
             ],
-            "type": "i64"
+            "type": "u128"
           },
           {
-            "name": "rate_carry",
-            "type": "u128"
+            "name": "opened_at",
+            "docs": [
+              "When it opened: a rate's halvings count from then."
+            ],
+            "type": "i64"
           },
           {
             "name": "growth",
@@ -11183,26 +10973,6 @@
             }
           },
           {
-            "name": "unbond",
-            "docs": [
-              "Seconds a token stake waits on its way out, earning nothing (`Seat::leaving`). 0: none."
-            ],
-            "type": "u32"
-          },
-          {
-            "name": "toll",
-            "docs": [
-              "A share of every payout of rewards, in the rewards mint."
-            ],
-            "type": {
-              "option": {
-                "defined": {
-                  "name": "Toll"
-                }
-              }
-            }
-          },
-          {
             "name": "total_weight",
             "type": "u128"
           },
@@ -11216,43 +10986,42 @@
           {
             "name": "reward_remainder",
             "docs": [
-              "The carry: unallocated vault balance times `PRECISION`: rounding, the fractions seats leave,",
-              "and what seats gave back (`given`). The next move before the farm's end credits the rounding to",
-              "the seats there once it adds up to a share; a move that leaves no weight, or any move once the",
-              "farm is over, sends its whole tokens back where they came from (`FarmSide::settle`)."
+              "The carry: rounding of a share over the total weight, times `PRECISION`. The next move before",
+              "the farm's end credits it to the seats there once it adds up to a share; a move that leaves no",
+              "weight, or any move once the farm is over, frees its whole tokens (`FarmSide::settle`)."
             ],
             "type": "u128"
           },
           {
-            "name": "given",
+            "name": "owed",
             "docs": [
-              "The whole tokens of the carry that seats gave back (a forfeit, an early exit, a watched NFT",
-              "gone, a seat past its `earns_until`), never credited to anyone: the move sends them back where they came",
-              "from (`FarmSide::settle`), to the pool (released again in a sharing farm before its end, the",
-              "project's otherwise), or burned by a rate that mints. 0 between moves, unless a forfeit could",
-              "not move them, or the rewards mint refuses their burn (`tokens::burn_locked`)."
+              "What it owes, times `PRECISION`, always whole tokens: what its seats were credited and not",
+              "paid, and the carry. Its vault holds that, but in a farm that mints, which mints what a seat is",
+              "paid; what the vault holds beyond it is free (`free`)."
             ],
-            "type": "u64"
+            "type": "u128"
+          },
+          {
+            "name": "clock",
+            "docs": [
+              "When it was last credited: its release, or its rate, has run up to then."
+            ],
+            "type": "i64"
           },
           {
             "name": "unreleased",
             "docs": [
-              "In a sharing farm (no rate): what of its rewards pool it counted and has not released yet,",
-              "still in the pool, and when the release was last brought up to (`Farm::release`)."
+              "In a sharing farm (no rate): what is free that it counted and has not released yet."
             ],
             "type": "u64"
-          },
-          {
-            "name": "released_at",
-            "type": "i64"
           },
           {
             "name": "release_ends",
             "docs": [
               "The release's line: `release_base` was unreleased at `release_from`, and is released evenly",
               "from then to `release_ends`, at its own pace whatever the farm's end (the release stops at the",
-              "end, and what the line has not reached stays in the pool). Laid again when an arrival is",
-              "counted (`Farm::count`)."
+              "end, and what the line has not reached stays free). Laid again when an arrival is counted",
+              "(`Farm::count`)."
             ],
             "type": "i64"
           },
@@ -11263,6 +11032,17 @@
           {
             "name": "release_base",
             "type": "u64"
+          },
+          {
+            "name": "marks",
+            "docs": [
+              "In a farm whose seats can stop earning (a tier's term, an upkeep), sharing what lands or paying",
+              "a shared rate: `reward_per_weight` at the grid's past times (`mark`), so a seat past its end is",
+              "credited up to it however late it is touched (`accrue`). Empty in any other farm."
+            ],
+            "type": {
+              "vec": "u128"
+            }
           }
         ]
       }
@@ -11279,10 +11059,6 @@
                 "name": "Custody"
               }
             }
-          },
-          {
-            "name": "rewards_pool",
-            "type": "u16"
           },
           {
             "name": "tiers",
@@ -11370,26 +11146,6 @@
               "option": {
                 "defined": {
                   "name": "Sink"
-                }
-              }
-            }
-          },
-          {
-            "name": "unbond",
-            "docs": [
-              "Seconds a token stake waits on its way out, earning nothing. A farm of tokens only."
-            ],
-            "type": "u32"
-          },
-          {
-            "name": "toll",
-            "docs": [
-              "A share of every payout of rewards, and where it goes."
-            ],
-            "type": {
-              "option": {
-                "defined": {
-                  "name": "Toll"
                 }
               }
             }
@@ -11970,13 +11726,6 @@
           },
           {
             "name": "rewards",
-            "type": "u64"
-          },
-          {
-            "name": "toll",
-            "docs": [
-              "What the farm's toll took."
-            ],
             "type": "u64"
           },
           {
@@ -13055,8 +12804,8 @@
           {
             "name": "round",
             "docs": [
-              "Counts the rounds: up by one each time a round is swept or cancelled. A lottery that draws",
-              "once has ended past round 0."
+              "Counts the rounds: up by one as a round's draw is first asked, or it is cancelled short, or",
+              "nobody bought into it. A lottery that draws once has ended past round 0."
             ],
             "type": "u32"
           },
@@ -13325,7 +13074,7 @@
             "docs": [
               "When set, a ticket costs one NFT that passes its rule, in place of tokens (`price.rs`):",
               "handed to the project as it is bought, then sent where its price says once the round is",
-              "swept (back to its buyer when it is cancelled). Such a lottery has no price and no shares."
+              "drawn (back to its buyer when it is cancelled). Such a lottery has no price and no shares."
             ],
             "type": {
               "option": {
@@ -14366,19 +14115,13 @@
     {
       "name": "Part",
       "docs": [
-        "Which part of an entry a pull settles."
+        "Which part a pull settles."
       ],
       "type": {
         "kind": "enum",
         "variants": [
           {
             "name": "Own"
-          },
-          {
-            "name": "Share",
-            "fields": [
-              "u8"
-            ]
           },
           {
             "name": "Pot",
@@ -14388,6 +14131,12 @@
           },
           {
             "name": "Prize",
+            "fields": [
+              "u16"
+            ]
+          },
+          {
+            "name": "Common",
             "fields": [
               "u16"
             ]
@@ -14887,7 +14636,7 @@
     {
       "name": "Rate",
       "docs": [
-        "A fixed rate a farm pays at, instead of sharing whatever its rewards pool receives."
+        "A fixed rate a farm pays at, instead of sharing whatever lands in its rewards vault."
       ],
       "type": {
         "kind": "struct",
@@ -14895,18 +14644,33 @@
           {
             "name": "per_day",
             "docs": [
-              "Base units of the reward a day, for each `NFT_UNIT` of weight: one collectible at ×1, or",
-              "1,000,000 base units of a token staked at ×1."
+              "Base units of the reward a day, for each `NFT_UNIT` of weight (one collectible at ×1, or",
+              "1,000,000 base units of a token staked at ×1); with `shared`, for the whole farm."
             ],
             "type": "u64"
           },
           {
             "name": "mints",
             "docs": [
-              "Minted (the project must be the rewards' mint authority), or paid from the rewards pool while",
-              "it lasts: what the pool can't cover, or the mint has no room for, is not owed later."
+              "Minted when a seat is paid (the project must be the rewards' mint authority), or paid from",
+              "what is free in the rewards vault while it lasts: what it can't cover, or the mint has no room",
+              "for, is not owed later."
             ],
             "type": "bool"
+          },
+          {
+            "name": "shared",
+            "docs": [
+              "`per_day` is the whole farm's, shared by weight while anything weighs: an emission budget."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "halve_every",
+            "docs": [
+              "Seconds from the farm's opening after which the rate halves, again and again (0: never)."
+            ],
+            "type": "u32"
           }
         ]
       }
@@ -15611,10 +15375,6 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "farm",
-            "type": "pubkey"
-          },
-          {
             "name": "player",
             "type": "pubkey"
           },
@@ -15694,7 +15454,8 @@
             "docs": [
               "Until when it earns and grows (`i64::MAX`: no end): the sooner of its tier's term",
               "(`Tier::earns_for` after `since`) and its fuel as its collectible said when last read",
-              "(staked, refreshed). And when it was last credited."
+              "(staked, refreshed). And when it was last credited: in a farm with a rate for each unit of",
+              "weight, what it earned up to its end is the time split of what it was credited since (`accrue`)."
             ],
             "type": "i64"
           },
@@ -15709,18 +15470,6 @@
               "mission that ran dry takes no prize, even refuelled before it lands."
             ],
             "type": "bool"
-          },
-          {
-            "name": "leaving",
-            "docs": [
-              "Tokens on their way out of a farm that unbonds: still in the staked vault, weighing nothing,",
-              "and free to take out from `leaving_at` (or once the farm is over)."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "leaving_at",
-            "type": "i64"
           },
           {
             "name": "locked",
@@ -15846,7 +15595,9 @@
     {
       "name": "Sink",
       "docs": [
-        "Where a fee a farm takes goes: burned, or into one of the project's pools."
+        "Where a fee a farm takes goes: burned, into one of the project's pools, or into the farm's own",
+        "rewards vault, free there for its seats like anything that lands (a farm whose staked token is",
+        "its rewards')."
       ],
       "type": {
         "kind": "enum",
@@ -15859,6 +15610,9 @@
             "fields": [
               "u16"
             ]
+          },
+          {
+            "name": "Rewards"
           }
         ]
       }
@@ -16339,30 +16093,12 @@
             "fields": [
               "pubkey"
             ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "Toll",
-      "docs": [
-        "A share of every payout of a farm's rewards (basis points, rounded up), taken before the player's",
-        "part moves, and where it goes."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bps",
-            "type": "u16"
           },
           {
-            "name": "to",
-            "type": {
-              "defined": {
-                "name": "Sink"
-              }
-            }
+            "name": "Farm",
+            "fields": [
+              "u32"
+            ]
           }
         ]
       }
@@ -16555,20 +16291,6 @@
               "What leaving early left behind (`Tier::exit_bps`)."
             ],
             "type": "u64"
-          },
-          {
-            "name": "leaving",
-            "docs": [
-              "What started its wait on the way out (`Farm::unbond`), still in the seat."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "toll",
-            "docs": [
-              "What the farm's toll took of the rewards paid."
-            ],
-            "type": "u64"
           }
         ]
       }
@@ -16635,37 +16357,6 @@
           {
             "name": "closes_at",
             "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Withdrawn",
-      "docs": [
-        "A player took out `amount` tokens whose unbonding wait was over (`Farm::unbond`)."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "project",
-            "type": "pubkey"
-          },
-          {
-            "name": "farm",
-            "type": "u32"
-          },
-          {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
-            "name": "seat",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
           }
         ]
       }
@@ -16897,8 +16588,8 @@
     {
       "name": "LOTTERY_TIMEOUT_SLOTS",
       "docs": [
-        "A lottery draw the oracle has not answered this many slots after it was asked for (7 days at",
-        "400 ms a slot) lets anyone cancel the round and refund it."
+        "A lottery draw the oracle has not answered this many slots after it was first asked for (7 days",
+        "at 400 ms a slot) is cancelled by the next ask (`draw_lottery`): the round is refunded."
       ],
       "type": "u64",
       "value": "1512000"

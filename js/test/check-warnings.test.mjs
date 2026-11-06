@@ -126,22 +126,30 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
 
 /** A round's record as `decodeRound` reads it, for the parts it owes. */
 const round = ({ returns = false, ...more } = {}) => ({
-  status: 'Drawn', terms: { returns, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, cursor: 0, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n,
-  paid: new Uint8Array(1), prizes: [], entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, to: [], nft: '11111111111111111111111111111111' }],
+  status: 'Drawn', terms: { returns, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n, pot_owed: 0n,
+  common: [], paid: new Uint8Array(1), prizes: [], nfts: [], assigned: 0, entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }],
   ...more,
 });
 
-test('a drawn round’s places are paid once it is swept, each place once', () => {
-  assert.deepEqual(loot.partsOwed(round(), 0), [], 'drawn: the sweep comes first');
-  assert.deepEqual(loot.partsOwed(round({ status: 'Swept' }), 0), [{ Pot: [0] }], 'first place\'s part of the pot');
-  assert.deepEqual(loot.partsOwed(round({ status: 'Swept' }), 1), [], 'the other ticket won nothing');
-  assert.deepEqual(loot.partsOwed(round({ status: 'Swept', paid: Uint8Array.of(1) }), 0), [], 'paid once');
+test('a drawn round’s places are pulled from its answer, in any order, each place once', () => {
+  assert.deepEqual(loot.partsOwed(round({ status: 'Drawing' }), 0), [], 'drawing: nothing yet');
+  assert.deepEqual(loot.partsOwed(round(), 0), [{ Pot: [0] }], 'first place\'s part of the pot');
+  assert.deepEqual(loot.partsOwed(round(), 1), [], 'the other ticket won nothing');
+  assert.deepEqual(loot.partsOwed(round({ paid: Uint8Array.of(1) }), 0), [], 'paid once');
 });
 
-test('in a lottery that returns its tickets, a ticket goes back from the draw, before the sweep', () => {
+test('in a lottery that returns its tickets, a ticket goes back from the draw', () => {
   assert.deepEqual(loot.partsOwed(round({ returns: true }), 1, { places: false }), ['Own']);
   assert.deepEqual(loot.partsOwed(round({ returns: true, status: 'Cancelled' }), 0), ['Own'], 'a cancelled round refunds every ticket');
-  assert.deepEqual(loot.partsOwed(round({ returns: true, status: 'Swept' }), 0), ['Own', { Pot: [0] }], 'and its winner\'s place once swept');
+  assert.deepEqual(loot.partsOwed(round({ returns: true }), 0), ['Own', { Pot: [0] }], 'and its winner\'s place');
+});
+
+test('parts owed in common: a share once drawn, the pot’s, a pool’s prize back after a cancel', () => {
+  const terms = { returns: false, ticket_mint: '11111111111111111111111111111111', shares: [{ to: 'Treasury', bps: 100 }, { to: 'Burn', bps: 100 }], places: [] };
+  const prizes = [{ run: 0, mint: WALLET, each: 5n, sent: 5n, arrived: 5n, minted: false }];
+  assert.deepEqual(loot.commonOwed(round({ status: 'Drawing', terms, common: [7n, 7n], pot_owed: 3n })), [], 'drawing: nothing moves');
+  assert.deepEqual(loot.commonOwed(round({ terms, common: [7n, 7n], pot_owed: 3n, prizes })), [{ Common: [0] }, { Common: [2] }], 'a share that burns is burned at the close');
+  assert.deepEqual(loot.commonOwed(round({ status: 'Cancelled', terms, common: [7n, 7n], pot_owed: 3n, prizes })), [{ Common: [2] }, { Common: [3] }], 'a cancel owes what the ask moved in');
 });
 
 test('every claim is signed by its winning wallet, whatever proves it; anyone may pay its fees', () => {
@@ -182,14 +190,13 @@ test('a run of places whose token prize in all passes a u64 is refused (BadLotte
   assert.ok(!run(1).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'));
 });
 
-test('a pull pays at most 300 places of a run; it closes the round only when they are the last parts owed', () => {
-  const r = round({ status: 'Swept', terms: { returns: false, mint: WALLET, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 20, prize: null, times: 400 }] }, sold: 400n, pot_total: 1_000_000n, pot_sent: 800_000n, pot_arrived: 800_000n, paid: new Uint8Array(100), entries: [{ buyer: WALLET, start: 0n, end: 400n, paid: 0n, amount: 400n, to: [], nft: '11111111111111111111111111111111' }] });
-  assert.equal(loot.MOST_A_PULL, 300);
-  assert.equal(loot.placesPulled(r, 0, 0, false), 300);
+test('one pull pays all of an entry’s places in a run; it closes the round only when they are the last parts owed', () => {
+  const r = round({ terms: { returns: false, mint: WALLET, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 20, prize: null, times: 400 }] }, sold: 400n, pot_total: 1_000_000n, pot_sent: 800_000n, pot_arrived: 800_000n, paid: new Uint8Array(100), entries: [{ buyer: WALLET, start: 0n, end: 400n, paid: 0n, amount: 400n, nft: '11111111111111111111111111111111' }] });
+  assert.equal(loot.placesPulled(r, 0, 0, false), 400);
   const opener = pda.platform();
   const pull = (owed) => loot.pullIx({ payer: WALLET, project: WALLET, roundAddress: WALLET, round: { ...r, owed, accounts: [], opener }, entry: 0, part: { Pot: [0] }, projectState: { treasury: WALLET } }).keys.map((k) => k.pubkey);
-  assert.ok(pull(300).includes(opener), 'the last 300 owed: it closes the round, naming its opener');
-  assert.ok(!pull(301).includes(opener), 'one more owed: the next pull closes it');
+  assert.ok(pull(400).includes(opener), 'the last 400 owed: it closes the round, naming its opener');
+  assert.ok(!pull(401).includes(opener), 'one more owed: a later pull closes it');
 });
 
 test('a grant is tag 27 and a profile 24: told apart by their tag; a Token Metadata Sheet names its edition to close', () => {

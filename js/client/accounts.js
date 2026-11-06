@@ -49,7 +49,7 @@ export const accountKind = (data) => (data?.length ? BY_TAG[data[0]] ?? null : n
  * tag 16), and a contest's entry. The client reads them with the same Borsh codec as any account.
  */
 const RECORDS = [
-  { name: 'Round', type: { kind: 'enum', variants: ['Open', 'Drawing', 'Drawn', 'Swept', 'Cancelled'].map((name) => ({ name })) } },
+  { name: 'Round', type: { kind: 'enum', variants: ['Open', 'Drawing', 'Drawn', 'Cancelled'].map((name) => ({ name })) } },
   { name: 'TokenPrize', type: { kind: 'struct', fields: [{ name: 'run', type: 'u16' }, { name: 'mint', type: 'pubkey' }, { name: 'each', type: 'u64' }, { name: 'sent', type: 'u64' }, { name: 'arrived', type: 'u64' }, { name: 'minted', type: 'bool' }] } },
   { name: 'Opened', type: { kind: 'struct', fields: [{ name: 'mint', type: 'pubkey' }, { name: 'by', type: 'pubkey' }] } },
   {
@@ -60,14 +60,17 @@ const RECORDS = [
         ['project', 'pubkey'], ['lottery', 'pubkey'], ['id', 'u32'], ['incarnation', 'u64'], ['round', 'u32'], ['bump', 'u8'], ['opener', 'pubkey'], ['head', 'u32'],
         ['status', { defined: { name: 'Round' } }],
         // The terms, as the lottery's revision had them at the round's first purchase; whether its entries keep what
-        // arrived (a payment mint with a transfer fee).
+        // arrived (a payment mint with a transfer fee, or a share the buyer chooses, paid as they buy).
         ['revision', 'u32'], ['terms', { defined: { name: 'LotteryTerms' } }], ['fee', 'bool'],
-        // The totals, split at each purchase, and what it still owes.
-        ['sold', 'u64'], ['to_pot', 'u64'], ['common', { vec: 'u64' }], ['owed_if_cancelled', 'u32'], ['owed_if_drawn', 'u32'], ['owed', 'u32'],
-        // The draw, the cursor and the sweep.
-        ['asked_first', 'u64'], ['asked_slot', 'u64'], ['answer', { array: ['u8', 32] }], ['first', 'u64'], ['cursor', 'u32'],
-        ['pot_total', 'u64'], ['pot_sent', 'u64'], ['pot_arrived', 'u64'], ['paid', 'bytes'],
+        // The totals, split at each purchase: what each share paid in common takes, the entries that own a part of
+        // their own, and the parts owed now.
+        ['sold', 'u64'], ['to_pot', 'u64'], ['common', { vec: 'u64' }], ['owns', 'u32'], ['owed', 'u32'],
+        // The draw, and the money the ask fixed: the pot's (what the round owes the pot back: `pot_owed`).
+        ['asked_first', 'u64'], ['asked_slot', 'u64'], ['answer', { array: ['u8', 32] }], ['first', 'u64'],
+        ['pot_total', 'u64'], ['pot_sent', 'u64'], ['pot_arrived', 'u64'], ['pot_owed', 'u64'], ['paid', 'bytes'],
         ['prizes', { vec: { defined: { name: 'TokenPrize' } } }], ['accounts', { vec: { defined: { name: 'Opened' } } }],
+        // The NFT of the lottery's own stash each place that holds or draws one got, in place order, and how many.
+        ['nfts', { vec: 'pubkey' }], ['assigned', 'u32'],
       ].map(([name, type]) => ({ name, type })),
     },
   },
@@ -309,39 +312,37 @@ export function decodeTokenMetadata(data) {
 // ---------------------------------------------------------------- a lottery's rounds (M3)
 //
 // A round is a record of its own (`pda.round`), opened by its first purchase: a header with a copy of the terms, the
-// totals, what it still owes and the draw, then one entry a purchase. `settle_round` gives the places' prizes and
-// sweeps; `pull` pays one part of one entry; the pull that leaves nothing owed closes it.
+// totals, what it still owes and the draw, then one entry a purchase. The ask (`draw_lottery`) fixes its money and moves
+// the lottery on; after the answer, `pull` pays one part at a time, in any order, and the pull that leaves nothing owed
+// closes it.
 
-/** An entry's word: its tickets' end in the low 48 bits, then a bit a part paid (its own the top one). */
+/** An entry's word: its tickets' end in the low 48 bits, its own part paid in the top bit. */
 const END_BITS = (1n << 48n) - 1n;
 export const OWN_PAID = 1n << 63n;
-/** The bit of an entry's `k`th recipient's part. */
-export const sharePaid = (k) => 1n << BigInt(62 - k);
 
 /** The mint a lottery's tickets are paid in (`terms`: a Lottery's or a round's): its ticket mint, burned, or its pot's. */
 export const paymentMint = (terms) => (ticketsBurn(terms) ? terms.ticket_mint : terms.mint);
 /** Whether a lottery's tickets are burned: they are paid in a ticket mint of its own. */
 export const ticketsBurn = (terms) => Boolean(terms.ticket_mint) && terms.ticket_mint !== NO_ADDRESS;
 
-/** A share each buyer's own entry names a wallet for: their choice, or whoever holds a collectible then. */
-export const perBuyer = (share) => Boolean(share.to?.Chosen || share.to?.Holder);
+/** A share the buyer chooses (a referrer, a collectible's holder): paid out of the price as they buy, from their own account. */
+export const chosenAtPurchase = (share) => Boolean(share.to?.Chosen);
 
-/** The bytes of one entry of a round: buyer, word, what arrived (a fee mint), a wallet a recipient, the NFT ticket. */
-export const entryWidth = (shares, fee, nft) => 40 + (fee ? 8 : 0) + 32 * shares.filter(perBuyer).length + (nft ? 32 : 0);
+/** The bytes of one entry of a round: buyer, word, what arrived (`fee`: a fee mint, or a chosen share), the NFT ticket. */
+export const entryWidth = (fee, nft) => 40 + (fee ? 8 : 0) + (nft ? 32 : 0);
 
 /**
- * A lottery round (`["round", lottery, incarnation, round]`): its header (`status` 'Open' | 'Drawing' | 'Drawn' | 'Swept' |
- * 'Cancelled', the terms it copied, `sold`, `owed`, the draw, the cursor and the sweep), and `entries`, one a purchase:
- * { buyer, start, end (its tickets), paid (the bits of its parts paid), amount, to (a wallet for each recipient share,
- * the default address for none), nft (its NFT ticket) }.
+ * A lottery round (`["round", lottery, incarnation, round]`): its header (`status` 'Open' | 'Drawing' | 'Drawn' |
+ * 'Cancelled', the terms it copied, `sold`, `owed`, the draw and the money the ask fixed, `nfts` the NFT of the
+ * lottery's own stash each such place got), and `entries`, one a purchase: { buyer, start, end (its tickets), paid (its
+ * own part's bit), amount (what reached the round), nft (its NFT ticket) }.
  */
 export function decodeRound(data) {
   const r = decode('LotteryRound', data);
   const at = Number(r.head);
   const width = Number(readUintLE(data, at, 2));
   const count = Number(readUintLE(data, at + 2, 4));
-  if (width !== entryWidth(r.terms.shares, r.fee, r.terms.nft_ticket != null) || data.length !== at + 6 + width * count) throw new Error('LotteryRound entries do not match its header');
-  const recipients = r.terms.shares.filter(perBuyer).length;
+  if (width !== entryWidth(r.fee, r.terms.nft_ticket != null) || data.length !== at + 6 + width * count) throw new Error('LotteryRound entries do not match its header');
   let start = 0n;
   const entries = Array.from({ length: count }, (_, i) => {
     const e = data.subarray(at + 6 + width * i, at + 6 + width * (i + 1));
@@ -350,8 +351,7 @@ export function decodeRound(data) {
     let k = 40;
     const take = (n) => e.subarray((k += n) - n, k);
     const amount = r.fee ? readUintLE(take(8), 0, 8) : (end - start) * BigInt(r.terms.price);
-    const to = Array.from({ length: recipients }, () => encodeBase58(take(32)));
-    const entry = { buyer: encodeBase58(e.subarray(0, 32)), start, end, paid: word & ~END_BITS, amount, to, nft: r.terms.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS };
+    const entry = { buyer: encodeBase58(e.subarray(0, 32)), start, end, paid: word & ~END_BITS, amount, nft: r.terms.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS };
     start = end;
     return entry;
   });
@@ -441,17 +441,15 @@ export function splitPart(runs, sent, arrived, place) {
 /** A share in basis points of an amount, rounded down. */
 const bpsOf = (amount, bps) => (BigInt(amount) * BigInt(bps)) / 10_000n;
 
-/** Whether place `place`'s part (its pot part, or with `prize` its token prize) is paid. */
-const placePaid = (r, place, prize) => {
-  const at = 2 * place + (prize ? 1 : 0);
+/** Whether place `place`'s part is paid: its pot part's bit (every place's first), or with `prize` its prize's (after
+ * every place's pot bit). */
+export const placePaid = (r, place, prize) => {
+  const at = place + (prize ? placeCount(r.terms.places) : 0);
   return Boolean((r.paid[at >> 3] ?? 0) & (1 << (at & 7)));
 };
 
-/** The most places of one run one `pull` pays (`MOST_A_PULL`, not in the IDL): the next pull pays the next ones. */
-export const MOST_A_PULL = 300;
-
 /** Entry `i`'s places in run `run` not paid yet of its pot part or (`prize`) its token prize, lowest first, each with
- * what it takes now: [{ place, amount }]. */
+ * what it takes: [{ place, amount }]. A pull pays all of them. */
 function unpaidPlaces(r, i, run, prize) {
   const e = r.entries[i];
   const k = prize ? r.prizes.findIndex((p) => Number(p.run) === run) : -1;
@@ -463,51 +461,110 @@ function unpaidPlaces(r, i, run, prize) {
   return placesIn(r, run, e.start, e.end).filter((p) => !placePaid(r, p, prize)).map((place) => ({ place, amount: splitPart(runs, sent, arrived, place - from) }));
 }
 
-/** What entry `i`'s places in run `run` take now and are not paid yet, of its pot part or (`prize`) its token prize. */
+/** What entry `i`'s places in run `run` take and are not paid yet, of its pot part or (`prize`) its token prize. */
 export const placesOwed = (r, i, run, prize) => unpaidPlaces(r, i, run, prize).reduce((sum, p) => sum + p.amount, 0n);
 
-/** How many of the round's owed parts a pull of `{ Pot: [run] }` or `{ Prize: [run] }` for entry `i` settles: of the
- * first `MOST_A_PULL` places it pays, those that take more than nothing. */
-export const placesPulled = (r, i, run, prize) => unpaidPlaces(r, i, run, prize).slice(0, MOST_A_PULL).filter((p) => p.amount > 0n).length;
+/** How many of the round's owed parts a pull of `{ Pot: [run] }` or a token `{ Prize: [run] }` for entry `i` settles:
+ * its places there that take more than nothing (one pull pays them all). */
+export const placesPulled = (r, i, run, prize) => unpaidPlaces(r, i, run, prize).filter((p) => p.amount > 0n).length;
+
+/** Whether run `run` of a round's places gives tokens (its prize is fixed at the ask, a `TokenPrize`). */
+export const tokenRun = (r, run) => Boolean(r.terms.places[run]?.prize?.Tokens);
+
+/** A place whose prize is an NFT of the lottery's own stash (`Held`, `Raffled`): assigned by the pulls, in place order. */
+export const ownStash = (place) => Boolean(place.prize?.Held) || place.prize === 'Raffled' || place.prize?.Raffled !== undefined;
+
+/** Entry `i`'s places in run `run` whose prize (not tokens) is not given yet, lowest first. */
+export const prizePlacesOwed = (r, i, run) => {
+  const e = r.entries[i];
+  return placesIn(r, run, e.start, e.end).filter((p) => !placePaid(r, p, true));
+};
+
+/** Where in `r.nfts` the NFT of `place` is (a place of a run that holds or draws one of the lottery's own stash). */
+export function nftSlot(r, place) {
+  let [k, first] = [0, 0];
+  for (const p of r.terms.places) {
+    if (place < first + Number(p.times)) return k + place - first;
+    if (ownStash(p)) k += Number(p.times);
+    first += Number(p.times);
+  }
+  return k;
+}
+
+/** How many places of a round win an NFT of the lottery's own stash (every such place with a winner). */
+export function stashPlacesWon(r) {
+  const w = roundWinners(r);
+  let [first, won] = [0, 0];
+  for (const p of r.terms.places) {
+    if (ownStash(p)) won += Math.max(0, Math.min(first + Number(p.times), w) - first);
+    first += Number(p.times);
+  }
+  return won;
+}
+
+/** Whether entry `i`'s places in run `run` (an NFT of the lottery's own stash) wait for their NFTs to be taken out
+ * (`LotteryRound::assign`): a pull with the stash alone does it, and `r.nfts` then names each. */
+export function awaitsNfts(r, i, run) {
+  if (!ownStash(r.terms.places[run])) return false;
+  const places = prizePlacesOwed(r, i, run);
+  return places.some((p) => nftSlot(r, p) >= Number(r.assigned));
+}
 
 /**
  * The parts entry `i` of a round is owed now, in the order a keeper pulls them (`pullIx`'s `part`): its own ('Own': a
- * refund, a no-loss ticket's price, its NFT ticket back or where its price sends it), each recipient's
- * ({ Share: [k] }), and with `places`, its places' parts of the pot ({ Pot: [run] }) and token prizes ({ Prize: [run] }).
+ * refund, a no-loss ticket's price, its NFT ticket back or where its price sends it), and with `places`, its places'
+ * parts of the pot ({ Pot: [run] }) and prizes ({ Prize: [run] }). Parts owed in common (a share, the pot's, a pool's
+ * prize back) are no entry's: `commonOwed`.
  */
 export function partsOwed(r, i, { places = true } = {}) {
   const e = r.entries[i];
   const parts = [];
-  const drawn = r.status === 'Drawn' || r.status === 'Swept';
+  const drawn = r.status === 'Drawn';
   const back = r.status === 'Cancelled' || (r.terms.returns && drawn);
   const nft = e.nft !== NO_ADDRESS;
   if ((e.amount > 0n || nft) && (back || (nft && drawn)) && !(e.paid & OWN_PAID)) parts.push('Own');
-  if (drawn && !r.terms.returns && !ticketsBurn(r.terms)) {
-    const bps = r.terms.shares.filter(perBuyer).map((s) => s.bps);
-    e.to.forEach((wallet, k) => {
-      if (wallet !== NO_ADDRESS && bpsOf(e.amount, bps[k]) > 0n && !(e.paid & sharePaid(k))) parts.push({ Share: [k] });
-    });
-  }
-  if (!places) return parts;
+  if (!places || !drawn) return parts;
   for (let run = 0; run < r.terms.places.length; run++) {
-    const prizeReady = r.status === 'Swept' || (r.status === 'Drawn' && r.cursor >= runPlaces(r, run)[1]);
-    if (r.status === 'Swept' && placesOwed(r, i, run, false) > 0n) parts.push({ Pot: [run] });
-    if (prizeReady && placesOwed(r, i, run, true) > 0n) parts.push({ Prize: [run] });
+    const prize = r.terms.places[run].prize;
+    if (placesOwed(r, i, run, false) > 0n) parts.push({ Pot: [run] });
+    if (tokenRun(r, run) ? placesOwed(r, i, run, true) > 0n : prize != null && prizePlacesOwed(r, i, run).length > 0) parts.push({ Prize: [run] });
   }
   return parts;
+}
+
+/**
+ * The parts of a round owed in common, of no entry (`{ Common: [i] }`): each share paid in common once drawn (one that
+ * burns is burned at the close), then what the round owes the lottery's pot (`i` = the shares' count), then after a
+ * cancel each pool's token prize back to its pool (past it).
+ */
+export function commonOwed(r) {
+  const n = r.terms.shares.length;
+  const out = [];
+  if (r.status === 'Drawn') r.terms.shares.forEach((s, i) => s.to !== 'Burn' && BigInt(r.common[i] ?? 0) > 0n && out.push({ Common: [i] }));
+  if ((r.status === 'Drawn' || r.status === 'Cancelled') && BigInt(r.pot_owed) > 0n) out.push({ Common: [n] });
+  if (r.status === 'Cancelled') r.prizes.forEach((p, k) => !p.minted && BigInt(p.arrived) > 0n && out.push({ Common: [n + 1 + k] }));
+  return out;
 }
 
 /** The entry of a round holding `ticket`. */
 export const entryOf = (r, ticket) => r.entries.findIndex((e) => e.start <= BigInt(ticket) && BigInt(ticket) < e.end);
 
-/** Whether a round is done and owes nothing: the next step closes it, given its close's accounts. */
-export const roundFinished = (r) => (r.status === 'Swept' || r.status === 'Cancelled') && Number(r.owed) === 0;
+/** Whether a round is done and owes nothing: the next pull closes it, given its close's accounts. */
+export const roundFinished = (r) => (r.status === 'Drawn' || r.status === 'Cancelled') && Number(r.owed) === 0;
 
 /** Whether a lottery's place wins something: a share of the pot, a prize, or both. */
 export const placeSet = (place) => Number(place.bps) > 0 || place.prize != null;
 
 /** The address of a lottery's current round's record (there or not). */
 export const roundAddress = (lotteryAddress, lottery) => pda.round(lotteryAddress, lottery.incarnation, lottery.round);
+
+/** Whether a lottery (decoded) drew once and has ended. */
+export const lotteryEnded = (lottery) => Number(lottery.every) === 0 && Number(lottery.round) > 0;
+
+/** The round a lottery's close, its write again and its own stash's moves name (`lottery::check_idle`): its current
+ * round's, or once a lottery that draws once has ended, round 0's (which keeps its stash's NFTs until its places took
+ * them out). */
+export const idleRound = (lotteryAddress, lottery) => pda.round(lotteryAddress, lottery.incarnation, lotteryEnded(lottery) ? 0 : lottery.round);
 
 /**
  * Who rents a listed NFT at `now` (Unix seconds), from its decoded Listing (or null for none): the renter's wallet while

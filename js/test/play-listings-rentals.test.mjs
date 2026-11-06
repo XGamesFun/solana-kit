@@ -73,7 +73,7 @@ test('an unbonding farm’s tokens come out once their wait is over; a sealed sc
   const { w, appOf } = fixture('play-wait');
   w.pool(3, w.mint, 0n);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, rewardsMint: w.mint, stakedMint: w.mint,
-    args: { custody: 'Escrow', rewards_pool: 3, tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, unbond: 600 } })]);
+    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, unbond: 600 } })]);
   // A wallet someone holds the key of (on the curve): a sealed schedule pays no other.
   const me = freshKeypair().address;
   w.chain.airdrop(me, 10_000_000_000n);
@@ -99,7 +99,7 @@ test('moving a stake onto a tier whose rewards wait for its lock harvests first,
   const { w, appOf } = fixture('play-harvest-first');
   w.pool(3, w.mint, 0n);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, rewardsMint: w.mint, stakedMint: w.mint,
-    args: { custody: 'Escrow', rewards_pool: 3, tiers: [{ lock: 0, bps: 10_000 }, { lock: 3600, bps: 20_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
+    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }, { lock: 3600, bps: 20_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
   const app = appOf(w.player);
   // Funded before the stake, which counts it: the farm releases it over a day, its longest lock being shorter.
   w.fund(w.creator, w.mint, 1_000n);

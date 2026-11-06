@@ -463,7 +463,7 @@ describe('mechanics that run by themselves', () => {
     assert.equal(w.chain.tokens(pda.pool(w.project, 1)), PRICE);
   });
 
-  t('a lottery: tickets, a draw on its timer, the oracle, then the places by a cursor and each part pulled', () => {
+  t('a lottery: tickets, a draw on its timer that fixes its money and moves it on, the oracle, then each part pulled', () => {
     const w = world();
     const args = { price: 1000n, mint: w.mint, shares: [{ to: 'Treasury', bps: 1000 }], places: [7000, 3000], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null };
     w.upsert({ Lottery: { id: 1, args } });
@@ -477,19 +477,19 @@ describe('mechanics that run by themselves', () => {
     w.chain.send(rival, [loot.buyTicketsIx({ player: rival, project: w.project, id: 1, lottery, round: w.round(1).round, mint: w.mint, count: 5n })]);
     assert.deepEqual(w.round(1).round.entries.map((e) => [e.buyer, e.start, e.end]), [[w.player, 0n, 5n], [rival, 5n, 10n]]);
     w.chain.warp(w.chain.now() + 3601);
-    const d = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
+    const d = w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery, round: w.round(1).round })]);
     assert.equal(d.answers.length, 1);
-    assert.equal(w.round(1).round.status, 'Drawn');
-    // The sweep (no place gives a prize) pays the treasury's share, and moves the lottery to its next round.
-    const swept = w.chain.send(w.cranker, [loot.settleRoundIx({ payer: w.cranker, project: w.project, roundAddress: key, round: w.round(1).round, projectState: w.projectState() })]);
-    assert.equal(w.round(1).round.status, 'Swept');
+    // The ask fixed the round's money and moved the lottery on: its next round sells at once.
     assert.equal(w.read('Lottery', address).round, 1);
-    assert.ok(swept);
-    // Five tickets each, places five apart: each buyer won one place, a pull each; the last closes the round.
     let r = w.round(1).round;
-    const owed = r.entries.map((_, i) => loot.partsOwed(r, i));
+    assert.equal(r.status, 'Drawn');
+    // The treasury's tenth is owed in common; five tickets each, places five apart: each buyer won one place.
+    assert.deepEqual(loot.commonOwed(r), [{ Common: [0] }]);
     const first = loot.entryOf(r, loot.ticketOfPlace(r, 0));
-    assert.deepEqual(owed, [0, 1].map((i) => [{ Pot: [i === first ? 0 : 1] }]), 'each owes its place');
+    assert.deepEqual(r.entries.map((_, i) => loot.partsOwed(r, i)), [0, 1].map((i) => [{ Pot: [i === first ? 0 : 1] }]), 'each owes its place');
+    assert.equal(r.owed, 3);
+    const common = w.chain.send(w.cranker, [loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: r, part: { Common: [0] }, projectState: w.projectState() })]);
+    assert.ok(names(common).includes('LotteryPulled'));
     for (const i of [0, 1]) {
       r = w.round(1).round;
       const pulled = w.chain.send(w.cranker, [loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: r, entry: i, part: loot.partsOwed(r, i)[0], projectState: w.projectState() })]);
@@ -519,14 +519,17 @@ describe('mechanics that run by themselves', () => {
     assert.equal(loot.readLimit(counts, loot.countKey(address, lottery.incarnation)).inWindow, 2);
     assert.equal(w.chain.tokens(pda.pot(address)), 0n);
     assert.equal(w.chain.tokens(pda.roundTokens(key, w.mint)), 4000n, 'the round holds its own money');
-    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
-    // A round nobody draws waits; one whose draw the oracle never answers is refunded.
+    fails(() => w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery, round: w.round(2).round })]), 'NotDue');
+    // A round nobody draws waits; one whose draw the oracle never answers is cancelled by the next ask after the timeout.
     w.chain.warp(Number(lottery.terms.draws_at) + 30 * 86_400);
-    fails(() => w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]), 'NotDue');
-    w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery })]); // the oracle never answers
+    w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery, round: w.round(2).round })]); // the oracle never answers
+    const asked = w.round(2).round;
+    assert.equal(asked.status, 'Drawing');
+    const again = () => loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery, round: w.round(2).round, roundAddress: key });
+    fails(() => w.chain.sendRaw(w.cranker, [again()]), 'NotDue');
     w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
     assert.ok(loot.lotteryCancellable(w.round(2).round, w.chain.slot()));
-    w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id: 2, lottery })]);
+    w.chain.sendRaw(w.cranker, [again()]);
     const r = w.round(2).round;
     assert.equal(r.status, 'Cancelled');
     const pull = loot.pullIx({ payer: w.cranker, project: w.project, roundAddress: key, round: r, entry: 0, part: 'Own', projectState: w.projectState() });
@@ -541,7 +544,7 @@ describe('mechanics that run by themselves', () => {
   t('a token farm with two tiers: stake, rewards arrive, harvest, unstake after the lock', () => {
     const w = world();
     w.pool(5, w.mint, 10n * PRICE);
-    const args = { custody: 'Escrow', rewards_pool: 5, tiers: [{ lock: 60, bps: 10_000 }, { lock: 600, bps: 30_000 }], boosts: [], max_boost_bps: 0, gate: null };
+    const args = { custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000 }, { lock: 600, bps: 30_000 }], boosts: [], max_boost_bps: 0, gate: null };
     w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args, rewardsMint: w.mint, stakedMint: w.mint })]);
     const farm = w.read('Farm', pda.farm(w.project, 1));
     w.chain.send(w.player, [loot.stakeTokensIx({ player: w.player, project: w.project, id: 1, farm, amount: 5n * PRICE, tier: 1 })]);
@@ -560,7 +563,7 @@ describe('mechanics that run by themselves', () => {
     w.pool(6, w.mint, 10n * PRICE);
     w.upsert({ Item: { id: 1, args: collectible('Miner') } });
     const boost = { rule: { of: { Item: [1] }, key: 'level', test: 'Any' }, effect: { PerPoint: { bps: 1000, most: 9 } } };
-    const args = { custody: 'Freeze', rewards_pool: 6, tiers: [{ lock: 60, bps: 10_000 }], boosts: [boost], max_boost_bps: 10_000, gate: { of: { Item: [1] }, key: 'level', test: 'Any' } };
+    const args = { custody: 'Freeze', tiers: [{ lock: 60, bps: 10_000 }], boosts: [boost], max_boost_bps: 10_000, gate: { of: { Item: [1] }, key: 'level', test: 'Any' } };
     w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 2, args, rewardsMint: w.mint })]);
     const farm = w.read('Farm', pda.farm(w.project, 2));
     const miner = w.make(1, w.player, [{ key: 'level', value: '4' }]);
@@ -585,7 +588,7 @@ describe('mechanics that run by themselves', () => {
     w.pool(7, dust);
     w.upsert({ Item: { id: 1, args: collectible('Hero') } });
     const args = {
-      custody: 'Escrow', rewards_pool: 7, tiers: [{ lock: 60, bps: 10_000 }, { lock: 3 * 86_400, bps: 15_000, prize: { Tokens: { from: { Mint: [ticket] }, amount: { Fixed: [2n] } } } }],
+      custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000 }, { lock: 3 * 86_400, bps: 15_000, prize: { Tokens: { from: { Mint: [ticket] }, amount: { Fixed: [2n] } } } }],
       boosts: [], max_boost_bps: 0, gates: [{ of: { Item: [1] }, key: '', test: 'Any' }],
       rate: { per_day: 1_000n, mints: true }, growth: [{ key: 'xp', per_day: 100, level: 'level', steps: [100, 300], streak: false }],
     };

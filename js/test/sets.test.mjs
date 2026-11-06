@@ -23,7 +23,7 @@ test('four staked pieces bind into a badge in one transaction, and stay staked u
   for (const id of [1, 2, 3, 4, 5]) w.upsert({ Item: { id, args: collectible(`Piece ${id}`) } });
   const spark = w.newMint(w.creator);
   w.pool(7, spark);
-  const args = { custody: 'Escrow', rewards_pool: 7, tiers: [{ lock: DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0, rate: { per_day: 0n, mints: true }, growth: [{ key: 'xp', per_day: 1, level: '', steps: [], streak: false }], lock_key: 'free_at' };
+  const args = { custody: 'Escrow', tiers: [{ lock: DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0, rate: { per_day: 0n, mints: true }, growth: [{ key: 'xp', per_day: 1, level: '', steps: [], streak: false }], lock_key: 'free_at' };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: spark })]);
   const raise = (place, key, by, most) => ({ place, key, by, most });
   const staked = [1, 2, 3, 4].map((item) => ({ Staked: { item, farm: 3 } }));

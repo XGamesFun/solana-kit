@@ -117,5 +117,5 @@ test('constants come from the IDL, and missing arguments are named', () => {
   assert.equal(loot.SETTLE_LAST, 4_294_967_295);
   assert.equal(loot.dayOf(constant('DAY_SECONDS') * 3n + 1n), 3);
   assert.throws(() => loot.withDefaults({ Box: { id: 1, args: { currency: A } } }), /entries/);
-  assert.throws(() => loot.openFarmIx({ owner: A, project: B, id: 0, args: { rewards_pool: 0 }, rewardsMint: C }), /args\.tiers/);
+  assert.throws(() => loot.openFarmIx({ owner: A, project: B, id: 0, args: {}, rewardsMint: C }), /args\.tiers/);
 });

@@ -154,7 +154,7 @@ t('a specific NFT and a collectible are given at once, by a grant’s claim and 
   w.chain.send(wallet, [computeUnitLimit(400_000), loot.claimGrantIx({ project: w.project, id: 2, grant: w.read('Grant', pda.grant(w.project, 2)), wallet, signer: wallet, projectState: w.projectState(), item })]);
   assert.equal(ownerOf(w, pda.itemAsset(pda.item(w.project, 2), 1)), wallet);
 
-  // A lottery: first place takes the pot, second the artwork: the cursor gives the artwork, a pull pays the pot.
+  // A lottery: first place takes the pot, second the artwork, each by a pull.
   const places = [10_000, { bps: 0, prize: { Nft: { stash: 1, nft: nfts[1] } } }];
   w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);

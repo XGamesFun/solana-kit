@@ -66,7 +66,7 @@ t('a farm of collectibles takes three NFTs, pays their rewards and lets them out
   const w = world({ seed: 'several-seats' });
   w.pool(6, w.mint, 10n * PRICE);
   w.upsert({ Item: { id: 1, args: collectible('Miner') } });
-  const args = { custody: 'Escrow', rewards_pool: 6, tiers: [{ lock: 60, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null };
+  const args = { custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 2, args, rewardsMint: w.mint })]);
   const farm = w.read('Farm', pda.farm(w.project, 2));
   w.tokenAccount(w.player, w.mint);
@@ -135,14 +135,14 @@ t('a lottery’s places as a run, and a raffle of many NFTs drawn from its own s
   const r = w.round(1).round;
   assert.equal(loot.roundWinners(r), 4, 'one place and a run of three');
   const winners = [1, 2, 3].map((p) => r.entries[loot.entryOf(r, loot.ticketOfPlace(r, p))].buyer);
-  // A step a raffled place, each NFT drawn as the program draws it; the last sweeps; then each place's pot part pulled.
+  // Which NFT each raffled place gets, as the pulls take them out of the stash (`stashNfts`): every one, none twice.
+  const stash = loot.decodeStash(w.chain.get(pda.lotteryStash(address)).data);
+  const predicted = loot.stashNfts(r, stash);
+  assert.deepEqual([...predicted].sort(), [...art].sort());
   const kinds = Object.fromEntries(art.map((x) => [x, { collection: w.collection }]));
-  for (let at = w.round(1); at.round.status === 'Drawn'; at = w.round(1)) {
-    const stash = loot.decodeStash(w.chain.get(pda.lotteryStash(address)).data);
-    w.chain.send(w.cranker, [computeUnitLimit(1_400_000), loot.settleRoundIx({ payer: w.cranker, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState(), nfts: kinds, stash })]);
-  }
+  w.finishRound(1, { kinds });
+  [1, 2, 3].forEach((p) => assert.equal(ownerOf(w, predicted[loot.nftSlot(r, p)]), winners[p - 1], `place ${p} took the NFT the client read`));
   assert.deepEqual(art.map((x) => ownerOf(w, x)).sort(), [...winners].sort(), 'each raffled place took one NFT');
-  w.finishRound(1);
   assert.equal(w.round(1), null, 'every place paid, the round closed');
   assert.equal(w.chain.tokens(pda.pot(address)), 0n, 'the places took the whole pot: 40% and three times 20%');
 });
@@ -211,7 +211,7 @@ t('a token exit that would lose what its seat grew writes it first, in the same 
   const w = world({ seed: 'refresh-first' });
   w.pool(5, w.mint, 10n * PRICE);
   const growth = [{ key: 'xp', per_day: 86_400, level: '', steps: [], streak: false, profile: true, at_least: 0n }];
-  const args = { custody: 'Freeze', rewards_pool: 5, tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null, growth };
+  const args = { custody: 'Freeze', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null, growth };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args, rewardsMint: w.mint, stakedMint: w.mint })]);
   const farm = w.read('Farm', pda.farm(w.project, 1));
   w.chain.send(w.player, [loot.stakeTokensIx({ player: w.player, project: w.project, id: 1, farm, amount: 100n })]);
@@ -271,22 +271,27 @@ t('the biggest orders are opened and rolled with the heap every transaction has:
   }
 });
 
-test('settle_round gives at most `runs` token runs a call: the rest wait for the next call from the cursor', () => {
+test('a round’s first ask carries its pot and each run of token prizes; a round asked before carries none', () => {
   const MINT = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-  const tokens = (n) => ({ bps: 0, prize: { Tokens: { from: { Pool: [n] }, amount: { Fixed: [10n] } } }, times: 1 });
-  const r = { status: 'Drawn', lottery: MINT, terms: { mint: MINT, places: [tokens(1), tokens(2), tokens(3)], shares: [], ticket_mint: NOBODY }, sold: 9n, first: 0n, cursor: 0, answer: new Uint8Array(32), entries: [], accounts: [], paid: new Uint8Array(2), prizes: [] };
-  const keys = (runs) => loot.settleRoundIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, projectState: { treasury: MINT }, poolMints: { 1: MINT, 2: MINT, 3: MINT }, runs }).keys.length;
-  assert.equal(keys(2) - keys(1), 3, 'one more run: its pool’s mint, the pool, the round’s account of it');
-  assert.ok(keys(3) > keys(2), 'all three, and the sweep after them');
+  const places = [{ bps: 5000, prize: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [10n] } } }, times: 1 }, { bps: 0, prize: { Tokens: { from: { Mint: [MINT] }, amount: { Fixed: [10n] } } }, times: 2 }];
+  const terms = { mint: MINT, places, shares: [], ticket_mint: NOBODY };
+  const lottery = { incarnation: 0n, round: 0, terms };
+  const keys = (status) => loot.drawLotteryIx({ payer: MINT, project: MINT, id: 1, lottery, round: { status, terms }, poolMints: { 1: MINT } }).keys;
+  const named = keys('Drawing').length;
+  assert.equal(keys('Open').length - named, 7, 'the pot, its mint and the round’s account of it; a pool run’s mint, pool and account; a minted run’s mint');
+  assert.equal(keys('Open')[named].pubkey, pda.pot(pda.lottery(MINT, 1)));
 });
 
-test('the authority’s mark of a pool’s run carries its mint and pool alone: no round account, sweep or close', () => {
+test('a part owed in common goes where its share says, or to the treasury when nobody can take it', () => {
   const MINT = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-  const run = { bps: 0, prize: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [10n] } } }, times: 1 };
-  const r = { status: 'Drawn', lottery: MINT, opener: MINT, terms: { mint: MINT, places: [run], shares: [], ticket_mint: NOBODY }, sold: 3n, first: 0n, cursor: 0, owed: 3, answer: new Uint8Array(32), entries: [], accounts: [], paid: new Uint8Array(1), prizes: [] };
-  const ix = loot.settleRoundIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, projectState: { treasury: MINT }, poolMints: { 1: MINT }, hold: true });
-  assert.equal(ix.keys.length, 12, 'the 10 named accounts, then the run’s mint and pool');
-  assert.equal(ix.keys[11].pubkey, pda.pool(MINT, 1));
+  const TREASURY = 'AdRk2vJvPVJ8rkVW3jdyJqZBHVoA8pqv2ybM8USkaQzv';
+  const r = { status: 'Drawn', lottery: MINT, opener: MINT, owed: 5, terms: { mint: MINT, places: [], shares: [{ to: { Pool: [2] }, bps: 100 }], ticket_mint: NOBODY }, entries: [], accounts: [], paid: new Uint8Array(1), prizes: [], nfts: [], assigned: 0 };
+  const pull = (more) => loot.pullIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, part: { Common: [0] }, projectState: { treasury: TREASURY }, ...more });
+  const named = pull({}).keys.length - 1;
+  assert.equal(pull({}).keys[named].pubkey, pda.pool(MINT, 2), 'its pool');
+  assert.deepEqual(pull({ toTreasury: true }).keys.slice(named + 1).map((k) => k.pubkey), [TREASURY, loot.ata(TREASURY, MINT)], 'then the treasury and its account');
+  const pot = loot.pullIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, part: { Common: [1] }, projectState: { treasury: TREASURY } });
+  assert.equal(pot.keys[named].pubkey, pda.pot(MINT), 'past the shares, the lottery’s pot');
 });
 
 t('a collectible’s upsert reads its collection: the item says whether its compressed prizes can be minted', () => {

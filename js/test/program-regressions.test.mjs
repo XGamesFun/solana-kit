@@ -27,7 +27,8 @@ test('a full per-round ticket allowance does not exhaust future rounds', { skip 
   w.chain.warp(Number(lottery.terms.draws_at));
   w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // the oracle never answers
   w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
-  w.chain.send(w.cranker, [loot.cancelLotteryIx({ project: w.project, id, lottery })]);
+  // The next ask after the timeout cancels the round its first ask moved past.
+  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery, round: w.round(id).round, roundAddress: loot.pda.round(address, lottery.incarnation, 0) })]);
   w.finishRound(id);
   lottery = w.read('Lottery', address);
   assert.equal(lottery.round, 1);

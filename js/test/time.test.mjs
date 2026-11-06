@@ -25,7 +25,7 @@ test('a ship staked in escrow is refuelled and let out early by recipes, its sea
   const gem = w.newMint(w.creator);
   w.pool(7, gem, 1_000_000n);
   const args = {
-    custody: 'Escrow', rewards_pool: 7, tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
+    custody: 'Escrow', tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
     rate: { per_day: 1_000n, mints: false }, lock_key: 'free_at', upkeep_key: 'fuel',
   };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: gem })]);
@@ -107,7 +107,7 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   const gem = w.newMint(w.creator);
   w.pool(7, gem, 1_000_000n);
   const args = {
-    custody: 'Escrow', rewards_pool: 7, tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
+    custody: 'Escrow', tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
     rate: { per_day: 1_000n, mints: false }, lock_key: 'free_at', upkeep_key: 'fuel',
   };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: gem })]);

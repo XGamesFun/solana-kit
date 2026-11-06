@@ -18,7 +18,7 @@ const player = addr('player'), project = addr('project'), tree = addr('tree'), c
 const BH = addr('bh');
 const bytes32 = () => new Uint8Array(32).fill(7);
 const cnft = (n) => ({ id: addr('cnft'), tree, nonce: 1n, owner: player, delegate: player, collection, dataHash: bytes32(), creatorHash: bytes32(), assetDataHash: null, flags: 0, root: bytes32(), proof: Array.from({ length: n }, (_, i) => addr(`node${i}`)) });
-const farm = (prize) => ({ farmed: 'Collectibles', custody: 'Escrow', rewards_mint: rwd, rewards_pool: 0, rate: { mints: true }, tiers: [{ lock: 30, prize, roll: null, exit_bps: 0 }], growth: [], toll: null, exit_to: null, lock_key: '' });
+const farm = (prize) => ({ farmed: 'Collectibles', custody: 'Escrow', rewards_mint: rwd, rate: { mints: true }, tiers: [{ lock: 30, prize, roll: null, exit_bps: 0 }], growth: [], toll: null, exit_to: null, lock_key: '' });
 const PROVE_LEAF = loot.IDL.instructions.find((i) => i.name === 'prove_leaf').discriminator;
 const isProveLeaf = (ix) => ix.programId === loot.LOOT_PROGRAM && PROVE_LEAF.every((b, i) => ix.data[i] === b);
 

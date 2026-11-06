@@ -37,7 +37,7 @@ function fixture({ hook = false, dynamic = false } = {}) {
   const reward = hook ? hookedMint(w, dynamic) : { mint: w.newMint() };
   w.pool(5, reward.mint);
   for (const id of [1, 2]) w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id, rewardsMint: reward.mint, stakedMint: id === 2 ? w.mint : null,
-    args: { custody: 'Freeze', rewards_pool: 5, tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null } })]);
+    args: { custody: 'Freeze', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, gate: null } })]);
   w.upsert({ Item: { id: 1, args: collectible('Miner') } });
   const asset = w.make(1, w.player), calls = { sign: 0 }, denied = new Set();
   const rpc = { ...w.chain.rpc,
@@ -104,7 +104,7 @@ test('an early exit gives its rewards back to the pool through the reward hook, 
   // A farm of the project's coin whose only tier leaves early for 10%: its rewards wait for the lock, and leaving early
   // gives them back to the pool, a transfer out of the rewards vault that runs the reward mint's hook.
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, rewardsMint: mint, stakedMint: w.mint,
-    args: { custody: 'Escrow', rewards_pool: 5, tiers: [{ lock: 3600, bps: 10_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
+    args: { custody: 'Escrow', tiers: [{ lock: 3600, bps: 10_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'early', id: 3, stakes: 'coin' }] };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: w.player, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   seed(100_000n);

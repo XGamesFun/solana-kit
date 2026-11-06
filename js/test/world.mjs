@@ -279,8 +279,8 @@ export function world({ seed = 'world', platform = true, project = true, compres
   /** A decoded account. */
   w.read = (name, address) => chain.account(name, address);
   w.projectState = () => w.read('Project', w.project);
-  /** Lottery `id`'s latest round with a record (its current one, or the one before, swept or cancelled and still paying
-   * out): { address, round } (`loot.decodeRound`), or null. */
+  /** Lottery `id`'s latest round with a record (its current one, or the one before, drawing, drawn or cancelled and
+   * still paying out): { address, round } (`loot.decodeRound`), or null. */
   w.round = (id) => {
     const lottery = loot.pda.lottery(w.project, id);
     const l = chain.account('Lottery', lottery);
@@ -291,19 +291,23 @@ export function world({ seed = 'world', platform = true, project = true, compres
     }
     return null;
   };
-  /** Anyone moves lottery `id`'s latest round on as a keeper does: settle_round until it is swept (one place a call),
-   * then every part owed pulled (with `places`, the places' parts too), the last pull closing it. Returns the records. */
+  /** Anyone pays lottery `id`'s latest round out as a keeper does, once it is drawn or cancelled: each part owed in
+   * common, then every entry's parts (with `places`, its places' parts too), a pull each, the last one closing it.
+   * Returns the records. */
   w.finishRound = (id, { places = true, payer = w.cranker, extra = {}, kinds = {}, items } = {}) => {
     const out = [];
-    for (let at = w.round(id); at && at.round.status === 'Drawn'; at = w.round(id)) out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.settleRoundIx({ payer, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState(), nfts: kinds, collection: w.collection, items: typeof items === 'function' ? items() : items, ...extra })]));
+    const stash = (r) => loot.decodeStash(chain.get(loot.pda.lotteryStash(r.lottery))?.data ?? null);
     for (let at = w.round(id); at; at = w.round(id)) {
-      const i = at.round.entries.findIndex((_, j) => loot.partsOwed(at.round, j, { places }).length);
-      if (i < 0) {
-        if (loot.roundFinished(at.round)) out.push(chain.send(payer, [loot.settleRoundIx({ payer, project: w.project, roundAddress: at.address, round: at.round, projectState: w.projectState() })]));
-        break;
+      const r = at.round;
+      if (r.status !== 'Drawn' && r.status !== 'Cancelled') break;
+      let pick = loot.roundFinished(r) ? { entry: 0, part: 'Own' } : loot.commonOwed(r).map((part) => ({ entry: 0, part }))[0];
+      if (!pick) {
+        const i = r.entries.findIndex((_, j) => loot.partsOwed(r, j, { places }).length);
+        if (i < 0) break;
+        pick = { entry: i, part: loot.partsOwed(r, i, { places })[0] };
       }
-      const [part] = loot.partsOwed(at.round, i, { places });
-      out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.pullIx({ payer, project: w.project, roundAddress: at.address, round: at.round, entry: i, part, projectState: w.projectState(), ticket: kinds[at.round.entries[i].nft] ?? {} })]));
+      const prize = { stash: stash(r), nfts: kinds, collection: w.collection, items: typeof items === 'function' ? items() : items };
+      out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.pullIx({ payer, project: w.project, roundAddress: at.address, round: r, ...pick, projectState: w.projectState(), ticket: kinds[r.entries[pick.entry]?.nft] ?? {}, prize, ...extra })]));
     }
     return out;
   };

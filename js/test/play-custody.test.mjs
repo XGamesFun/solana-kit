@@ -26,7 +26,7 @@ function fixture() {
   const other = otherNft(w);
   for (const id of [1, 2, 3]) {
     const gates = id === 3 ? [{ of: { Collection: [other.collection] }, key: '', test: 'Any' }] : [];
-    const args = { custody: 'Freeze', rewards_pool: id === 3 ? 6 : 5, tiers: [{ lock: 60, bps: 10_000 }, { lock: 600, bps: 20_000 }], boosts: [], max_boost_bps: 0, gates };
+    const args = { custody: 'Freeze', tiers: [{ lock: 60, bps: 10_000 }, { lock: 600, bps: 20_000 }], boosts: [], max_boost_bps: 0, gates };
     w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id, args, rewardsMint: w.mint, stakedMint: id === 2 ? w.mint : null })]);
   }
   const calls = { sign: 0, send: 0 };

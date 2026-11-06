@@ -1,6 +1,6 @@
 // Listings, raffles, contest splits, farm exits and sealed schedules, as the client builds them and the real program
 // takes them (LiteSVM): listings for sale and for rent, raffles from a lottery's own stash with prizes first and a least
-// sale, a contest prize split by stake, farm exits, unbonding, compounding and tolls, and a sealed schedule caught up in
+// sale, a contest prize split by stake, farm exits and compounding, and a sealed schedule caught up in
 // one transaction.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -59,7 +59,7 @@ t('a listing sells an NFT at its price, and rents another by the period to one r
   assert.equal(ownerOf(w, cabin), maker, 'home');
 });
 
-t('a raffle: the NFT is locked in the lottery’s own stash, given by the round’s cursor before its sweep; a short round refunds', () => {
+t('a raffle: the NFT is locked in the lottery’s own stash, pulled by its winner, the money owed in common; a short round refunds', () => {
   const w = world({ seed: 'exits-raffle' });
   w.upsert({ Item: { id: 1, args: collectible('Artwork') } });
   const art = w.make(1, w.creator);
@@ -78,13 +78,15 @@ t('a raffle: the NFT is locked in the lottery’s own stash, given by the round�
   w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery: lotteryState(1) })]);
   const { address: key, round: r } = w.round(1);
   assert.equal(r.status, 'Drawn');
-  // The sweep waits for the prize: a part of the treasury's money can't be pulled before it.
-  assert.deepEqual(r.entries.map((_, i) => loot.partsOwed(r, i)), [[], []], 'nothing to pull before the sweep');
-  const winner = r.entries[loot.entryOf(r, loot.ticketOfPlace(r, 0))].buyer;
+  // The ask fixed its money: the treasury's share and what the pot keeps are owed in common, the NFT to its winner.
+  assert.deepEqual(loot.commonOwed(r), [{ Common: [0] }, { Common: [1] }]);
+  const won = loot.entryOf(r, loot.ticketOfPlace(r, 0));
+  assert.deepEqual(r.entries.map((_, i) => loot.partsOwed(r, i)), r.entries.map((_, i) => (i === won ? [{ Prize: [0] }] : [])));
+  const winner = r.entries[won].buyer;
   const treasuryBefore = w.balance(w.treasury);
   w.finishRound(1, { kinds: { [art]: { collection: w.collection } } });
   assert.equal(ownerOf(w, art), winner, 'the winner has the NFT');
-  assert.equal(w.balance(w.treasury) - treasuryBefore, 3_600_000n, 'and the seller is paid (90% of 4 tickets) at the sweep');
+  assert.equal(w.balance(w.treasury) - treasuryBefore, 3_600_000n, 'and the seller is paid (90% of 4 tickets)');
   assert.equal(w.chain.get(key), null, 'the round closed');
 
   // A least sale: 5 tickets wanted, 1 sold, so the draw cancels the round and the buyer is refunded.
@@ -129,49 +131,39 @@ t('a contest’s token prize is set aside at the decision and split by what each
   assert.equal(w.balance(rival) - r0, 400n, 'two parts in three');
 });
 
-t('a farm of tokens: an early exit for a fee, an unbonding wait, compounding that keeps the lock, and a toll', () => {
+t('a farm of tokens: an early exit for a fee that keeps its rewards, compounding that keeps the lock', () => {
   const w = world({ seed: 'exits-farm' });
-  w.pool(3, w.mint, 0n);
-  // Exit fees go to a pool of their own here; to the rewards pool, the stayers would share them.
+  // Exit fees go to a pool of their own here; into the farm's own vault (`Rewards`), the stayers would share them.
   w.pool(4, w.mint, 0n);
-  const args = {
-    custody: 'Escrow', rewards_pool: 3, tiers: [{ lock: 3600, bps: 10_000, exit_bps: 1000 }, { lock: 3600, bps: 10_000 }], boosts: [], max_boost_bps: 0,
-    exit_to: { Pool: [4] }, unbond: 60, toll: { bps: 500, to: 'Burn' },
-  };
+  const args = { custody: 'Escrow', tiers: [{ lock: 3600, bps: 10_000, exit_bps: 1000 }, { lock: 3600, bps: 10_000 }], boosts: [], max_boost_bps: 0, exit_to: { Pool: [4] } };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args, rewardsMint: w.mint, stakedMint: w.mint })]);
   const farmAddress = pda.farm(w.project, 1);
   const farm = w.read('Farm', farmAddress);
   // The player locks in the tier with no early exit; a leaver takes the one that has one.
   const leaver = w.who();
   w.fund(leaver, w.mint, 10n * PRICE);
-  // Funded before the stakes: the first counts it, and the farm releases it over a day (its locks are shorter).
+  // Funded into its rewards vault before the stakes: the first counts it, and the farm releases it over a day.
   w.fund(w.creator, w.mint, 2_000n);
-  w.payIn(w.creator, w.mint, 2_000n, [{ to: { Pool: [3] }, bps: 10_000 }]);
+  w.payIn(w.creator, w.mint, 2_000n, [{ to: { Account: [pda.rewards(farmAddress)] }, bps: 10_000 }]);
   w.chain.send(w.player, [loot.stakeTokensIx({ player: w.player, project: w.project, id: 1, farm, amount: 10n * PRICE, tier: 1 })]);
   w.chain.send(leaver, [loot.stakeTokensIx({ player: leaver, project: w.project, id: 1, farm, amount: 10n * PRICE, tier: 0 })]);
   w.chain.warp(w.chain.now() + 1800);
-  // Compounding keeps the lock, and pays the toll.
+  // Compounding keeps the lock.
   const since = w.read('Seat', pda.seat(farmAddress, w.player)).since;
   const h = w.chain.send(w.player, [loot.harvestIx({ player: w.player, project: w.project, id: 1, farm, compound: true })]);
   const harvested = h.receipts.find((r) => r.name === 'Harvested').data;
-  assert.ok(harvested.compounded > 0n && harvested.toll === (harvested.compounded + harvested.toll + 19n) / 20n, '5% toll, rounded up');
+  assert.ok(harvested.compounded > 0n);
   const seat = w.read('Seat', pda.seat(farmAddress, w.player));
   assert.equal(seat.amount, 10n * PRICE + harvested.compounded);
   assert.equal(seat.since, since, 'the lock did not restart');
-  // A tier with an early exit keeps its rewards until its lock has run (RewardsLocked).
-  fails(() => w.chain.send(leaver, [loot.harvestIx({ player: leaver, project: w.project, id: 1, farm })]), 'RewardsLocked');
-  // Early, for 10% (and what it was owed): what is taken out waits 60 seconds, earning nothing, then leaves.
+  // Early, for 10%: what is taken out leaves at once, with the rewards the seat was credited.
   const held = w.balance(leaver);
   const out = w.chain.send(leaver, [loot.unstakeTokensIx({ player: leaver, project: w.project, id: 1, farm, amount: 5n * PRICE })]);
   assert.equal(out.receipts.find((r) => r.name === 'Unseated').data.fee, 500_000n);
   assert.equal(w.chain.tokens(pda.pool(w.project, 4)), 500_000n, 'the fee in its pool');
-  const left = w.read('Seat', pda.seat(farmAddress, leaver));
-  assert.equal(left.leaving, 4_500_000n);
-  assert.equal(loot.withdrawable(left, w.chain.now()), 0n);
-  w.chain.warp(w.chain.now() + 61);
-  assert.equal(loot.withdrawable(left, w.chain.now()), 4_500_000n);
-  w.chain.send(leaver, [loot.unstakeTokensIx({ player: leaver, project: w.project, id: 1, farm, amount: 0n })]);
-  assert.equal(w.balance(leaver) - held, 4_500_000n, 'the unbonded tokens, and no rewards: leaving early forfeits them');
+  const paid = out.receipts.find((r) => r.name === 'Unseated').data.rewards;
+  assert.ok(paid > 0n, 'leaving early keeps what it was credited');
+  assert.equal(w.balance(leaver) - held, 4_500_000n + paid);
 });
 
 t('a sealed schedule pays from its own vault, catches up in one transaction, and its last run empties it', () => {

@@ -38,7 +38,7 @@ test('a Token Metadata account reads as its mint, its verified collection and wh
 
 test('a stake, a harvest and a refresh name a Token Metadata NFT’s accounts', () => {
   const [player, project, mint, rewards, rules, seller] = Array.from({ length: 6 }, newAddress);
-  const farm = { custody: 'Freeze', farmed: { Collectibles: {} }, rewards_mint: rewards, rewards_pool: 0, rate: { per_day: 1n, mints: true }, prize: null, growth: [{ key: 'xp' }] };
+  const farm = { custody: 'Freeze', farmed: { Collectibles: {} }, rewards_mint: rewards, rate: { per_day: 1n, mints: true }, prize: null, growth: [{ key: 'xp' }] };
   // An account of an instruction, by name, in the order the IDL lists them (nested ones flattened).
   const leaves = (list) => list.flatMap((a) => (a.accounts ? leaves(a.accounts) : [a.name]));
   const account = (ix, name) => (keys) => keys[leaves(IDL.instructions.find((i) => i.name === ix).accounts).indexOf(name)];
