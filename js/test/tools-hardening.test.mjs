@@ -344,7 +344,13 @@ describe('a loan whose token someone can freeze is shown as such, and needs the 
     let prompts = 0;
     const counted = solanaApp({ spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } }, rpc: w.chain.rpc, wallet: { ...asWallet(kp), signTransaction: (x) => (prompts++, asWallet(kp).signTransaction(x)) }, now: () => w.chain.now() });
     const before = w.chain.get(kp.address).lamports;
-    const { released } = await counted.repay(b, w.read('Hold', loan.hold).free_at);
+    const due = w.read('Hold', loan.hold).free_at;
+    const shown = await counted.loan(b, due);
+    assert.equal(shown.repay, 2n * PRICE);
+    await assert.rejects(counted.repay(b, due), /Say the debt the payer was shown/);
+    await assert.rejects(counted.repay(b, due, { repay: shown.repay - 1n }), /now asks/);
+    assert.equal(prompts, 0);
+    const { released } = await counted.repay(b, due, { repay: shown.repay });
     assert.ok(released);
     assert.equal(prompts, 1, 'one prompt: the key sends the release');
     assert.equal(w.chain.get(loan.hold), null, 'the hold is closed');

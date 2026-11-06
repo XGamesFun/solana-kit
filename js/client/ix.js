@@ -1385,7 +1385,7 @@ export const raffledNft = (stash, answer, place) => stash?.nfts[weighted(stream(
 export function settleRoundIx({ payer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints = {}, projectMint, items, nfts = {}, collection, stash, places = 1, runs = Infinity, nonce = 0n, hold = false, extra = [] }) {
   const rest = [];
   const entries = [];
-  let [sweeps, took, paid] = [false, 0, 0];
+  let [sweeps, took, paid, marked] = [false, 0, 0, false];
   const own = pda.lotteryStash(r.lottery);
   const poolMint = (index) => poolMints[index] ?? projectMint ?? r.terms.mint;
   if (r.status === 'Drawn') {
@@ -1401,8 +1401,10 @@ export function settleRoundIx({ payer, project, roundAddress: key, round: r, pro
       }
       const from = prize.Tokens?.from;
       if (from?.Pool && hold) {
+        // The authority's mark of a pool's run that can't move: its mint and pool alone (the hook tail may follow), no
+        // round account of it, no sweep, no close; a call that carries more moves the run instead.
         rest.push(meta(poolMint(from.Pool[0]), false, false), meta(pda.pool(project, from.Pool[0]), false, false));
-        place = end;
+        marked = true;
         break;
       }
       if (from) {
@@ -1434,7 +1436,7 @@ export function settleRoundIx({ payer, project, roundAddress: key, round: r, pro
       place += 1;
       if (hold) break;
     }
-    if (place >= winners) {
+    if (place >= winners && !marked) {
       sweeps = true;
       const common = r.terms.shares.flatMap((s) => (s.to.Holder || s.to.Chosen?.item != null || s.to === 'Burn' ? [] : [s.to.Chosen ? { ...s, to: 'Treasury' } : s]));
       rest.push(
@@ -1445,7 +1447,7 @@ export function settleRoundIx({ payer, project, roundAddress: key, round: r, pro
     }
   }
   // The sweep may leave nothing owed, and opens the pot's account when the places take from it: the close names it.
-  const closes = sweeps || roundFinished(r);
+  const closes = !marked && (sweeps || roundFinished(r));
   if (closes) {
     rest.push(...roundCloseMetas(key, r));
     if (sweeps && !r.accounts.some((o) => o.mint === r.terms.mint)) rest.push(meta(pda.roundTokens(key, r.terms.mint), false, true), meta(r.terms.mint, false, true), meta(payer, false, true));
@@ -2503,15 +2505,17 @@ export function borrowIx({ borrower, project, id, offer, due, asset, collection,
 /**
  * Anyone (`payer`: the borrower, a friend) repays a loan before it is due (`hold` the decoded Hold, with its debt): the
  * debt's `repay` goes to the lender, and the NFT is the borrower's again. Only money moves: anyone then sends the NFT
- * home with `releaseIx` (in the same transaction, or later: a repaid loan's release has no deadline). Free. `extra`: a
+ * home with `releaseIx` (in the same transaction, or later: a repaid loan's release has no deadline). Free. `repay`: the
+ * debt the payer was shown (`hold.debt.repay` as read): any other amount is refused (`TermsChanged`). `extra`: a
  * transfer hook's accounts.
  */
-export function repayIx({ payer, project, hold, payerToken, programs, extra = [] }) {
+export function repayIx({ payer, project, hold, repay, payerToken, programs, extra = [] }) {
+  if (repay === undefined || repay === null) throw new Error('A repay names the debt the payer was shown (repay: hold.debt.repay as read).');
   const { lender, mint } = hold.debt;
   const tokenProgram = tokenProgramOf(programs, mint);
   return lootIx(
     'repay',
-    {},
+    { repay: toBigInt(repay) },
     {
       payer, project, hold: pda.hold(hold.asset, hold.free_at), lender,
       lender_token: ata(lender, mint, tokenProgram), payer_token: payerToken ?? ata(payer, mint, tokenProgram), mint,

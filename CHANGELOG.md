@@ -51,6 +51,9 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- `repay` names the debt its payer was shown (`repayIx({ repay })`); js/play's `loan()` reads it and `repay(asset, due,
+  { repay })` passes it. A pool run's mark carries its mint and pool alone. js/play reads a hooked mint's accounts
+  (`resolveTransfers`) for ticket purchases, a round's settle and its pulls: a hooked lottery runs from the page.
 - An open of a box of one entry and more than 100 draws, and a call giving a roll of one, asks for a 256 KiB heap
   (`boxHeapFrame`; js/play adds it). `settleRoundIx` takes `runs`, the most token runs a call; js/play fits them to 64
   accounts and asks for the larger heap. A box's order size counts its stored shares.

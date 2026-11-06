@@ -281,8 +281,10 @@ describe('offers', () => {
     w.fund(friend, w.mint, 2n * PRICE);
     const hold = w.read('Hold', pda.hold(x, due));
     assert.equal(hold.debt.lender, maker);
+    // The repay names the debt its payer was shown: any other is refused.
+    assert.throws(() => w.chain.send(friend, [loot.repayIx({ payer: friend, project: w.project, hold, repay: hold.debt.repay - 1n })]), /TermsChanged/);
     // Repaying moves only the money; the release in the same transaction sends the NFT home.
-    w.chain.send(friend, [loot.repayIx({ payer: friend, project: w.project, hold }), loot.releaseIx({ signer: friend, project: w.project, collection: w.collection, asset: x, hold })]);
+    w.chain.send(friend, [loot.repayIx({ payer: friend, project: w.project, hold, repay: hold.debt.repay }), loot.releaseIx({ signer: friend, project: w.project, collection: w.collection, asset: x, hold })]);
     assert.equal(owner(x), w.player);
     w.chain.warp(due);
     const late = w.read('Hold', pda.hold(y, due - 1));

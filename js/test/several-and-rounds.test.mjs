@@ -272,3 +272,12 @@ test('settle_round gives at most `runs` token runs a call: the rest wait for the
   assert.equal(keys(2) - keys(1), 3, 'one more run: its pool’s mint, the pool, the round’s account of it');
   assert.ok(keys(3) > keys(2), 'all three, and the sweep after them');
 });
+
+test('the authority’s mark of a pool’s run carries its mint and pool alone: no round account, sweep or close', () => {
+  const MINT = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
+  const run = { bps: 0, prize: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [10n] } } }, times: 1 };
+  const r = { status: 'Drawn', lottery: MINT, opener: MINT, terms: { mint: MINT, places: [run], shares: [], ticket_mint: NOBODY }, sold: 3n, first: 0n, cursor: 0, owed: 3, answer: new Uint8Array(32), entries: [], accounts: [], paid: new Uint8Array(1), prizes: [] };
+  const ix = loot.settleRoundIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, projectState: { treasury: MINT }, poolMints: { 1: MINT }, hold: true });
+  assert.equal(ix.keys.length, 12, 'the 10 named accounts, then the run’s mint and pool');
+  assert.equal(ix.keys[11].pubkey, pda.pool(MINT, 1));
+});

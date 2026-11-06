@@ -274,3 +274,29 @@ t('a lottery paid in a hooked coin sweeps a step a call: its common share, then 
   assert.deepEqual(steps, ['Drawn', 'Swept'], 'the share, then the pot');
   assert.equal(w.chain.tokens(treasury), 400n, 'the treasury’s 10% of 4,000');
 });
+
+t('js/play buys, draws, settles and pulls a lottery paid in a hooked coin, reading the hook’s accounts itself', async () => {
+  const w = world({ seed: 'hooked-play' });
+  const coin = hookedMint(w);
+  const counter = newAddress(w.random);
+  w.chain.put(validationAddress(coin, HOOK), { owner: HOOK, lamports: w.chain.rent(51), data: concat(EXECUTE_DISCRIMINATOR, uintLE(39, 4), uintLE(1, 4), Uint8Array.of(0), addressBytes(counter), Uint8Array.of(0, 1)) });
+  w.chain.put(counter, { owner: HOOK, lamports: w.chain.rent(16), data: new Uint8Array(16) });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: coin, decimals: 6, program: 'token-2022' }], lotteries: [{ key: 'draw', name: 'Draw', id: 1 }], live: { project: w.project, collection: w.collection, mints: { coin } } };
+  const players = [w.who(), w.who()];
+  const apps = players.map((p) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: p, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() }));
+  for (const p of players) w.chain.send(w.creator, [createAssociatedTokenAccountIdempotent(w.creator, p, coin, TOKEN_2022_PROGRAM), mintToIx({ mint: coin, to: loot.ata(p, coin, TOKEN_2022_PROGRAM), authority: w.creator, amount: 10_000n, tokenProgram: TOKEN_2022_PROGRAM })]);
+  for (const app of apps) await app.buyTickets('draw', 2, { maxPrice: 1000n });
+  w.chain.warp(w.chain.now() + 3601);
+  // Each step from the page, until nothing is left: the draw, the sweep a step a call, the winner's pull.
+  for (let i = 0; i < 10; i++) {
+    const steps = (await Promise.all(apps.map(async (app) => (await app.claims()).filter((c) => ['reveal', 'settle-round', 'pull', 'payout'].includes(c.kind)).map((c) => [app, c])))).flat();
+    if (!steps.length) break;
+    const [app, c] = steps[0];
+    await app.claim(c);
+  }
+  assert.equal(w.round(1), null, 'the round closed');
+  assert.equal(w.chain.tokens(loot.ata(w.treasury, coin, TOKEN_2022_PROGRAM)), 400n, 'the treasury’s 10%');
+  const left = players.map((p) => w.chain.tokens(loot.ata(p, coin, TOKEN_2022_PROGRAM)));
+  assert.deepEqual(left.sort((a, b) => (a < b ? -1 : 1)), [8_000n, 11_600n], 'the winner took the pot: 3,600');
+});

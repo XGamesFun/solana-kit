@@ -133,8 +133,10 @@ await app.balances();                     // what they hold of each of the econo
 - **A lottery round** moves on in a few steps whatever its size: `app.claims()` lists the draw (`reveal`), moving a
   drawn round on (`settle-round`: its places' prizes, then its sweep), what this player is owed (`pull`) and paying
   everyone else (`payout`); `app.claim(c)` sends one. The last pull closes the round.
-- **Repaying a loan**: `app.repay(asset, due)` repays in the player's one prompt; a throwaway key that transaction
-  funds sends the NFT home (a pNFT's or a compressed NFT's release the wallet sends: a second prompt).
+- **Repaying a loan** (the player's own, or a friend's): `app.loan(asset, due)` reads it; show its `repay` (base units
+  of its `mint`), then `app.repay(asset, due, { repay })` pays exactly that, in the payer's one prompt (a loan whose
+  debt changed since is refused); a throwaway key that transaction funds sends the NFT home to its borrower (a pNFT's
+  or a compressed NFT's release the wallet sends: a second prompt).
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

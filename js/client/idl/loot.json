@@ -5520,7 +5520,7 @@
       "name": "repay",
       "docs": [
         "Anyone repays a loan before it is due: the money goes to the lender and the debt is marked",
-        "paid. The NFT goes home with `release`, whenever."
+        "paid. The NFT goes home with `release`, whenever. `repay` is the amount the payer saw."
       ],
       "discriminator": [
         234,
@@ -5579,7 +5579,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "repay",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "roll",

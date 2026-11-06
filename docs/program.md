@@ -234,7 +234,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `close_offer` (`closeOfferIx`) | maker | free | what is left back to the maker |
 | | `sell_to_offer` (`sellToOfferIx`) | the NFT's holder | P, or J | NFT to the maker, price to the seller |
 | | `borrow` (`borrowIx`) | the NFT's holder | P, or J | NFT held against a debt, money to the borrower |
-| | `repay` (`repayIx`) | anyone, before `due` | free | repayment to the lender; then anyone `release`s the NFT |
+| | `repay` (`repayIx`) | anyone, before `due` | free | repayment to the lender; then anyone `release`s the NFT; names the debt its payer was shown (`repay`, `TermsChanged` otherwise; js/play `loan()` then `repay(asset, due, { repay })`) |
 | Listings | `open_listing` (`openListingIx`) | the NFT's holder | P, or J | for sale or for rent |
 | | `take_listing` (`takeListingIx`) | taker | P, or J | buys, or rents for 1 to `max_periods` periods |
 | | `close_listing` (`closeListingIx`) | maker | free | NFT home; during a rental only stops it |
@@ -599,7 +599,9 @@ call of hooked runs under 64 accounts, the next call going on from the cursor, a
 an NFT or a collectible to its winner, a run of token prizes in one step into the round's account (minted ones at the
 pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
 and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
-winner (`hold`; its rent, and a Token Metadata NFT's account's, back to whoever sent it, `rent_to`, at the release); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
+winner (`hold`; its rent, and a Token Metadata NFT's account's, back to whoever sent it, `rent_to`, at the release; the
+authority's mark of a pool's run is the 10 named accounts, then that run's mint and pool and the hook tail alone: a call
+carrying the round's token account, the sweep's or the close's moves the run instead); the project's authority may mark a transfer that can be seen to be stuck (`NotStuck` otherwise; a pot
 mark also when the places take nothing of it). In a payment mint with a transfer hook the sweep goes a step a call:
 each common share above 0 that isn't a burn, then the pot, with the same accounts each time; the round stays Drawn
 (its cursor past its places) until the pot's step sweeps it, so whoever moves it on (a keeper, the page's
