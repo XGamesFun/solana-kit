@@ -595,7 +595,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
    * with a compressed prize in the spec; one made before never can.
    */
   const compressedCheck = (it, at, what, code) => {
-    const never = code === 'E-GRANT' || code === 'E-RECIPE' ? 'every claim or craft would be refused' : 'its winner would get nothing';
+    // The item records whether its collection carries the plugin (`Item::compressed`): without it, a box's open is
+    // refused (SoldOut), a sale, a claim or a craft too (PrizeNotCovered), and a finishing route gives nothing.
+    const never = code === 'E-GRANT' || code === 'E-RECIPE' ? 'every claim or craft would be refused (PrizeNotCovered)' : code === 'E-ODDS' ? 'opening the box would be refused (SoldOut), and buying it (PrizeNotCovered)' : 'its winner would get nothing';
     if (!isCollectible(it)) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is a normal item: only a collectible is an NFT.`, 'Make it a collectible, or leave "compressed" out.');
     if (it.soulbound) return refuse(code, `${at}.compressed`, `${what} gives ${label(it)} compressed, but it is soulbound: a compressed NFT can’t be kept from moving, so the program never gives one (${never}).`, 'Give it as a Core collectible (leave "compressed" out), or make the item tradable.');
     // Its serial at its longest, and each drawn trait's value at its longest (32 bytes) wherever its `{attribute}` is.

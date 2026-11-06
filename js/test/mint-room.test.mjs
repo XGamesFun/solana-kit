@@ -84,8 +84,9 @@ test('the program refuses a stash take-out to any of its accounts (ToTheProject)
   assert.deepEqual(stashOf(w, 1), [nfts[1]]);
   assert.equal(ownerOf(w, nfts[0]), w.project);
   const hold = w.read('Hold', pda.hold(nfts[0], 0));
-  assert.equal(hold.player, w.treasury, 'owed to the treasury');
-  w.chain.send(w.cranker, [loot.releaseIx({ signer: w.cranker, project: w.project, asset: nfts[0], collection: w.collection, hold })]);
+  assert.equal(hold.player, w.project, 'owed to the treasury: the project’s own address stands for it');
+  assert.throws(() => loot.releaseIx({ signer: w.cranker, project: w.project, asset: nfts[0], collection: w.collection, hold }), /owed to the treasury/);
+  w.chain.send(w.cranker, [loot.releaseIx({ signer: w.cranker, project: w.project, asset: nfts[0], collection: w.collection, hold, treasury: w.projectState().treasury })]);
   assert.equal(ownerOf(w, nfts[0]), w.treasury, 'released to the treasury');
   // To a wallet, it goes.
   const winner = w.who();

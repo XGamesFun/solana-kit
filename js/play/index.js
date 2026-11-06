@@ -1434,6 +1434,14 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // `prizeRollNonce` of the one named (`namedRollNonce`).
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
       const boxes = roll != null ? { [roll]: await read('LootBox', loot.pda.box(project, roll)) } : {};
+      // A roll still at the NFT's order address blocks the leave, unless it was asked and came back with nothing to give
+      // (Waiting, asked once): that one stands in for this. Any other is asked (anyone may), answered and settled first.
+      if (roll != null) {
+        const at = loot.pda.order(project, wallet.address, loot.namedRollNonce(boxes[roll], asset, nonce));
+        const there = await readMaybe('Order', at);
+        if (there && !(there.status === 'Waiting' && BigInt(there.asked_first) !== 0n))
+          throw new Error(`This NFT's last mission roll (${at}) hasn't finished: it must be asked, answered and settled before the NFT can leave. claims() lists the step; collect it (app.collect), then leave.`);
+      }
       const ix = loot.unstakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, forfeit, roll, nonce, tier: seat.tier, projectCollection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, boxes, ...token });
       const { signature, rolls } = await sendRolling([...heapOf(given), ...before, ...given.before, ...token.before, ix]);
       const rolled = rolls.length ? { rolled: rolls[0] } : {};
@@ -2289,11 +2297,16 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         const says = off ? 'Your entry back: the contest is off.' : contest.nft ? `Your NFT back${picks ? ', and your pick of the losers’' : ''}.` : contest.prize != null ? 'Your share of the pot, and your prize.' : 'Your share of the pot.';
         out.push({ kind: 'contest', id: contest.id, side: entry.side, says });
       }
-      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project), at(65, me)])) {
+      // The player's holds; the project's treasury wallet's also those owed to the treasury (a hold whose player is the
+      // project's own address: a dropped stash NFT, a lottery's or an auction's NFT owed to it).
+      const g = await projectNow();
+      const holdsOf = [me, ...(g.treasury === me ? [project] : [])];
+      const holds = (await Promise.all(holdsOf.map((who) => client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project), at(65, who)])))).flat();
+      for (const { pubkey, account } of holds) {
         const hold = loot.decode('Hold', account.data);
         // A repaid loan's NFT goes home whenever; an unpaid one's is the lender's once due.
         if (hold.debt?.paid) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: 'Your collectible back: your loan is repaid.' });
-        else if (!hold.debt && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: 'Your collectible back: its hold is over.' });
+        else if (!hold.debt && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: hold.player === project ? 'An NFT owed to the treasury: send it there.' : 'Your collectible back: its hold is over.' });
       }
       // A seat whose upkeep ran out since it was last credited: refreshing it (free, anyone) stops it at its
       // `upkeep_until`, so it earns no more than its fuel paid for and a pool's sharers are not short meanwhile.
@@ -2429,7 +2442,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (c.kind === 'release') {
         const hold = await read('Hold', c.hold);
         const { before, hasAuthority: _, ...nft } = await nftOf(c.asset, me, { to: me });
-        return send([...before, loot.releaseIx({ signer: me, project, asset: c.asset, ...nft, collection: (await collectionOf(c.asset)) ?? MPL_CORE, hold })]);
+        return send([...before, loot.releaseIx({ signer: me, project, asset: c.asset, ...nft, collection: (await collectionOf(c.asset)) ?? MPL_CORE, hold, treasury: g.treasury })]);
       }
       if (c.kind === 'auction') return (await this.endAuction(c.key)).signature;
       if (c.kind === 'withdraw') return this.withdraw(c.key);

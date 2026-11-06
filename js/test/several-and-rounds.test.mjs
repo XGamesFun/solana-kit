@@ -281,3 +281,11 @@ test('the authority’s mark of a pool’s run carries its mint and pool alone: 
   assert.equal(ix.keys.length, 12, 'the 10 named accounts, then the run’s mint and pool');
   assert.equal(ix.keys[11].pubkey, pda.pool(MINT, 1));
 });
+
+t('a collectible’s upsert reads its collection: the item says whether its compressed prizes can be minted', () => {
+  for (const compressed of [true, false]) {
+    const w = world({ seed: `item-compressed-${compressed}`, compressed });
+    w.upsert({ Item: { id: 1, args: collectible('Relic') } });
+    assert.equal(w.read('Item', pda.item(w.project, 1)).compressed, compressed);
+  }
+});

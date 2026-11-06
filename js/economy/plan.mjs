@@ -835,7 +835,7 @@ export const auctionSeller = (a, ctx) => (a.lot?.asset ? ctx.owner : ctx.authori
 export const recordBytesOf = (kind, body) => {
   const args = body.args;
   const base = {
-    Item: () => ({ project: NOBODY, item_id: 0, ...placeholders(args), issued: 0, voided: 0 }),
+    Item: () => ({ project: NOBODY, item_id: 0, ...placeholders(args), issued: 0, voided: 0, compressed: false }),
     LootBox: () => ({ project: NOBODY, box_id: 0, ...placeholders(args), version: 0 }),
     Recipe: () => ({ project: NOBODY, id: 0, version: 0, ...placeholders(args) }),
     Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),

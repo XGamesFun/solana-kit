@@ -150,7 +150,7 @@ order, offer) is created, never written over.
 | 8 | `Recipe` | `["recipe", project, id]` | varies | owner; never closed |
 | 9 | `Hold` | `["hold", asset, free_at]` | 170 (a loan's 243) | player or borrower (`payer`), back on release |
 | 10 | `Contest` | `["contest", project, id]`; pot `["pot", contest]`; split prize `["prize", contest]` | varies | the opening authority, back on close |
-| 12 | `Sheet` | `["sheet", project, nft]` | 69 + attributes | whoever's write grows it; anyone closes it once its NFT is burned (rent to the treasury) |
+| 12 | `Sheet` | `["sheet", project, nft]` | 69 + attributes | whoever's write grows it (a write that shrinks it refunds nobody); anyone closes it once its NFT is burned (rent to the treasury) |
 | 13 | `Traits` | `["traits", project, key]` | 97 | owner or authority; never closed |
 | 16 | `LotteryRound` | `["round", lottery, incarnation, round]`; its token accounts `["round-tokens", round, mint]` | a header sized once at its first purchase, then an entry a purchase (`entryWidth`: 40 + 8 for a fee mint + 32 a recipient share + 32 an NFT ticket) | first buyer the header (back at the close), each buyer its entry (to the treasury at the close) |
 | 17 | `Farm` | `["farm", project, id]`; vaults `["staked", farm]`, `["rewards", farm]` | varies | owner; never closed |
@@ -159,7 +159,7 @@ order, offer) is created, never written over.
 | 20 | `Auction` | `["auction", project, seller, id]` | varies, + 32 an NFT bid | seller, back at the end |
 | 22 | `Offer` | `["offer", project, maker, id]` | varies | maker, back on close |
 | 23 | `Listing` | `["listing", project, asset]` | 183 sale / 189 rental, + 3–35 a share | maker, back on close |
-| 24 | `Profile` | `["profile", project, wallet]` | 69 + attributes | whoever's write grows it; never closed |
+| 24 | `Profile` | `["profile", project, wallet]` | 69 + attributes | whoever's write grows it (a write that shrinks it refunds nobody); never closed |
 | 25 | `Table` | `["table", project, id]` | 51 + 8 a row of numbers / 40 a row of labels; a committed table 1,107 | owner, as it writes rows; never closed |
 | 25 | `Table` (a stash) | `["stash", project, id]`; a lottery's own `["lottery_stash", lottery]` | 103 with one NFT, + 36 an NFT | whoever puts an NFT in; never closed |
 | 26 | a list (`decodeList`) | a wallet's counts `["counts", project, wallet]`; a grant's claims `["claims", grant, incarnation, shard]` and rounds `["rounds", grant, incarnation, shard]`; a contest's entries `["entries", contest, incarnation, 0]` | 7, + 28 a limit record, 16 a round paid, 43 or 83 an entry | the one counted (a grant's funds for a claim), never closed; a grant's shards close once it is gone (rent to the owner); a contest's with it |
@@ -222,7 +222,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `refresh_seat` (`refreshSeatIx`) | anyone (pays what growth adds) | free | re-reads boosts, the NFT, upkeep, the player's profile; writes growth |
 | Recipes, holds | `craft` (`craftIx`) | player alone | P | all lines in and out, or nothing (`profile`, the player's, when a need or a raise names it) |
 | | `hold` (`holdIx`) | player | P | NFTs handed to the project until `free_at`, a hold each |
-| | `release` (`releaseIx`) | authority while it runs (J); anyone after (free); loans below | J / free | sends held NFTs on, one `to` |
+| | `release` (`releaseIx`) | authority while it runs (J); anyone after (free); loans below | J / free | sends held NFTs on, one `to`; a hold whose `player` is the project's own address is owed to the treasury, sent to `project.treasury` as it is then (`releaseIx`'s `treasury`; `Released.player` the wallet it went to) |
 | Contests | `open_contest` (`openContestIx`) | authority | J | terms fixed for good |
 | | `enter` (`enterIx`) | player | P | a record in the contest's list, one side a wallet (`OtherSide`) |
 | | `decide` (`decideIx`) | authority, or anyone with a verdict; anyone for an overdue contest | J; free when overdue | names a side, or `None` calls it off |
@@ -381,7 +381,10 @@ Anyone asks and settles it. A roll an order won is made at settle at `rollNonce(
 
 **Items** (`ItemArgs`): `kind` (`Normal` or `Collectible`), `rarity`, `soulbound`, `burnable`, `name`, `uri`
 (`{serial}` is replaced by each unit's serial), `max_supply`, `life`, `active`, `traits`, and for a collectible its
-`collection` (one of the project's; fixed once a unit is out, `KindLocked`). The program keeps names and URIs of any
+`collection` (one of the project's; fixed once a unit is out, `KindLocked`), which a collectible's upsert passes as its
+first extra account (`BadCollection` without it): the item records whether it carries Bubblegum's plugin
+(`Item.compressed`), and without it a compressed prize of the item is never there (`open_box` `SoldOut`; `buy`, a grant,
+a craft `PrizeNotCovered`; a mission, a lottery or a contest gives nothing). The program keeps names and URIs of any
 length; Metaplex Core and, for a compressed NFT, Bubblegum (32-byte names, 200-byte URIs) bound them. Items have no
 price; boxes sell them. Lowering `max_supply` below what is out reads as sold out. Switched off, an item isn't sold,
 dropped, crafted or given (the authority's `Make` still works). A **normal** item is delivered by the project's
@@ -519,7 +522,10 @@ A box whose every entry burns, gives or stashes the NFT takes it as its price.
   little endian; `SubjectNonce` otherwise), so a second waits for the first, and rules read what the last roll wrote.
   An NFT frozen on a farm seat is refused. A craft's `RollOn` and a mission's roll name a nonce and are made at
   `namedRollNonce`: the NFT's own on a box that holds it, whatever was named; otherwise `prizeRollNonce` of the named
-  one (a mission of several names seat `i`'s roll `nonce + 2i`, its prize's `nonce + 2i + 1`).
+  one (a mission of several names seat `i`'s roll `nonce + 2i`, its prize's `nonce + 2i + 1`). Only a mission roll
+  asked and come back empty (`Waiting`, `asked_first` set) stands in for the next: any other at that address makes
+  `unstake_nft` fail (the System program's "already in use"), so the last one is asked, answered and settled first, in
+  transactions of their own (js/play's `unstakeNft` says so; `claims()` lists the step).
 - **What was rolled stays rolled**: the fate is copied into the order at the roll.
 - `settle`, `refund` and `end_auction` pass their remaining accounts to the NFT's move, so a Core collection's transfer
   checks find what they read.

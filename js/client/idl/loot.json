@@ -3635,6 +3635,13 @@
         {
           "name": "entries",
           "writable": true
+        },
+        {
+          "name": "prize_pool",
+          "docs": [
+            "mint must be `prize_mint`."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -12478,7 +12485,9 @@
           {
             "name": "player",
             "docs": [
-              "Who handed it in, and who it goes back to."
+              "Who handed it in, and who it goes back to. The project's own address for one owed to the",
+              "treasury (a stash's drop, an auction's or a lottery's NFT): it goes to the project's",
+              "treasury wallet of the day it is released."
             ],
             "type": "pubkey"
           },
@@ -12742,6 +12751,15 @@
                 }
               }
             }
+          },
+          {
+            "name": "compressed",
+            "docs": [
+              "Collectibles only: its collection takes compressed NFTs (it carries Bubblegum's plugin, set",
+              "only when a collection is made), read from the collection each time the item is written. A",
+              "compressed prize of an item without it is never given, and a roll never lands on one."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -15778,7 +15796,8 @@
           {
             "name": "player",
             "docs": [
-              "Who handed it in."
+              "Who handed it in, or who it was owed to: for a hold owed to the treasury, the project's",
+              "treasury wallet at the release."
             ],
             "type": "pubkey"
           },

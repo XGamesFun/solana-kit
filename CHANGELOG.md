@@ -51,6 +51,11 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- A collectible's upsert names its collection (`Item.compressed`: whether it carries Bubblegum's plugin). A split pool
+  prize's `open_contest` names its pool. A hold owed to the treasury (player: the project's address) is released to the
+  project's treasury (`releaseIx({ treasury })`), and `claims()` lists those for the treasury's wallet. `unstakeNft`
+  refuses to leave while the NFT's last mission roll is unfinished, saying what to do. A Sheet or profile that shrinks
+  refunds nobody.
 - A settle splits the payment with its first call (`SETTLE_SPLIT` alone when no prize fits beside the shares); js/play
   sends it so. `buy` takes one draw only (`boxBuys`). `stashIx({ drop })` leaves an NFT in its hold, owed to the
   treasury; the project's address is refused. A compressed prize of a collection without Bubblegum's plugin shifts the

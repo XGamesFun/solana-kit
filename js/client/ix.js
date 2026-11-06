@@ -630,6 +630,9 @@ export function upsertIx({ owner, project, def: given, lottery = null, lotterySt
   const [kind] = Object.keys(def);
   const { args } = def[kind];
   let remaining = [];
+  // A collectible names its collection, read for Bubblegum's plugin (`Item::compressed`: its compressed prizes can be
+  // minted only when the collection carries it).
+  if (kind === 'Item' && args.kind === 'Collectible') remaining = [meta(args.collection, false, false)];
   // A new sealed schedule opens its own vault: its mint, the vault and both token programs.
   const vest = kind === 'Schedule' ? args.action?.from?.Vest?.[0] : null;
   if (vest) {
@@ -1182,8 +1185,11 @@ export const madeAssets = (project, item, itemState, count = 1) => Array.from({ 
  * (`piece`): `asset` and `collection` for a Core asset, with `tokenMetadata` for a Token Metadata NFT, or `compressed`
  * (after a `proveLeafIx`).
  */
-export function releaseIx({ signer, project, collection, asset, tokenMetadata: tm, compressed, hold, to, reference: ref, more = [] }) {
-  const receiver = to ?? hold.player;
+export function releaseIx({ signer, project, collection, asset, tokenMetadata: tm, compressed, hold, to, treasury, reference: ref, more = [] }) {
+  // A hold whose player is the project's own address is owed to the treasury, as the project names it now (`treasury`,
+  // the decoded Project's).
+  if (!to && hold.player === project && !treasury) throw new Error('This hold is owed to the treasury: pass treasury (the project’s, as it is now).');
+  const receiver = to ?? (hold.player === project ? treasury : hold.player);
   // Never to the project's own address, nor any account of the program, where nothing could move it again (ToTheProject).
   if (receiver === project) throw new Error('A held NFT can’t go to the project’s own address: name a wallet.');
   // Several holds of one player's with one end, payer and rent wallet (`more`: each { asset, collection, tokenMetadata,
@@ -1218,6 +1224,9 @@ export const openContestIx = ({ authority, project, projectState, id, mint, args
     authority, project, mint, contest,
     prize_mint: split ? splitMint(args.prize, prizeMint) : null, prize_vault: split ? pda.prizeVault(contest) : null,
     entries: pda.entries(contest, BigInt(projectState.incarnations) + 1n),
+    // A split prize from a pool names the pool at its index (`WrongPool` without it; a prize mint not the pool's is
+    // `WrongMint`).
+    prize_pool: split && args.prize?.Tokens?.from?.Pool ? pda.pool(project, args.prize.Tokens.from.Pool[0]) : null,
   });
 };
 
