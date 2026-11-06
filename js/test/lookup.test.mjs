@@ -282,7 +282,7 @@ describe('xsolana_check sizes every box’s settle', async () => {
     for (const args of [{ core: 3, holders: 4 }, { tokens: 3, holders: 4 }, { pnft: 3, holders: 4, subject: true }]) {
       const { refused, v0 } = verdict(args);
       assert.deepEqual(refused, [], JSON.stringify(args));
-      assert.match(v0?.message ?? '', /as a v0 transaction that loads its accounts from an address lookup table.*SOL of its rent, which comes back/s, JSON.stringify(args));
+      assert.match(v0?.message ?? '', /as a v0 transaction that loads its accounts from an address lookup table.*the project’s standing table, which going live makes.*SOL of rent back/s, JSON.stringify(args));
     }
     assert.equal(verdict({ core: 3, holders: 3 }).v0, undefined);
   });

@@ -3,7 +3,7 @@
 import { encodeBase58 } from '../chain/base58.js';
 import { randomBytes } from '../chain/bytes.js';
 import { LOOT_PROGRAM } from '../client/pda.js';
-import { compressedTree, model } from './model.mjs';
+import { compressedTree, listOf, model } from './model.mjs';
 import { auctionSeller, plan, setupContext } from './plan.mjs';
 
 /** A key for each fresh account the plan creates. Their secret halves are made by whoever signs (the page). */
@@ -21,7 +21,30 @@ export function prepare(economy, { owner, keys, live = null, now = Math.floor(Da
   const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent }), slot };
   const p = plan(economy, { now, ctx, live, only });
   if (!p.ok) return p;
+  // Going live always makes the project's standing lookup table (the plan's "table" step). Without a recent slot it
+  // can't be made: refused when a part's widest transaction needs it (`wideParts`), so no player is left with a
+  // transaction only a table carries in one approval.
+  const wide = p.steps.some((s) => s.id === 'table') && slot == null ? wideParts(m, p.warnings) : [];
+  if (wide.length)
+    return {
+      ok: false,
+      warnings: p.warnings,
+      refusals: [{ code: 'E-NO-TABLE', where: wide[0].where, message: `Going live makes the project’s standing lookup table, and no recent slot was read to make it at: ${wide.map((x) => x.why).join('; ')}. Without the table each of those is a wallet’s own table first (more approvals), or can’t be sent at all by a wallet that sends legacy transactions only.`, fix: 'Try again once the cluster answers (the approval page reads a recent slot from its slot hashes).' }],
+    };
   return { ...p, ctx };
+}
+
+/**
+ * The parts of an economy whose widest transaction passes a legacy transaction, so a player sends it in one approval
+ * only with the project's standing lookup table: a box's open or settle and a craft the checker sizes past one
+ * (W-TX-V0, W-SETTLE-V0), an auction whose bids are NFTs (each moves with its own accounts), and a farm of another
+ * collection's NFTs (a pNFT's stake and exit carry its token record and rule set). [{ where, why }]
+ */
+export function wideParts(m, warnings = []) {
+  const out = warnings.filter((w) => w.code === 'W-TX-V0' || w.code === 'W-SETTLE-V0').map((w) => ({ where: w.where, why: `${w.where} (${w.code === 'W-TX-V0' ? 'its open, buy or craft' : 'its settle'} passes a legacy transaction)` }));
+  for (const a of m.auctions) if (a.bidNfts) out.push({ where: `economy.auctions.${a.key}`, why: `the auction “${a.name}” (its bids are NFTs)` });
+  for (const f of m.farms) if (f.stakes === 'collectibles' && listOf(f.gate).some((g) => g?.collection)) out.push({ where: `economy.farms.${f.key}`, why: `the farm “${f.name}” (it stakes another collection’s NFTs, a pNFT’s stake and exit pass a legacy transaction)` });
+  return out;
 }
 
 /**

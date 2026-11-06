@@ -5,7 +5,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
-import { NATIVE_MINT, SYSTEM_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { NATIVE_MINT, SYSTEM_PROGRAM, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { slotHashes } from '../chain/lookup.js';
 import { createCollectionInstruction, MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit, createAssociatedTokenAccountIdempotent, meta } from '../chain/programs.js';
 import { mintToIx } from '../chain/token.js';
@@ -121,8 +122,9 @@ describe('every example goes live on the program', () => {
       w.chain.warp(NOW);
       const first = plan(spec, { now: NOW });
       const keys = freshAddresses(first.freshKeys, w.random);
-      const p = prepare(spec, { owner, keys, now: NOW, rent: (bytes) => w.chain.rent(bytes) });
-      assert.ok(p.ok);
+      // A recent slot: going live makes the project's standing lookup table at it.
+      const p = prepare(spec, { owner, keys, now: NOW, rent: (bytes) => w.chain.rent(bytes), slot: slotHashes(w.chain.get(SYSVAR_SLOT_HASHES)?.data)[0] ?? null });
+      assert.ok(p.ok, JSON.stringify(p.refusals));
       const signatures = [];
       for (const t of p.transactions) {
         const payer = t.signer === 'authority' ? p.ctx.authority : owner;
