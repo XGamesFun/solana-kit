@@ -57,7 +57,7 @@ const RECORDS = [
     type: {
       kind: 'struct',
       fields: [
-        ['project', 'pubkey'], ['lottery', 'pubkey'], ['id', 'u32'], ['incarnation', 'u64'], ['round', 'u32'], ['bump', 'u8'], ['opener', 'pubkey'], ['head', 'u32'],
+        ['project', 'pubkey'], ['lottery', 'pubkey'], ['id', 'u32'], ['incarnation', 'u64'], ['round', 'u32'], ['bump', 'u8'], ['opener', 'pubkey'], ['lent', 'u64'], ['head', 'u32'],
         ['status', { defined: { name: 'Round' } }],
         // The terms, as the lottery's revision had them at the round's first purchase; whether its entries keep what
         // arrived (a payment mint with a transfer fee, or a share the buyer chooses, paid as they buy).

@@ -109,6 +109,12 @@ t('rollAccounts: each entry’s prize accounts, a fresh item’s tables while th
   const crowded = { prizes: [...Array.from({ length: 10 }, () => fromPool(2, 1)), { Item: [1] }, { Item: [2] }] };
   assert.equal(loot.tableBudget([crowded]), 21 - (3 + 12 + 5));
   assert.deepEqual(loot.entryAccounts(project, [crowded], { 1: wide, 2: fresh }).slice(10).map((m) => m.pubkey), [pda.item(project, 1), pda.item(project, 2), pda.table(project, 3)], 'the wide one takes none; the next fits the one left');
+  // An order holds, for each draw, the rows its dearest entry's fresh items draw now (`entryRows`, the same walk).
+  assert.deepEqual(loot.entryRows([two], { 1: wide, 2: fresh }), [8]);
+  assert.deepEqual(loot.entryRows([crowded], { 1: wide, 2: fresh }), [1], 'the wide one draws none');
+  const pack = { entries: [two, { prizes: [fromPool(2, 1)] }], slots: [{ count: 3, only: [], distinct: false }], odds: [], fates: [] };
+  assert.equal(loot.orderBytes(pack, 0, 2, { 1: wide, 2: fresh }) - loot.orderBytes(pack, 0, 1, { 1: wide, 2: fresh }), 3 * (41 + 8 * 4), 'a draw: its dearest entry (tokens, 41 bytes; two items are 28) and eight rows of 4');
+  assert.equal(loot.orderBytes(pack, 0, 2) - loot.orderBytes(pack, 0, 1), 3 * (41 + 10 * 4), 'a roll made in another call keeps the whole table budget a draw');
   // A write or a route naming boxes passes each once, the box alone; a roll given is its box and its order.
   assert.deepEqual(loot.boxesAccounts(project, [4, 4, 5]).map((m) => m.pubkey), [pda.box(project, 4), pda.box(project, 5)]);
   assert.deepEqual(loot.defRolls({ Recipe: { args: { outputs: [{ Prize: [{ Roll: [7] }] }, { RollOn: { box_id: 9, place: 0 } }] } } }), [7, 9]);

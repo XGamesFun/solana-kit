@@ -955,10 +955,6 @@ export function settlePartEnd(order, from = Number(order.settled ?? 0), items = 
   return end;
 }
 
-/** The most cards a client puts in one order: what one oracle answer holds for most boxes (the program stops a roll
- * that its count of compute says might not fit, and gives back the draws it didn't make; `tests/limits.rs`). */
-export const CARDS_AN_ORDER = 30;
-
 /** How many draws one open of `box` makes: its slots' counts, or one. */
 export const boxDraws = (box) => (box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
@@ -1147,7 +1143,8 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
  * the same transaction fails whole on an empty box, and the player keeps what the route took. The player's own ask on
  * an empty box ends the roll there, with no oracle: rolled with nothing (an NFT it holds goes home as it was), or failed
  * for its refund when its winner paid for it (an auction's roll lot). An answer that finds nothing at all in stock puts
- * a free roll back to waiting (`Waiting`), for a restock or for its player to end it so.
+ * a free roll back to waiting (`Waiting`), for a restock or for its player to end it so. Once asked, every later ask
+ * comes in a later slot than the last (`SameSlot`, `rollAskable`).
  */
 export function askRollIx({ payer, orderAddress, order, box, poolMints, items = {}, programs }) {
   poolMints = boxPoolMints(box, poolMints);
@@ -1511,7 +1508,8 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  *                    order at `prizeRollNonce(nonce + place)` (ask it in the same transaction: `pullRolls`);
  *   { Common: [i] }  a part owed in common: share `i`, the pot's (`i` = the shares' count), a pool's prize back after a
  *                    cancel (past it), paid where it goes (`holders`, `programs`); `toTreasury` when that can't take it
- *                    (a pool never opened, the pot closed since, an account gone: a holder nobody is is found here).
+ *                    (a pool never opened, the pot closed since or made again in another mint, an account gone: a
+ *                    holder nobody is is found here).
  * The pull that leaves nothing owed closes the round (`projectState`: its treasury and owner; `lotteryClosed` when the
  * lottery is gone, so rent it lent goes to the owner). A round that owes nothing and waits only for its close is closed
  * by any pull.

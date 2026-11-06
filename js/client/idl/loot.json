@@ -541,7 +541,8 @@
         {
           "name": "player",
           "docs": [
-            "Pays for the tickets and the bytes their entry adds; the round's first buyer also fronts its",
+            "Pays for the tickets, and the bytes their entry adds when the lottery's spare SOL doesn't (a",
+            "round the lottery opened, while its spare covers them); the round's first buyer also fronts its",
             "header and its account of the payment mint when the lottery's spare SOL can't (`funded`), back",
             "at the close."
           ],
@@ -9037,6 +9038,11 @@
       "code": 6139,
       "name": "OutOfOrder",
       "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
+    },
+    {
+      "code": 6140,
+      "name": "PackTooLarge",
+      "msg": "A pack's draws (each open's, times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
     }
   ],
   "types": [
@@ -16613,6 +16619,15 @@
       ],
       "type": "u64",
       "value": "10000000"
+    },
+    {
+      "name": "MAX_RUN_PLACES",
+      "docs": [
+        "The most places one run of a lottery's places holds when they are given one by one (an NFT, a",
+        "compressed NFT, a raffled one): a pull walks the run from its first place, and so fits."
+      ],
+      "type": "u32",
+      "value": "4096"
     },
     {
       "name": "MAX_SCHEDULE_SECONDS",

@@ -23,8 +23,14 @@ export function orderRefundSlot(order) {
   return (deadline > U64_MAX ? U64_MAX : deadline) + 1n;
 }
 
-/** Whether anyone may ask the oracle for a mission's or a recipe's roll at `slot`: never asked, or never answered. */
-export const rollAskable = (order, slot) => order.status === 'Waiting' || (order.status === 'Asked' && BigInt(slot) > BigInt(order.requested_slot) + STALE_SLOTS);
+/**
+ * Whether anyone may ask the oracle for a mission's or a recipe's roll at `slot`: never asked, or never answered. Once
+ * asked, a later ask comes in a later slot than the last (`SameSlot`: never the same seed twice), so a roll that found
+ * nothing in stock and waits again is asked from the next slot on.
+ */
+export const rollAskable = (order, slot) =>
+  (order.status === 'Waiting' && (BigInt(order.asked_first ?? 0) === 0n || BigInt(slot) > BigInt(order.requested_slot))) ||
+  (order.status === 'Asked' && BigInt(slot) > BigInt(order.requested_slot) + STALE_SLOTS);
 
 /**
  * Whether a contest is off at `now` (Unix seconds), as the program reads its verdict: called off, its result

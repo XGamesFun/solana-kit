@@ -156,11 +156,12 @@ describe('money in', () => {
       assert.equal(r.answers.length, 1, 'the oracle answered');
       const orderAddress = pda.order(w.project, w.player, nonce);
       const order = w.read('Order', orderAddress);
-      assert.equal(w.chain.get(orderAddress).data.length, loot.orderBytes(box, 1), 'sized to its box: its prizes, its one share');
+      const items = { 1: w.read('Item', pda.item(w.project, 1)) };
+      assert.equal(w.chain.get(orderAddress).data.length, loot.orderBytes(box, 1, 1, items), 'sized to its box: its prizes, its one share');
+      assert.ok(loot.orderBytes(box, 1, 1, items) < loot.orderBytes(box, 1), 'smaller than a roll made inside another call, which keeps the table budget');
       assert.equal(order.status, 'Rolled');
       seen.add(order.won.length ? Object.keys(order.won[0])[0] : 'Nothing');
       w.chain.nextSlot();
-      const items = { 1: w.read('Item', pda.item(w.project, 1)) };
       const s = w.chain.send(w.player, [loot.settleIx({ signer: w.player, orderAddress, order, projectState: w.projectState(), items })]);
       assert.ok(names(s).includes('OrderSettled'));
     }

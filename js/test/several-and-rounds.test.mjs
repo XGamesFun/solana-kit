@@ -250,25 +250,34 @@ t('an auction ended with hold leaves its NFT lot in a hold for the winner, which
   assert.equal(w.chain.get(ender).lamports, before + rent, 'the hold’s rent came back to the ender');
 });
 
-t('the biggest orders are opened and rolled with the heap every transaction has: 240 draws of tokens, 91 of an item', () => {
+t('the biggest packs one oracle answer draws are opened and rolled with the default heap; one draw more is refused', () => {
   const w = world({ seed: 'big-open' });
-  // A box of an item holds 91 draws an order at most (the rows a fresh unit's draw may carry, MAX_GROW); one of tokens
-  // about 243. Every open asks the oracle: the roll is its answer's, not the open's.
+  // A pack's draws must all fit one answer (`drawsFit`, the program's `draws_fit`): 28 draws of tokens from a pool,
+  // 61 of an item. One more is refused at the upsert (`PackTooLarge`), and so is a purchase of several opens past it.
   w.pool(1, w.mint, 10_000n);
   w.upsert({ Item: { id: 1, args: collectible('Card') } });
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([fromPool(1, 1n)])], { slots: [{ count: 240, only: [], distinct: false }] }) } });
-  w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 91, only: [], distinct: false }] }) } });
-  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 92, only: [], distinct: false }] }) } }), /BadEntries/);
+  const tokens = [drop([fromPool(1, 1n)])];
+  const item = [drop([{ Item: [1] }])];
+  assert.deepEqual([loot.drawsFit(tokens, 28), loot.drawsFit(tokens, 29), loot.drawsFit(item, 61), loot.drawsFit(item, 62)], [true, false, true, false]);
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, tokens, { slots: [{ count: 28, only: [], distinct: false }] }) } });
+  w.upsert({ Box: { id: 2, args: boxArgs(PRICE, item, { slots: [{ count: 61, only: [], distinct: false }] }) } });
+  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, tokens, { slots: [{ count: 29, only: [], distinct: false }] }) } }), /PackTooLarge/);
+  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, item, { slots: [{ count: 62, only: [], distinct: false }] }) } }), /PackTooLarge/);
   const items = { 1: w.read('Item', pda.item(w.project, 1)) };
   for (const id of [1, 2]) {
     const box = w.read('LootBox', pda.box(w.project, id));
-    assert.ok(loot.orderBytes(box) <= loot.MAX_ORDER_BYTES);
+    assert.equal(loot.opensAnOrder(box, { items }), 1, 'one open an order');
     const r = w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.openBoxIx({ player: w.player, project: w.project, box, nonce: BigInt(id), maxPrice: PRICE, items, poolMints: { 1: w.mint } })]);
     assert.equal(r.answers.length, 1);
     const order = w.read('Order', pda.order(w.project, w.player, BigInt(id)));
     assert.equal(order.status, 'Rolled');
-    assert.equal(w.chain.get(pda.order(w.project, w.player, BigInt(id))).data.length, loot.orderBytes(box), 'sized as the client sizes it');
+    assert.equal(order.won.length, id === 1 ? 28 : 61, 'every draw made');
+    assert.equal(w.chain.get(pda.order(w.project, w.player, BigInt(id))).data.length, loot.orderBytes(box, 0, 1, items), 'sized as the client sizes it');
   }
+  // Two opens of a 20-draw box are 40 draws of tokens: refused at the purchase.
+  w.upsert({ Box: { id: 4, args: boxArgs(PRICE, tokens, { slots: [{ count: 20, only: [], distinct: false }] }) } });
+  const box = w.read('LootBox', pda.box(w.project, 4));
+  assert.throws(() => w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.openBoxIx({ player: w.player, project: w.project, box, nonce: 9n, maxPrice: 2n * PRICE, count: 2, items, poolMints: { 1: w.mint } })]), /PackTooLarge/);
 });
 
 test('a round’s first ask carries its pot and each run of token prizes; a round asked before carries none', () => {

@@ -962,9 +962,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const prizeMints = [...new Set([...Object.values(poolMints).filter(Boolean), ...minted])];
     const choosesHolder = box.shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
     const chosen = chosenRecipient && choosesHolder ? chosenRecipient : null;
-    // A purchase of more cards than one oracle answer holds (`loot.CARDS_AN_ORDER`) is several orders, each its own
-    // answer, all in this one transaction: one wallet prompt.
-    const each = Math.max(1, Math.floor(loot.CARDS_AN_ORDER / loot.boxDraws(box)));
+    // A purchase of more opens than one order takes (`loot.opensAnOrder`: what one oracle answer draws, and an order's
+    // rent and fee within 0.01 SOL) is several orders, each its own answer, all in this one transaction: one prompt.
+    const each = loot.opensAnOrder(box, { items });
     const orders = [];
     for (let left = count, k = 0n; left > 0; left -= each, k++) {
       const n = Math.min(each, left);
@@ -1203,7 +1203,10 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         const to = c < n ? r.terms.shares[c].to : c === n ? { Account: [loot.pda.pot(r.lottery)] } : r.terms.places[Number(r.prizes[c - n - 1].run)].prize.Tokens.from;
         if (to.Holder) more.holders = await holdersOf([{ to }]);
         const target = to.Pool ? loot.pda.pool(project, to.Pool[0]) : to.Account?.[0];
-        if (target && !(await client.account(target))) more.toTreasury = true;
+        // A pot or pool made again in another mint can't take it either: the program sends it to the treasury.
+        const mint = c < n ? loot.paymentMint(r.terms) : c === n ? r.terms.mint : r.prizes[c - n - 1].mint;
+        const held = target ? await client.account(target) : null;
+        if (target && (!held || encodeBase58(held.data.subarray(0, 32)) !== mint)) more.toTreasury = true;
       }
       const last = k === parts.length - 1;
       const round = closes && last ? { ...r, owed: pullSettles(r, i, part) } : { ...r, owed: Number.MAX_SAFE_INTEGER };
