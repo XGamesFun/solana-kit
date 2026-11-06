@@ -107,24 +107,24 @@ await app.balances();                     // what they hold of each of the econo
   or a harvest.
 - **Getting out of a farm**: after the farm lock ends, `app.unstakeNft(farmKey, asset)` releases the collectible;
   `app.unstake(farmKey, amount)` returns tokens. If reward transfers are blocked, offer an explicit choice to give
-  up rewards with `{ forfeit: true }` as the last argument. Remove a token seat's booster before withdrawing all
-  its tokens. Forfeiting does not bypass the lock or the token's or NFT issuer's own controls: say which custody
+  up rewards with `{ forfeit: true }` as the last argument. Remove a token seat's booster before taking out all
+  its tokens. An early exit (a tier's `exitFee`) keeps the rewards the seat was credited; what is taken out leaves at
+  once (no unbonding wait). Forfeiting does not bypass the lock or the token's or NFT issuer's own controls: say which custody
   the farm uses and never promise an unconditional exit (`telling-the-person.md`, NFT custody).
 - **Farm token hooks and Core adapters**: `stake`, `unstake`, `stakeNft`, `unstakeNft`, and `harvest` accept
   `extra` account metas or `transfers` keyed by mint in their options. Static Token-2022 hooks and required memos
   resolve automatically. For dynamic hooks, provide every actual `{ source, destination, authority, amount }`
-  transfer: reward pool to vault, then vault to player when the action pays; token principal too when it moves.
-  Incoming transfer fees reduce reward credit before calculating the payout. Do not guess amounts from the gross
-  pool balance. Without that plan the app fails before signing; refresh the plan if balances or fee terms change.
+  transfer: the farm's rewards vault to the player when the action pays (crediting moves no tokens); token principal
+  too when it moves. Do not guess amounts from the vault's balance. Without that plan the app fails before signing; refresh the plan if balances or fee terms change.
   Explicit `extra` replaces automatic resolution and must include all hook, memo and Core adapter accounts.
   For example, `app.unstakeNft('heroes', asset, { transfers: { [rewardsMint]: rewardTransfers } })`, or
   `app.unstakeNft('heroes', asset, { extra: adapterAndTokenAccounts })`. Harvest takes options third:
   `app.harvest('heroes', asset, { transfers: { [rewardsMint]: rewardTransfers } })`.
   A forfeit exit skips reward-mint reads and reward ATA creation; principal transfers still need their own mint.
-- **Lottery steps**: `claims()` lists a due draw, the completion of its recorded tickets, each place's prize, and,
-  for a draw the oracle never answered, the cancel-and-refund (`after-launch.md` says how the money moves). Show each
-  as a button and read the list again after each one: a drawn round's tickets must be completed before its winners
-  collect.
+- **Lottery steps**: `claims()` lists a due draw (`reveal`), what this player is owed (`pull`), paying everyone else
+  and the shares owed in common (`payout`), and for a draw the oracle never answered, asking again or, after its
+  timeout, the cancel-and-refund (`cancel-draw`; `after-launch.md` says how the money moves). Show each as a button
+  and read the list again after each one. The parts are pulled in any order: nobody waits on anyone else.
 - **Gates**: a gated buy, ticket, stake, entry, bid or claim finds the player's collectible that passes the gate by
   itself ("You need a Guild Pass to buy this" when there is none). Use `collectibles()` and its `item` key to show
   what a player holds; never match NFTs by name. A list gate (`{ "list": [...] }`) takes the player's proof: the
@@ -134,9 +134,11 @@ await app.balances();                     // what they hold of each of the econo
   the stake is too small or its lock is over (show the farm's locked tiers next to the gate).
 - **A no-loss lottery** (`noLoss`): once the round is drawn every ticket is owed back to its buyer (a pull, which
   anyone may send, so say "your tickets come back after the draw"), and the winners then collect the pot.
-- **A lottery round** moves on in a few steps whatever its size: `app.claims()` lists the draw (`reveal`), moving a
-  drawn round on (`settle-round`: its places' prizes, then its sweep), what this player is owed (`pull`) and paying
-  everyone else (`payout`); `app.claim(c)` sends one. The last pull closes the round.
+- **A lottery round** finishes in a few steps whatever its size: `app.claims()` lists the draw (`reveal`, whose ask
+  fixes the round's money and opens the next round at once), what this player is owed (`pull`: a refund, a place's
+  part of the pot, its prize; a raffled NFT; a roll asked for in the same transaction and settled in the same prompt)
+  and paying everyone else and the parts owed in common (`payout`); `app.claim(c)` sends one. The last pull closes
+  the round.
 - **Repaying a loan** (the player's own, or a friend's): `app.loan(asset, due)` reads it; show its `repay` (base units
   of its `mint`), then `app.repay(asset, due, { repay })` pays exactly that, in the payer's one prompt (a loan whose
   debt changed since is refused); a throwaway key that transaction funds sends the NFT home to its borrower (a pNFT's

@@ -95,12 +95,14 @@ Don'ts:
   at once: a guild frozen, its missions watched. Either way the NFT issuer's own controls still apply: an issuer who
   can block transfers, or (under Freeze) one whose later metadata or plugin changes stop the unfreeze, can keep an
   NFT from coming back, and forfeiting rewards doesn't get around that. Never promise an unconditional exit.
-- **A farm releases everything in its rewards pool** to its stakers, over its longest lock (a day at least), by
-  weight as it is released: give each farm a pool of its own (`W-POOL-SHARED`). Whoever stakes first is credited all
-  that is released while they are alone, so say early stakers share the first rewards among few. A farm that
-  `runs` takes no stake at its end, and what it has not released by then stays in the pool, the project's, as does
-  what a seat gives back after it: say to fund it at least its release span before the end, and to refresh a seat
-  they suspect is dead (a watched NFT sold, an upkeep run out) a span before it. A sharing farm of a token with a
+- **A farm releases everything that lands in its own rewards vault** to its stakers, over its longest lock (a day at
+  least), by weight as it is released. Something must send it rewards: its `seed`, a share `"farm:<key>"` of a sale,
+  or a schedule that pays or mints into `"farm:<key>"` (`W-FARM-DRY` when nothing does). Whoever stakes first is
+  credited all that is released while they are alone, so say early stakers share the first rewards among few. A farm
+  that `runs` takes no stake at its end, and what it has not released by then stays in its vault (the authority may
+  take back what is free there), as does what a seat gives back after it: say to fund it at least its release span
+  before the end. A seat past its term (`earnsFor`) or its fuel earns nothing more however late it is touched: no
+  refresh is needed at its end. A sharing farm of a token with a
   great many base units (a memecoin) that pays a reward of few units rounds each seat's share to nothing
   (`W-FARM-ROUNDING`). A farm with
   a fixed `rate` pays the same to each NFT instead; minted, it grows the token's supply every day it runs, which

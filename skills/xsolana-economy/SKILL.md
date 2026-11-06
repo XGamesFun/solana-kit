@@ -33,7 +33,7 @@ or `npx -y @xgamesfun/solana@0.22.0 tool <name> '<json>'` for any tool (always w
    economy is legal where it is offered is theirs. Never promise it is safe, and never give legal advice.
 7. **Take addresses from the tools, never from memory**: the program, its accounts, the IDL. Every answer names them.
 8. **Public data only in a spec**: names, prices, percents, public addresses. Leave out `id`, `index`, `shopBox`,
-   `rewardsIndex` and `live`: they are written when it goes live.
+   and `live`: they are written when it goes live.
 9. **Compose before you say no.** Most ideas are several parts working together, not one part. Before calling
    anything a limit, break the idea into its pieces (what players pay, what they get, what is random, what the chain
    can't see, what is held and for how long, who is paid) and find the part for each (`references/sentence-to-spec.md`).
@@ -50,8 +50,8 @@ or `npx -y @xgamesfun/solana@0.22.0 tool <name> '<json>'` for any tool (always w
      table.
 
 10. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
-   draw a lottery, complete its tickets and pay its places, refund a draw the oracle never answered, claim a win, end
-   an auction, take unbonded tokens out, run a sealed schedule, take a rental's NFT home) can be sent by anyone, and
+   draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
+   win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by anyone, and
    the person who gains from it sends it from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
    grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
    nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
@@ -94,7 +94,7 @@ or `npx -y @xgamesfun/solana@0.22.0 tool <name> '<json>'` for any tool (always w
 ## Building the app around it
 
 A game, a site or a bot calls the live economy with the player's own wallet, through the package's player module
-(`@xgamesfun/solana/play`: buy, open a box and collect the roll, pay, stake, compound and withdraw, craft, bid and end an
+(`@xgamesfun/solana/play`: buy, open a box and collect the roll, pay, stake, compound and unstake, craft, bid and end an
 auction, list an NFT for sale or for rent and read who rents it, raffle an NFT, claim what a player is owed, run what
 is due, list what a player owns). Pages call `claims()` when they open and show each as a button.
 `references/apps.md` shows a whole page; `xsolana_client` gives the program and the calls. Never invent account layouts,

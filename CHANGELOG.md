@@ -17,14 +17,13 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   `rounds`, `claimGrantIx` with `rounds`/`proofs`/`paidRounds`); a claim may need 400,000 compute units.
   **Verdicts** sign `"loot-verdict-v4" | sha256(body)`, a side a `u16` (65,535 calls it off).
 - **A lottery round is its own record** (`["round", lottery, incarnation, round]`, `decodeRound`), holding its money in
-  accounts of its own: `settle_round` gives its places' prizes and sweeps, `pull` pays one part of one entry
-  (`partsOwed`), the last closes it. Places are runs (`times`); `Prize::Raffled` draws an NFT of the lottery's own
+  accounts of its own: `pull` pays one part (`partsOwed`, `commonOwed`), the last closes it. Places are runs (`times`); `Prize::Raffled` draws an NFT of the lottery's own
   stash at random. `finish_lottery_contribution` is gone. A lottery's terms are one `LotteryTerms` (`LotteryArgs {
   terms, every, gate, per_wallet }`), which the round copies (`round.terms`, `paymentMint(terms)`); `buy_tickets`
   names no incarnation (its round's address does); `LotteryPulled` carries the `amount` settled, and `LotteryPaid` is
-  gone. A pull pays at most 300 places of a run (`MOST_A_PULL`, `placesPulled`). A grant's tag is 27, a profile's 24.
+  gone. A grant's tag is 27, a profile's 24.
   A Token Metadata NFT's Sheet closes naming its edition (`closeSheetIx({ tokenMetadata })`).
-- **A contest's entries are one list** (`decodeEntries`); `claim(entry, nonce, forgo, end, give_up, nfts)`; winners
+- **A contest's entries are one list** (`decodeEntries`); `claim(entry, nonce, forgo, end, nfts)`; winners
   share the losers' NFTs (`cap`), losers send nothing.
 - **The tail**: every route's extra accounts (hook accounts, Core's checks) come from the Memo program's account on
   (`tailOf`).
@@ -50,6 +49,18 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   `Renew`). Grants count with `Limits.all` and `Grant.counted` (`OverDay` is gone; codes after it moved). `Debt.paid` is
   gone (a repaid loan is a plain hold that is over). `Fate.then` is `Option<Spend>`. A seat earns until a time
   (`Seat.earns_until`, a tier's `earns_for`). An order of a box that gives items has room for its draws' rows.
+- **Leaner (batches C and D: lotteries, contests, holds, farms)**: tags are dense 0–54 (`pull` 20). A lottery round's
+  first ask (`draw_lottery(skip_hooked)`) fixes its money and moves the lottery on; then every part is pulled, in any
+  order (`pull(entry, part, nonce)`: `Own`, `Pot(run)`, `Prize(run)`, `Common(i)`; `commonOwed`); `settle_round` and
+  `cancel_lottery` are gone (an unanswered draw is cancelled by its next ask after the timeout). A share the buyer
+  chooses is paid at purchase; the lottery's own stash's NFTs are taken out by the pulls in place order (`stashNfts`);
+  SOL sent to the lottery pays its rounds' rent. An owed NFT is moved by its piece or made a hold by its hold's address
+  (`claim` without `give_up`, `end_auction` without `hold`, `bid` taking the outbid NFTs' holds). A contest closes by
+  its claims (`decide` names no opener or entries). A compressed NFT's record closes when its payer signs
+  (`close_leaf`). Farms: no `unbond`, toll or rewards pool: rewards land in the farm's own vault (`["rewards", farm]`),
+  `Rate { per_day, mints, shared, halve_every }`, `Sink::Rewards`, a 184-byte seat (its player at offset 1), end marks,
+  `TokenSource::Farm` for what a farm holds free; an early exit keeps its rewards; no refresh at a seat's end. Sealed
+  schedules pay a wallet, the treasury or a burn.
 
 ### The tools
 
@@ -58,8 +69,14 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   count entries' bytes that never come back and what a settle key is lent. An item's `life` is written into each
   recipe that takes it (`lifeLines`). An outcome no longer burns the payment (`"gives": "burn"`, `burns`: refused in
   words). The checker warns of a prize out of stock (W-OUT-OF-STOCK) and refuses a roll in a box that rolls.
-- js/play: lotteries read their rounds; `claims()` lists `settle-round`, `pull` and `payout`; a contest's claim picks a
-  winner's share; grant claims read the shards.
+- js/play: lotteries read their rounds; `claims()` lists `reveal` (or `cancel-draw`, an older round's ask after the
+  timeout), `pull` and `payout` (the parts owed in common too); a place's roll is asked in the pull's own transaction
+  and a key settles it; a contest's claim picks a winner's share; grant claims read the shards. Every send appends
+  `close_leaf` for a compressed NFT's record (`withLeafCloses`).
+- The spec (batches C and D): a farm's `rewards` names a token, `seed` funds its vault, and "farm:<key>" sends it
+  rewards (a split, a recipe, a schedule that pays or mints into it); `rate.shared`, `rate.halveEvery`, a tier's
+  `earnsFor`, `exitFeeTo: "rewards"`; no `unbond`, `toll` or `rewardsIndex` (W-FARM-DRY for a farm nothing funds). A
+  sealed schedule pays a wallet, the treasury or a burn. A lottery's `roundRent`.
 - js/play keys: a step after the wallet's prompt is a throwaway key's job (funded in that transaction for what it pays,
   the rent minimum read from the cluster and a spare fee; simulated, sent, or else sent by the wallet; emptied back).
   A craft, a bundle bought, a mission left, a grant's or contest's roll prize and a roll lot the winner ends ask for
@@ -81,15 +98,12 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - A settle splits the payment with its first call (`upto` 0 alone when no prize fits beside the shares); js/play
   sends it so. `stashIx({ drop })` leaves an NFT in its hold, owed to the
   treasury; the project's address is refused. A compressed prize of a collection without Bubblegum's plugin shifts the
-  next one's Sheet (`unminted`; `parseCoreCollection` reads the plugin). `claims()` lists a seat's refresh once its
-  upkeep ran out.
+  next one's Sheet (`unminted`; `parseCoreCollection` reads the plugin).
 - `repay` names the debt its payer was shown (`repayIx({ repay })`); js/play's `loan()` reads it and `repay(asset, due,
-  { repay })` passes it. A pool run's mark carries its mint and pool alone. js/play reads a hooked mint's accounts
-  (`resolveTransfers`) for ticket purchases, a round's settle and its pulls: a hooked lottery runs from the page.
-- `settleRoundIx` takes `runs`, the most token runs a call; js/play fits them to 64
-  accounts and asks for the larger heap. A box's order size counts its stored shares.
-- `end_auction` takes `hold`: an NFT lot and a bid's winning NFTs become holds released after (`endAuctionIx({ hold })`;
-  js/play's `endAuction` does so when the end doesn't fit). A claim of a split pool prize names its pool (`prize_pool`).
+  { repay })` passes it. js/play reads a hooked mint's accounts (`resolveTransfers`) for ticket purchases, a round's
+  ask and its pulls: a hooked lottery runs from the page. A box's order size counts its stored shares.
+- An NFT lot and a bid's winning NFTs can become holds released after (`endAuctionIx({ hold })`, true or a list of
+  assets; js/play's `endAuction` does so when the end doesn't fit). A claim of a split pool prize names its pool (`prize_pool`).
   A settle part before the last gives prizes only (no shares, a stand-in piece); js/play splits a settle that passes
   64 accounts or 1,232 bytes into such parts. The checker refuses a box whose order passes 10,240 bytes
   (`MAX_ORDER_BYTES`); `MAX_PROVEN_BYTES` and `provenRowBytes` size committed tables' rows.

@@ -9,7 +9,7 @@ winner nobody pays.
 | Step | Who can send it | If nobody does |
 | --- | --- | --- |
 | A box's roll and settle, a shop buy | the player, in their own purchase (`js/play` does both in one prompt) | anyone can settle a rolled order, a normal item too (the app's backend delivers it from the `OrderSettled` receipt of a finalized transaction whose `meta.err` is null, once per order: `loot.receipts(tx)` gives none for a transaction with an error, whose logs can still read as all-success; it reads the transaction again when its log is truncated); a roll that failed or never came refunds (`app.refund`) |
-| A lottery draw, its round moved on (its places' prizes, then its sweep), each part pulled | **anyone**: the page (`app.claims()` lists each available step), or a sweep. A pull pays one entry one part (a refund, a ticket back, a place's part of the pot or token prize, a referrer's share) into its owner's account, opened in the same transaction when it is not there (the sender pays its rent) | selling stops at draw time. A round nobody draws waits, with no deadline. Once drawn, anyone moves it on: each place's prize (an NFT, a collectible, tokens, a roll) by a cursor, then the sweep, which pays the common shares and splits the pot among the places; the next round opens then. Each part waits in the round for its own pull, holding up nobody else; the pull that leaves nothing owed closes the round, and its first buyer's deposit for the round's record comes back. If the oracle never answers a draw (7 days after it was asked for), anyone can cancel it, and every buyer's refund is pulled. An empty round moves on with the next ticket. A one-time lottery ends after its round |
+| A lottery draw, then each part pulled | **anyone**: the page (`app.claims()` lists each available step), or a sweep. The draw's ask fixes the round's money (what its places take of the pot, each pool's prize) and opens the next round at once. A pull pays one part into its owner's account, opened in the same transaction when it is not there (the sender pays its rent): an entry's own (a refund, a ticket back), its places' part of the pot or their prizes (a raffled NFT, an item, tokens, a roll), or a part owed in common (a share, what the pot gets back) | selling stops at draw time. A round nobody draws waits, with no deadline. Once drawn, every part waits in the round for its own pull, in any order, holding up nobody else; the pull that leaves nothing owed closes the round, and the rent of its record goes back to whoever fronted it (the lottery's `roundRent`, or its first buyer). An NFT that can't move is made a hold for its winner. If the oracle never answers a draw (7 days after it was first asked for), the next ask cancels it, and every buyer's refund is pulled. An empty round moves on with the next ticket. A one-time lottery ends after its round |
 | A schedule that is due (an emission, rent, a drip) | **anyone**: the page (`app.runSchedule`), a player, a sweep | it waits, and one call catches up every run due (a backlog of years takes a few) |
 | Ending an auction | **anyone**: usually the winner, from the page | it waits: whenever it is ended, the lot goes to the highest bidder |
 | A contest's entries back when it is off, or its winners' claims | **anyone** (each entry's money goes only to its player) | they wait; nothing is lost |
@@ -22,16 +22,17 @@ winner nobody pays.
 | Putting more NFTs in a stash, or taking one out | the **owner** (or the authority), holding them: add them to the stash's `nfts` and publish again (only the new ones go in), or `loot.stashIx` with `out` to any wallet | a stash nobody refills just runs out |
 
 "Anyone" means the page can offer a button for it, and any player can press it. Build those buttons with `js/play`:
-`app.claims()` lists what this player can finish now (a draw, its completion or cancellation, a payout, a refund, an
+`app.claims()` lists what this player can finish now (a draw, its cancellation, a pull, a payout, a refund, an
 auction to end), and `app.claim(c)` sends one. A **sweep** is a server that sends overdue public steps for the
 projects it watches. One may or may not be running for the person's project, so never rely on it: the page's buttons
 are what finish them. A sweep never needs anyone's key but its own fee payer.
 
-A round of a lottery is a record of its own, opened by its first purchase (its buyer fronts its header, about 0.003
-SOL, back when the round closes), and it holds its ticket money in accounts of its own until its sweep: cuts and burns
-run after the draw, and the pot holds only what nobody is owed. Each purchase adds an entry (its bytes, about 0.0002
-SOL, never come back; they go to the treasury when the round closes). The buyer's share recipients are fixed when they
-buy. Cancelling (only for a draw the oracle never answered, or a round short of its least sale) owes every entry its
+A round of a lottery is a record of its own, opened by its first purchase (the SOL the lottery holds for it,
+`roundRent`, pays its header and token accounts; with too little, its first buyer fronts them, about 0.004 SOL and up;
+either way back when the round closes), and it holds its ticket money in accounts of its own until each part is
+pulled: shares in common and burns run after the draw, and the pot holds only what nobody is owed. Each purchase adds
+an entry (its bytes, about 0.0002 SOL, never come back; they go to the treasury when the round closes). A share the
+buyer chooses (a referrer) is paid as they buy. Cancelling (only for a draw the oracle never answered, or a round short of its least sale) owes every entry its
 whole ticket payment back, with no split or burn; network and oracle fees stay spent. Prizes and outside donations
 already in the pot stay there for the lottery; they are not ticket refunds. A round holds about 70,000 to 260,000
 purchases, by how wide its entries are.
@@ -48,7 +49,7 @@ methods). What the project writes about one (a level, a use) goes in its Sheet (
 the authority with `collectible` `Set`, by a farm's growth, or by anyone proving the traits the project vouched for
 (`app.proveTraits`).
 
-A new mission is a new farm: add it to the spec and publish again; `runs` ends it that long after it goes live. Near the end of a farm that shares its pool, fund it at least its release span (its longest lock, a day at least) before the end and refresh any seat you suspect is dead a span before it: what is not released by the end, and what a seat gives back after it, stays in the pool, the project's. If rewards cannot move, unstaking can explicitly forfeit them.
+A new mission is a new farm: add it to the spec and publish again; `runs` ends it that long after it goes live. Near the end of a farm that shares what lands, fund it at least its release span (its longest lock, a day at least) before the end: what is not released by the end, and what a seat gives back after it, stays in its rewards vault, where the authority may take back what is free (`loot.moveTokensIx` with `from: { Farm: [id] }`), never what the farm owes its seats. No seat needs a refresh at its end. If rewards cannot move, unstaking can explicitly forfeit them.
 
 Changing a live box's roll (its outcomes, odds, `stockOdds`, `rollsOn`, `then`) fails every roll of it still waiting
 (`W-LIVE-ROLLS`): a purchase gets its payment back, but a roll won on another route (a grant's, a mission's chest, a

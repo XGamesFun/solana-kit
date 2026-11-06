@@ -27,7 +27,7 @@ An economy is a JSON spec, not a new smart contract. Every project shares the on
 - lotteries and raffles, including no-loss lotteries
 - prizes of any kind on every route, random or not: items, tokens, and NFTs the project holds in a stash
 - an NFT as the price on every route that takes money
-- staking farms with lock tiers, boosts, early exits and tolls
+- staking farms with lock tiers, boosts, early exits, fixed or shared rates and terms
 - crafting recipes
 - holds and contests, with prizes by rank or by stake
 - auctions: the highest bid wins, the outbid refunded at once
