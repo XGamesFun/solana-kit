@@ -52,7 +52,10 @@ test('a raffle’s NFT is held in its lottery only; a split prize is a contest�
     s.items = [{ key: 'hero', name: 'Hero', price: 1 }];
     s.collection = { name: 'Heroes' };
   });
-  assert.ok(nfts.refused.includes('E-FARM economy.farms.farm.tiers') && nfts.refused.includes('E-FARM economy.farms.farm.unbond'), nfts.refused.join());
+  assert.ok(nfts.refused.includes('E-FARM economy.farms.farm.tiers'), nfts.refused.join());
+  // No unbonding wait and no toll any more: the schema refuses a spec that still names one.
+  const old = edit(farm, (s) => Object.assign(s.farms[0], { unbond: '7d', toll: { percent: 2, to: 'burn' } }));
+  assert.ok(old.refused.includes('E-SCHEMA economy.farms[0].unbond') && old.refused.includes('E-SCHEMA economy.farms[0].toll'), old.refused.join());
 });
 
 test('a sealed schedule has an end and pays no holder; a list names amounts up to the grant’s', () => {
@@ -62,7 +65,7 @@ test('a sealed schedule has an end and pays no holder; a list names amounts up t
   assert.ok(edit(vesting, (s) => (s.grants[0].list[0].amount = 30_000)).refused.includes('E-GRANT economy.grants.advisors.list[0].amount'));
 });
 
-test('a schedule pays a lottery’s pot; a farm with no rewards gets an empty pool of its own', () => {
+test('a schedule pays a lottery’s pot or a farm’s rewards; a farm nothing funds is said to pay nothing', () => {
   const raffle = example('nft-raffle');
   const sponsored = edit(raffle, (s) => (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }], s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }]));
   assert.ok(sponsored.ok, sponsored.refused.join());
@@ -70,9 +73,12 @@ test('a schedule pays a lottery’s pot; a farm with no rewards gets an empty po
   const spec = structuredClone(farm);
   spec.farms.push({ key: 'qualify', name: 'Qualify', stakes: 'gem', tiers: [{ lock: '7d' }] });
   const r = codes(spec);
-  assert.ok(r.ok && r.warned.includes('W-FARM economy.farms.qualify.rewards'), r.refused.join());
-  assert.ok(model(spec).pool.has('qualify-rewards'));
+  assert.ok(r.ok && r.warned.includes('W-FARM-DRY economy.farms.qualify') && !r.warned.includes('W-FARM-DRY economy.farms.farm'), r.warned.join());
+  assert.equal(model(spec).farm.get('qualify').rewardsToken, 'gem', 'its rewards are its staked token');
   assert.ok(plan(spec, { now: NOW }).ok);
+  // A farm's rewards are a token: one that names a pool is told where its rewards land now.
+  const pooled = edit(farm, (s) => (s.pools = [{ key: 'old', currency: 'gem' }], s.farms[0].rewards = 'old'));
+  assert.ok(pooled.refused.includes('E-FARM economy.farms.farm.rewards'), pooled.refused.join());
 });
 
 test('a sealed schedule pays a key someone holds, its last run within 10 years; a draw within 5 years', () => {

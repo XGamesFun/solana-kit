@@ -168,8 +168,10 @@ export function scheduleArgs(s, m) {
   const poolOf = (key) => m.pool.get(key)?.index ?? 0;
   let action;
   if (s.does === 'issue') {
-    const t = m.tokens.get(s.currency ?? m.pool.get(s.pool)?.currency);
-    action = { from: { Mint: [`@mint:${t?.key}`] }, to: { Pool: [poolOf(s.pool)] }, amount: { Fixed: [amount(s.amount, t)] }, halve_every: s.halveEvery ?? 0 };
+    // Minted into a pool, or into a farm's rewards vault ("to": "farm:<key>"): an emission its stakers share.
+    const farm = destination(s.to ?? '').kind === 'farm' ? m.farm.get(destination(s.to).key) : null;
+    const t = m.tokens.get(s.currency ?? (farm ? farm.rewardsToken : m.pool.get(s.pool)?.currency));
+    action = { from: { Mint: [`@mint:${t?.key}`] }, to: farm ? toEnum(s.to, m) : { Pool: [poolOf(s.pool)] }, amount: { Fixed: [amount(s.amount, t)] }, halve_every: s.halveEvery ?? 0 };
   } else if (s.sealed) {
     // A sealed schedule pays from its own vault, in `currency`.
     const t = m.tokens.get(s.currency ?? m.currencyKey);
@@ -289,39 +291,42 @@ export function farmArgs(f, m) {
     roll: t.roll ? m.box.get(t.roll)?.id ?? 0 : null,
     // A token seat may leave before this tier's lock by leaving this share of what it takes out.
     exit_bps: Math.round((t.exitFee ?? 0) * 100),
-    // How long a seat of this tier earns from its stake (0: no end). The spec has no field for it yet.
-    earns_for: 0,
+    // How long a seat of this tier earns and grows from when its lock started (0: no end): a term.
+    earns_for: t.earnsFor ? toSeconds(t.earnsFor) : 0,
   }));
   // Every rule of its gate; with none, a farm of one item's collectibles takes that item.
   const named = listOf(f.gate);
   const gates = f.stakes !== 'collectibles' ? [] : (named.length ? named : f.item ? [{ item: f.item, attribute: 'item_id' }] : []).map((r) => ruleOf(r, m));
   // A rate is per NFT_UNIT of weight: one collectible, or 1,000,000 base units of a staked token.
-  const rewards = m.poolToken(f.rewards);
+  const rewards = m.tokens.get(f.rewardsToken);
   const staked = f.stakes === 'collectibles' ? null : m.tokens.get(f.stakes);
   const perDay = f.rate ? amount(f.rate.perDay, rewards) : 0n;
+  // A shared rate is the whole farm's a day, shared by weight; any other is for each unit of weight.
+  const shared = Boolean(f.rate?.shared);
   return {
     custody: { freeze: 'Freeze', watch: 'Watch' }[f.custody] ?? 'Escrow',
-    rewards_pool: m.pool.get(f.rewards)?.index ?? 0,
     tiers,
     boosts: (f.boosts ?? []).map((b) => ({ rule: ruleOf(b.when, m), effect: effectOf(b.add) })),
     max_boost_bps: Math.round((f.maxBoostPercent ?? 0) * 100),
     gates,
-    rate: f.rate ? { per_day: staked ? (perDay * 1_000_000n) / 10n ** BigInt(staked.decimals ?? 0) : perDay, mints: Boolean(f.rate.minted) } : null,
+    rate: f.rate ? { per_day: staked && !shared ? (perDay * 1_000_000n) / 10n ** BigInt(staked.decimals ?? 0) : perDay, mints: Boolean(f.rate.minted), shared, halve_every: f.rate.halveEvery ? toSeconds(f.rate.halveEvery) : 0 } : null,
     growth: listOf(f.growth).map((g) => ({ key: g.attribute ?? 'xp', per_day: g.perDay, level: (g.levels ?? []).length ? g.level ?? 'level' : '', steps: g.levels ?? [], streak: Boolean(g.streak), profile: false, at_least: 0n })),
     // A farm that runs for a time ends that long after it goes live.
     ends_at: f.runs ? BigInt(m.now + toSeconds(f.runs)) : 0n,
     // The times it keeps on what is staked: its lock, and an upkeep.
     lock_key: f.lockAttribute ?? '',
     upkeep_key: f.upkeepAttribute ?? '',
-    // Where an early exit's fee goes, how long a stake waits on its way out, and a toll on every payout of rewards.
+    // Where an early exit's fee goes.
     exit_to: f.exitFeeTo ? sinkOf(f.exitFeeTo, m) : null,
-    unbond: f.unbond ? toSeconds(f.unbond) : 0,
-    toll: f.toll ? { bps: Math.round(f.toll.percent * 100), to: sinkOf(f.toll.to, m) } : null,
   };
 }
 
-/** A fee's sink (`Sink`): "burn", or "pool:<key>", one of the project's pools. */
-export const sinkOf = (to, m) => (to === 'burn' ? 'Burn' : { Pool: [m.pool.get(String(to).replace(/^pool:/, ''))?.index ?? 0] });
+/** A fee's sink (`Sink`): "burn", "rewards" (the farm's own vault), or "pool:<key>", one of the project's pools. */
+export const sinkOf = (to, m) => (to === 'burn' ? 'Burn' : to === 'rewards' ? 'Rewards' : { Pool: [m.pool.get(String(to).replace(/^pool:/, ''))?.index ?? 0] });
+
+/** The end marks a farm keeps (`Farm::marks`, 7 levels of 16): a farm whose seats can stop earning (a tier's term, an
+ * upkeep) and whose seats' shares hang on the total weight (it shares what lands, or a shared rate). */
+export const farmMarks = (f) => ((f.tiers ?? []).some((t) => t.earnsFor) || f.upkeepAttribute) && (!f.rate || f.rate.shared) ? 112 : 0;
 
 /** An auction's args: its lot, reserve, least raise, times and split. "start" is when it goes live unless it says. */
 export function auctionArgs(a, m) {
@@ -378,7 +383,8 @@ export function grantArgs(g, m) {
 
 /**
  * Replaces "@mint:<key>" strings anywhere in `value` with the mint `ctx` names, "@ata:<wallet>:<key>" with that
- * wallet's token account for it, "@pot:<id>" with a lottery's pot and "@farm:<id>" with a farm's address.
+ * wallet's token account for it, "@pot:<id>" with a lottery's pot, "@farm:<id>" with a farm's address and "@rewards:<id>"
+ * with a farm's rewards vault.
  */
 function resolve(value, ctx) {
   if (value === '@treasury') {
@@ -402,6 +408,10 @@ function resolve(value, ctx) {
   if (typeof value === 'string' && value.startsWith('@farm:')) {
     if (!ctx.project) throw new Error('No project yet for a stake gate’s farm.');
     return loot.pda.farm(ctx.project, Number(value.slice(6)));
+  }
+  if (typeof value === 'string' && value.startsWith('@rewards:')) {
+    if (!ctx.project) throw new Error('No project yet for a farm’s rewards vault.');
+    return loot.pda.rewards(loot.pda.farm(ctx.project, Number(value.slice(9))));
   }
   if (typeof value === 'string' && value.startsWith('@pot:')) {
     if (!ctx.project) throw new Error('No project yet for a lottery’s pot.');
@@ -429,8 +439,8 @@ const placeholderKey = (name) => encodeBase58(sha256(utf8(`loot-plan:${name}`)))
  * Every step that sets the economy up, in order: the tokens the project mints, the collection, the project, the pools, items, boxes (the shop's too), recipes, schedules, lotteries, grants,
  * farms, auctions, then the seeds and the grants' funds. `only` limits it to these part ids (a change to a live economy).
  *
- * A farm opens before the seed of its rewards pool lands, and anyone may stake in between. That is safe: a sharing
- * farm credits nothing at once, and releases what lands in its pool over its longest lock (a day at least) to the
+ * A farm opens before its seed lands in its rewards vault, and anyone may stake in between. That is safe: a sharing
+ * farm credits nothing at once, and releases what lands in its vault over its longest lock (a day at least) to the
  * seats there as it is released, its clock stopped while nobody is in. A seed that lands
  * before the first stake or after it is released the same way from that stake on, so seeding first would change nothing.
  */
@@ -612,10 +622,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   }
   for (const r of m.recipes) record(`recipe:${r.key}`, { Recipe: { id: r.id, args: recipeArgs(r, m) } }, `Write the recipe “${r.name}”`, 'Recipe', `the recipe “${r.name}”`);
   for (const s of m.schedules) {
-    // A sealed schedule that pays a lottery's pot names the lottery when it is written (the pot is the project's own).
-    const pays = destination(s.to ?? '');
-    const lottery = s.sealed && pays.kind === 'lottery' ? m.lottery.get(pays.key) : null;
-    record(`schedule:${s.key}`, { Schedule: { id: s.id, args: scheduleArgs(s, m) } }, `${s.active === false ? 'Stop' : 'Start'} the ${s.sealed ? 'sealed ' : ''}schedule “${s.name ?? s.key}”`, 'Schedule', `the schedule “${s.name ?? s.key}”`, (ctx) => (lottery ? { lottery: loot.pda.lottery(project(ctx), lottery.id) } : {}));
+    record(`schedule:${s.key}`, { Schedule: { id: s.id, args: scheduleArgs(s, m) } }, `${s.active === false ? 'Stop' : 'Start'} the ${s.sealed ? 'sealed ' : ''}schedule “${s.name ?? s.key}”`, 'Schedule', `the schedule “${s.name ?? s.key}”`);
     // A sealed schedule's vault is funded once, at go-live: from the owner's wallet, minted, or from a pool.
     const id = `fund:${s.key}`;
     if (!s.sealed || !Number(s.fund ?? 0) || (live?.landed ?? []).includes(id) || live?.published?.schedules?.some((x) => x.key === s.key)) continue;
@@ -663,12 +670,12 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   /** The boxes a farm's tiers roll, tier by tier (its roll, then a prize that is a roll). */
   for (const f of m.farms) {
     if (live?.farms?.includes(f.key)) continue;
-    const rewards = m.poolToken(f.rewards);
+    const rewards = m.tokens.get(f.rewardsToken);
     add({
       id: `farm:${f.key}`,
       part: `farm:${f.key}`,
-      says: `Open the farm “${f.name}”: stake ${f.stakes === 'collectibles' ? 'collectibles' : m.tokens.get(f.stakes)?.symbol}, earn ${rewards?.symbol} from “${f.rewards}”`,
-      creates: [{ what: `the farm “${f.name}”`, bytes: encodedSize('Farm', { project: NOBODY, id: 0, farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } }, ...placeholders(farmArgs(f, m)), rewards_mint: NOBODY, rate_at: 0n, rate_carry: 0n, total_weight: 0n, reward_per_weight: 0n, reward_remainder: 0n, given: 0n, unreleased: 0n, released_at: 0n, release_ends: 0n, release_from: 0n, release_base: 0n }) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }])],
+      says: `Open the farm “${f.name}”: stake ${f.stakes === 'collectibles' ? 'collectibles' : m.tokens.get(f.stakes)?.symbol}, earn ${rewards?.symbol}${f.rate?.minted ? ', minted' : ' from its own rewards vault'}`,
+      creates: [{ what: `the farm “${f.name}”`, bytes: farmBytes(f, m) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }])],
       build: (ctx) => [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes] })],
     });
   }
@@ -774,6 +781,24 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       });
     }
   }
+  // A farm's seed: the owner puts it straight into the farm's rewards vault, once the farm is open.
+  for (const f of m.farms) {
+    if (!(Number(f.seed ?? 0) > 0) || live?.seeded?.includes(`farm:${f.key}`)) continue;
+    const t = m.tokens.get(f.rewardsToken);
+    const units = amount(f.seed, t);
+    add({
+      id: `seed:farm:${f.key}`,
+      part: `farm:${f.key}`,
+      says: `Put ${f.seed} ${t.symbol} into the rewards of “${f.name}”`,
+      build: (ctx) => {
+        const vault = loot.pda.rewards(loot.pda.farm(project(ctx), f.id));
+        return [
+          ...(t.wsol ? [createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT), transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), units), syncNative(loot.ata(ctx.owner, NATIVE_MINT))] : []),
+          loot.payIx({ player: ctx.owner, project: project(ctx), mint: ctx.mints[t.key], treasury: ctx.treasury, amount: units, shares: [{ to: { Account: [vault] }, bps: 10_000 }], reference: `seed ${f.key}`, programs: programsOf(ctx) }),
+        ];
+      },
+    });
+  }
   // A lottery's seed: the owner puts it straight into the lottery's pot.
   for (const l of m.lotteries) {
     if (!(Number(l.seed ?? 0) > 0) || live?.seeded?.includes(`lottery:${l.key}`)) continue;
@@ -791,6 +816,12 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         ];
       },
     });
+  }
+  // SOL a lottery holds for its rounds' rent: each round borrows it at its first purchase (or its ask), back at its close.
+  for (const l of m.lotteries) {
+    if (!(Number(l.roundRent ?? 0) > 0)) continue;
+    const lamports = toUnits(l.roundRent, 9);
+    add({ id: `rent:lottery:${l.key}`, part: `lottery:${l.key}`, says: `Put ${l.roundRent} SOL in “${l.name}” for its rounds’ rent (each round gives it back when it closes)`, build: (ctx) => [transferLamports(ctx.owner, loot.pda.lottery(project(ctx), l.id), lamports)] });
   }
   for (const g of m.grants) {
     if (!(Number(g.fund ?? 0) > 0) || live?.funded?.includes(g.key)) continue;
@@ -865,6 +896,12 @@ export const recordBytesOf = (kind, body) => {
   }[kind];
   return encodedSize(kind, base());
 };
+/** A farm's bytes as `open_farm` writes it: its args, its numbers, and its end marks when it keeps them (`farmMarks`). */
+export const farmBytes = (f, m) => encodedSize('Farm', {
+  project: NOBODY, id: 0, farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } }, ...placeholders(farmArgs(f, m)), rewards_mint: NOBODY,
+  rate_carry: 0n, opened_at: 0n, total_weight: 0n, reward_per_weight: 0n, reward_remainder: 0n, owed: 0n, clock: 0n, unreleased: 0n, release_ends: 0n, release_from: 0n, release_base: 0n,
+  marks: Array(farmMarks(f)).fill(0n),
+});
 /** Exact initial contest record size for its configured shares, gate, sides and deciders. */
 export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, owed: 0n, unclaimed: 0n, sides: Array(contest.sides).fill(0n), share: 0, extras: 0, picks: 0 });
 /** Args with "@mint:" names standing in as addresses, for sizing. */
@@ -1032,7 +1069,7 @@ export function playSteps(economy) {
   }
   for (const r of m.recipes) add(`recipe:${r.key}`, 'craft', 'player', `craft “${r.name}”`);
   for (const s of m.schedules) add(`schedule:${s.key}`, 'run_schedule', 'anyone', `run “${s.name ?? s.key}” when it is due`);
-  for (const l of m.lotteries) add(`lottery:${l.key}`, 'buy_tickets', 'player', 'buy tickets'), add(`lottery:${l.key}`, 'draw_lottery', 'anyone', 'ask for the draw when it is due'), add(`lottery:${l.key}`, 'settle_round', 'anyone', 'give the places’ prizes, then sweep the round'), add(`lottery:${l.key}`, 'pull', 'anyone', 'pay one entry its part: a refund, a place, a recipient’s share');
+  for (const l of m.lotteries) add(`lottery:${l.key}`, 'buy_tickets', 'player', 'buy tickets'), add(`lottery:${l.key}`, 'draw_lottery', 'anyone', 'ask for the draw when it is due'), add(`lottery:${l.key}`, 'pull', 'anyone', 'pay one part: a refund, a place’s part of the pot or its prize, a share owed in common');
   for (const f of m.farms) {
     if (f.stakes === 'collectibles') add(`farm:${f.key}`, 'stake_nft', 'player', 'stake a collectible'), add(`farm:${f.key}`, 'unstake_nft', 'player', 'take it out once its lock has run');
     else add(`farm:${f.key}`, 'stake_tokens', 'player', 'stake'), add(`farm:${f.key}`, 'unstake_tokens', 'player', 'unstake or collect'), add(`farm:${f.key}`, 'stake_nft', 'player', 'put a collectible on as a booster');
@@ -1042,7 +1079,7 @@ export function playSteps(economy) {
   for (const c of m.contests) {
     add(`contest:${c.key}`, 'open_contest', 'authority', `open “${c.name}”`);
     add(`contest:${c.key}`, 'enter', 'player', 'back a side');
-    add(`contest:${c.key}`, 'decide', 'authority (or anyone, to call it off once overdue)', 'name the side that won');
+    add(`contest:${c.key}`, 'decide', 'authority (or anyone sending a decider’s verdict)', 'name the side that won, or call it off before its result is due');
     add(`contest:${c.key}`, 'claim', 'anyone', 'pay an entry');
   }
   for (const a of m.auctions) {

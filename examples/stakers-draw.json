@@ -40,19 +40,12 @@
       }
     }
   ],
-  "pools": [
-    {
-      "key": "vault-rewards",
-      "currency": "gem",
-      "about": "Names the vault's token: its rate is minted, so nothing is paid from here."
-    }
-  ],
   "farms": [
     {
       "key": "vault",
       "name": "The vault",
       "stakes": "gem",
-      "rewards": "vault-rewards",
+      "rewards": "gem",
       "rate": {
         "perDay": 0.001,
         "minted": true

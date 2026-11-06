@@ -58,10 +58,10 @@ test('a grant whose total is less than its list says the rest are refused', () =
   assert.ok(!codes(enough).warned.includes('W-GRANT-LIMITS economy.grants.welcome.limits.total'));
 });
 
-test('a farm with no rate that only qualifies stakers for a gate may have a rewards pool nothing fills', () => {
+test('a farm with no rate that only qualifies stakers for a gate may have a rewards vault nothing fills', () => {
   const spec = example('stakers-draw');
   delete spec.farms[0].rate;
   const r = codes(spec);
   assert.ok(r.ok, r.refused.join());
-  assert.ok(r.warned.includes('W-POOL-DRY economy.pools.vault-rewards'), r.warned.join());
+  assert.ok(r.warned.includes('W-FARM-DRY economy.farms.vault'), r.warned.join());
 });

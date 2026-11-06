@@ -119,14 +119,13 @@ test('the checker and the approval refuse such a mint on a route that reads it o
   await assert.rejects(checkMints({ m: model(spec(null)), chain: { account: async (a) => w.chain.get(a) } }), (e) => e instanceof MintMismatch && /auction/.test(e.message));
 });
 
-test('the tools say a sharing farm releases what lands in its pool over its longest lock, a day at least', async () => {
+test('the tools say a sharing farm releases what lands in its vault over its longest lock, a day at least', async () => {
   const { simulate } = await import('../economy/simulate.mjs');
   const { releaseWords } = await import('../economy/model.mjs');
   const spec = {
     version: 2, network: 'devnet', name: 'Release', currency: 'gem',
     tokens: [{ key: 'gem', source: 'game', symbol: 'GEM', decimals: 6 }],
-    pools: [{ key: 'rewards', currency: 'gem', seed: 1000 }],
-    farms: [{ key: 'stake', name: 'Stake', stakes: 'gem', rewards: 'rewards', tiers: [{ lock: '1h', multiplier: 1 }, { lock: '30d', multiplier: 3 }] }],
+    farms: [{ key: 'stake', name: 'Stake', stakes: 'gem', rewards: 'gem', seed: 1000, tiers: [{ lock: '1h', multiplier: 1 }, { lock: '30d', multiplier: 3 }] }],
     scenario: { days: 30, staked: { stake: 1000 } },
   };
   assert.equal(releaseWords(spec.farms[0]), '30 days');
@@ -164,24 +163,23 @@ test('the player module offers no stake at a farm\'s end or after it, nor one wh
   assert.equal(w.chain.get(loot.pda.seat(loot.pda.farm(w.project, 2), w.player)), null, 'a seat still leaves after the end');
 });
 
-test('the tools say what the end of a sharing farm keeps in its pool', async () => {
+test('the tools say what the end of a sharing farm keeps in its vault', async () => {
   const { simulate } = await import('../economy/simulate.mjs');
   const { explainEconomy } = await import('../economy/explain.mjs');
   const spec = {
     version: 2, network: 'devnet', name: 'Season', currency: 'gem',
     tokens: [{ key: 'gem', source: 'game', symbol: 'GEM', decimals: 6 }],
     collection: { name: 'Studio' },
-    pools: [{ key: 'rewards', currency: 'gem', seed: 1000 }],
-    farms: [{ key: 'season', name: 'Season', stakes: 'collectibles', custody: 'watch', rewards: 'rewards', runs: '14d', tiers: [{ lock: '0s', multiplier: 1 }, { lock: '14d', multiplier: 2 }] }],
+    farms: [{ key: 'season', name: 'Season', stakes: 'collectibles', custody: 'watch', rewards: 'gem', seed: 1000, runs: '14d', tiers: [{ lock: '0s', multiplier: 1 }, { lock: '14d', multiplier: 2 }] }],
     scenario: { days: 30 },
   };
   const result = check(spec);
   assert.deepEqual(result.refusals, []);
   const runs = result.warnings.find((x) => x.code === 'W-FARM' && x.where.endsWith('.runs'));
   assert.match(runs.message, /takes no stake at its end/);
-  assert.match(runs.message, /not released by its end stays in the pool, the project’s/);
+  assert.match(runs.message, /not released by its end stays in its vault/);
   assert.match(runs.message, /fund it at least 14 days before its end/);
-  assert.match(runs.message, /refresh a seat you suspect is dead \(a watched NFT sold\) at least 14 days before the end/);
+  assert.doesNotMatch(runs.message, /refresh a seat/, 'a seat past its end needs no refresh');
   assert.ok(result.warnings.some((x) => x.where === 'economy.farms.season.tiers[1].lock'), 'a lock as long as the farm runs is never taken: the farm takes no seat at its end');
   const sim = simulate(spec);
   assert.match(sim.farms[0].end, /fund it at least 14 days before its end/);
@@ -196,8 +194,7 @@ test('W-FARM-ROUNDING: a sharing farm of a token with a great many base units, p
   const spec = (stake, reward, seed = 2000, extra = {}) => ({
     version: 2, network: 'devnet', name: 'Meme', currency: 'pts',
     tokens: [{ key: 'meme', source: 'existing', mint: 'Stake11111111111111111111111111111111111111', symbol: 'MEME', ...stake }, { key: 'pts', source: 'game', symbol: 'PTS', ...reward }],
-    pools: [{ key: 'rewards', currency: 'pts', seed }],
-    farms: [{ key: 'stake', name: 'Stake', stakes: 'meme', rewards: 'rewards', tiers: [{ lock: '1d', multiplier: 1 }, { lock: '7d', multiplier: 7 }], ...extra }],
+    farms: [{ key: 'stake', name: 'Stake', stakes: 'meme', rewards: 'pts', seed, tiers: [{ lock: '1d', multiplier: 1 }, { lock: '7d', multiplier: 7 }], ...extra }],
   });
   const rounding = (s) => check(s).warnings.find((x) => x.code === 'W-FARM-ROUNDING');
   // A billion MEME at 6 decimals and x7 weighs 7×10¹⁵: a step of 7,000 PTS, more than the 2,000 a release.
@@ -216,15 +213,14 @@ test('W-FARM-ROUNDING: a sharing farm of a token with a great many base units, p
   assert.equal(rounding(spec({ decimals: 6 }, { decimals: 0 }, 2000, { rate: { perDay: 1, minted: true } })), undefined);
 });
 
-test('W-FARM-FEE: a farm whose rewards keep a transfer fee says a refresh that changes nothing releases a chunk at a time', () => {
+test('W-FARM-FEE: a farm whose rewards keep a transfer fee says what lands and what is paid arrive less it', () => {
   const spec = (rate) => ({
     version: 2, network: 'devnet', name: 'Fee', currency: 'gem',
     tokens: [{ key: 'gem', source: 'existing', mint: 'Stake11111111111111111111111111111111111111', symbol: 'GEM', decimals: 6, program: 'token-2022', powers: { transferFeePercent: 1 } }],
-    pools: [{ key: 'rewards', currency: 'gem', seed: 1000 }],
-    farms: [{ key: 'stake', name: 'Stake', stakes: 'gem', rewards: 'rewards', tiers: [{ lock: '1d', multiplier: 1 }], ...(rate && { rate }) }],
+    farms: [{ key: 'stake', name: 'Stake', stakes: 'gem', rewards: 'gem', seed: 1000, tiers: [{ lock: '1d', multiplier: 1 }], ...(rate && { rate }) }],
   });
   const fee = (s) => check(s).warnings.find((x) => x.code === 'W-FARM-FEE');
-  assert.match(fee(spec()).message, /releases a chunk at a time, 10,000 base units/);
-  assert.match(fee(spec({ perDay: 1, minted: false })).message, /every move pays from the pool/);
-  assert.equal(fee(spec({ perDay: 1, minted: true })), undefined, 'a minted rate moves nothing out of a pool');
+  assert.match(fee(spec()).message, /what lands in its vault arrives less that, and so does what each seat is paid/);
+  assert.ok(fee(spec({ perDay: 1, minted: false })));
+  assert.equal(fee(spec({ perDay: 1, minted: true })), undefined, 'a minted rate moves nothing out of its vault');
 });

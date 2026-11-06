@@ -34,13 +34,6 @@
       "price": 0.05
     }
   ],
-  "pools": [
-    {
-      "key": "ore-rewards",
-      "currency": "ore",
-      "about": "Names the fleet's reward token: the mine mints ORE at its rate, so nothing waits here."
-    }
-  ],
   "recipes": [
     {
       "key": "refuel",
@@ -118,7 +111,7 @@
       "name": "The mine",
       "stakes": "collectibles",
       "item": "ship",
-      "rewards": "ore-rewards",
+      "rewards": "ore",
       "rate": {
         "perDay": 100,
         "minted": true

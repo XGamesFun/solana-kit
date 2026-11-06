@@ -54,8 +54,7 @@ test('a life is written as needs and raises at each collectible’s place in the
 
 test('a staked line of an item with uses must move its farm’s lock too: the life’s raise is a raise on it', () => {
   const staked = structuredClone(spec);
-  staked.farms = [{ key: 'yard', name: 'Yard', stakes: 'collectibles', item: 'tool', custody: 'escrow', rewards: 'yard-pool', lockAttribute: 'free_at', tiers: [{ lock: '1d' }] }];
-  staked.pools = [{ key: 'yard-pool', currency: 'sol' }];
+  staked.farms = [{ key: 'yard', name: 'Yard', stakes: 'collectibles', item: 'tool', custody: 'escrow', rewards: 'sol', lockAttribute: 'free_at', tiers: [{ lock: '1d' }] }];
   staked.recipes = [{ key: 'work', name: 'Work', in: [{ takes: 'staked', item: 'tool', farm: 'yard' }], out: [] }];
   const r = check(staked, { now: NOW });
   assert.ok(r.refusals.some((x) => x.code === 'E-RECIPE' && /“used”/.test(x.message) && /BadRecipe/.test(x.message)), r.refusals.map((x) => x.message).join('\n'));

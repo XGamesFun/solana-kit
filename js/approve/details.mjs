@@ -93,6 +93,7 @@ function readDetails(reads, names) {
     const owner = read.accounts.owner ?? read.accounts.seller;
     const project = read.accounts.project;
     const pots = new Map(names.m.lotteries.map((l) => [pda.pot(pda.lottery(project, l.id)), l.name ?? l.key]));
+    const vaults = new Map(names.m.farms.map((f) => [pda.rewards(pda.farm(project, f.id)), f.name ?? f.key]));
     // Before a wallet connects, the plan stands a made-up address in for it (one no spec may name): that one is not
     // shown. Once one is connected, only that wallet is called yours.
     const yours = (a) => (names.owner == null ? 'your wallet' : a === names.owner ? `your wallet (${a})` : `the project’s owner, ${a}`);
@@ -105,7 +106,7 @@ function readDetails(reads, names) {
       const v = to[kind];
       if (kind === 'Pool') return `the pool “${names.pools.get(v[0]) ?? v[0]}”`;
       if (kind === 'Wallet') return wallet(v[0]);
-      if (kind === 'Account') return pots.has(v[0]) ? `the pot of “${pots.get(v[0])}”` : `the token account ${v[0]}`;
+      if (kind === 'Account') return pots.has(v[0]) ? `the pot of “${pots.get(v[0])}”` : vaults.has(v[0]) ? `the rewards of the farm “${vaults.get(v[0])}”` : `the token account ${v[0]}`;
       if (kind === 'Holder') return `whoever holds the NFT ${v[0]}`;
       if (kind === 'Chosen') return 'a wallet the buyer chooses';
       return JSON.stringify(to);

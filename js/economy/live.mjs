@@ -40,8 +40,6 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
   out.pools = withIds('pools', m.pools, 'index');
   out.boxes = withIds('boxes', m.boxes);
   for (const k of ['stashes', 'tables', 'recipes', 'schedules', 'lotteries', 'farms', 'grants', 'auctions']) if (economy[k]) out[k] = withIds(k, m[k]);
-  // A farm that pays nothing keeps the number of the empty pool made for it, so a pool added later never takes it.
-  if (economy.farms) out.farms = out.farms.map((f, i) => (m.farms[i].unpaid ? { ...f, rewardsIndex: m.pool.get(m.farms[i].rewards).index } : f));
   // An auction's address names its seller: the page finds it by both.
   if (economy.auctions) out.auctions = out.auctions.map((a) => ({ ...a, seller: a.seller ?? auctionSeller(a, ctx) }));
   for (const k of ['items', 'pools', 'boxes']) if (!economy[k]) delete out[k];
@@ -79,7 +77,7 @@ export function changedParts(economy) {
   const only = new Set();
   const fixed = [];
   const removed = [];
-  const strip = ({ id, index, shopBox, seller, rewardsIndex, ...rest }) => JSON.stringify(rest);
+  const strip = ({ id, index, shopBox, seller, ...rest }) => JSON.stringify(rest);
   for (const [list, kind] of Object.entries(PART_LISTS)) {
     const before = new Map((published[list] ?? []).map((p) => [p.key, p]));
     for (const part of economy[list] ?? []) {

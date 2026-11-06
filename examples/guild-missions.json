@@ -20,13 +20,6 @@
   "collection": {
     "name": "Guild Missions"
   },
-  "pools": [
-    {
-      "key": "gem-rewards",
-      "currency": "gem",
-      "about": "Names the guild's token: every farm here mints it, so nothing waits in this pool."
-    }
-  ],
   "traits": [
     {
       "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR",
@@ -43,7 +36,7 @@
       "gate": {
         "collection": "Cvb5ZbtpUMk8yNG9GzC5nQ7FkB2xPVUZzZaxXqgNbvxR"
       },
-      "rewards": "gem-rewards",
+      "rewards": "gem",
       "rate": {
         "perDay": 5,
         "minted": true
@@ -77,7 +70,7 @@
         "attribute": "level",
         "atLeast": 3
       },
-      "rewards": "gem-rewards",
+      "rewards": "gem",
       "rate": {
         "perDay": 0,
         "minted": true
@@ -110,7 +103,7 @@
           "atLeast": 6
         }
       ],
-      "rewards": "gem-rewards",
+      "rewards": "gem",
       "rate": {
         "perDay": 0,
         "minted": true

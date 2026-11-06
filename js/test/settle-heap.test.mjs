@@ -93,12 +93,11 @@ const setSpec = ({ farm = 'altar', keys = ['bound', 'free_at'], custody, lockAtt
   tokens: [{ key: 'sol', source: 'sol' }, { key: 'spark', source: 'game', symbol: 'SPARK', decimals: 0 }],
   collection: { name: 'Set' },
   items: [{ key: 'fire', name: 'Fire', price: 0.01 }, { key: 'water', name: 'Water', price: 0.01 }, { key: 'badge', name: 'Badge' }],
-  pools: [{ key: 'spark-rewards', currency: 'spark' }],
   recipes: [{ key: 'bind', name: 'Bind', in: ['fire', 'water'].map((item) => ({ takes: 'staked', item, ...(farm === null ? {} : { farm }), ...line })), out: [{ gives: 'item', item: 'badge' }],
     raises: [0, 1].flatMap((place) => keys.map((key) => (key === 'free_at' ? { place, key, by: '20000d' } : { place, key, by: 1, upTo: 1 }))) }],
   farms: [
-    { key: 'altar', name: 'The altar', stakes: 'collectibles', rewards: 'spark-rewards', rate: { perDay: 10, minted: true }, tiers: [{ lock: '1d' }], ...(lockAttribute ? { lockAttribute } : {}), ...(custody ? { custody } : {}) },
-    { key: 'vault', name: 'The vault', stakes: 'spark', rewards: 'spark-rewards', tiers: [{ lock: '1d' }] },
+    { key: 'altar', name: 'The altar', stakes: 'collectibles', rewards: 'spark', rate: { perDay: 10, minted: true }, tiers: [{ lock: '1d' }], ...(lockAttribute ? { lockAttribute } : {}), ...(custody ? { custody } : {}) },
+    { key: 'vault', name: 'The vault', stakes: 'spark', rewards: 'spark', seed: 100, tiers: [{ lock: '1d' }] },
   ],
 });
 
@@ -120,14 +119,14 @@ test('a staked line names its farm, in the spec, the plan and the checker', () =
   assert.ok(!warned(setSpec()).some((w) => w.startsWith('W-STAKED')));
 });
 
-test('a rate farm’s give-back goes back to its pool, or is burned when the rate mints; never to the other seats', () => {
+test('a rate farm’s give-back stays free in its vault, or is never minted when the rate mints; never to the other seats', () => {
   const minted = simulate(setSpec(), { now: NOW }).farms.find((f) => f.key === 'altar');
-  assert.match(minted.says, /gives back.*burned.*never to the other seats/);
-  const fromPool = structuredClone(setSpec());
-  fromPool.farms[0].rate.minted = false;
-  fromPool.pools[0].seed = 1000;
-  assert.match(simulate(fromPool, { now: NOW }).farms.find((f) => f.key === 'altar').says, /gives back.*back to “spark-rewards”.*never to the other seats/);
-  assert.match(explainEconomy(fromPool, { now: NOW }).text.split('\n').find((a) => a.includes('Stake collectibles in “The altar”')), /gives back.*back to “spark-rewards”.*never to the other seats/);
+  assert.match(minted.says, /gives back.*never minted.*never to the other seats/);
+  const fromVault = structuredClone(setSpec());
+  fromVault.farms[0].rate.minted = false;
+  fromVault.farms[0].seed = 1000;
+  assert.match(simulate(fromVault, { now: NOW }).farms.find((f) => f.key === 'altar').says, /gives back.*left free in its vault.*never to the other seats/);
+  assert.match(explainEconomy(fromVault, { now: NOW }).text.split('\n').find((a) => a.includes('Stake collectibles in “The altar”')), /gives back.*left free in its vault.*never to the other seats/);
 });
 
 test('W-STASH-NAMED when prizes name NFTs of a stash that players fill; not when only the owner fills it', () => {

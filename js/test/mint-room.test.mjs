@@ -21,8 +21,7 @@ const stashOf = (w, id) => loot.decodeStash(w.chain.get(pda.stash(w.project, id)
 const rated = (rate, { reward = {}, runs } = {}) => ({
   version: 2, network: 'devnet', name: 'Meme', currency: 'pts',
   tokens: [{ key: 'meme', source: 'existing', mint: 'Stake11111111111111111111111111111111111111', symbol: 'MEME', decimals: 6 }, { key: 'pts', source: 'game', symbol: 'PTS', decimals: 9, ...reward }],
-  pools: [{ key: 'rewards', currency: 'pts' }],
-  farms: [{ key: 'stake', name: 'Stake', stakes: 'meme', rewards: 'rewards', rate, tiers: [{ lock: '1d', multiplier: 1 }, { lock: '7d', multiplier: 7 }], ...(runs ? { runs } : {}) }],
+  farms: [{ key: 'stake', name: 'Stake', stakes: 'meme', rewards: 'pts', rate, tiers: [{ lock: '1d', multiplier: 1 }, { lock: '7d', multiplier: 7 }], ...(runs ? { runs } : {}) }],
 });
 const room = (spec) => check(spec, { now: NOW }).warnings.find((x) => x.code === 'W-FARM-MINT-ROOM');
 
@@ -45,10 +44,10 @@ test('the checker warns of a minting rate that could come near the most a mint c
 
 test('the simulation and the explainer say a minting rate mints only while the mint has room', () => {
   const spec = rated({ perDay: 1, minted: true }, { reward: { decimals: 0 }, runs: '30d' });
-  assert.match(simulate(spec).farms[0].says, /\(minted, as far as the mint has room for: what it can’t mint is not owed later\)/);
-  assert.match(explainEconomy(spec).text, /minted while the mint has room for it, never owed later past that/);
-  // A rate from a pool still says it pays while the pool lasts.
-  assert.match(simulate(rated({ perDay: 1, minted: false }, { reward: { decimals: 0 }, runs: '30d' })).farms[0].says, /while the pool lasts/);
+  assert.match(simulate(spec).farms[0].says, /\(minted when a seat is paid, as far as the mint has room for: what it can’t mint is not owed later\)/);
+  assert.match(explainEconomy(spec).text, /minted when a seat is paid while the mint has room for it, never owed later past that/);
+  // A rate paid from its vault still says it pays while its vault lasts.
+  assert.match(simulate(rated({ perDay: 1, minted: false }, { reward: { decimals: 0 }, runs: '30d' })).farms[0].says, /while its vault lasts/);
 });
 
 test('stashIx refuses taking an NFT out to an account of the program it names', () => {

@@ -24,7 +24,7 @@ test('a fixed supply’s seed with too many decimals is refused, not thrown on, 
 });
 
 test('a farm’s rate with more decimals than its rewards is refused, not thrown on', () => {
-  const spec = base({ pools: [{ key: 'r', currency: 'gold' }], farms: [{ key: 'f', name: 'F', stakes: 'gold', rewards: 'r', rate: { perDay: 0.001 } }] });
+  const spec = base({ farms: [{ key: 'f', name: 'F', stakes: 'gold', rewards: 'gold', rate: { perDay: 0.001 } }] });
   assert.deepEqual(codes(check(spec, { now: NOW })), ['E-AMOUNT economy.farms.f.rate.perDay']);
 });
 
@@ -38,22 +38,15 @@ test('a contest of NFTs counts its least pot in whole NFTs: 1.5 is refused, 2 an
   }
 });
 
-test('the empty pool of a farm that pays nothing keeps its number once live: a pool added later takes a free one', () => {
+test('a farm that pays nothing makes no pool: its rewards land in a vault of its own', () => {
   const spec = base({ pools: [{ key: 'a', currency: 'gold' }], farms: [{ key: 'f', name: 'F', stakes: 'gold', tiers: [{ lock: '7d' }] }] });
   const numbers = (e) => Object.fromEntries(model(e).pools.map((p) => [p.key, p.index]));
-  assert.deepEqual(numbers(spec), { a: 0, 'f-rewards': 1 });
+  assert.deepEqual(numbers(spec), { a: 0 });
   const landed = recordLanded(spec, { ctx: { project: A, treasury: A, authority: A, mints: { gold: A } } });
-  assert.equal(landed.farms[0].rewardsIndex, 1);
+  assert.equal(landed.farms[0].rewardsIndex, undefined);
   const grown = { ...landed, pools: [...landed.pools, { key: 'b', currency: 'gold' }] };
-  assert.deepEqual(numbers(grown), { a: 0, b: 2, 'f-rewards': 1 });
+  assert.deepEqual(numbers(grown), { a: 0, b: 1 });
   assert.deepEqual([...changedParts(grown).only], ['pool:b', 'seed:b']);
-  assert.deepEqual(codes(check(grown, { now: NOW })), []);
-  // Live before numbers were kept (an id, no rewardsIndex): the farm's pool still comes before the new one.
-  const older = { ...grown, farms: [{ ...spec.farms[0], id: 1 }] };
-  assert.deepEqual(numbers(older), { a: 0, b: 2, 'f-rewards': 1 });
-  // A pool numbered as the farm's is refused.
-  const clash = { ...grown, pools: [landed.pools[0], { key: 'b', currency: 'gold', index: 1 }] };
-  assert.deepEqual(codes(check(clash, { now: NOW })), ['E-KEY-DUP economy.farms.f.rewardsIndex']);
 });
 
 test('a recipe’s tokens from a pool are counted in the pool’s token, not the game’s currency', () => {
@@ -93,10 +86,10 @@ test('every percent the program counts in hundredths is refused when finer, and 
   const spec = base({
     tokens: [{ key: 'gold', source: 'game', decimals: 6 }, { key: 'fee', source: 'existing', mint: A, decimals: 6, powers: { transferFeePercent: 0.001 } }],
     items: [{ key: 'badge', name: 'Badge' }],
-    pools: [{ key: 'r', currency: 'gold' }, { key: 'sink', currency: 'gold' }, { key: 'fr', currency: 'fee', seed: 1 }],
+    pools: [{ key: 'sink', currency: 'gold' }],
     farms: [
-      { key: 'f', name: 'F', stakes: 'gold', rewards: 'r', exitFeeTo: 'pool:sink', toll: { percent: 1.234, to: 'burn' }, tiers: [{ lock: '7d', exitFee: 2.555 }], boosts: [{ when: { item: 'badge' }, add: { addPercent: 10.001 } }], maxBoostPercent: 150.005 },
-      { key: 'g', name: 'G', stakes: 'gold', rewards: 'fr' },
+      { key: 'f', name: 'F', stakes: 'gold', exitFeeTo: 'pool:sink', tiers: [{ lock: '7d', exitFee: 2.555 }], boosts: [{ when: { item: 'badge' }, add: { addPercent: 10.001 } }], maxBoostPercent: 150.005 },
+      { key: 'g', name: 'G', stakes: 'gold', rewards: 'fee', seed: 1 },
     ],
   });
   const r = check(spec, { now: NOW });
@@ -104,7 +97,6 @@ test('every percent the program counts in hundredths is refused when finer, and 
     'E-PERCENT economy.farms.f.boosts[0].add.addPercent',
     'E-PERCENT economy.farms.f.maxBoostPercent',
     'E-PERCENT economy.farms.f.tiers[0].exitFee',
-    'E-PERCENT economy.farms.f.toll.percent',
     'E-PERCENT economy.tokens[1].powers.transferFeePercent',
   ]);
   assert.ok(!JSON.stringify(r).includes('∞'));
@@ -148,7 +140,7 @@ test('an old version is refused once (E-VERSION), not again by the schema', () =
 });
 
 test('a farm’s growth may not write under a name the program keeps, "origin" included', () => {
-  const spec = base({ items: [{ key: 'hero', name: 'Hero' }], pools: [{ key: 'r', currency: 'gold' }], farms: [{ key: 'f', name: 'F', stakes: 'collectibles', item: 'hero', rewards: 'r', rate: { perDay: 1, minted: true }, growth: { attribute: 'origin', perDay: 1 } }] });
+  const spec = base({ items: [{ key: 'hero', name: 'Hero' }], farms: [{ key: 'f', name: 'F', stakes: 'collectibles', item: 'hero', rewards: 'gold', rate: { perDay: 1, minted: true }, growth: { attribute: 'origin', perDay: 1 } }] });
   assert.ok(codes(check(spec, { now: NOW })).includes('E-FARM economy.farms.f.growth'));
 });
 
@@ -156,9 +148,8 @@ test('a mission’s roll is explained from its box’s own outcomes', () => {
   const spec = base({
     tokens: [{ key: 'gold', source: 'game' }],
     items: [{ key: 'hero', name: 'Hero' }],
-    pools: [{ key: 'r', currency: 'gold' }],
     boxes: [{ key: 'quest', name: 'Quest', price: 0, active: false, rollsOn: { item: 'hero' }, outcomes: [{ gives: 'tokens', from: 'mint', amount: 5, chance: 50, shifts: [{ attribute: 'level', by: 1, upTo: 10 }] }, { gives: 'nothing', chance: 30 }, { gives: 'nothing', chance: 20, then: 'burn' }] }],
-    farms: [{ key: 'f', name: 'F', stakes: 'collectibles', item: 'hero', rewards: 'r', rate: { perDay: 1, minted: true }, tiers: [{ lock: '1d', roll: 'quest' }] }],
+    farms: [{ key: 'f', name: 'F', stakes: 'collectibles', item: 'hero', rewards: 'gold', rate: { perDay: 1, minted: true }, tiers: [{ lock: '1d', roll: 'quest' }] }],
   });
   const text = explainEconomy(spec, { now: NOW }).text;
   assert.match(text, /rolled on “Quest” \(its result: \+1 level and 5 GOLD, minted; nothing changes; or the NFT burned\)/);

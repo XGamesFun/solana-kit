@@ -283,8 +283,8 @@
     },
     "destination": {
       "type": "string",
-      "description": "Where a share goes: \"burn\", \"treasury\" (the game's), \"pool:<key>\", \"wallet:<address>\" (a partner, a creator, a charity: the program pays their own account for the currency, and opens it when it is not there), \"account:<token account address>\" (an existing token account of that currency), \"holder:<collectible address>\" (whoever holds that collectible at the time), \"lottery:<key>\" (that lottery's pot), or, in a box's or a lottery's split, \"chosen\" (a wallet the buyer names when they buy: a referrer, a streamer) or \"chosen:<item key>\" (whoever holds the collectible of that item the buyer names: the plot they build on; the buyer must name one a player holds, or the purchase is refused); in a payment's split, \"chosen\" only (a wallet the payer names each time they pay, never their own). A share that can't be paid (its wallet has no account, nobody holds the collectible) goes to the treasury instead; a sale never fails over it.",
-      "pattern": "^(burn|treasury|chosen|chosen:[a-z][a-z0-9-]{0,31}|pool:[a-z][a-z0-9-]{0,31}|lottery:[a-z][a-z0-9-]{0,31}|wallet:[1-9A-HJ-NP-Za-km-z]{32,44}|account:[1-9A-HJ-NP-Za-km-z]{32,44}|holder:[1-9A-HJ-NP-Za-km-z]{32,44})$"
+      "description": "Where a share goes: \"burn\", \"treasury\" (the game's), \"pool:<key>\", \"wallet:<address>\" (a partner, a creator, a charity: the program pays their own account for the currency, and opens it when it is not there), \"account:<token account address>\" (an existing token account of that currency), \"holder:<collectible address>\" (whoever holds that collectible at the time), \"lottery:<key>\" (that lottery's pot), \"farm:<key>\" (that farm's rewards vault, shared by its stakers), or, in a box's or a lottery's split, \"chosen\" (a wallet the buyer names when they buy: a referrer, a streamer) or \"chosen:<item key>\" (whoever holds the collectible of that item the buyer names: the plot they build on; the buyer must name one a player holds, or the purchase is refused); in a payment's split, \"chosen\" only (a wallet the payer names each time they pay, never their own). A share that can't be paid (its wallet has no account, nobody holds the collectible) goes to the treasury instead; a sale never fails over it.",
+      "pattern": "^(burn|treasury|chosen|chosen:[a-z][a-z0-9-]{0,31}|pool:[a-z][a-z0-9-]{0,31}|lottery:[a-z][a-z0-9-]{0,31}|farm:[a-z][a-z0-9-]{0,31}|wallet:[1-9A-HJ-NP-Za-km-z]{32,44}|account:[1-9A-HJ-NP-Za-km-z]{32,44}|holder:[1-9A-HJ-NP-Za-km-z]{32,44})$"
     },
     "share": {
       "type": "object",
@@ -1451,7 +1451,7 @@
               "$ref": "#/$defs/destination"
             }
           ],
-          "description": "move: the pool it fills. pay: \"wallet:<address>\", \"account:<token account address>\" or \"holder:<asset address>\", or \"lottery:<key>\" (that lottery's pot: a sponsored or no-loss prize stream)."
+          "description": "move: the pool it fills. issue: \"farm:<key>\" to mint into that farm's rewards vault instead of a `pool` (an emission its stakers share). pay: \"wallet:<address>\", \"account:<token account address>\" or \"holder:<asset address>\", \"lottery:<key>\" (that lottery's pot: a sponsored or no-loss prize stream) or \"farm:<key>\" (that farm's rewards vault). A sealed one pays only \"wallet:<address>\", \"treasury\" or \"burn\"."
         },
         "amount": {
           "$ref": "#/$defs/amount"
@@ -1485,7 +1485,7 @@
         },
         "sealed": {
           "type": "boolean",
-          "description": "A sealed schedule (does \"pay\", in `currency`): it pays from a vault of its own that nothing else can touch, and once written nobody, the owner included, can change it, switch it off or take its tokens back. It needs `maxRuns`; its last run pays whatever is left. Vesting, an unlock, a sponsored prize stream with a real guarantee."
+          "description": "A sealed schedule (does \"pay\", in `currency`): it pays from a vault of its own that nothing else can touch, and once written nobody, the owner included, can change it, switch it off or take its tokens back. It needs `maxRuns`; its last run pays whatever is left. It pays a wallet, the treasury or a burn (a stream into a pool, a pot or a farm is only as safe as where it lands: leave it unsealed). Vesting, an unlock."
         },
         "fund": {
           "$ref": "#/$defs/amount",
@@ -1583,6 +1583,10 @@
         "seed": {
           "$ref": "#/$defs/amount",
           "description": "What the owner puts in the pot at go-live."
+        },
+        "roundRent": {
+          "$ref": "#/$defs/amount",
+          "description": "SOL the owner puts in the lottery at go-live to pay each round's record and token accounts (lent to the round, back to the lottery when it closes): about 0.004 SOL and up a round, more with many places or token prizes, times the rounds still paying out at once. Without it, or when it is short, a round's first buyer fronts them, back to them at the close."
         },
         "split": {
           "$ref": "#/$defs/split",
@@ -2306,6 +2310,10 @@
         "exitFee": {
           "$ref": "#/$defs/percent",
           "description": "A farm of tokens: a stake may leave before this tier's lock has run by leaving this percent of what it takes out (to the farm's `exitFeeTo`). Absent: no early exit. A farm of collectibles leaves early by a recipe that lowers its `lockAttribute`."
+        },
+        "earnsFor": {
+          "$ref": "#/$defs/duration",
+          "description": "A term: a seat at this tier earns and grows only this long after its lock started (a stake, or a booster put on, starts it again), however late it is touched; its prize is still given once its lock has run. Absent: no end."
         }
       }
     },
@@ -2317,7 +2325,7 @@
         "name",
         "stakes"
       ],
-      "description": "Players stake a token or collectibles. Rewards are whatever arrives in the rewards pool, shared by weight (what they stake, times their lock tier, plus boosts from what a collectible says), or a fixed `rate` for each seat. A farm can also write points and levels on what is staked (`growth`), and pay a mission's `prize` to a collectible that stays its tier's lock. It cannot be edited once open. A farm of collectibles can keep two times on the NFT itself: its lock (`lockAttribute`) and an upkeep (`upkeepAttribute`), which recipes and rolls move like any number.",
+      "description": "Players stake a token or collectibles. Rewards are whatever lands in the farm's own rewards vault (\"farm:<key>\" in a split or a schedule, its `seed`), shared by weight (what they stake, times their lock tier, plus boosts from what a collectible says), or a fixed `rate`. A farm can also write points and levels on what is staked (`growth`), and pay a mission's `prize` to a collectible that stays its tier's lock. It cannot be edited once open. A farm of collectibles can keep two times on the NFT itself: its lock (`lockAttribute`) and an upkeep (`upkeepAttribute`), which recipes and rolls move like any number.",
       "properties": {
         "key": {
           "$ref": "#/$defs/key"
@@ -2348,13 +2356,11 @@
         },
         "rewards": {
           "$ref": "#/$defs/key",
-          "description": "The pool rewards come from, and whose token they are in. Without a `rate`, the farm takes all of it, so it must be this farm's alone; with a `rate` that isn't minted, it pays from it while it lasts. Leave it out for a farm that pays nothing (staking only to qualify, for a stake gate): the setup opens an empty pool for it."
+          "description": "The token its rewards are in (a token key). They land in the farm's own rewards vault: send it a share (\"farm:<key>\" in a split), pay it with a schedule (\"to\": \"farm:<key>\"), or `seed` it; with a minted `rate` nothing waits there. Left out: the staked token, or for a farm of collectibles the project's currency."
         },
-        "rewardsIndex": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255,
-          "description": "For a farm that names no `rewards`: the program's number for the empty pool made for it. Written when it goes live; never change it after."
+        "seed": {
+          "$ref": "#/$defs/amount",
+          "description": "What the owner puts into its rewards vault at go-live, from their wallet (anyone may add more later, with a plain transfer)."
         },
         "rate": {
           "type": "object",
@@ -2362,16 +2368,25 @@
           "required": [
             "perDay"
           ],
-          "description": "A fixed rate instead of sharing what arrives: the same for each seat whoever else is in, times its tier and boosts (most Solana NFT staking paid this way).",
+          "description": "A fixed rate instead of sharing what lands: for each seat whoever else is in, times its tier and boosts (most Solana NFT staking paid this way), or with `shared` the whole farm's a day, shared by weight.",
           "properties": {
             "perDay": {
               "$ref": "#/$defs/amount",
-              "description": "Reward tokens a day for each collectible at x1; for a farm of tokens, for each whole token staked. 0 pays nothing: a farm that only grows what is staked, or gives mission prizes (its \"rewards\" pool is then never touched)."
+              "description": "Reward tokens a day for each collectible at x1; for a farm of tokens, for each whole token staked; with `shared`, for the whole farm. 0 pays nothing: a farm that only grows what is staked, or gives mission prizes."
             },
             "minted": {
               "type": "boolean",
               "default": false,
-              "description": "Minted (the rewards' token must be one the game mints), or paid from the rewards pool while it lasts (what it can't cover is not owed later)."
+              "description": "Minted when a seat is paid (the rewards' token must be one the game mints), or paid from what its rewards vault holds free while it lasts (what it can't cover is not owed later)."
+            },
+            "shared": {
+              "type": "boolean",
+              "default": false,
+              "description": "`perDay` is the whole farm's a day, shared by weight while anything is staked: an emission budget, each seat's share falling as more stake."
+            },
+            "halveEvery": {
+              "$ref": "#/$defs/duration",
+              "description": "The rate halves every this long from when the farm opens, again and again (a halving emission)."
             }
           }
         },
@@ -2453,39 +2468,17 @@
         "lockAttribute": {
           "type": "string",
           "minLength": 1,
-          "description": "For a farm of collectibles: the attribute the farm writes each staked collectible's lock under, as the time it ends (Unix seconds), and reads when it leaves. Whatever moves a number moves it: a recipe `raises` it by \"-1d\" with `fromNow` for a price (a way out early; the price can be burned, or paid into this farm's rewards pool, shared by the seats there at the next move), a roll's `shifts` add a day (jail). A mission's prize still needs the tier's own lock to have run, and a tier that rolls rolls whenever the collectible leaves. A recipe reaches a collectible staked in escrow (the default) on its seat."
+          "description": "For a farm of collectibles: the attribute the farm writes each staked collectible's lock under, as the time it ends (Unix seconds), and reads when it leaves. Whatever moves a number moves it: a recipe `raises` it by \"-1d\" with `fromNow` for a price (a way out early; the price can be burned, or paid into this farm's rewards vault (\"farm:<key>\"), shared by the seats there), a roll's `shifts` add a day (jail). A mission's prize still needs the tier's own lock to have run, and a tier that rolls rolls whenever the collectible leaves. A recipe reaches a collectible staked in escrow (the default) on its seat."
         },
         "upkeepAttribute": {
           "type": "string",
           "minLength": 1,
-          "description": "For a farm of collectibles: an upkeep. The attribute that says until when (Unix seconds) a staked collectible earns and grows: fuel, food, a license. A recipe sells it (`raises` with `fromNow`: \"+1d\" for 10 FUEL, up to \"3d\" ahead), and it runs out by itself. Run dry, the seat earns and grows nothing more, and what it was credited after it ran out goes back to the farm (split by time), shared by the seats there. Fuel bought counts once the seat is refreshed (anyone sends `refresh`; the play page sends it with the recipe). A mission's prize needs the upkeep to last its tier's lock."
+          "description": "For a farm of collectibles: an upkeep. The attribute that says until when (Unix seconds) a staked collectible earns and grows: fuel, food, a license. A recipe sells it (`raises` with `fromNow`: \"+1d\" for 10 FUEL, up to \"3d\" ahead), and it runs out by itself. Run dry, the seat earns and grows nothing more from that time, however late it is next touched. Fuel bought counts once the seat is refreshed (anyone sends `refresh`; the play page sends it with the recipe). A mission's prize needs the upkeep to last its tier's lock."
         },
         "exitFeeTo": {
           "type": "string",
-          "pattern": "^(burn|pool:[a-z][a-z0-9-]{0,31})$",
-          "description": "Where early-exit fees go: \"burn\", or \"pool:<key>\" (the farm's own rewards pool shares them with the stakers who stay). Needed when a tier has `exitFee`."
-        },
-        "unbond": {
-          "$ref": "#/$defs/duration",
-          "description": "A farm of tokens: what a player takes out waits this long first, earning nothing (an unbonding wait), then any later unstake takes it out."
-        },
-        "toll": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "percent",
-            "to"
-          ],
-          "description": "A share of every payout of rewards (harvest, compound, unstake), burned or sent to a pool. Not on mission prizes.",
-          "properties": {
-            "percent": {
-              "$ref": "#/$defs/percent"
-            },
-            "to": {
-              "type": "string",
-              "pattern": "^(burn|pool:[a-z][a-z0-9-]{0,31})$"
-            }
-          }
+          "pattern": "^(burn|rewards|pool:[a-z][a-z0-9-]{0,31})$",
+          "description": "Where early-exit fees go: \"burn\", \"rewards\" (the farm's own rewards vault, shared by the stakers who stay: a farm whose rewards are its staked token), or \"pool:<key>\". Needed when a tier has `exitFee`."
         }
       }
     },

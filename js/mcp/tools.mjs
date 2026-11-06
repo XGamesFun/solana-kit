@@ -169,7 +169,7 @@ export function carryIds(previous, next) {
   carry('pools', ['index']);
   for (const list of ['stashes', 'boxes', 'recipes', 'schedules', 'lotteries', 'grants']) carry(list, ['id']);
   // A farm that pays nothing keeps the number of the empty pool made for it; an auction keeps the seller its address names.
-  carry('farms', ['id', 'rewardsIndex']);
+  carry('farms', ['id']);
   carry('auctions', ['id', 'seller']);
   return out;
 }
@@ -459,16 +459,16 @@ export const tools = [
         '  app.buyListing(asset, { listing }), app.rentListing(asset, { periods, listing }) (`listing`: what listing() or listings()',
         '  showed the player), app.unlist(asset), app.rentedTo(asset) (one account read)   listings, sale and rent',
         '  app.raffle(id, nft, { price, drawsAt, minSold }), app.unraffle(id, nft)   a raffle from the lottery’s own stash',
-        '  app.compound(key), app.withdraw(key), app.runSchedule(key)   compound, take out unbonded tokens, catch a schedule up',
-        '  app.claims() also lists a raffle’s prize step (given before the money), unbonded tokens, vested runs, a rental over',
+        '  app.compound(key), app.runSchedule(key)   compound, catch a schedule up',
+        '  app.claims() also lists a lottery’s parts to pull (a refund, a place, a raffle’s NFT), vested runs, a rental over',
         'Lower level, for what the player module does not cover:',
         '  import * as loot from "@xgamesfun/solana/client";',
         '  loot.pda.project(owner, number), loot.pda.box(project, id), …   every address the program derives',
         '  loot.openBoxIx({ player, project, box, nonce }), loot.buyIx({ player, project, box, items }) …   one builder per instruction; each returns { programId, keys, data }',
         '  loot.payNftIx({ player, project, asset, to })             pay with an NFT (burned, or given to `to`): the app admits by the receipt',
         '  loot.openListingIx / takeListingIx / closeListingIx, loot.listingTerms(listing), loot.pda.listing(project, asset), loot.renterOf(listing, now)',
-        '  loot.decodeRound(data), loot.settleRoundIx(...) then loot.partsOwed(round, entry) and loot.pullIx(...)   a drawn round’s prizes and sweep, then each part pulled',
-        '  loot.withdrawable(seat, now), loot.runsDue(schedule, now, vaultBalance), loot.pda.vest(schedule), loot.pda.prizeVault(contest), loot.pda.lotteryStash(lottery)',
+        '  loot.decodeRound(data), loot.partsOwed(round, entry), loot.commonOwed(round), loot.pullIx(...)   a round’s parts, each pulled in any order (a place’s roll: loot.pullRolls, asked in the same transaction)',
+        '  loot.runsDue(schedule, now, vaultBalance), loot.pda.vest(schedule), loot.pda.prizeVault(contest), loot.pda.lotteryStash(lottery), loot.pda.rewards(farm)',
         '  loot.decode("LootBox", data), loot.receipts(tx)            accounts, and the receipts of a getTransaction result (none when meta.err is set)',
         'IDL: @xgamesfun/solana/idl.json (Anchor 1.x format).',
         'A page builds the instruction, puts it in a transaction, and asks the player’s wallet (Wallet Standard: Phantom, Solflare, Backpack) to sign and send it. The app never holds a key.',

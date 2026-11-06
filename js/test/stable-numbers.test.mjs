@@ -99,8 +99,7 @@ test('xsolana_save keeps every number a live part landed with, so removing an ea
     currency: 'coin',
     tokens: [{ key: 'coin', source: 'existing', mint: WSOL, decimals: 9 }],
     pools: [{ key: 'a', currency: 'coin', index: 0 }, { key: 'b', currency: 'coin', index: 1 }],
-    // A farm that pays nothing: the empty pool made for it took number 2.
-    farms: [{ key: 'club', name: 'Club', stakes: 'coin', id: 1, rewardsIndex: 2 }],
+    farms: [{ key: 'club', name: 'Club', stakes: 'coin', id: 1 }],
     auctions: [{ key: 'lot', name: 'Lot', id: 1, seller, lot: { roll: 'chest' } }],
     live: { project: seller, published: {} },
   };
@@ -109,12 +108,8 @@ test('xsolana_save keeps every number a live part landed with, so removing an ea
   delete next.live;
   const saved = carryIds(live, next);
   assert.equal(saved.pools[0].index, 1);
-  assert.equal(saved.farms[0].rewardsIndex, 2, 'the farm’s empty pool keeps its number');
   assert.equal(saved.auctions[0].seller, seller, 'the auction keeps the seller its address names');
-  const m = model(saved);
-  assert.equal(m.pool.get('club-rewards').index, 2, 'not the number pool “a” left free');
-  // A pool added later takes a free number, never the farm's.
+  // A pool added later takes a free number: a farm holds none (its rewards are a vault of its own).
   const added = model({ ...saved, pools: [...saved.pools, { key: 'c', currency: 'coin' }] });
-  assert.notEqual(added.pool.get('c').index, 2);
   assert.notEqual(added.pool.get('c').index, 1);
 });

@@ -13,9 +13,6 @@
     { "key": "pass", "name": "Expedition Pass", "price": 0.01 },
     { "key": "trinket", "name": "Trinket", "value": 0.01 }
   ],
-  "pools": [
-    { "key": "shard-rewards", "currency": "shards", "about": "Names the expedition's token: it pays nothing, its result is a chest." }
-  ],
   "stashes": [
     {
       "key": "vault",
@@ -94,7 +91,7 @@
       "name": "Expedition",
       "stakes": "collectibles",
       "item": "pass",
-      "rewards": "shard-rewards",
+      "rewards": "shards",
       "rate": { "perDay": 0, "minted": true },
       "tiers": [{ "lock": "1d", "multiplier": 1, "prize": { "gives": "roll", "box": "daily-chest" } }]
     }

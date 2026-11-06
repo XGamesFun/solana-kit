@@ -47,8 +47,8 @@ test('a time the program keeps in 4 bytes, or counts from go-live, is refused in
   e.farms[0].tiers[0].lock = tooLong;
   assert.deepEqual(at(checkAndPlan(e)), ['economy.farms.' + e.farms[0].key + '.tiers[0].lock']);
   e = example('paper-hands-farm');
-  e.farms[0].unbond = 4_294_967_296;
-  assert.deepEqual(at(checkAndPlan(e)), ['economy.farms.' + e.farms[0].key + '.unbond']);
+  e.farms[0].tiers[0].earnsFor = 4_294_967_296;
+  assert.deepEqual(at(checkAndPlan(e)), ['economy.farms.' + e.farms[0].key + '.tiers[0].earnsFor']);
   e = example('stud-farm');
   const living = e.items.find((it) => it.life);
   living.life.readyAfter = tooLong;
@@ -92,12 +92,9 @@ test('a sealed schedule gets the checks an unsealed one gets: its amounts in its
   assert.deepEqual(codes(checkAndPlan(spec({ amount: '0.0000001' }))), ['E-AMOUNT economy.schedules.s.amount']);
   assert.deepEqual(codes(checkAndPlan(spec({ fund: '0.0000001' }))), ['E-AMOUNT economy.schedules.s.fund']);
   assert.deepEqual(codes(checkAndPlan(spec({ fund: '99999999999999999999' }))), ['E-AMOUNT economy.schedules.s.fund']);
-  assert.deepEqual(codes(checkAndPlan(spec({ to: 'pool:nope' }))), ['E-REF economy.schedules.s.to']);
-  assert.deepEqual(codes(checkAndPlan(spec({ to: 'lottery:nope' }))), ['E-REF economy.schedules.s.to']);
-  assert.deepEqual(codes(checkAndPlan(spec({ to: 'nope' }))), ['E-SCHEDULE economy.schedules.s.to']);
-  // A share of its vault into a pool of SOL: the pool holds another token.
-  assert.deepEqual(codes(checkAndPlan(spec({ to: 'pool:sols', amount: undefined, percent: 10 }, { pools: [{ key: 'sols', currency: 'sol' }] }))), ['E-POOL-MINT economy.schedules.s.to']);
-  assert.deepEqual(codes(checkAndPlan(spec({ to: 'lottery:l' }, { lotteries: [{ key: 'l', name: 'L', price: 0.1, every: '1d' }] }))), ['E-POOL-MINT economy.schedules.s.to']);
+  // It pays a wallet, the treasury or a burn: never a pool, a pot, a farm or an account (BadMove).
+  for (const to of ['pool:nope', 'lottery:nope', 'farm:nope', `account:${W}`, 'nope']) assert.deepEqual(codes(checkAndPlan(spec({ to }))), ['E-SCHEDULE economy.schedules.s.to'], to);
+  assert.equal(checkAndPlan(spec({ to: 'treasury' })).ok, true);
 });
 
 test('a grant’s funds are SOL to the lamport, and no more than the program counts', () => {

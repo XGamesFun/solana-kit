@@ -26,11 +26,6 @@
       "currency": "sol",
       "seed": 5,
       "about": "Pays the winning flips. 88% of every flip comes back into it."
-    },
-    {
-      "key": "backers",
-      "currency": "sol",
-      "about": "The 2% edge, shared by everyone who stakes ARENA."
     }
   ],
   "boxes": [
@@ -48,7 +43,7 @@
           "percent": 10
         },
         {
-          "to": "pool:backers",
+          "to": "farm:backers",
           "percent": 2
         }
       ],
@@ -96,7 +91,7 @@
       "key": "backers",
       "name": "Back the house",
       "stakes": "arena",
-      "rewards": "backers",
+      "rewards": "sol",
       "tiers": [
         {
           "lock": "1d",

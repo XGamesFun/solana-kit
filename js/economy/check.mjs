@@ -27,6 +27,7 @@ import {
   model,
   placeOf,
   poolFillers,
+  farmFillers,
   outcomeParts,
   boxBuys,
   boxRolls,
@@ -503,11 +504,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       ids.add(part[field]);
     }
   }
-  // The empty pool of a farm that pays nothing keeps the number written on the farm (`rewardsIndex`): no pool may share it.
-  for (const p of m.pools.filter((x) => x.farm && Number.isInteger(x.index))) {
-    const other = m.pools.find((x) => x !== p && x.index === p.index);
-    if (other) refuse('E-KEY-DUP', `economy.farms.${p.farm}.rewardsIndex`, `The farm “${p.farm}”’s empty rewards pool and the pool “${other.key}” both have the program number ${p.index}: the second would overwrite the first.`, other.farm ? 'Remove the number from the newer one; it gets a free number when it goes live.' : `Remove the "index" from “${other.key}” if it is new; it gets a free number when it goes live.`);
-  }
   const boxIds = new Map();
   for (const b of m.allBoxes) {
     if (boxIds.has(b.id)) refuse('E-KEY-DUP', b.shopOf ? `economy.items.${b.shopOf}.shopBox` : `economy.boxes.${b.key}.id`, `The box number ${b.id} is taken twice (a box and a shop listing share the numbers).`, 'Remove one of the numbers; it gets a free one when it goes live.');
@@ -791,6 +787,12 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         if (!l) refuse('E-REF', `${where}[${i}].to`, `There is no lottery “${s.key}”.`, 'Name one of "lotteries" by its key.');
         else if (tok && potKey !== tok.key) refuse('E-POOL-MINT', `${where}[${i}].to`, `${what} is paid in ${tok.symbol}, but the pot of ${label(l)} is in ${m.tokens.get(potKey)?.symbol ?? potKey}.`, `Send it to a lottery whose pot is in ${tok.symbol}.`);
       }
+      // A farm's rewards vault of this spec, in the token the share is paid in.
+      if (s.kind === 'farm') {
+        const f = m.farm.get(s.key);
+        if (!f) refuse('E-REF', `${where}[${i}].to`, `There is no farm “${s.key}”.`, 'Name one of "farms" by its key.');
+        else if (tok && f.rewardsToken !== tok.key) refuse('E-POOL-MINT', `${where}[${i}].to`, `${what} is paid in ${tok.symbol}, but ${label(f)}’s rewards are ${m.tokens.get(f.rewardsToken)?.symbol ?? f.rewardsToken}.`, `Send it to a farm whose rewards are ${tok.symbol}.`);
+      }
       if (['account', 'holder', 'wallet'].includes(s.kind) && !isAddress(s.key)) refuse('E-REF', `${where}[${i}].to`, `${what} sends a share to “${s.to}”, which is not an address.`, `Write "${s.kind}:<address>".`);
       // A token account named as it is can't be opened for anyone: while none is there, its share goes to the treasury.
       if (s.kind === 'account' && isAddress(s.key) && gameVault(s.key, tok)) refuse('E-SPLIT', `${where}[${i}].to`, `${what} sends a share to the game’s own vault for ${tok.symbol}, where open orders, prizes set aside and bids wait: the program refuses it (it would mix into what those records hold).`, 'Send it to a pool ("pool:<key>") or the treasury instead.');
@@ -916,18 +918,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const fills = fillers.filter((f) => f.pool === p.key);
     if (takes.length && !fills.length)
       warn('W-POOL-DRY', where, `The pool “${p.key}” is paid out of (${takes.map((t) => t.by).join(', ')}) but nothing in this spec fills it: until someone sends it tokens, those payouts give nothing (a claim of a fixed amount is refused).`, `Seed it ("seed"), send it a share of a sale (a split to "pool:${p.key}"), or fill it with a schedule.`);
-    const names = m.farms.some((f) => f.rewards === p.key && f.rate?.minted);
-    if (!takes.length && !fills.length && !names) warn('W-POOL', where, `The pool “${p.key}” is never used.`, 'Remove it, or use it.');
+    if (!takes.length && !fills.length) warn('W-POOL', where, `The pool “${p.key}” is never used.`, 'Remove it, or use it.');
     if (fills.length && !takes.length)
       warn('W-POOL', where, `Money goes into “${p.key}” (${fills.map((f) => f.by).join(', ')}) and nothing in the economy takes it out: only the authority can, with a payout.`, 'Add what pays from it (a box prize, a lottery, a farm, a recipe, a grant), or a decision that pays out of it.');
-    const farm = takes.find((t) => t.by.startsWith('farm:') && t.how.startsWith('releases everything'));
-    if (farm) {
-      const others = takes.filter((t) => t !== farm);
-      if (others.length)
-        warn('W-POOL-SHARED', where, `The farm ${label(m.farm.get(farm.by.slice(5)))} releases everything that arrives in “${p.key}” to its stakers, and ${others.map((t) => t.by).join(', ')} also take from it: the farm releases all the pool holds to its seats, so what the others need is paid out to stakers, and whichever takes first leaves the others less.`, 'Give the farm a rewards pool of its own, and feed it with a share or a schedule.');
-    }
     const lottery = takes.find((t) => t.by.startsWith('lottery:'));
-    if (lottery && !farm) {
+    if (lottery) {
       const others = takes.filter((t) => t !== lottery);
       if (others.length) warn('W-POOL-SHARED', where, `The pot “${p.key}” of ${lottery.by} is also taken from by ${others.map((t) => t.by).join(', ')}: until its winners are paid it is a pool like any other, and the winners share what is left.`, 'Give the lottery a pot of its own.');
     }
@@ -1397,8 +1392,13 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const byShare = s.percent !== undefined;
     if (s.does !== 'issue' && byShare && s.amount !== undefined) refuse('E-SCHEDULE', where, `${label(s)} names both a percent and an amount.`, 'Keep one.');
     if (s.does === 'issue') {
-      const p = s.pool ? pool(s.pool, `${where}.pool`) : refuse('E-SCHEDULE', where, `${label(s)} mints but does not say into which pool.`, 'Add "pool".');
-      const tok = token(s.currency ?? p?.currency, `${where}.currency`);
+      // Into a pool, or a farm's rewards vault ("to": "farm:<key>").
+      const intoFarm = destination(s.to ?? '').kind === 'farm';
+      const farm = intoFarm ? m.farm.get(destination(s.to).key) : null;
+      if (intoFarm && !farm) refuse('E-REF', `${where}.to`, `There is no farm “${destination(s.to).key}”.`, 'Name one of "farms" by its key.');
+      const p = intoFarm ? null : s.pool ? pool(s.pool, `${where}.pool`) : refuse('E-SCHEDULE', where, `${label(s)} mints but does not say into which pool or farm.`, 'Add "pool", or "to": "farm:<key>".');
+      const tok = token(s.currency ?? p?.currency ?? farm?.rewardsToken, `${where}.currency`);
+      if (farm && tok && farm.rewardsToken !== tok.key) refuse('E-POOL-MINT', `${where}.to`, `${label(s)} mints ${tok.symbol} into ${label(farm)}, whose rewards are ${m.tokens.get(farm.rewardsToken)?.symbol ?? farm.rewardsToken}.`, 'Mint the farm’s rewards token.');
       if (tok && !tok.gameMints) refuse('E-MINT-NOT-OURS', where, `${label(s)} mints ${tok.symbol}, but the project cannot mint it: only a token the project makes itself can be minted, so every run of it would fail.`, 'Fill the pool with a share of sales or a move from another pool, or use a token with source "project".');
       if (p && tok && p.currency !== tok.key) refuse('E-POOL-MINT', `${where}.pool`, `${label(s)} mints ${tok.symbol} into “${p.key}”, which holds ${m.tokens.get(p.currency)?.symbol}.`, `Mint into a pool of ${tok.symbol}.`);
       if (units(s.amount, tok, `${where}.amount`, `What ${label(s)} mints`) === 0n) refuse('E-SCHEDULE', `${where}.amount`, `${label(s)} mints 0.`, 'Give it an amount above 0.');
@@ -1415,7 +1415,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       const d = destination(s.to ?? '');
       // A wallet that is a program's address (off the curve) nobody can sign for: a run would pay where nobody can
       // spend it, or pass it over (BadMove).
-      if (d.kind === 'wallet' && isAddress(d.key) && !isOnCurve(addressBytes(d.key))) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays ${d.key}, the address of a program's account, not a wallet someone holds the key of: nobody could spend what it pays (BadMove).`, 'Pay the wallet of a person (its public key), or "account:<token account>".');
+      if (d.kind === 'wallet' && isAddress(d.key) && !isOnCurve(addressBytes(d.key))) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays ${d.key}, the address of a program's account, not a wallet someone holds the key of: nobody could spend what it pays (BadMove).`, 'Pay the wallet of a person (its public key).');
       // Its last run within 10 years of going live.
       if (s.maxRuns > 0) {
         let first = now + seconds(s.every, `${where}.every`);
@@ -1427,20 +1427,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         if (first + seconds(s.every, `${where}.every`) * (s.maxRuns - 1) - now > MAX_SCHEDULE_SECONDS) refuse('E-SCHEDULE', `${where}.maxRuns`, `${label(s)} is sealed and its last run would come more than 10 years after go-live (BadSchedule).`, 'Fewer runs, a shorter "every", or an earlier "start".');
       }
       if (s.maxRuns > MAX_SEALED_RUNS) refuse('E-SCHEDULE', `${where}.maxRuns`, `${label(s)} is sealed with ${s.maxRuns} runs; a sealed schedule runs at most ${MAX_SEALED_RUNS} times (BadSchedule).`, 'Fewer runs, each larger.');
-      if (d.kind === 'account') warn('W-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays a token account: it must be its holder's associated account of ${tok?.symbol ?? 'its token'}, or a token account the project holds with no close authority, when it goes live, or the write is refused (BadMove).`);
-      if (d.kind === 'account' && gameVault(d.key, tok)) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays the game’s own vault, where open orders, prizes set aside and bids wait: no run could (BadMove).`, 'Pay a wallet.');
-      if (!['wallet', 'account', 'pool', 'lottery', 'treasury', 'burn'].includes(d.kind) || !s.to) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays “${s.to ?? 'nowhere'}”: a sealed schedule pays a wallet, a token account, a pool, a lottery's pot, the treasury or a burn (BadMove).`, 'Write "to": "wallet:<address>".');
-      // What it pays into is this spec's, and holds what it pays: a pool of its token, a lottery whose pot is in it.
-      if (d.kind === 'pool') {
-        const p = pool(d.key, `${where}.to`);
-        if (p && tok && p.currency !== tok.key) refuse('E-POOL-MINT', `${where}.to`, `${label(s)} is sealed in ${tok.symbol}, but pays the pool “${p.key}”, which holds ${m.tokens.get(p.currency)?.symbol ?? p.currency}.`, `Pay a pool of ${tok.symbol}, or seal it in ${m.tokens.get(p.currency)?.symbol ?? p.currency}.`);
-      }
-      if (d.kind === 'lottery') {
-        const l = m.lottery.get(d.key);
-        const potKey = l?.currency ?? m.currencyKey;
-        if (!l) refuse('E-REF', `${where}.to`, `There is no lottery “${d.key}”.`, 'Name one of "lotteries" by its key.');
-        else if (tok && potKey !== tok.key) refuse('E-POOL-MINT', `${where}.to`, `${label(s)} is sealed in ${tok.symbol}, but pays the pot of ${label(l)}, which is in ${m.tokens.get(potKey)?.symbol ?? potKey}.`, `Pay a lottery whose pot is in ${tok.symbol}, or seal it in ${m.tokens.get(potKey)?.symbol ?? potKey}.`);
-      }
+      // A wallet, the treasury or a burn: a stream into a pool or an account would be only as safe as where it lands (the
+      // authority moves a pool; an account's holder may close it).
+      if (!['wallet', 'treasury', 'burn'].includes(d.kind) || !s.to) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} is sealed and pays “${s.to ?? 'nowhere'}”: a sealed schedule pays a wallet, the treasury or a burn, never a pool, a pot, a farm or an account (BadMove).`, 'Write "to": "wallet:<address>"; for a stream into a pool, a pot or a farm, leave "sealed" out.');
       if (tok?.wsol && d.kind === 'burn') refuse('E-WSOL-BURN', `${where}.to`, `${label(s)} burns SOL, and wrapped SOL cannot be burned.`, 'Pay it somewhere instead.');
       startsFrozen(tok, `${where}.currency`, `${label(s)} (sealed)`, 'E-SCHEDULE', 'BadSchedule');
       if (tok?.powers?.permanentDelegate || tok?.powers?.nonTransferable || tok?.powers?.confidentialTransfers)
@@ -1450,7 +1439,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (s.fund !== undefined) units(s.fund, tok, `${where}.fund`, `${label(s)}’s fund`);
       if (s.fundFrom === 'mint' && tok && !tok.gameMints) refuse('E-MINT-NOT-OURS', `${where}.fundFrom`, `${label(s)} is funded by minting ${tok.symbol}, which the project cannot mint.`, 'Fund it from the owner\'s wallet or a pool.');
       if (s.fundFrom?.startsWith('pool:')) pool(s.fundFrom.slice(5), `${where}.fundFrom`);
-      if (d.kind === 'lottery' || d.kind === 'pool') warn('W-SCHEDULE', `${where}.to`, `${label(s)} is sealed, but pays ${d.kind === 'pool' ? 'a pool, which the authority moves' : 'a lottery’s pot, which the owner may close between rounds with nothing sold'}: a stream is as safe as where it lands.`);
       warn('W-SCHEDULE', where, `${label(s)} is sealed: once written it never closes, and nobody can edit or stop it. Check its terms before it goes live.`);
       if (!Number(s.fund ?? 0)) warn('W-SCHEDULE', `${where}.fund`, `${label(s)} starts empty: its runs pay nothing until someone sends tokens to its vault.`, 'Give it "fund".');
       if (d.kind === 'treasury') warn('W-SCHEDULE', `${where}.to`, `${label(s)} pays the treasury: the owner can change which wallet that is, so it is the owner's promise to themselves.`);
@@ -1471,7 +1459,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (s.does === 'pay') {
       const d = destination(s.to ?? '');
       if (d.kind === 'lottery') m.lottery.has(d.key) || refuse('E-REF', `${where}.to`, `There is no lottery “${d.key}”.`, 'Name one of "lotteries" by its key.');
-      else if (!['account', 'holder', 'wallet'].includes(d.kind) || !isAddress(d.key)) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} pays “${s.to ?? 'nowhere'}”: a pay schedule pays a wallet, a token account, a collectible’s holder or a lottery’s pot.`, 'Write "to": "wallet:<address>", "account:<token account address>" or "holder:<asset address>".');
+      else if (d.kind === 'farm') {
+        const f = m.farm.get(d.key);
+        if (!f) refuse('E-REF', `${where}.to`, `There is no farm “${d.key}”.`, 'Name one of "farms" by its key.');
+        else if (srcToken && f.rewardsToken !== srcToken.key) refuse('E-POOL-MINT', `${where}.to`, `${label(s)} pays ${srcToken.symbol} into ${label(f)}, whose rewards are ${m.tokens.get(f.rewardsToken)?.symbol ?? f.rewardsToken}.`, 'Pay it from a pool of the farm’s rewards token.');
+      } else if (!['account', 'holder', 'wallet'].includes(d.kind) || !isAddress(d.key)) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} pays “${s.to ?? 'nowhere'}”: a pay schedule pays a wallet, a token account, a collectible’s holder, a lottery’s pot or a farm’s rewards.`, 'Write "to": "wallet:<address>", "account:<token account address>", "holder:<asset address>", "lottery:<key>" or "farm:<key>".');
       else if (d.kind === 'account' && gameVault(d.key, m.poolToken(sourceKey))) refuse('E-SCHEDULE', `${where}.to`, `${label(s)} pays the game’s own vault, where open orders, prizes set aside and bids wait: the program refuses it.`, 'Pay a pool or a wallet instead.');
       warn('W-SCHEDULE-PAY', where, `${label(s)} pays out of “${sourceKey}” on a timer, but the pool stays the game’s: the authority can still spend it, and the owner can rewrite or stop the schedule. It is a promise the project keeps, not a vesting contract the recipient holds.`, 'Make it "sealed" (with "fund" and "maxRuns") for a vesting nobody can take back.');
     }
@@ -1499,6 +1491,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     } else if (l.price === undefined || units(l.price, ticket, `${where}.price`, `${label(l)}’s ticket`) === 0n)
       warn('W-LOTTERY', `${where}.price`, `${label(l)}’s tickets are free: a buyer pays only the player fee (${fromUnits(FEES.player, 9)} SOL)${l.perWallet ? '' : ', and with no "perWallet" one wallet can hold most of the tickets'}. Its pot is only what is paid into it.`, 'Give a ticket a "price" if it should cost something, or set "perWallet".');
     units(l.seed, potToken, `${where}.seed`, `${label(l)}’s seed`);
+    if (l.roundRent !== undefined) units(l.roundRent, { decimals: 9, symbol: 'SOL' }, `${where}.roundRent`, `${label(l)}’s round rent`);
     if (seconds(l.every, `${where}.every`) <= 0 && !l.firstDraw) warn('W-LOTTERY', `${where}.every`, `${label(l)} draws once (no "every"), and the draw is due at go-live.`, 'Give it a "firstDraw" (like "publish+1d"), or an "every" to draw again and again.');
     // A round whose draw is more than five years off sells nothing (lottery.rs).
     if (seconds(l.every, `${where}.every`) > MAX_CONTEST_SECONDS) refuse('E-LOTTERY', `${where}.every`, `${label(l)} draws every ${l.every}: a draw more than 5 years off sells no ticket (SalesClosed).`, 'Draw within 5 years.');
@@ -1539,7 +1532,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const held = placed.map((p) => (p.prize?.held ? p.prize.nft : null)).filter(Boolean);
     if (held.length && l.every) refuse('E-LOTTERY', `${where}.every`, `${label(l)} holds an NFT as a prize, so it draws once: a next round would sell a prize already won (BadLottery).`, 'Leave "every" out.');
     if (new Set(held).size < held.length) refuse('E-LOTTERY', `${where}.places`, `${label(l)} gives the same NFT on two places: the second could never be given (BadLottery).`, 'Name each NFT once.');
-    if (held.length) warn('W-RAFFLE', `${where}.places`, `${label(l)} holds ${held.length === 1 ? 'its NFT' : 'its NFTs'} in its own stash: nobody, the owner included, can take ${held.length === 1 ? 'it' : 'them'} out while a place names ${held.length === 1 ? 'it' : 'them'}, and the winner gets ${held.length === 1 ? 'it' : 'them'} before any ticket money moves. If the NFT's collection lets someone freeze or move it (a permanent freeze, transfer or burn delegate), they could stop the prize, and every ticket's money would wait in the lottery until they let it go.`);
+    // One pull takes every NFT its places win out of the stash, in place order (lottery.rs `assign_fits`).
+    const rows = (l.nfts ?? []).length + held.length;
+    const draw = 6_000 + 250 * Math.ceil(rows / 4_096);
+    if (raffled * draw + held.length * 15 * rows > 1_300_000) refuse('E-LOTTERY', `${where}.places`, `${label(l)} draws ${raffled} and names ${held.length} NFTs of its own stash of ${rows}: one pull takes them all out, and that would pass what one transaction can compute (BadLottery).`, 'Fewer raffled places (about 200 at most in a small stash), or a smaller stash.');
+    if (held.length) warn('W-RAFFLE', `${where}.places`, `${label(l)} holds ${held.length === 1 ? 'its NFT' : 'its NFTs'} in its own stash: nobody, the owner included, can take ${held.length === 1 ? 'it' : 'them'} out while a place names ${held.length === 1 ? 'it' : 'them'}, and the winner pulls ${held.length === 1 ? 'it' : 'them'} after the draw, in any order with the money. If the NFT's collection lets someone freeze or move it (a permanent freeze, transfer or burn delegate), they could stop the prize: anyone may then make it a hold for its winner, so the rest of the round pays out.`);
     if (l.minSold && l.perWallet && !l.every && l.minSold > l.perWallet * 1000) warn('W-LOTTERY', `${where}.minSold`, `${label(l)} needs ${l.minSold} tickets sold, and each wallet may hold ${l.perWallet}: it takes at least ${Math.ceil(l.minSold / l.perWallet)} wallets.`);
     const total = places.reduce((a, b, i) => a + b * placed[i].times, 0);
     if (total > 10_000) refuse('E-LOTTERY', `${where}.places`, `${label(l)}’s places add up to ${total / 100}% of the pot, more than all of it.`, 'Make them add up to 100% or less.');
@@ -1566,30 +1563,37 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // A farm that shares what arrives releases it to the seats over its release span (its longest lock, a day at
     // least), by weight as it is released: nobody takes at once what landed before them. A seat alone still
     // earns all that is released while it is alone, however small it is.
-    const waiting = !f.rate && poolFillers(m).filter((x) => x.pool === f.rewards);
-    if (waiting?.length) warn('W-FARM-FIRST', `${where}.rewards`, `${label(f)} shares what arrives in “${f.rewards}” (${waiting.map((x) => x.by).join(', ')}), released over ${releaseWords(f)} as seats stay: whoever stakes first is credited all that is released while they are the only one in, even with 1 unit.`, 'Have the owner hold a small seat from the start, or tell stakers early ones share the first rewards among few.');
-    // A rewards mint that keeps a fee on transfers rounds each fee up, by less than a base unit (Token-2022). A sharing
-    // farm's refresh that changes no weight releases only a chunk at a time, ⌈1,000,000 / fee_bps⌉ base units or a
-    // hundredth of its line, so the rounding stays small; a fixed rate from a pool pays on every move, with no chunk.
-    const feePercent = Number(m.tokens.get(m.pool.get(f.rewards)?.currency)?.powers?.transferFeePercent ?? 0);
-    // A fee finer than a hundredth of a percent is refused with its token (E-PERCENT).
-    const feeBps = toBps(feePercent);
-    if (feeBps > 0 && !f.rate?.minted && !f.unpaid) {
-      const chunk = Math.ceil(1_000_000 / feeBps);
-      warn('W-FARM-FEE', `${where}.rewards`, f.rate
-        ? `${label(f)} pays its rate from “${f.rewards}”, whose token keeps ${feePercent}% of every transfer, each fee rounded up: every move pays from the pool and can lose up to a base unit to the rounding, so a refresh anyone can send every few seconds turns a slow rate into fees (they go to the mint’s fee collector, not to anyone in the farm).`
-        : `${label(f)}’s rewards keep ${feePercent}% of every transfer, each fee rounded up: a refresh that changes no seat’s weight releases a chunk at a time, ${chunk.toLocaleString('en-US')} base units or a hundredth of what is being released if that is less, the rest waiting for the next move that releases it; a release of a few base units a second, or a watched NFT moved back and forth with a refresh each time, can still lose a base unit a move to the rounding.`,
-        'Give the rewards token enough decimals that a second’s release is many base units, or use one without a fee.');
+    // Its rewards land in a vault of its own (`["rewards", farm]`): `rewards` names their token, never a pool.
+    if (f.rewards && !m.tokens.has(f.rewards)) {
+      if (m.pool.has(f.rewards)) refuse('E-FARM', `${where}.rewards`, `${label(f)} names the pool “${f.rewards}” for its rewards: a farm’s rewards land in a vault of its own now, and "rewards" names their token.`, `Write "rewards": "${m.pool.get(f.rewards).currency}", and send the farm what it shares with "farm:${f.key}" (in a split, or a schedule that pays it) or "seed".`);
+      else token(f.rewards, `${where}.rewards`);
     }
+    const rewardsToken = m.tokens.get(f.rewardsToken);
+    const fills = farmFillers(m).filter((x) => x.farm === f.key);
+    if (f.seed !== undefined) units(f.seed, rewardsToken, `${where}.seed`, `The seed of ${label(f)}`);
+    if (!f.rate?.minted && Number(f.rate?.perDay ?? 1) > 0 && !fills.length)
+      warn('W-FARM-DRY', `${where}`, `${label(f)} ${f.rate ? 'pays its rate from what its rewards vault holds free' : 'shares what lands in its rewards vault'}, and nothing in this spec sends it any: its seats earn nothing until someone does.`, `Seed it ("seed"), send it a share of a sale ("farm:${f.key}" in a split), or pay it with a schedule ("to": "farm:${f.key}").`);
+    // A farm that shares what arrives releases it to the seats over its release span (its longest lock, a day at
+    // least), by weight as it is released: nobody takes at once what landed before them. A seat alone still
+    // earns all that is released while it is alone, however small it is.
+    if (!f.rate && fills.length) warn('W-FARM-FIRST', `${where}.rewards`, `${label(f)} shares what lands in its rewards vault (${fills.map((x) => x.by).join(', ')}), released over ${releaseWords(f)} as seats stay: whoever stakes first is credited all that is released while they are the only one in, even with 1 unit.`, 'Have the owner hold a small seat from the start, or tell stakers early ones share the first rewards among few.');
+    // A rewards mint that keeps a fee on transfers: what lands in the vault and what each seat is paid arrive less it.
+    const feePercent = Number(rewardsToken?.powers?.transferFeePercent ?? 0);
+    if (toBps(feePercent) > 0 && !f.rate?.minted)
+      warn('W-FARM-FEE', `${where}.rewards`, `${label(f)}’s rewards keep ${feePercent}% of every transfer: what lands in its vault arrives less that, and so does what each seat is paid.`, 'Use a rewards token without a fee, or say so to stakers.');
     if (!ofCollectibles) {
       const tok = token(f.stakes, `${where}.stakes`);
       if (tok?.wsol) warn('W-FARM', `${where}.stakes`, `${label(f)} stakes SOL: players stake wrapped SOL, which their wallet makes for them.`);
       if (f.item) refuse('E-FARM', `${where}.item`, `${label(f)} stakes a token, so it takes no item.`, 'Remove "item", or make it a farm of collectibles ("stakes": "collectibles").');
       if (f.custody === 'watch') refuse('E-FARM', `${where}.custody`, `${label(f)} stakes a token: its boosters can’t be left free and watched, or one sold could keep boosting.`, 'Use "custody": "escrow" or "freeze", or make it a farm of collectibles.');
     }
-    // Early exits, unbonding and tolls (farm.rs): a fee leaves to a burn or a pool of its token, checked once at open.
+    // Early exits (farm.rs): a fee leaves to a burn, a pool of its token or the farm's own vault, checked once at open.
     const exits = (f.tiers ?? []).some((t) => Number(t.exitFee ?? 0) > 0);
     const sinkOk = (to, at, tokenKey, what) => {
+      if (to === 'rewards') {
+        if (tokenKey !== f.rewardsToken) refuse('E-FARM', at, `${label(f)} sends ${what} into its own rewards vault, but it stakes ${m.tokens.get(tokenKey)?.symbol ?? tokenKey} and its rewards are ${m.tokens.get(f.rewardsToken)?.symbol ?? f.rewardsToken} (WrongMint).`, 'Send it to a burn or a pool, or make its rewards its staked token.');
+        return;
+      }
       if (to === 'burn') {
         if (m.tokens.get(tokenKey)?.wsol) refuse('E-WSOL-BURN', at, `${label(f)} burns ${what} in SOL, and wrapped SOL cannot be burned: every exit or harvest that owes it would fail.`, 'Send it to a pool instead.');
         return;
@@ -1598,32 +1602,25 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (p && tokenKey && p.currency !== tokenKey) refuse('E-POOL-MINT', at, `${label(f)} sends ${what} to “${p.key}”, which holds ${m.tokens.get(p.currency)?.symbol ?? p.currency}, not ${m.tokens.get(tokenKey)?.symbol ?? tokenKey} (WrongMint).`, `Send it to a pool of ${m.tokens.get(tokenKey)?.symbol ?? tokenKey}.`);
     };
     if (ofCollectibles && exits) refuse('E-FARM', `${where}.tiers`, `${label(f)} stakes collectibles: there is no stake to take an exit fee from (BadFarm). A collectible leaves early by a recipe that lowers its lock.`, 'Remove "exitFee", and give the farm a "lockAttribute" and a recipe that lowers it.');
-    if (ofCollectibles && f.unbond) refuse('E-FARM', `${where}.unbond`, `${label(f)} stakes collectibles: unbonding is a stake of tokens' wait (BadFarm).`, 'Remove "unbond".');
-    else fourByteSeconds(f.unbond, `${where}.unbond`);
-    if (!ofCollectibles && exits && !f.exitFeeTo) refuse('E-FARM', `${where}.exitFeeTo`, `${label(f)} has an early-exit fee but does not say where it goes (BadFarm).`, 'Add "exitFeeTo": "burn" or "pool:<key>".');
+    if (!ofCollectibles && exits && !f.exitFeeTo) refuse('E-FARM', `${where}.exitFeeTo`, `${label(f)} has an early-exit fee but does not say where it goes (BadFarm).`, 'Add "exitFeeTo": "burn", "rewards" or "pool:<key>".');
     if (!ofCollectibles && f.exitFeeTo) sinkOk(f.exitFeeTo, `${where}.exitFeeTo`, f.stakes, 'its exit fees');
     (f.tiers ?? []).forEach((t, i) => percent(t.exitFee, `${where}.tiers[${i}].exitFee`));
-    if (f.toll) {
-      sinkOk(f.toll.to, `${where}.toll.to`, m.pool.get(f.rewards)?.currency, 'its toll');
-      percent(f.toll.percent, `${where}.toll.percent`);
-    }
-    if (!ofCollectibles && exits) warn('W-FARM', `${where}.tiers`, `${label(f)}’s tiers with an early exit keep their rewards until the lock has run (no harvest or compound before), and leaving early gives up what the seat is owed as well as the fee: ${f.rate ? (f.rate.minted ? 'burned' : `sent back to “${f.rewards}”`) + ' in the same move, never to the other seats' : `back to “${f.rewards}”, released again with the rest`}.`);
-    if (f.exitFeeTo === `pool:${f.rewards}`) warn('W-FARM', `${where}.exitFeeTo`, `${label(f)} sends early-exit fees to its own rewards pool: the stakers who stay share them.`);
-    if (f.unpaid) warn('W-FARM', `${where}.rewards`, `${label(f)} pays nothing: its rewards pool “${f.rewards}” is opened empty, for staking only to qualify (a stake gate reads it).`);
+    if (!ofCollectibles && exits) warn('W-FARM', `${where}.tiers`, `${label(f)}’s tiers with an early exit may leave before the lock for the fee, keeping the rewards they were credited (a tier's extra weight can be bought for its exit fee): pick the fee with that in mind.`);
+    if (f.exitFeeTo === 'rewards') warn('W-FARM', `${where}.exitFeeTo`, `${label(f)} sends early-exit fees into its own rewards vault: the stakers who stay share them.`);
     if (ofCollectibles && f.item) {
       const it = item(f.item, `${where}.item`);
       if (it && it.kind === 'normal') refuse('E-FARM', `${where}.item`, `${label(f)} takes ${label(it)}, a normal item: only collectibles can be staked.`, `Make ${label(it)} a collectible.`);
       if (it?.soulbound && (f.custody ?? 'escrow') === 'escrow') refuse('E-FARM', `${where}.custody`, `${label(f)} holds collectibles in escrow, and ${label(it)} is soulbound: it can’t move to the game.`, 'Use "custody": "freeze", or a collectible that is not soulbound.');
     }
     if (f.custody === 'watch' && listOf(f.growth).some((g) => g.streak)) refuse('E-FARM', `${where}.growth`, `${label(f)} watches NFTs left free in their wallets and counts a streak: one leaves by being moved, with nothing to set its streak back to 0, so the program refuses it (BadFarm).`, 'Use "custody": "escrow" or "freeze" for a streak, or drop "streak".');
-    if (f.custody === 'watch') warn('W-FARM-CUSTODY', `${where}.custody`, `${label(f)} watches NFTs left free in their wallets: one sold while staked stops earning for its staker (what its seat was owed ${f.rate ? (f.rate.minted ? 'is burned' : `goes back to “${f.rewards}”`) + ', never to the other seats' : `goes back to “${f.rewards}”, released again with the rest`}), and its new holder can take the seat over, paying the last staker back the seat’s rent.`);
+    if (f.custody === 'watch') warn('W-FARM-CUSTODY', `${where}.custody`, `${label(f)} watches NFTs left free in their wallets: one sold while staked stops earning for its staker (what its seat was owed ${f.rate ? (f.rate.minted ? 'is never minted' : 'stays free in its vault') + ', never to the other seats' : 'goes back to its vault, released again with the rest'}), and its new holder can take the seat over, paying the last staker back the seat’s rent.`);
     else if (f.custody === 'freeze') warn('W-FARM-CUSTODY', `${where}.custody`, `${label(f)} locks NFTs in their wallets (a Core freeze, Token Metadata’s lock, a compressed NFT’s freeze), with the game the only key that unlocks them. For ordinary Core assets, issuer metadata or plugin growth can make unfreezing fail; a soulbound asset needs no extra freeze. This also applies to token-seat boosters.`, 'Use escrow for transferable collectibles, or retain freeze only with a trusted issuer and controlled metadata changes.');
     else if (ofCollectibles || (f.boosts ?? []).length) warn('W-FARM-CUSTODY', `${where}.custody`, `${label(f)} escrows collectibles. This avoids Core’s unfreeze operation, but issuer-controlled transfer rules can still block return. Soulbound collectibles require explicit freeze custody.`);
-    pool(f.rewards, `${where}.rewards`);
     const tiers = f.tiers ?? [{ lock: 0, multiplier: 1 }];
     if (tiers.length > LIMITS.tiers) refuse('E-FARM', `${where}.tiers`, `${label(f)} has ${tiers.length} lock tiers; a farm has at most ${LIMITS.tiers}.`, 'Merge tiers.');
     for (const [i, t] of tiers.entries()) {
       fourByteSeconds(t.lock, `${where}.tiers[${i}].lock`);
+      if (t.earnsFor !== undefined) fourByteSeconds(t.earnsFor, `${where}.tiers[${i}].earnsFor`);
       const bps = Math.round((t.multiplier ?? 1) * 10_000);
       if (bps <= 0 || bps > LIMITS.maxTierBps) refuse('E-FARM', `${where}.tiers[${i}].multiplier`, `${label(f)}’s tier ${i} multiplies by ${t.multiplier}: a tier is above 0 and at most x11.`, 'Use a multiplier above 0, up to 11.');
       else if (bps < 10_000) warn('W-FARM', `${where}.tiers[${i}].multiplier`, `${label(f)}’s tier ${i} weighs x${t.multiplier}, less than what it stakes: a flexible tier that earns less.`);
@@ -1635,7 +1632,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     boostPercent(f.maxBoostPercent, `${where}.maxBoostPercent`);
     if ((f.boosts ?? []).length && !(f.maxBoostPercent > 0)) warn('W-FARM', `${where}.maxBoostPercent`, `${label(f)} has boosts but no "maxBoostPercent", so they add nothing (the cap is 0).`, 'Set "maxBoostPercent", for example 100 (at most double).');
     // A fixed rate (`rate`), growth (`growth`) and missions (tiers' `prize`).
-    const rewardsToken = m.poolToken(f.rewards);
     const growths = listOf(f.growth);
     const prized = tiers.some((t) => t.prize);
     const rolls = tiers.some((t) => t.roll);
@@ -1643,10 +1639,13 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       const perDay = units(f.rate.perDay, rewardsToken, `${where}.rate.perDay`, `${label(f)}’s rate`);
       if (!(Number(f.rate.perDay) > 0)) {
         if (!growths.length && !prized && !rolls) warn('W-FARM', `${where}.rate.perDay`, `${label(f)}’s fixed rate pays nothing a day, and it grows nothing, gives no prize and rolls no mission: staking there only counts (a stake gate can read it).`, 'Set "perDay" above 0, or give it "growth", a mission prize or a mission roll.');
-      } else if (!ofCollectibles && perDay !== null && (perDay * 1_000_000n) / 10n ** BigInt(m.tokens.get(f.stakes)?.decimals ?? 0) === 0n) warn('W-FARM', `${where}.rate.perDay`, `${label(f)}’s rate of ${f.rate.perDay} a day is less than one base unit for each 1,000,000 base units staked.`, 'Raise "perDay".');
-      if (f.rate.minted && rewardsToken && !rewardsToken.gameMints) refuse('E-MINT-NOT-OURS', `${where}.rate.minted`, `${label(f)} mints its rewards, but the project cannot mint ${rewardsToken.symbol}.`, 'Pay the rate from the pool ("minted": false), or reward in a token with source "project".');
-      if (!f.rate.minted) warn('W-FARM-RATE', `${where}.rate`, `${label(f)} pays its fixed rate from “${f.rewards}” while it lasts: what the pool can’t cover is not owed later, and every seat earns less once it runs dry.`, 'Keep the pool filled (a schedule), or mint the rewards.');
+      } else if (!ofCollectibles && !f.rate.shared && perDay !== null && (perDay * 1_000_000n) / 10n ** BigInt(m.tokens.get(f.stakes)?.decimals ?? 0) === 0n) warn('W-FARM', `${where}.rate.perDay`, `${label(f)}’s rate of ${f.rate.perDay} a day is less than one base unit for each 1,000,000 base units staked.`, 'Raise "perDay".');
+      if (f.rate.minted && rewardsToken && !rewardsToken.gameMints) refuse('E-MINT-NOT-OURS', `${where}.rate.minted`, `${label(f)} mints its rewards, but the project cannot mint ${rewardsToken.symbol}.`, 'Pay the rate from its rewards vault ("minted": false), or reward in a token with source "project".');
+      if (!f.rate.minted) warn('W-FARM-RATE', `${where}.rate`, `${label(f)} pays its fixed rate from what its rewards vault holds free while it lasts: what it can’t cover is not owed later, and every seat earns less once it runs dry.`, `Keep it funded ("farm:${f.key}" in a split or a schedule), or mint the rewards.`);
       else rateRoom(f, warn, m);
+      if (f.rate.halveEvery !== undefined) fourByteSeconds(f.rate.halveEvery, `${where}.rate.halveEvery`);
+      if (f.rate.shared) warn('W-FARM-RATE', `${where}.rate.shared`, `${label(f)}’s rate of ${f.rate.perDay} a day is the whole farm’s, shared by weight while anything is staked${f.rate.halveEvery ? `, halving every ${f.rate.halveEvery} from when it opens` : ''}: an emission budget, so each seat’s share falls as more stake.`);
+      else if (f.rate.halveEvery) warn('W-FARM-RATE', `${where}.rate.halveEvery`, `${label(f)}’s rate halves every ${f.rate.halveEvery} from when it opens, for every seat.`);
     }
     const names = growths.flatMap((g) => [g.attribute ?? 'xp', ...((g.levels ?? []).length ? [g.level ?? 'level'] : [])]);
     if (names.some((n, i) => names.indexOf(n) !== i)) refuse('E-FARM', `${where}.growth`, `${label(f)} grows the same attribute twice (${names.join(', ')}): each growth writes names of its own.`, 'Give each growth its own "attribute" (and "level").');
@@ -1664,7 +1663,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       for (const [i, t] of tiers.entries())
         if (toSeconds(t.lock ?? 0) > 0 && toSeconds(t.lock ?? 0) >= runs) warn('W-FARM', `${where}.tiers[${i}].lock`, `${label(f)} runs ${f.runs}, and its tier ${i} locks ${t.lock}: nobody could ever take it (a seat must be free by the farm’s end, and the farm takes none at its end).`, 'Shorten the lock, or let the farm run longer.');
       const end = farmEndWords(f);
-      warn('W-FARM', `${where}.runs`, `${label(f)} runs ${f.runs} from when it goes live: it takes no stake at its end or after it (nor one at a tier whose lock would run past it), and pays and grows nothing more; seats leave and harvest what they were owed as before.${end ? ` It shares its pool: ${end}.` : ''}`);
+      warn('W-FARM', `${where}.runs`, `${label(f)} runs ${f.runs} from when it goes live: it takes no stake at its end or after it (nor one at a tier whose lock would run past it), and pays and grows nothing more; seats leave and harvest what they were owed as before.${end ? ` It shares what lands: ${end}.` : ''}`);
     }
     // Missions' prizes (prize.rs): a tier's, given as a collectible that stayed its lock leaves its seat.
     if (f.prize) refuse('E-FARM', `${where}.prize`, `${label(f)} names where its prizes come from: each tier names its whole prize.`, 'Move it into each tier: "prize": { "gives": "tokens", "amount": n, "from": "mint" or "pool:<key>" } (or an item, an NFT, a roll of a chest).');
@@ -1696,7 +1695,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (f.lockAttribute !== undefined && f.lockAttribute === f.upkeepAttribute) refuse('E-FARM', `${where}.upkeepAttribute`, `${label(f)} keeps its lock and its upkeep under the same name, “${f.lockAttribute}”.`, 'Give each its own name.');
     if (f.upkeepAttribute !== undefined && ofCollectibles) {
       const sells = m.recipes.some((r) => (r.raises ?? []).some((x) => x.key === f.upkeepAttribute && x.fromNow && toBy(x.by) > 0));
-      warn('W-FARM-UPKEEP', `${where}.upkeepAttribute`, `${label(f)} pays and grows a collectible only until the time under “${f.upkeepAttribute}”: one staked dry counts for nothing until it is topped up and its seat refreshed, and what a seat is credited after its upkeep runs out is not paid (in a farm at a fixed rate it is burned or goes back where the rate came from, never to the other seats; in a farm that shares its pool it goes back to the pool and is released again with the rest).${sells ? '' : ' Nothing in this spec sells it: only the authority (Set) could.'}`, sells ? undefined : `Add a recipe that raises "${f.upkeepAttribute}" with "fromNow": true.`);
+      warn('W-FARM-UPKEEP', `${where}.upkeepAttribute`, `${label(f)} pays and grows a collectible only until the time under “${f.upkeepAttribute}”: one staked dry counts for nothing until it is topped up and its seat refreshed, and a seat earns nothing after its upkeep runs out, however late it is next touched (no refresh is needed at its end).${sells ? '' : ' Nothing in this spec sells it: only the authority (Set) could.'}`, sells ? undefined : `Add a recipe that raises "${f.upkeepAttribute}" with "fromNow": true.`);
       // A known limit of the program: a recipe with a pay line waits while the project is paused or suspended
       // (craft.rs), and the upkeep's clock keeps running. With every top-up paid and capped below a mission's lock, a
       // switch on for longer than a player could top up ahead dries the seat, and a seat that ran dry before its lock
@@ -1716,7 +1715,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // No lock rule for rewards that land: a sharing farm releases each over its release span, and a fixed rate pays by
     // the second, so a stake just before a reward lands and gone right after takes only what was released meanwhile.
     // A farm whose rewards are a share of what players pay hands holders the project's revenue.
-    const revenue = fillers.filter((x) => x.pool === f.rewards && /^(box|item|payment):/.test(x.by));
+    const revenue = fills.filter((x) => /^(box|item|payment):/.test(x.by));
     if (revenue.length)
       warn('W-REVENUE-SHARE', where, `${label(f)} pays stakers a share of what players spend (${revenue.map((x) => x.by).join(', ')}). Paying holders out of a project’s revenue is what regulators look at when they decide whether a token is a security.`, 'Fine on devnet. Before mainnet, ask counsel, or reward stakers from emissions (a schedule that mints a game token) rather than from sales.');
   }
@@ -2004,16 +2003,16 @@ function many(x) {
 
 /**
  * A sharing farm's rounding: a release is credited by weight in steps of the total
- * weight ÷ 10¹² base units of the reward, and what is below a step waits uncredited, going back to the pool when the
+ * weight ÷ 10¹² base units of the reward, and what is below a step waits uncredited, freed in its vault when the
  * last seat leaves or the farm ends. A staked token with a great many base units (many decimals, a huge supply: a
  * memecoin) paying a reward of few units rounds every seat's share to nothing: an exact model of the farm found seats
  * losing all of rewards of 194 to 2,155 units at total weights around 7×10¹⁵. The weight is the most that can
  * plausibly be staked (the supply, else a billion whole tokens or the scenario's stake if larger) at the highest tier
- * and the largest boost; the reward, what lands in a release span (the pool's seed and a span of the steady inflow).
+ * and the largest boost; the reward, what lands in a release span (the farm's seed and a span of the steady inflow).
  */
 function farmRounding(f, row, warn, m) {
-  if (!f || f.rate || f.unpaid || f.stakes === 'collectibles') return;
-  const staked = m.tokens.get(f.stakes), pool = m.pool.get(f.rewards), reward = m.tokens.get(pool?.currency);
+  if (!f || f.rate || f.stakes === 'collectibles') return;
+  const staked = m.tokens.get(f.stakes), reward = m.tokens.get(f.rewardsToken);
   if (staked?.decimals === undefined || reward?.decimals === undefined) return;
   const scenario = Number(m.scenario.staked?.[f.key] ?? 0);
   const whole = staked.supply !== undefined ? Number(staked.supply) : Math.max(1e9, scenario);
@@ -2023,18 +2022,18 @@ function farmRounding(f, row, warn, m) {
   if (!(weight > 1e12)) return;
   const step = weight / 1e12;
   const span = releaseSeconds(f) / 86_400;
-  const units = (Number(pool.seed ?? 0) + Number(row.rewardsPerDay ?? 0) * span) * 10 ** reward.decimals;
+  const units = (Number(f.seed ?? 0) + Number(row.rewardsPerDay ?? 0) * span) * 10 ** reward.decimals;
   if (!(units > 0) || units >= 100 * step) return;
-  const [ss, rs] = [staked.symbol ?? f.stakes, reward.symbol ?? pool.currency];
+  const [ss, rs] = [staked.symbol ?? f.stakes, reward.symbol ?? f.rewardsToken];
   const basis = `${staked.supply !== undefined ? `its supply of ${many(whole)}` : whole > 1e9 ? `the scenario’s ${many(whole)} staked` : `a billion ${ss} (assumed when no supply is given)`} at ${staked.decimals} decimals${top > 1 ? `, at x${top}` : ''}${boost > 1 ? `, boosted +${f.maxBoostPercent}%` : ''}`;
   const lost = units < step
-    ? 'each seat’s share of it rounds down to nothing, so no seat is credited any of it, and it goes back to the pool when the last seat leaves or the farm ends'
-    : `up to a step of it at a time waits uncredited until more adds up to a step, and what waits goes back to the pool when the last seat leaves or the farm ends, so the seats can lose up to ${Math.min(100, Math.round((step / units) * 100))}% of a release`;
+    ? 'each seat’s share of it rounds down to nothing, so no seat is credited any of it, and it is freed in its vault when the last seat leaves or the farm ends'
+    : `up to a step of it at a time waits uncredited until more adds up to a step, and what waits is freed in its vault when the last seat leaves or the farm ends, so the seats can lose up to ${Math.min(100, Math.round((step / units) * 100))}% of a release`;
   warn('W-FARM-ROUNDING', `economy.farms.${f.key}.stakes`, `${label(f)} shares its rewards by weight, and the stakes in it can weigh up to about ${many(weight)} base units of ${ss} (${basis}). At that weight the program can share a release only in steps of about ${many(step)} base units of ${rs}, and about ${many(units)} land in it over a release (${releaseWords(f)}): ${lost}.`, `Stake a token with fewer base units (fewer decimals or a smaller supply), or fund larger rewards: about ${many(100 * step)} base units of ${rs} (${(100 * step) / 10 ** reward.decimals >= 1 ? many((100 * step) / 10 ** reward.decimals) : +((100 * step) / 10 ** reward.decimals).toPrecision(3)} ${rs}) or more a release keeps the rounding under 1%.`);
 }
 
 /**
- * A fixed rate that mints: every move mints the rate's due as far as the mint has room for under the most a
+ * A fixed rate that mints: each payout mints what a seat is owed as far as the mint has room for under the most a
  * mint can ever hold (u64::MAX base units, less its supply), and what it can't mint is never owed later. What the rate
  * could mint is the rate times the most that can plausibly be staked (a token's supply, else a billion whole tokens or
  * the scenario's stake if larger; a collectible's supply, else 10,000 or the scenario's count), at the highest tier and
@@ -2043,7 +2042,7 @@ function farmRounding(f, row, warn, m) {
  */
 function rateRoom(f, warn, m) {
   if (!(Number(f.rate.perDay) > 0)) return;
-  const reward = m.poolToken(f.rewards);
+  const reward = m.tokens.get(f.rewardsToken);
   if (reward?.decimals === undefined) return;
   const scenario = Number(m.scenario.staked?.[f.key] ?? 0);
   const ofCollectibles = f.stakes === 'collectibles';
@@ -2053,10 +2052,10 @@ function rateRoom(f, warn, m) {
   const top = Math.max(1, ...(f.tiers ?? []).map((t) => Number(t.multiplier ?? 1)));
   const boost = (f.boosts ?? []).length ? 1 + Number(f.maxBoostPercent ?? 0) / 100 : 1;
   const days = f.runs ? toSeconds(f.runs) / 86_400 : 3650;
-  const units = Number(f.rate.perDay) * count * top * boost * days * 10 ** reward.decimals;
+  const units = Number(f.rate.perDay) * (f.rate.shared ? 1 : count * top * boost) * days * 10 ** reward.decimals;
   const room = 2 ** 64;
   if (!(units >= room / 10)) return;
-  const [rs, unit] = [reward.symbol ?? m.pool.get(f.rewards)?.currency, ofCollectibles ? 'collectible' : (staked?.symbol ?? f.stakes)];
+  const [rs, unit] = [reward.symbol ?? f.rewardsToken, ofCollectibles ? 'collectible' : (staked?.symbol ?? f.stakes)];
   const basis = `${known ? `a supply of ${many(count)}` : count > (ofCollectibles ? 10_000 : 1e9) ? `the scenario’s ${many(count)}` : ofCollectibles ? '10,000 collectibles' : `a billion ${unit}`} staked${top > 1 ? ` at x${top}` : ''}${boost > 1 ? `, boosted +${f.maxBoostPercent}%` : ''}, ${f.runs ? `over its ${f.runs}` : 'over ten years'}`;
   const whole = room / 10 ** reward.decimals;
   warn('W-FARM-MINT-ROOM', `economy.farms.${f.key}.rate`, `${label(f)} mints ${f.rate.perDay} ${rs} a day for each ${unit} at x1: at ${basis}, that is about ${many(units)} base units, ${units >= room ? 'more than' : `${Math.round((units / room) * 100)}% of`} the most a mint can ever hold (about ${many(room)} base units, ${many(whole)} ${rs} at ${reward.decimals} decimals). Each move mints only what the mint still has room for, and what it can’t mint is never owed later: once ${rs}’s supply nears that, every seat is paid less than the rate, then nothing.`, `Lower "perDay", give the farm an end ("runs"), or reward in a token with fewer decimals.`);

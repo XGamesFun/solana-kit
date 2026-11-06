@@ -14,8 +14,7 @@ const spec = {
   tokens: [{ key: 'sol', source: 'sol' }],
   collection: { name: 'Custody choices' },
   items: [{ key: 'badge', name: 'Badge' }],
-  pools: [{ key: 'rewards', currency: 'sol', seed: 1 }],
-  farms: [{ key: 'farm', name: 'Farm', stakes: 'collectibles', item: 'badge', rewards: 'rewards' }],
+  farms: [{ key: 'farm', name: 'Farm', stakes: 'collectibles', item: 'badge', rewards: 'sol', seed: 1 }],
 };
 
 test('a farm with no custody named escrows, in the schema, the plan and the guide', () => {

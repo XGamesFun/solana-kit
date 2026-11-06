@@ -14,7 +14,7 @@ const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 const sol = (lamports) => round(Number(lamports) / Number(LAMPORTS_PER_SOL));
 /** Setup steps that are no loot instruction, and so charge no fee: a token minted, the collection made, SOL put in a
  * grant's funds. Every other step is the owner or the authority calling loot, which charges the project fee. */
-const NO_FEE_STEP = /^(token:|collection$|fund:)/;
+const NO_FEE_STEP = /^(token:|collection$|fund:|rent:)/;
 /** Setup cost from a plan (plan.mjs `plan`). */
 export function setupCost(plan, economy) {
   const m = model(economy);
@@ -31,8 +31,8 @@ export function setupCost(plan, economy) {
   let seedLamports = 0n;
   const funded = m.grants.filter((g) => Number(g.fund ?? 0) > 0 && steps.has(`fund:${g.key}`));
   for (const g of funded) seedLamports += toUnits(g.fund, 9);
-  // What the owner puts in from their own wallet: a pool's seed, a lottery's seed (into its pot), a sealed schedule's
-  // funds (into its vault, from the wallet).
+  // What the owner puts in from their own wallet: a pool's seed, a lottery's seed (into its pot), a farm's seed (into its
+  // rewards vault), a sealed schedule's funds (into its vault, from the wallet).
   const putIn = (key, amount, step) => {
     if (!(Number(amount ?? 0) > 0) || !steps.has(step)) return;
     const t = m.tokens.get(key ?? m.currencyKey);
@@ -41,11 +41,15 @@ export function setupCost(plan, economy) {
   };
   for (const p of m.pools) putIn(p.currency, p.seed, `seed:${p.key}`);
   for (const l of m.lotteries) putIn(l.currency, l.seed, `seed:lottery:${l.key}`);
+  for (const f of m.farms) putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`);
+  // SOL a lottery holds for its rounds' rent: lent to each round, back at its close.
+  for (const l of m.lotteries) if (Number(l.roundRent ?? 0) > 0 && steps.has(`rent:lottery:${l.key}`)) seedLamports += toUnits(l.roundRent, 9);
   for (const sc of m.schedules) if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet') putIn(sc.currency, sc.fund, `fund:${sc.key}`);
   const total = rentLamports + feeLamports + networkLamports + seedLamports;
   const notes = [];
   if (accounts.some((a) => a.approx)) notes.push('Accounts marked “about” are sized roughly (a Core collection or an external token account).');
-  if (Object.entries(seeds).some(([symbol]) => [...m.tokens.values()].some((t) => t.wsol && t.symbol === symbol))) notes.push('The total includes the SOL you put in: pools’ and lotteries’ seeds, and sealed schedules’ funds.');
+  if (Object.entries(seeds).some(([symbol]) => [...m.tokens.values()].some((t) => t.wsol && t.symbol === symbol))) notes.push('The total includes the SOL you put in: pools’, lotteries’ and farms’ seeds, and sealed schedules’ funds.');
+  if (m.lotteries.some((l) => Number(l.roundRent ?? 0) > 0 && steps.has(`rent:lottery:${l.key}`))) notes.push('The total includes the SOL lotteries hold for their rounds’ rent (`roundRent`): each round borrows it and gives it back when it closes; it comes back to you when the lottery closes.');
   if (funded.length) notes.push('The total includes the SOL put in grants’ funds, which pays their claims; what is left goes back to you when a grant closes.');
   notes.push('The network fee is 5,000 lamports a signature; a wallet may add a priority fee of its own.');
   return {
@@ -97,17 +101,16 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     row(`recipe:${r.key}`, `craft “${r.name}”`, 'player', FEES.player, made ? [back(`${made} new collectible${made > 1 ? 's' : ''}`, COLLECTIBLE_RENT * BigInt(made), `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`)] : []);
   }
   for (const l of m.lotteries) {
-    // A purchase adds its entry's bytes to the round (not refunded); the round's first buyer fronts its header.
-    const shares = lotterySplit(l).map((s) => ({ to: String(s.to).startsWith('chosen') || String(s.to).startsWith('holder') ? { Chosen: {} } : 'Treasury' }));
-    const entry = BigInt(entryWidth(shares, false, Boolean(l.ticketNft))) * RENT_PER_BYTE;
-    row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], 'A round’s first buyer also fronts its record’s header (about 0.003 SOL, more with many places), back to them when the round closes, once everyone is paid.');
+    // A purchase adds its entry's bytes to the round (not refunded); the round's first buyer fronts its header unless the
+    // lottery holds SOL for it (`roundRent`). A share the buyer chooses makes each entry keep what arrived.
+    const chosen = lotterySplit(l).some((s) => String(s.to).startsWith('chosen'));
+    const entry = BigInt(entryWidth(chosen, Boolean(l.ticketNft))) * RENT_PER_BYTE;
+    row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], Number(l.roundRent ?? 0) > 0 ? `A round’s record and its token accounts are paid from the SOL the lottery holds for them (${l.roundRent} SOL), back to it when the round closes; when that is short, the round’s first buyer fronts them, back to them at the close.` : 'A round’s first buyer also fronts its record’s header and token accounts (about 0.003 SOL and up, more with many places), back to them when the round closes, once every part is pulled; `roundRent` has the lottery pay them instead.');
   }
   for (const f of m.farms) {
     row(`farm:${f.key}`, `stake in “${f.name}”`, 'player', FEES.player, [back('the seat', rent(ACCOUNT_BYTES.Seat), 'when they take everything out')]);
     row(`farm:${f.key}`, `unstake or harvest from “${f.name}”`, 'player', FEES.player, [], [
-      (f.tiers ?? []).some((t) => t.exitFee) && 'Leaving a tier before its lock leaves its exit fee of what is taken out.',
-      f.unbond && `What is taken out waits ${f.unbond} first; a later unstake (or withdraw) takes it out.`,
-      f.toll && `${f.toll.percent}% of every payout of rewards goes ${f.toll.to === 'burn' ? 'to a burn' : `to ${String(f.toll.to).slice(5)}`}.`,
+      (f.tiers ?? []).some((t) => t.exitFee) && 'Leaving a tier before its lock leaves its exit fee of what is taken out, and keeps the rewards the seat was credited.',
     ].filter(Boolean).join(' ') || undefined);
   }
   for (const h of m.holds) row(`hold:${h.key}`, `hand in for “${h.name}”`, 'player', FEES.player, [back('the hold', rent(ACCOUNT_BYTES.Hold), 'when it is released')]);
@@ -141,8 +144,8 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   if (m.allBoxes.some((b) => !boxBuys(b, m))) row('orders', 'settle an order', 'anyone (a keeper, or the player)', 0n, [], 'The sender pays what the settle opens or mints (a collectible’s rent, a token account the player lacks); the order’s rent goes back to the player. js/play’s throwaway key sends it with what the open lent it.');
   if (m.schedules.length) row('schedules', 'run a schedule when it is due', 'anyone (a sealed one’s recipient, from their page)', 0n, [], m.schedules.some((sc) => sc.sealed) ? 'Several runs that fell behind go in one transaction; a sealed schedule pays from its own vault.' : undefined);
   if (m.lotteries.length) {
-    row('lotteries', 'ask for a draw', 'anyone (a keeper, or a player)', 0n, [], 'The draw asks MagicBlock’s oracle for the winning numbers; the oracle takes its fee from whoever sends the draw.', ORACLE_FEE);
-    row('lotteries', 'give a place’s prize, then route the tickets, then pay a place', 'anyone (the winner’s page)', 0n, [], 'A drawn round gives every place’s prize first; its ticket money moves only after (prizes first, then money).');
+    row('lotteries', 'ask for a draw', 'anyone (a keeper, or a player)', 0n, [], 'The draw asks MagicBlock’s oracle for the winning numbers, and fixes the round’s money first (the next round sells at once); the oracle takes its fee from whoever sends the draw. An oracle that never answers within about a week: the next ask cancels the round, and every ticket is refunded.', ORACLE_FEE);
+    row('lotteries', 'pull a part: a refund, a place’s part of the pot or its prize, a share owed in common', 'anyone (the winner’s page, a keeper)', 0n, [], 'Each part is pulled by itself, in any order, and the pull that leaves nothing owed closes the round; whoever pulls opens the payee’s token account when it is missing.');
     if (m.lotteries.some((l) => l.minSold)) row('lotteries', 'a short round', 'anyone', 0n, [], 'A round that sold fewer tickets than its least is cancelled at its draw, with no oracle fee, and every ticket refunded.');
   }
   return rows;

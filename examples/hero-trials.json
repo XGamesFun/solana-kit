@@ -13,9 +13,6 @@
     { "key": "hero", "name": "Hero", "price": 0.05 },
     { "key": "relic", "name": "Relic" }
   ],
-  "pools": [
-    { "key": "gem-rewards", "currency": "gem", "about": "Names the expedition's token: it pays nothing, its result is a roll." }
-  ],
   "boxes": [
     {
       "key": "enchant",
@@ -84,7 +81,7 @@
       "stakes": "collectibles",
       "item": "hero",
       "custody": "freeze",
-      "rewards": "gem-rewards",
+      "rewards": "gem",
       "rate": { "perDay": 0, "minted": true },
       "tiers": [{ "lock": "1d", "multiplier": 1, "roll": "expedition-result" }]
     }

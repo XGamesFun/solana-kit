@@ -67,9 +67,8 @@ test('the spec carries a farm’s lock and upkeep, time raises and time rules to
     tokens: [{ key: 'sol', source: 'sol' }, { key: 'fuel', source: 'game', name: 'Fuel', symbol: 'FUEL', decimals: 0 }, { key: 'ore', source: 'game', name: 'Ore', symbol: 'ORE', decimals: 0 }],
     collection: { name: 'Fleet' },
     items: [{ key: 'ship', name: 'Ship', price: 0.05 }],
-    pools: [{ key: 'ore-rewards', currency: 'ore' }],
     farms: [{
-      key: 'mine', name: 'Mine', stakes: 'collectibles', item: 'ship', rewards: 'ore-rewards', rate: { perDay: 10, minted: true },
+      key: 'mine', name: 'Mine', stakes: 'collectibles', item: 'ship', rewards: 'ore', rate: { perDay: 10, minted: true },
       tiers: [{ lock: '3d' }], lockAttribute: 'free_at', upkeepAttribute: 'fuel_until',
       gate: [{ item: 'ship', attribute: 'jailed', time: 'passed' }],
     }],

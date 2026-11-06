@@ -38,13 +38,6 @@
       "name": "Rare Relic"
     }
   ],
-  "pools": [
-    {
-      "key": "dust-rewards",
-      "currency": "dust",
-      "about": "Names the guild's reward token: the guild mints DUST at its rate, so nothing waits here."
-    }
-  ],
   "boxes": [
     {
       "key": "chest",
@@ -110,7 +103,7 @@
       "name": "The guild",
       "stakes": "collectibles",
       "item": "hero",
-      "rewards": "dust-rewards",
+      "rewards": "dust",
       "rate": {
         "perDay": 10,
         "minted": true

@@ -121,8 +121,7 @@ test('W-FARM-REFUEL for a farm whose mission brings a prize and whose every refu
       tokens: [{ key: 'sol', source: 'sol' }, { key: 'fuel', source: 'game', name: 'Fuel', symbol: 'FUEL', decimals: 0 }, { key: 'ore', source: 'game', name: 'Ore', symbol: 'ORE', decimals: 0 }, { key: 'ticket', source: 'game', name: 'Ticket', symbol: 'TIX', decimals: 0 }],
       collection: { name: 'Fleet' },
       items: [{ key: 'ship', name: 'Ship', price: 0.05 }],
-      pools: [{ key: 'ore-rewards', currency: 'ore' }],
-      farms: [{ key: 'mine', name: 'Mine', stakes: 'collectibles', item: 'ship', rewards: 'ore-rewards', rate: { perDay: 10, minted: true }, tiers: [{ lock: '3d', prize: { gives: 'tokens', amount: 50, currency: 'ticket', from: 'mint' } }], upkeepAttribute: 'fuel_until' }],
+      farms: [{ key: 'mine', name: 'Mine', stakes: 'collectibles', item: 'ship', rewards: 'ore', rate: { perDay: 10, minted: true }, tiers: [{ lock: '3d', prize: { gives: 'tokens', amount: 50, currency: 'ticket', from: 'mint' } }], upkeepAttribute: 'fuel_until' }],
       recipes: [{ key: 'refuel', name: 'Refuel', in: [{ takes: 'use', item: 'ship' }, { takes: 'pay', currency: 'fuel', amount: 10, to: 'burn' }], raises: [{ place: 0, key: 'fuel_until', by: '1d', upTo: '1d', fromNow: true }] }],
     };
     change(s);

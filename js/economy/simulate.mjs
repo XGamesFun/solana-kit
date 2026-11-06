@@ -22,7 +22,7 @@ const NETWORK_FEE = sol(SIGNATURE_FEE);
 const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
  * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
-const ticketLine = (l) => sol(BigInt(entryWidth(lotterySplit(l).map((x) => ({ to: /^(chosen|holder)/.test(String(x.to)) ? { Chosen: {} } : 'Treasury' })), false, Boolean(l.ticketNft))) * RENT_PER_BYTE);
+const ticketLine = (l) => sol(BigInt(entryWidth(lotterySplit(l).some((x) => String(x.to).startsWith('chosen')), Boolean(l.ticketNft))) * RENT_PER_BYTE);
 /** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
 /** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps
@@ -149,6 +149,8 @@ export function simulate(economy, { now = 0 } = {}) {
   const pools = new Map(m.pools.map((p) => [p.key, { key: p.key, currency: p.currency, seed: num(p.seed), in: [], out: [], rate: [], variance: 0 }]));
   // Each lottery's pot is an account of its own, counted here as a pool named "lottery:<key>".
   for (const l of m.lotteries) pools.set(`lottery:${l.key}`, { key: `lottery:${l.key}`, pot: l.name, currency: l.currency ?? game, seed: num(l.seed), in: [], out: [], rate: [], variance: 0 });
+  // Each farm's rewards vault is an account of its own too, counted as a pool named "farm:<key>".
+  for (const f of m.farms) pools.set(`farm:${f.key}`, { key: `farm:${f.key}`, farm: f.name, currency: f.rewardsToken, seed: num(f.seed), in: [], out: [], rate: [], variance: 0 });
   const flowIn = (pool, by, amount) => amount && pools.get(pool)?.in.push({ by, perDay: amount });
   const flowOut = (pool, by, amount) => amount && pools.get(pool)?.out.push({ by, perDay: amount });
   const rateOut = (pool, by, perDayShare, to) => perDayShare && pools.get(pool)?.rate.push({ by, perDay: perDayShare, ...(to ? { to } : {}) });
@@ -216,10 +218,11 @@ export function simulate(economy, { now = 0 } = {}) {
     notes.push(sold.last >= 10 * num(part.price) ? `${said} It ends ${sold.last >= PRICE_CAP ? 'beyond any price' : `${round(sold.last / num(part.price), 1)} times`} where it started: players stop buying long before that. A smaller growth keeps it in reach.` : said);
   };
 
-  /** Sends `amount` of `token` a day to one destination (model `destination`): a pool, a lottery's pot, a burn, the treasury or an account. */
+  /** Sends `amount` of `token` a day to one destination (model `destination`): a pool, a lottery's pot, a farm's rewards vault, a burn, the treasury or an account. */
   const sendTo = (d, token, amount, by) => {
     if (d.kind === 'pool') flowIn(d.key, by, amount);
     else if (d.kind === 'lottery') flowIn(`lottery:${d.key}`, by, amount);
+    else if (d.kind === 'farm') flowIn(`farm:${d.key}`, by, amount);
     else if (d.kind === 'burn') add(burned, token, amount);
     else if (d.kind === 'treasury') add(creator.treasury, token, amount);
     else if (d.kind === 'chosen') add(accounts, d.key ? `the holder of the ${m.item.get(d.key)?.name ?? d.key} the buyer names` : `the wallet the ${String(by).startsWith('payment:') ? 'payer' : 'buyer'} names`, amount);
@@ -446,7 +449,7 @@ export function simulate(economy, { now = 0 } = {}) {
       creator.network += runs * NETWORK_FEE; // run_schedule is free of the program's fee; whoever sends it pays the network
       if (s.does === 'issue') {
         const amount = num(s.amount);
-        flowIn(s.pool, `schedule:${s.key}`, runs * amount);
+        flowIn(destination(s.to ?? '').kind === 'farm' ? s.to : s.pool, `schedule:${s.key}`, runs * amount);
         const halving = s.halveEvery ? `, halving every ${s.halveEvery} runs (every ${round((s.halveEvery * every) / DAY, 2)} days)` : '';
         // Halving every h runs: h runs at the amount, h at half, … (2 × h × amount in all, with no end); with
         // maxRuns, the full halvings it reaches and the runs after the last.
@@ -494,7 +497,7 @@ export function simulate(economy, { now = 0 } = {}) {
       return { key: s.key, does: s.does, percentPerDay: round(runs * s.percent, 6), says: `${where} ${s.percent}% of ${from} every ${round(every / 3600, 3)} h` };
     });
 
-  // ---- stakes: everything that arrives in the rewards pool goes to stakers
+  // ---- stakes: everything that arrives in a farm’s rewards vault goes to its stakers
   // ---- lotteries: in steady state each round pays out what came in (what the places leave rolls over). One that draws
   // once (no `every`) has one round, from going live to its first draw (the scenario's end at the latest): its tickets,
   // its draw and its pot happen once, spread over the scenario's days like an auction's sale.
@@ -651,48 +654,48 @@ export function simulate(economy, { now = 0 } = {}) {
       p.inflow = inflow;
     }
 
-  // Farms: everything that arrives in the rewards pool is released to the seats over the farm's release span (its
-  // longest lock, a day at least), by weight (stake × tier × boosts) as it is released; or a fixed rate for each seat
-  // (minted, or from the pool while it lasts). In a steady state the release pays what arrives, a day at a time.
-  /** A farm's ways out and tolls, in words (farm.rs): an early-exit fee, an unbonding wait, a toll; or null. */
+  // Farms: everything that arrives in a farm's rewards vault is released to the seats over the farm's release span (its
+  // longest lock, a day at least), by weight (stake × tier × boosts) as it is released; or a fixed rate for each seat,
+  // or with `shared` for the whole farm (minted, or from the vault while it lasts). In a steady state the release pays
+  // what arrives, a day at a time.
+  /** A farm's ways out, in words (farm.rs): an early-exit fee, compounding; or null. */
   const farmExtras = (f) => {
-    const exits = (f.tiers ?? []).map((t, i) => (t.exitFee ? `tier ${i + 1} may leave before its ${t.lock} lock by leaving ${t.exitFee}% of what it takes out (${f.exitFeeTo === 'burn' ? 'burned' : `to ${String(f.exitFeeTo).replace(/^pool:/, '')}`})` : null)).filter(Boolean);
+    const exits = (f.tiers ?? []).map((t, i) => (t.exitFee ? `tier ${i + 1} may leave before its ${t.lock} lock by leaving ${t.exitFee}% of what it takes out (${f.exitFeeTo === 'burn' ? 'burned' : f.exitFeeTo === 'rewards' ? 'into its own rewards vault' : `to ${String(f.exitFeeTo).replace(/^pool:/, '')}`}), keeping the rewards it was credited` : null)).filter(Boolean);
     const parts = [
       ...exits,
-      f.unbond && `what is taken out waits ${f.unbond}, earning nothing, before it can leave`,
-      f.toll && `${f.toll.percent}% of every payout of rewards is ${f.toll.to === 'burn' ? 'burned' : `sent to ${String(f.toll.to).replace(/^pool:/, '')}`}`,
-      f.stakes !== 'collectibles' && m.pool.get(f.rewards)?.currency === f.stakes && 'its rewards can be compounded into the stake without restarting the lock',
-      f.unpaid && 'it pays nothing: staking there only counts (a stake gate reads it)',
+      f.stakes !== 'collectibles' && f.rewardsToken === f.stakes && 'its rewards can be compounded into the stake without restarting the lock',
+      (f.tiers ?? []).some((t) => t.earnsFor) && `a seat earns only for its tier’s term (${(f.tiers ?? []).map((t) => t.earnsFor ?? 'no end').join(', ')}) after its lock started`,
     ].filter(Boolean);
     return parts.length ? parts.join('; ') : null;
   };
-  /** What a seat of `f` can give back (farm.rs `Farm::give`): a forfeit, an early exit's waiting rewards, a watched NFT gone, a lapsed upkeep. */
-  const giveBacks = (f) => ['a forfeit', (f.tiers ?? []).some((t) => t.exitFee) && 'an early exit’s waiting rewards', f.custody === 'watch' && 'a watched NFT sold', f.upkeepAttribute && 'what a lapsed upkeep earned'].filter(Boolean).join(', ');
+  /** What a seat of `f` can give back (farm.rs `Farm::give`): a forfeit, a watched NFT gone. */
+  const giveBacks = (f) => ['a forfeit', f.custody === 'watch' && 'a watched NFT sold'].filter(Boolean).join(', ');
   const farmRows = m.farms.map((f) => {
-    const pool = pools.get(f.rewards);
+    const pool = pools.get(`farm:${f.key}`);
     const staked = num(m.scenario.staked?.[f.key]);
     const perUnit = f.rate ? num(f.rate.perDay) : null;
-    const wanted = f.rate ? perUnit * staked : Infinity;
+    const wanted = !f.rate ? Infinity : f.rate.shared ? (staked ? perUnit : 0) : perUnit * staked;
     const free = pool ? Math.max(0, pool.inflow - pool.out.reduce((n, x) => n + x.perDay, 0)) : 0;
     const rewards = f.rate?.minted ? wanted : Math.min(wanted, f.rate ? free + (pool?.seed ?? 0) / Math.max(1, m.scenario.days ?? 30) : free);
     if (pool && !f.rate?.minted) pool.out.push({ by: `farm:${f.key}`, perDay: rewards });
-    const sameToken = pool?.currency === f.stakes;
-    const tiers = (f.tiers ?? [{ lock: 0, multiplier: 1 }]).map((t) => ({ lock: t.lock, multiplier: t.multiplier ?? 1, ...(prizeLine(t.prize) ? { prize: prizeWords(t.prize, m) } : {}) }));
+    const sameToken = f.rewardsToken === f.stakes;
+    const tiers = (f.tiers ?? [{ lock: 0, multiplier: 1 }]).map((t) => ({ lock: t.lock, multiplier: t.multiplier ?? 1, ...(t.earnsFor ? { earnsFor: t.earnsFor } : {}), ...(prizeLine(t.prize) ? { prize: prizeWords(t.prize, m) } : {}) }));
     const unit = f.stakes === 'collectibles' ? 'collectible' : symbol(f.stakes);
     // Growth: the days a collectible at x1 needs for each level.
     const growth = listOf(f.growth).map((g) => {
       const levels = (g.levels ?? []).map((points, i) => ({ level: i + 1, points, days: round(points / g.perDay, 2) }));
       return { attribute: g.attribute ?? 'xp', perDay: g.perDay, ...(levels.length ? { level: g.level ?? 'level', levels } : {}), streak: Boolean(g.streak) };
     });
+    const perSeat = !f.rate ? null : f.rate.shared ? (staked ? perUnit / staked : null) : perUnit;
     return {
       key: f.key,
       name: f.name,
       stakes: f.stakes,
-      rewardsToken: pool?.currency,
+      rewardsToken: f.rewardsToken,
       rewardsPerDay: round(rewards),
-      ...(f.rate ? { rate: { perDay: perUnit, minted: Boolean(f.rate.minted) } } : {}),
+      ...(f.rate ? { rate: { perDay: perUnit, minted: Boolean(f.rate.minted), ...(f.rate.shared ? { shared: true } : {}), ...(f.rate.halveEvery ? { halveEvery: f.rate.halveEvery } : {}) } } : {}),
       tiers,
-      ...(staked ? { staked, perUnitPerDay: round(f.rate ? perUnit : rewards / staked), unit } : f.rate ? { perUnitPerDay: perUnit, unit } : {}),
+      ...(staked ? { staked, perUnitPerDay: round(f.rate ? perSeat : rewards / staked), unit } : f.rate && !f.rate.shared ? { perUnitPerDay: perUnit, unit } : {}),
       ...(staked && sameToken ? { yearlyPercent: round(((rewards * 365) / staked) * 100, 4) } : {}),
       ...(growth.length ? { growth } : {}),
       ...(f.runs ? { runs: f.runs } : {}),
@@ -701,8 +704,8 @@ export function simulate(economy, { now = 0 } = {}) {
       ...(f.upkeepAttribute ? { upkeepAttribute: f.upkeepAttribute } : {}),
       ...(farmExtras(f) ? { extras: farmExtras(f) } : {}),
       says: f.rate
-        ? `each seat earns ${perUnit} a day for each ${unit} at x1, whoever else is in${f.rate.minted ? ' (minted, as far as the mint has room for: what it can’t mint is not owed later)' : ', while the pool lasts'}${perUnit > 0 ? `; what a seat gives back (${giveBacks(f)}) is ${f.rate.minted ? 'burned' : `sent back to “${f.rewards}”`} in the same move, never to the other seats` : ''}`
-        : `what lands in the pool is released over ${releaseWords(f)} to the seats there as it is released, so a stake earns only while it stays; ${tiers.length > 1 || (f.boosts ?? []).length ? 'shares are by weight: a higher tier or a boosted collectible takes more of the same rewards, so the figures are for a seat at x1 among seats at x1' : 'shares are by what each seat stakes'}`,
+        ? `${f.rate.shared ? `the farm pays ${perUnit} a day in all, shared by weight while anything is staked` : `each seat earns ${perUnit} a day for each ${unit} at x1, whoever else is in`}${f.rate.halveEvery ? `, halving every ${f.rate.halveEvery}` : ''}${f.rate.minted ? ' (minted when a seat is paid, as far as the mint has room for: what it can’t mint is not owed later)' : ', while its vault lasts'}${perUnit > 0 ? `; what a seat gives back (${giveBacks(f)}) is ${f.rate.minted ? 'never minted' : 'left free in its vault'}, never to the other seats` : ''}`
+        : `what lands in its rewards vault is released over ${releaseWords(f)} to the seats there as it is released, so a stake earns only while it stays; ${tiers.length > 1 || (f.boosts ?? []).length ? 'shares are by weight: a higher tier or a boosted collectible takes more of the same rewards, so the figures are for a seat at x1 among seats at x1' : 'shares are by what each seat stakes'}`,
     };
   });
   for (const row of farmRows) add(players.get, row.rewardsToken, row.rewardsPerDay);
@@ -737,6 +740,7 @@ export function simulate(economy, { now = 0 } = {}) {
     const row = {
       key: p.key,
       ...(p.pot ? { pot: p.pot } : {}),
+      ...(p.farm ? { farm: p.farm } : {}),
       token: p.currency,
       seed: p.seed,
       inPerDay: round(inflow),
@@ -929,7 +933,7 @@ export function explain(sim, economy) {
   for (const s of sim.schedules) lines.push(`Schedule “${s.key}”: ${s.says}.`);
   for (const c of sim.contests) lines.push(`Contest “${c.name}”: ${c.says}.`);
   for (const a of sim.auctions ?? []) lines.push(`Auction “${a.name}”: ${a.says}.`);
-  for (const p of sim.pools) lines.push(`${p.pot ? `The pot of “${p.pot}”` : `Pool “${p.key}”`}: ${n(p.inPerDay)} ${sym(p.token)} in and ${n(p.outPerDay)} out a day from a seed of ${n(p.seed)}; it ${poolFate(p, sim.scenario.days)}.`);
+  for (const p of sim.pools) lines.push(`${p.pot ? `The pot of “${p.pot}”` : p.farm ? `The rewards vault of “${p.farm}”` : `Pool “${p.key}”`}: ${n(p.inPerDay)} ${sym(p.token)} in and ${n(p.outPerDay)} out a day from a seed of ${n(p.seed)}; it ${poolFate(p, sim.scenario.days)}.`);
   const d = sim.perDay;
   const list = (map) => Object.entries(map).map(([k, v]) => `${n(v)} ${sym(k)}`).join(', ') || 'nothing';
   lines.push(`Each day players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average (items at the value you gave them), plus ${n(d.players.playerFeesSol)} SOL in player fees, ${n(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle and ${n(d.players.networkFeesSol)} SOL in network fees.`);

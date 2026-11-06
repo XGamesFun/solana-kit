@@ -46,13 +46,6 @@
       "name": "Elemental Badge"
     }
   ],
-  "pools": [
-    {
-      "key": "spark-rewards",
-      "currency": "spark",
-      "about": "Names the reward token: both farms mint SPARK at their rates, so nothing waits here."
-    }
-  ],
   "recipes": [
     {
       "key": "bind",
@@ -232,7 +225,7 @@
       "key": "altar",
       "name": "The altar",
       "stakes": "collectibles",
-      "rewards": "spark-rewards",
+      "rewards": "spark",
       "rate": {
         "perDay": 10,
         "minted": true
@@ -249,7 +242,7 @@
       "name": "The sanctum",
       "stakes": "collectibles",
       "item": "badge",
-      "rewards": "spark-rewards",
+      "rewards": "spark",
       "rate": {
         "perDay": 100,
         "minted": true

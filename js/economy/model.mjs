@@ -115,8 +115,8 @@ export function toSeconds(duration) {
 }
 
 /**
- * How long what lands in a farm's rewards pool takes to be released to its seats, in seconds (a farm that shares its
- * pool, `farm.rs` `release_span`): its longest lock tier, and a day at least.
+ * How long what lands in a farm's rewards vault takes to be released to its seats, in seconds (a farm that shares what
+ * lands, `farm.rs` `release_span`): its longest lock tier, and a day at least.
  */
 export const releaseSeconds = (f) => Math.max(86_400, ...(f.tiers ?? []).map((t) => toSeconds(t.lock ?? 0)));
 
@@ -129,14 +129,24 @@ export function releaseWords(f) {
 
 /**
  * What the end of a sharing farm that `runs` means, in words, or null (no end, or a fixed rate): its release keeps its
- * pace, so what it has not let go by the end stays in the pool, the project's, and so does what a seat gives back after
- * the end; a seat that may be dead (a watched NFT sold, an upkeep run out) is refreshed a release span before it.
+ * pace, so what it has not let go by the end stays in its vault, free for the authority to take back, and so does what
+ * a seat gives back after the end.
  */
 export function farmEndWords(f) {
   if (!f.runs || f.rate) return null;
   const span = releaseWords(f);
-  const dead = [f.custody === 'watch' && 'a watched NFT sold', f.upkeepAttribute && 'an upkeep run out'].filter(Boolean);
-  return `what is not released by its end stays in the pool, the project’s, credited to nobody, and so does what a seat gives back after the end: fund it at least ${span} before its end (what lands later is released only in part, and what lands at or after the end not at all)${dead.length ? `, and refresh a seat you suspect is dead (${dead.join(', ')}) at least ${span} before the end, or what it was credited stays in the pool too` : ''}`;
+  return `what is not released by its end stays in its vault, credited to nobody (the authority may take back what is free there), and so does what a seat gives back after the end: fund it at least ${span} before its end (what lands later is released only in part, and what lands at or after the end not at all)`;
+}
+
+/**
+ * The token a farm's rewards are in (`rewards`, a token key): by default its staked token, or for a farm of
+ * collectibles the project's currency. One that names a pool (as farms did before they had a vault of their own) is
+ * read as that pool's token, and the checker refuses it.
+ */
+export function farmRewardsToken(f, tokens, currencyKey, poolCurrency = new Map()) {
+  if (f.rewards && tokens.has(f.rewards)) return f.rewards;
+  if (f.rewards && poolCurrency.has(f.rewards)) return poolCurrency.get(f.rewards);
+  return f.stakes && f.stakes !== 'collectibles' ? f.stakes : currencyKey;
 }
 
 /** A raise's or a shift's `by`: a number, or for a time a duration, which may be negative ("-1d"). */
@@ -210,21 +220,14 @@ export function model(economy, { now = 0 } = {}) {
   const tokens = new Map((e.tokens ?? []).map((t) => [t.key, tokenOf(t)]));
   const currencyKey = e.currency ?? (tokens.size === 1 ? [...tokens.keys()][0] : undefined);
   const currency = tokens.get(currencyKey);
-  // A farm that names no rewards pool pays nothing (staking only to qualify): it gets an empty pool of its own, which
-  // the program needs to exist (farm.rs) and nothing ever fills. Once live, its number is kept on the farm
-  // (`rewardsIndex`, live.mjs `recordLanded`), so a pool added later never takes it.
-  const unpaid = (e.farms ?? []).filter((f) => !f.rewards);
-  const hidden = unpaid.map((f) => ({ key: `${f.key}-rewards`, currency: f.stakes !== 'collectibles' ? f.stakes : currencyKey, about: `${f.key}: pays nothing`, farm: f.key, ...(Number.isInteger(f.rewardsIndex) ? { index: f.rewardsIndex } : {}) }));
-  const listed = [...(e.pools ?? []), ...hidden];
-  // Numbers are given in this order: the pools that have one, then the empty pool of a farm already live that has no
-  // number written (it went live before numbers were kept, and took the first free one then, before any pool added
-  // since), then the rest in the spec's order.
-  const landed = (key) => Number.isInteger(unpaid.find((f) => f.key === key)?.id);
-  const rank = (p) => (Number.isInteger(p.index) ? 0 : p.farm && landed(p.farm) ? 1 : 2);
-  const order = [...listed.keys()].sort((a, b) => rank(listed[a]) - rank(listed[b]));
+  // Numbers are given in this order: the pools that have one, then the rest in the spec's order.
+  const listed = e.pools ?? [];
+  const order = [...listed.keys()].sort((a, b) => Number(!Number.isInteger(listed[a].index)) - Number(!Number.isInteger(listed[b].index)));
   const assigned = assignIds(order.map((i) => listed[i]), 'index', 0);
   const pools = listed.map((_, i) => assigned[order.indexOf(i)]);
-  const farms = (e.farms ?? []).map((f) => (f.rewards ? f : { ...f, rewards: `${f.key}-rewards`, unpaid: true }));
+  // A farm's rewards land in a vault of its own: `rewardsToken` is their token.
+  const poolCurrency = new Map(pools.map((p) => [p.key, p.currency]));
+  const farms = (e.farms ?? []).map((f) => ({ ...f, rewardsToken: farmRewardsToken(f, tokens, currencyKey, poolCurrency) }));
   // A raffle: its NFT is first place's prize, held in the lottery's own stash.
   const lotteries = (e.lotteries ?? []).map((l) => {
     if (!l.raffle) return l;
@@ -523,7 +526,8 @@ export const sharesOf = (split) => (split ?? []).map((s) => ({ ...destination(s.
  * The program's `To` for a destination, with pool indexes resolved (the IDL's own shape). A wallet ("wallet:<address>")
  * is paid at its own token account of the part's currency (the program opens it when it is not there); "treasury" is the game's treasury wallet's; "chosen"
  * (or "chosen:<item>") is the one the buyer names when they buy; "lottery:<key>" is that lottery's pot
- * ("@pot:<id>", which the plan resolves once the game is known).
+ * ("@pot:<id>") and "farm:<key>" that farm's rewards vault ("@rewards:<id>"), which the plan resolves once the game is
+ * known.
  */
 export function toEnum(to, m) {
   const d = destination(to);
@@ -533,6 +537,7 @@ export function toEnum(to, m) {
   if (d.kind === 'account') return { Account: [d.key] };
   if (d.kind === 'wallet') return { Wallet: [d.key] };
   if (d.kind === 'lottery') return { Account: [`@pot:${m.lottery.get(d.key)?.id ?? 0}`] };
+  if (d.kind === 'farm') return { Account: [`@rewards:${m.farm.get(d.key)?.id ?? 0}`] };
   if (d.kind === 'chosen') return { Chosen: { item: d.key ? (m.item.get(d.key)?.id ?? 0) : null } };
   return { Holder: [d.key] };
 }
@@ -613,12 +618,6 @@ export function poolTakers(m) {
     // from a vault of its own and names no pool.
     if (s.does === 'pay') add(s.from, `schedule:${s.key}`, 'pays out on a timer');
   }
-  for (const f of m.farms) {
-    // Sharing what arrives releases all of the pool over its release span; a fixed rate from it takes the rate; a
-    // minted one takes nothing.
-    if (!f.rate) add(f.rewards, `farm:${f.key}`, 'releases everything to its seats');
-    else if (!f.rate.minted) add(f.rewards, `farm:${f.key}`, 'pays its fixed rate');
-  }
   for (const d of m.decisions) if (d.does === 'payout' || d.does === 'burn') add(d.pool, `decision:${d.key}`, d.does === 'payout' ? 'pays out on the authority’s word' : 'burns on the authority’s word');
   return takers;
 }
@@ -636,6 +635,31 @@ export function poolFillers(m) {
     if (s.does === 'issue') add(s.pool, `schedule:${s.key}`, 'mints into it');
     if (s.does === 'move') add(s.to, `schedule:${s.key}`, 'moves a share in');
   }
+  for (const l of m.lotteries) fromSplit(lotterySplit(l), `lottery:${l.key}`);
+  for (const c of m.contests) fromSplit(c.split, `contest:${c.key}`);
+  for (const a of m.auctions) fromSplit(a.split, `auction:${a.key}`);
+  return fillers;
+}
+
+/**
+ * Every place the spec sends money into a farm's rewards vault ("farm:<key>"): a split's share, a schedule that pays it,
+ * a craft that pays it, the owner's seed, an early exit's fee into its own vault. [{ farm, by, how }]
+ */
+export function farmFillers(m) {
+  const fillers = [];
+  const add = (to, by, how) => {
+    const d = destination(to ?? '');
+    if (d.kind === 'farm') fillers.push({ farm: d.key, by, how });
+  };
+  const fromSplit = (split, by) => sharesOf(split).forEach((s) => add(s.to, by, `${s.percent}% of each payment`));
+  for (const f of m.farms) {
+    if (Number(f.seed ?? 0) > 0) fillers.push({ farm: f.key, by: `farm:${f.key}`, how: 'the owner’s seed' });
+    if (f.exitFeeTo === 'rewards') fillers.push({ farm: f.key, by: `farm:${f.key}`, how: 'early-exit fees' });
+  }
+  for (const b of m.allBoxes) fromSplit(b.split, b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`);
+  for (const p of m.payments) fromSplit(p.split, `payment:${p.key}`);
+  for (const r of m.recipes) for (const i of r.in ?? []) if (i.takes === 'pay') add(i.to, `recipe:${r.key}`, 'a craft pays in');
+  for (const s of m.schedules) if (s.does === 'pay' || s.does === 'issue') add(s.to, `schedule:${s.key}`, s.does === 'issue' ? 'mints into it on a timer' : 'pays in on a timer');
   for (const l of m.lotteries) fromSplit(lotterySplit(l), `lottery:${l.key}`);
   for (const c of m.contests) fromSplit(c.split, `contest:${c.key}`);
   for (const a of m.auctions) fromSplit(a.split, `auction:${a.key}`);

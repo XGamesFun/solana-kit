@@ -68,7 +68,7 @@ describe('xsolana approve', () => {
     assert.equal(w.chain.tokens(loot.pda.pool(saved.live.project, saved.pools.find((p) => p.key === 'house').index)), 5_000_000_000n);
 
     // A change: a new pool, and the flip costs more. Only those land.
-    const changed = { ...saved, pools: [...saved.pools, { key: 'bonus', currency: 'sol' }], boxes: [{ ...saved.boxes[0], price: 0.2, split: [{ to: 'pool:house', percent: 86 }, { to: 'lottery:weekly', percent: 10 }, { to: 'pool:backers', percent: 2 }, { to: 'pool:bonus', percent: 2 }] }], decisions: [{ key: 'bonus-payout', when: 'a weekly high score', does: 'payout', pool: 'bonus', amount: 0.1 }] };
+    const changed = { ...saved, pools: [...saved.pools, { key: 'bonus', currency: 'sol' }], boxes: [{ ...saved.boxes[0], price: 0.2, split: [{ to: 'pool:house', percent: 86 }, { to: 'lottery:weekly', percent: 10 }, { to: 'farm:backers', percent: 2 }, { to: 'pool:bonus', percent: 2 }] }], decisions: [{ key: 'bonus-payout', when: 'a weekly high score', does: 'payout', pool: 'bonus', amount: 0.1 }] };
     writeFileSync(file, JSON.stringify(changed, null, 2));
     const again = await createApproval({ file, chain, now: () => NOW });
     const state = again.state();
@@ -178,7 +178,7 @@ describe('xsolana approve', () => {
     const { w, owner, file, chain } = setup(example);
     const first = await createApproval({ file, chain, now: () => NOW });
     const box = first.state().steps.find((s) => s.id === 'box:flip:LootBox');
-    assert.ok(box.details.some((d) => /^Pays: 88% to the pool “house”, 10% to the pot of “Weekly draw”, 2% to the pool “backers”$/.test(d)), box.details.join('\n'));
+    assert.ok(box.details.some((d) => /^Pays: 88% to the pool “house”, 10% to the pot of “Weekly draw”, 2% to the rewards of the farm “Back the house”$/.test(d)), box.details.join('\n'));
     await runAll(first, owner);
     const saved = JSON.parse(readFileSync(file, 'utf8'));
 
