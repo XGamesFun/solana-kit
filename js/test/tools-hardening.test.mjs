@@ -89,7 +89,7 @@ describe('a prize’s roll is made at prizeRollNonce of the nonce its route name
     const w = world({ seed: 'hardening-prize-nonce' });
     w.upsert({ Item: { id: 1, args: collectible('Gem') } });
     w.upsert({ Box: { id: 5, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
-    const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+    const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
     w.upsert({ Grant: { id: 1, args: { gives: { Roll: [5] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
     const victimNft = w.make(1, w.player);
     const nonce = loot.nonceOn(victimNft);

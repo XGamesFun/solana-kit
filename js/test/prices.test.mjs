@@ -65,7 +65,7 @@ t('buy sells a box with no roll in one instruction: the price split at once, a b
   const buy = (id) => loot.buyIx({ player: w.player, project: w.project, box: w.read('LootBox', pda.box(w.project, id)), treasury: w.treasury, items: items(), poolMints: { 1: w.mint } });
   const [coins, treasury] = [w.balance(w.player), w.balance(w.treasury)];
   const r = w.chain.send(w.player, [computeUnitLimit(600_000), buy(7)]);
-  assert.deepEqual(names(r), ['PrizeGiven', 'PrizeGiven', 'PrizeGiven', 'Bought']);
+  assert.deepEqual(names(r), ['Bought', 'PrizeGiven', 'PrizeGiven', 'PrizeGiven'], 'the receipt first, then each prize');
   const item = pda.item(w.project, 1);
   assert.deepEqual([ownerOf(w, pda.itemAsset(item, 1)), ownerOf(w, pda.itemAsset(item, 2))], [w.player, w.player]);
   assert.equal(w.balance(w.player), coins - PRICE + 300n);
@@ -75,33 +75,35 @@ t('buy sells a box with no roll in one instruction: the price split at once, a b
   fails(() => w.chain.send(w.player, [buy(8)]), 'Rolls');
 });
 
-t('a rolled bundle: the roll sets each prize aside, settle hands them all over and makes the roll it won', () => {
+t('a rolled bundle: the roll sets each prize aside, and whoever settles pays what it mints; a box that rolls gives no roll', () => {
   const w = world({ seed: 'prices-bundle' });
   const coin = w.newMint(w.creator);
   w.chain.send(w.creator, [setAuthorityIx({ account: coin, current: w.creator, newAuthority: w.project })]);
   w.upsert({ Item: { id: 1, args: collectible('Gem') } });
   w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
   const minted = { Tokens: { from: { Mint: [coin] }, amount: { Fixed: [40n] } } };
+  // A roll is given only by a box that doesn't roll (BadEntries).
+  fails(() => w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }, { Roll: [9] }]), drop([])]) } }), 'BadEntries');
   // The bundle all but always: a weight of 1,000,000 against 1.
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted, { Roll: [9] }], 1_000_000), drop([])]) } });
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted], 1_000_000), drop([])]) } });
   const box = w.read('LootBox', pda.box(w.project, 1));
-  // A unit for the collectible, and one for the coin it may pay (the player's account of it).
-  assert.equal(loot.orderEscrow(box), 2n * loot.ESCROW_LAMPORTS);
+  // What a throwaway key that settles it is funded with: a unit for the collectible, one for the coin it may pay.
+  assert.equal(loot.settleRent(box), 2n * loot.SETTLE_RENT_UNIT);
   const r = w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box, nonce: 1n })]);
   assert.equal(r.answers.length, 1);
   const orderAddress = pda.order(w.project, w.player, 1n);
   const order = w.read('Order', orderAddress);
-  assert.deepEqual(order.won, [{ Item: { item: 1, serial: 1 } }, { Tokens: { mint: coin, amount: 40n } }, { Roll: [9] }]);
+  assert.deepEqual(order.won, [{ Item: { item: 1, serial: 1, drawn: null } }, { Tokens: { mint: coin, amount: 40n } }]);
   w.chain.nextSlot();
+  const had = w.chain.get(w.cranker).lamports;
   const s = w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), items: { 1: w.read('Item', pda.item(w.project, 1)) } })]);
   const settled = s.receipts.find((x) => x.name === 'OrderSettled').data;
-  const roll = pda.order(w.project, w.player, loot.rollNonce(orderAddress, order.requested_slot, 2));
-  // The receipt names what was won; what each became follows from it: the collectible at its item and serial, the
-  // roll's order at its nonce.
+  // The receipt names what was won; what each became follows from it: the collectible at its item and serial.
   assert.deepEqual([settled.from, settled.won], [0, order.won]);
   assert.ok(w.chain.get(pda.itemAsset(pda.item(w.project, 1), 1)), 'the collectible is minted');
   assert.equal(w.balance(w.player, coin), 40n);
-  assert.equal(w.read('Order', roll).status, 'Waiting');
+  const spent = had - w.chain.get(w.cranker).lamports;
+  assert.ok(spent > 1_000_000n && spent < loot.settleRent(box), `the settler paid the collectible's rent and the coin's account: ${spent}`);
 });
 
 t('a list gate lets in the wallets on it, its proof passed where an NFT shown would be', () => {
@@ -176,17 +178,18 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player, nfts: [w.entryOf(1, w.player), w.entryOf(1, w.cranker)], kinds: { [a]: kind, [b]: kind } })]);
   assert.deepEqual([ownerOf(w, a), ownerOf(w, b)], [w.player, w.player]);
 
-  // An auction whose bids are NFTs: a bundle of two tops one of one, which goes back.
+  // An auction whose bids are NFTs (of an item: a roll lot takes no NFT bids): a bundle of two tops one of one, which
+  // goes back.
   const [c, d, e] = [mint(w.player), mint(w.cranker), mint(w.cranker)];
-  const lot = { lot: { Roll: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(w.chain.now()), ends_at: BigInt(w.chain.now() + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
-  w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(2)], { active: false }) } });
-  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot, rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []) })]);
+  w.upsert({ Item: { id: 9, args: { ...collectible('Relic'), kind: 'Normal' } } });
+  const lot = { lot: { Item: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(w.chain.now()), ends_at: BigInt(w.chain.now() + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
+  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
   const auction = () => w.read('Auction', pda.auction(w.project, w.authority, 1));
   w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: auction(), nfts: [{ asset: c, ...kind }] })]);
   w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.bidIx({ bidder: w.cranker, project: w.project, id: 1, auction: auction(), nfts: [{ asset: d, ...kind }, { asset: e, ...kind }], held: [kind] })]);
   assert.equal(ownerOf(w, c), w.player, 'the bid it topped went back');
   assert.deepEqual(auction().held, [d, e]);
   w.chain.warp(w.chain.now() + 601);
-  w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: auction(), held: [kind, kind] })]);
-  assert.deepEqual([ownerOf(w, d), ownerOf(w, e)], [w.treasury, w.treasury], 'the winning NFTs went to the treasury, for the project’s roll');
+  w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: auction(), item: w.read('Item', pda.item(w.project, 9)), held: [kind, kind] })]);
+  assert.deepEqual([ownerOf(w, d), ownerOf(w, e)], [w.treasury, w.treasury], 'the winning NFTs went to the treasury, for the project’s item');
 });

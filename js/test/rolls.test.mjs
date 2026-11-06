@@ -11,7 +11,7 @@ const skip = cannotRun() ?? false;
 const { pda } = loot;
 const hero = { of: { Item: [1] }, key: '', test: 'Any' };
 // Entry 0: a level up, back home; entry 1: burned.
-const fates = [{ entry: 0, shifts: [{ key: 'level', by: 1, most: 0 }], then: 'Back' }, { entry: 1, shifts: [], then: 'Burn' }];
+const fates = [{ entry: 0, shifts: [{ key: 'level', by: 1, most: 0 }], then: null }, { entry: 1, shifts: [], then: 'Burn' }];
 const box = (active) => ({
   price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active, shares: [],
   entries: [{ outcome: 'Nothing', weight: 1 }, { outcome: 'Nothing', weight: 1 }], odds: [], subject: hero, fates,

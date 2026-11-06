@@ -32,9 +32,9 @@ test('a player claims a grant and wins an auction that each give a roll, and tak
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
   for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], burns: false, weight: 1 }], odds: [] };
+  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
   w.upsert({ Box: { id: CHEST, args: chest } });
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [CHEST] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const now = w.chain.now();
   const lot = { lot: { Roll: [CHEST] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [] };
@@ -88,7 +88,7 @@ test('a player claims grants that give an NFT and a collectible at once, through
   w.upsert({ Item: { id: 2, args: collectible('Trophy') } });
   const trophy = w.make(1, w.authority);
   w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: trophy, collection: w.collection })]);
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   const open = (gives) => ({ gives, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true });
   w.upsert({ Grant: { id: 1, args: open({ Nft: { stash: 1, nft: trophy } }) } });
   w.upsert({ Grant: { id: 2, args: open({ Item: [2] }) } });

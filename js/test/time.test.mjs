@@ -84,8 +84,8 @@ test('the spec carries a farm’s lock and upkeep, time raises and time rules to
   const m = model(spec);
   const farm = farmArgs(spec.farms[0], m);
   assert.deepEqual([farm.lock_key, farm.upkeep_key, farm.gates.at(-1).test], ['free_at', 'fuel_until', 'Passed']);
-  assert.deepEqual(recipeArgs(spec.recipes[0], m).raises, [{ place: 0, key: 'fuel_until', by: DAY, most: 3 * DAY, from_now: true }]);
-  assert.equal(recipeArgs(spec.recipes[1], m).raises[0].by, -DAY);
+  assert.deepEqual(recipeArgs(spec.recipes[0], m).raises, [{ place: 0, shift: { key: 'fuel_until', by: DAY, most: 3 * DAY, from_now: true } }]);
+  assert.equal(recipeArgs(spec.recipes[1], m).raises[0].shift.by, -DAY);
 
   const refused = (change) => {
     const s = structuredClone(spec);
@@ -121,7 +121,7 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   const farm = w.read('Farm', pda.farm(w.project, 3));
   w.chain.send(kp.address, [loot.stakeNftIx({ player: kp.address, project: w.project, id: 3, farm, asset: ship, collection: w.collection })]);
   const seatAt = pda.seat(pda.farm(w.project, 3), ship);
-  assert.equal(Number(w.read('Seat', seatAt).upkeep_until), 0, 'staked dry');
+  assert.equal(Number(w.read('Seat', seatAt).earns_until), 0, 'staked dry');
   const wallet = {
     address: kp.address,
     async signTransaction(wire) {
@@ -137,7 +137,7 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   await app.craft('refuel', [ship], 1, { listing });
   const fuel = numberOf(w, ship, 'fuel');
   assert.equal(fuel, w.chain.now() + DAY, 'fuelled a day');
-  assert.equal(Number(w.read('Seat', seatAt).upkeep_until), fuel, 'and the seat read it in the same transaction');
+  assert.equal(Number(w.read('Seat', seatAt).earns_until), fuel, 'and the seat read it in the same transaction');
   // Once the fuel runs out, claims() lists the seat's refresh (free, anyone), until it is refreshed.
   assert.deepEqual((await app.claims()).filter((c) => c.kind === 'refresh-seat'), []);
   w.chain.warp(fuel + 60);

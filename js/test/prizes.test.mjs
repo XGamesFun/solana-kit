@@ -22,7 +22,7 @@ function stocked(seed) {
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
   for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], burns: false, weight: 1 }], odds: [] };
+  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
   w.upsert({ Box: { id: CHEST, args: chest } });
   return { w, nfts };
 }
@@ -67,7 +67,7 @@ t('a stash takes what the project’s keys put in, and a box gives one of its NF
 
 t('a grant gives a roll of a box', () => {
   const { w, nfts } = stocked('prizes-grant');
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [CHEST] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const wallet = w.who();
   const grant = w.read('Grant', pda.grant(w.project, 1));
@@ -119,21 +119,26 @@ t('an auction sells a roll of a box', () => {
   const { w, nfts } = stocked('prizes-auction');
   const now = w.chain.now();
   const args = { lot: { Roll: [CHEST] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [] };
-  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args, rolls: w.rolls(args.lot.Roll ? [args.lot.Roll[0]] : []) })]);
+  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args })]);
   const address = pda.auction(w.project, w.authority, 1);
+  assert.equal(w.read('Auction', address).pin, w.read('LootBox', pda.box(w.project, CHEST)).version, 'the box’s version, pinned');
   w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: w.read('Auction', address), amount: PRICE })]);
   w.chain.warp(now + 601);
   const auction = w.read('Auction', address);
   const treasury = w.balance(w.treasury);
   w.chain.send(w.cranker, [loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction })]);
-  assert.equal(w.balance(w.treasury) - treasury, PRICE);
+  // The winning bid stays in the vault as the roll's order's payment, split by the auction's shares when it settles.
+  assert.equal(w.balance(w.treasury), treasury, 'nothing split at the end');
   const order = pda.order(w.project, w.player, loot.prizeRollNonce(loot.prizeNonce(address, BigInt(auction.last_bid_at))));
+  const made = w.read('Order', order);
+  assert.deepEqual([made.paid, made.mint, made.box_version], [PRICE, w.mint, auction.pin]);
   assert.ok(nfts.includes(rollAndSettle(w, order)));
+  assert.equal(w.balance(w.treasury) - treasury, PRICE, 'the treasury’s at the settle');
 });
 
 t('a specific NFT and a collectible are given at once, by a grant’s claim and by a lottery’s place', () => {
   const { w, nfts } = stocked('prizes-direct');
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   const grantArgs = (gives) => ({ gives, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true });
   // A grant of one NFT of the stash: the claim hands it over, in its own transaction.
   w.upsert({ Grant: { id: 1, args: grantArgs({ Nft: { stash: 1, nft: nfts[0] } }) } });

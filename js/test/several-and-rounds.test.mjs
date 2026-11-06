@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import { encodeBase58 } from '../chain/base58.js';
 import { concat } from '../chain/bytes.js';
 import { parseCoreAsset } from '../chain/core.js';
-import { computeUnitLimit, requestHeapFrame } from '../chain/programs.js';
+import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
@@ -87,7 +87,7 @@ t('a voucher of several rounds pays each once, in one claim; a grant keeps its r
   const w = world({ seed: 'several-rounds' });
   w.pool(1, w.mint, 100n);
   const signer = keyFromSeed(new Uint8Array(32).fill(3));
-  const limits = { wallet: { total: 0, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 0, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [signer.publicKey, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, shard_bits: 2 } } });
   const address = pda.grant(w.project, 1);
   w.chain.airdrop(address, 1_000_000_000n);
@@ -250,18 +250,25 @@ t('an auction ended with hold leaves its NFT lot in a hold for the winner, which
   assert.equal(w.chain.get(ender).lamports, before + rent, 'the hold’s rent came back to the ender');
 });
 
-t('a box of one entry and 150 draws an open asks for the larger heap: without it the open fails, with it the order is made', () => {
+t('the biggest orders are opened and rolled with the heap every transaction has: 240 draws of tokens, 91 of an item', () => {
   const w = world({ seed: 'big-open' });
-  w.upsert({ Item: { id: 1, args: { ...collectible('Card'), kind: 'Normal' } } });
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 150, only: [], distinct: false }] }) } });
-  const box = w.read('LootBox', pda.box(w.project, 1));
-  assert.equal(loot.boxHeapFrame(box), loot.LARGE_SETTLE_HEAP);
-  assert.equal(loot.boxHeapFrame({ ...box, slots: [{ count: 100 }] }), 0, '100 draws fit');
+  // A box of an item holds 91 draws an order at most (the rows a fresh unit's draw may carry, MAX_GROW); one of tokens
+  // about 243. Every open asks the oracle: the roll is its answer's, not the open's.
+  w.pool(1, w.mint, 10_000n);
+  w.upsert({ Item: { id: 1, args: collectible('Card') } });
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([fromPool(1, 1n)])], { slots: [{ count: 240, only: [], distinct: false }] }) } });
+  w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 91, only: [], distinct: false }] }) } });
+  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 92, only: [], distinct: false }] }) } }), /BadEntries/);
   const items = { 1: w.read('Item', pda.item(w.project, 1)) };
-  const open = (nonce) => loot.openBoxIx({ player: w.player, project: w.project, box, nonce, maxPrice: PRICE, items });
-  assert.throws(() => w.chain.send(w.player, [computeUnitLimit(1_400_000), open(1n)]));
-  w.chain.send(w.player, [computeUnitLimit(1_400_000), requestHeapFrame(loot.boxHeapFrame(box)), open(2n)]);
-  assert.ok(w.chain.get(pda.order(w.project, w.player, 2n)), 'the order is made');
+  for (const id of [1, 2]) {
+    const box = w.read('LootBox', pda.box(w.project, id));
+    assert.ok(loot.orderBytes(box) <= loot.MAX_ORDER_BYTES);
+    const r = w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.openBoxIx({ player: w.player, project: w.project, box, nonce: BigInt(id), maxPrice: PRICE, items, poolMints: { 1: w.mint } })]);
+    assert.equal(r.answers.length, 1);
+    const order = w.read('Order', pda.order(w.project, w.player, BigInt(id)));
+    assert.equal(order.status, 'Rolled');
+    assert.equal(w.chain.get(pda.order(w.project, w.player, BigInt(id))).data.length, loot.orderBytes(box), 'sized as the client sizes it');
+  }
 });
 
 test('settle_round gives at most `runs` token runs a call: the rest wait for the next call from the cursor', () => {
