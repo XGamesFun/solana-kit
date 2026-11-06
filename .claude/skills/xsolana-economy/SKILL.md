@@ -9,8 +9,8 @@ An economy is one JSON spec (`xsolana.json` in the project) on **loot**, a Solan
 writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and the project's
 owner puts it live by approving in their own wallet. It runs on **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.22.0 <guide|examples|check|simulate|cost|explain|publish|status> [xsolana.json]`,
-or `npx -y @xgamesfun/solana@0.22.0 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.23.0 <guide|examples|check|simulate|cost|explain|publish|status> [xsolana.json]`,
+or `npx -y @xgamesfun/solana@0.23.0 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -84,7 +84,7 @@ or `npx -y @xgamesfun/solana@0.22.0 tool <name> '<json>'` for any tool (always w
 7. **Save it**: `xsolana_save {"spec": …}` writes `xsolana.json`, only if it checks. A live file keeps its program numbers.
 8. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
    run it themselves in the project folder, exactly as `xsolana_publish` gives it (it names the exact version:
-   `npx -y @xgamesfun/solana@0.22.0 approve xsolana.json`; never drop the version). It opens a page on their computer where
+   `npx -y @xgamesfun/solana@0.23.0 approve xsolana.json`; never drop the version). It opens a page on their computer where
    they connect a devnet wallet and approve; what lands is written back into `xsolana.json`. You publish nothing.
 9. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
    happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the

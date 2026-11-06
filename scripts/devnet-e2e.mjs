@@ -7,7 +7,9 @@
 // are refuelled and bound into a badge by recipes, held in until the badge is burned. Spends a little devnet SOL; every
 // key lives in memory only.
 //
-//   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only flip|examples|auction|farms|stash|compressed|packs]
+//   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
+//
+// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -58,9 +60,11 @@ const signAll = (wallet, wires) =>
     return toBase64(wireTransaction(t.message, sigs));
   });
 
+// Each project of the one owner is a number of its own (the project's address is ["project", owner, number]).
+let projects = 0;
 async function goLive(name, spec) {
   const file = path.join(dir, `${name}.json`);
-  writeFileSync(file, JSON.stringify(spec, null, 2));
+  writeFileSync(file, JSON.stringify({ ...spec, projectNumber: projects++ }, null, 2));
   const session = await createApproval({ file, chain });
   for (let i = 0; i < 10 && !session.state().done; i++) {
     const batch = await session.prepare(owner.address);
@@ -72,7 +76,8 @@ async function goLive(name, spec) {
   return saved;
 }
 
-const only = process.argv.includes('--only') ? arg('only') : null;
+const only = process.argv.includes('--only') ? arg('only').split(',') : null;
+const want = (name) => !only || only.includes(name);
 
 /** A keypair as js/play's wallet: it signs its own slot. */
 const asWallet = (k) => ({
@@ -85,7 +90,7 @@ const asWallet = (k) => ({
   },
 });
 
-if (!only || only === 'flip') {
+if (want('flip')) {
 // 1. A small coin flip, so the real oracle rolls on devnet.
 const flip = await goLive('tiny-flip', {
   version: 2,
@@ -124,7 +129,7 @@ console.log(`payout (the authority): ${await send([owner], [loot.moveTokensIx({ 
 }
 
 // 2. Two examples: a season of emissions with a project token, and a level ladder whose payouts the authority signs.
-if (!only || only === 'examples')
+if (want('examples'))
   for (const name of ['halving-seasons', 'level-ladder']) {
     const spec = JSON.parse(readFileSync(new URL(`../examples/${name}.json`, import.meta.url), 'utf8'));
     if (name === 'level-ladder') spec.pools = spec.pools.map((p) => ({ ...p, seed: 0.02 }));
@@ -133,7 +138,7 @@ if (!only || only === 'examples')
 
 // 3. The artwork auction, short: two players bid in SOL through js/play, the outbid one's SOL is back at once, and the
 // winner ends it once it is over and has the collectible.
-if (!only || only === 'auction') {
+if (want('auction')) {
   const spec = JSON.parse(readFileSync(new URL('../examples/artwork-auction.json', import.meta.url), 'utf8'));
   spec.auctions = spec.auctions.map((a) => ({ ...a, reserve: 0.001, runs: '90s', extendBy: '30s' }));
   const live = await goLive('artwork-auction', spec);
@@ -158,7 +163,7 @@ if (!only || only === 'auction') {
 // 4. Farm times and a set: two pieces staked at an altar that keeps their lock and fuel on the NFT; a recipe refuels one
 // (the play page refreshes its seat with it), a recipe binds both into a badge (only while they are staked), and the
 // pieces can't leave until a recipe burns the badge.
-if (!only || only === 'farms') {
+if (want('farms')) {
   const live = await goLive('bound-elements', {
     version: 2,
     network: 'devnet',
@@ -168,16 +173,15 @@ if (!only || only === 'farms') {
     tokens: [{ key: 'sol', source: 'sol' }, { key: 'spark', source: 'project', name: 'Spark', symbol: 'SPARK', decimals: 0 }, { key: 'fuel', source: 'project', name: 'Fuel', symbol: 'FUEL', decimals: 0 }],
     collection: { name: 'Bound elements' },
     items: [{ key: 'fire', name: 'Fire' }, { key: 'water', name: 'Water' }, { key: 'badge', name: 'Elemental Badge' }],
-    pools: [{ key: 'spark-rewards', currency: 'spark' }],
     farms: [
-      { key: 'altar', name: 'The altar', stakes: 'collectibles', rewards: 'spark-rewards', rate: { perDay: 10, minted: true }, tiers: [{ lock: 0 }], lockAttribute: 'free_at', upkeepAttribute: 'fuel_until' },
-      { key: 'sanctum', name: 'The sanctum', stakes: 'collectibles', item: 'badge', rewards: 'spark-rewards', rate: { perDay: 100, minted: true }, tiers: [{ lock: 0 }] },
+      { key: 'altar', name: 'The altar', stakes: 'collectibles', rewards: 'spark', rate: { perDay: 10, minted: true }, tiers: [{ lock: 0 }], lockAttribute: 'free_at', upkeepAttribute: 'fuel_until' },
+      { key: 'sanctum', name: 'The sanctum', stakes: 'collectibles', item: 'badge', rewards: 'spark', rate: { perDay: 100, minted: true }, tiers: [{ lock: 0 }] },
     ],
     recipes: [
       { key: 'refuel', name: 'Refuel', in: [{ takes: 'use', item: 'fire' }, { takes: 'pay', currency: 'fuel', amount: 1, to: 'burn' }], raises: [{ place: 0, key: 'fuel_until', by: '1d', upTo: '3d', fromNow: true }] },
-      { key: 'bind', name: 'Bind', in: [{ takes: 'staked', item: 'fire' }, { takes: 'staked', item: 'water' }], out: [{ gives: 'item', item: 'badge' }],
+      { key: 'bind', name: 'Bind', in: [{ takes: 'staked', item: 'fire', farm: 'altar' }, { takes: 'staked', item: 'water', farm: 'altar' }], out: [{ gives: 'item', item: 'badge' }],
         raises: [0, 1].flatMap((place) => [{ place, key: 'bound', by: 1, upTo: 1 }, { place, key: 'free_at', by: '20000d' }]) },
-      { key: 'unbind', name: 'Unbind', in: [{ takes: 'burn', item: 'badge' }, { takes: 'staked', item: 'fire' }, { takes: 'staked', item: 'water' }],
+      { key: 'unbind', name: 'Unbind', in: [{ takes: 'burn', item: 'badge' }, { takes: 'staked', item: 'fire', farm: 'altar' }, { takes: 'staked', item: 'water', farm: 'altar' }],
         needs: [1, 2].map((place) => ({ place, key: 'bound', atLeast: 1 })), raises: [1, 2].flatMap((place) => [{ place, key: 'bound', by: -1 }, { place, key: 'free_at', by: '-20000d' }]) },
     ],
   });
@@ -209,7 +213,7 @@ if (!only || only === 'farms') {
 }
 // 5. A stash's NFT at random, rolled by MagicBlock's real oracle: the callback takes the NFT it picks out of the stash
 // (the stash shrinks inside the oracle's call), and the settle hands it over.
-if (!only || only === 'stash') {
+if (want('stash')) {
   const live = await goLive('stash-chest', {
     version: 2,
     network: 'devnet',
@@ -256,7 +260,7 @@ if (!only || only === 'stash') {
 // 7. Packs (loot 0.22): a booster of four cards and a guaranteed rare, and a pack of fresh heroes whose color is drawn
 // from a sealed table and power from a range; four boosters bought at once, one wallet prompt, the real oracle's one
 // answer, settled in parts by the throwaway key.
-if (!only || only === 'packs') {
+if (want('packs')) {
   const live = await goLive('packs', {
     version: 2,
     network: 'devnet',
@@ -292,9 +296,78 @@ if (!only || only === 'packs') {
   for (const c of mine) console.log(`packs: ${c.name}, color ${c.attributes.color}, power ${c.attributes.power}`);
   console.log(`packs: ${prompts} wallet prompts for both purchases`);
 }
+// 8. A lottery (loot 0.23: each round is a record of its own): two fresh players buy tickets of a one-off draw due
+// 90 seconds after going live; once it is due, one reveals it, MagicBlock's real oracle draws, and the players take
+// what they are owed (anyone may pay out everyone): the winner has the pot, and the last pull closes the round.
+if (want('lottery')) {
+  const live = await goLive('quick-draw', {
+    version: 2,
+    network: 'devnet',
+    name: 'Quick draw',
+    prompt: 'A one-off draw 90 seconds after going live: 0.001 SOL a ticket, the winner takes the pot.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    lotteries: [{ key: 'quick', name: 'Quick draw', price: 0.001, places: [100], firstDraw: 'publish+90s' }],
+  });
+  const players = [freshKeypair(), freshKeypair()];
+  for (const k of players) await send([funder], [transferLamports(funder.address, k.address, 30_000_000n)]);
+  const apps = players.map((k) => solanaApp({ spec: live, rpc, wallet: asWallet(k) }));
+  for (const [i, app] of apps.entries()) console.log(`lottery: ${players[i].address} buys ${i + 1} ticket(s): ${await app.buyTickets('quick', i + 1, { listing: (await app.lotteries())[0] })}`);
+  const lotteryAddress = loot.pda.lottery(live.live.project, live.lotteries[0].id);
+  const roundAddress = loot.currentRound(lotteryAddress, loot.decode('Lottery', (await rpc.account(lotteryAddress)).data));
+  const { drawsAt } = (await apps[0].lotteries())[0];
+  await sleep(Math.max(0, drawsAt * 1000 - Date.now()) + 3000);
+  // The chain's clock can trail the wall's by a few seconds: look again until the draw is due there too.
+  let reveal;
+  for (let i = 0; i < 20 && !reveal; i++) reveal = (await apps[0].claims()).find((c) => c.kind === 'reveal' && c.key === 'quick') ?? (await sleep(5000), null);
+  if (!reveal) throw new Error('The draw never came due.');
+  console.log(`lottery: revealed (the oracle asked) ${await apps[0].claim(reveal)}`);
+  let round;
+  for (let i = 0; i < 30; i++) {
+    round = loot.decodeRound((await rpc.account(roundAddress)).data);
+    if (round.status !== 'Drawing') break;
+    await sleep(2000);
+  }
+  if (round.status !== 'Drawn') throw new Error(`The oracle did not draw the round: ${round.status}`);
+  console.log(`lottery: drawn by the oracle; ${round.sold} tickets sold`);
+  for (let pass = 0; pass < 4 && (await rpc.account(roundAddress)); pass++)
+    for (const [i, app] of apps.entries())
+      for (const c of (await app.claims()).filter((x) => x.key === 'quick' && ['pull', 'payout'].includes(x.kind)))
+        console.log(`lottery: ${players[i].address} ${c.kind}s: ${await app.claim(c)}`);
+  if (await rpc.account(roundAddress)) throw new Error('The round is still open after every pull.');
+  const pot = await Promise.all(players.map(async (k) => {
+    const held = await rpc.account(loot.ata(k.address, NATIVE_MINT));
+    return held ? new DataView(held.data.buffer, held.data.byteOffset).getBigUint64(64, true) : 0n;
+  }));
+  console.log(`lottery: every part paid and the round closed; wrapped SOL won: ${players.map((k, i) => `${k.address} ${pot[i]}`).join(', ')}`);
+}
+// 9. A token farm: a fresh player stakes SOL, earns SPARK minted as it grows (a rate is per whole staked token: 0.01 SOL
+// earns 1,000 SPARK a day), harvests it, then takes the stake out.
+if (want('farm')) {
+  const live = await goLive('spark-field', {
+    version: 2,
+    network: 'devnet',
+    name: 'Spark field',
+    prompt: 'Stake SOL and earn SPARK, minted as it grows, with no lock.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }, { key: 'spark', source: 'project', name: 'Spark', symbol: 'SPARK', decimals: 6 }],
+    farms: [{ key: 'field', name: 'The field', stakes: 'sol', rewards: 'spark', rate: { perDay: 100000, minted: true }, tiers: [{ lock: 0 }] }],
+  });
+  const player = freshKeypair();
+  await send([funder], [transferLamports(funder.address, player.address, 30_000_000n)]);
+  const app = solanaApp({ spec: live, rpc, wallet: asWallet(player) });
+  console.log(`farm: ${player.address} stakes 0.01 SOL: ${await app.stake('field', '0.01')}`);
+  await sleep(20_000);
+  console.log(`farm: harvested ${await app.harvest('field')}`);
+  const spark = loot.ata(player.address, live.live.mints.spark);
+  const held = (await rpc.account(spark)).data;
+  const earned = new DataView(held.buffer, held.byteOffset).getBigUint64(64, true);
+  if (earned <= 0n) throw new Error('The harvest paid no SPARK.');
+  console.log(`farm: ${Number(earned) / 1e6} SPARK harvested; unstaked ${await app.unstake('field', '0.01')}`);
+}
 // 6. A compressed badge, given by an open grant: the setup makes the collection with Bubblegum's plugin and opens the
 // project's tree; a fresh player claims, paying the player fee; Bubblegum mints the badge into the tree.
-if (!only || only === 'compressed') {
+if (want('compressed')) {
   await send([funder], [transferLamports(funder.address, owner.address, 300_000_000n)]);
   const live = await goLive('compressed-badge', {
     version: 2,

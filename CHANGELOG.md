@@ -4,9 +4,19 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## 0.23.0 (not released; the program is not deployed yet)
+## 0.23.0 (not released on npm; the program is on devnet)
 
 For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no account of 0.22.0 carries over.
+
+### Pinned to devnet
+
+- loot 0.23.0 is on devnet since slot 519,323,615 (2026-11-06). `release.json` and `js/test/fixtures/pinned.txt` pin
+  its build: 1,673,976 bytes, sha256 `d18c4c19…`, read back from devnet byte for byte. The package, the plugin
+  manifests, `server.json`, the npx commands and the README say 0.23.0. npm still serves 0.20.1.
+- `scripts/devnet-e2e.mjs`: `--only` takes several scenarios (`--only packs,lottery,farm,auction`), each project of
+  the one owner its own `projectNumber`, and two scenarios of 0.23: `lottery` (two players, a draw by the real oracle,
+  the pot paid out and the round closed) and `farm` (stake SOL, harvest a minted rate, unstake). The `farms`
+  scenario's spec says what 0.23's checker asks (rewards name a token; a staked recipe line names its farm).
 
 ### The program, as the tools see it
 
@@ -154,7 +164,7 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - Going live opens the project's token accounts and its share wallets' and makes a standing lookup table
   (`live.tables`), which play's sends and keys use; the authority's steps come last.
 
-## 0.22.0 (not released; the program is not deployed yet)
+## 0.22.0 (not released on npm; on devnet from slot 518,850,971 until 0.23.0)
 
 For loot 0.22.0, the release that launches. The IDL, the client, the spec and the docs follow it; no account of 0.20.1
 carries over.

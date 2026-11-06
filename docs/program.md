@@ -1,7 +1,7 @@
 # The loot program: how it behaves
 
-**Version 0.23.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**, and not deployed
-yet: devnet runs 0.22.0 until it is. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
+**Version 0.23.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**: on devnet since
+slot 519,323,615 (2026-11-06). Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
 accounts carry over from older versions: make fresh economies for this one.
 
 What 0.23 changed, in short: who claimed what is kept in **lists of records** (a wallet's counts, a grant's claims and
