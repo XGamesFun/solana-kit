@@ -48,19 +48,20 @@ test('a Core NFT of another collection and one of the game\'s each stake with on
   assert.equal(w.read('Seat', loot.pda.seat(loot.pda.farm(w.project, 1), native)).asset, native);
 });
 
-for (const kind of ['tokens', 'nfts']) test(`the browser ${kind} exit can forfeit rewards when their pool is frozen`, { skip }, async () => {
+for (const kind of ['tokens', 'nfts']) test(`the browser ${kind} exit can forfeit rewards when their vault is frozen`, { skip }, async () => {
   const { w, app } = fixture();
   if (kind === 'nfts') w.upsert({ Item: { id: 1, args: collectible('Native') } });
   const imported = kind === 'nfts' ? { asset: w.make(1, w.player) } : null;
-  // Funded before the stake: the stake counts it, and the farm releases it over a day.
+  // Funded into the farm's rewards vault before the stake: the stake counts it, and the farm releases it over a day.
+  const vault = loot.pda.rewards(loot.pda.farm(w.project, imported ? 1 : 2));
   w.fund(w.creator, w.mint, 10n);
-  w.payIn(w.creator, w.mint, 10n, [{ to: { Pool: [5] }, bps: 10_000 }]);
+  w.payIn(w.creator, w.mint, 10n, [{ to: { Account: [vault] }, bps: 10_000 }]);
   if (imported) await app.stakeNft('nfts', imported.asset, 0);
   else await app.stake('tokens', '1', 0);
-  const pool = loot.pda.pool(w.project, 5), account = w.chain.get(pool);
+  const account = w.chain.get(vault);
   const data = Uint8Array.from(account.data);
-  data[108] = 2; // SPL token AccountState::Frozen: model an issuer freezing the reward source after admission.
-  w.chain.put(pool, { ...account, data });
+  data[108] = 2; // SPL token AccountState::Frozen: model an issuer freezing the rewards after admission.
+  w.chain.put(vault, { ...account, data });
   w.chain.warp(w.chain.now() + 86_401);
   const exit = (options) => imported ? app.unstakeNft('nfts', imported.asset, options) : app.unstake('tokens', '1', options);
   const address = loot.pda.seat(loot.pda.farm(w.project, imported ? 1 : 2), imported?.asset ?? w.player);
@@ -68,5 +69,5 @@ for (const kind of ['tokens', 'nfts']) test(`the browser ${kind} exit can forfei
   assert.ok(w.chain.get(address), 'failed reward credit leaves the stake intact');
   await exit({ forfeit: true });
   assert.equal(w.chain.get(address), null);
-  if (!imported) assert.equal(w.balance(w.player), 100_000_000n, 'principal returned despite frozen reward pool');
+  if (!imported) assert.equal(w.balance(w.player), 100_000_000n, 'principal returned despite frozen rewards');
 });

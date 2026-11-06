@@ -99,8 +99,8 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
   await theirs.bid('sunset', '0.01');
   assert.deepEqual(await theirs.claims(), []);
 
-  // A lottery: two buyers; on its date the draw shows as due, either may reveal it; anyone moves the drawn round on (its
-  // sweep), and the winner pulls their place, which closes the round.
+  // A lottery: two buyers; on its date the draw shows as due, either may reveal it (the ask moves the lottery on), and the
+  // winner pulls their place, which closes the round.
   await app.buyTickets('daily', 2, { listing: (await app.lotteries()).find((l) => l.key === 'daily') });
   await theirs.buyTickets('daily', 1, { listing: (await theirs.lotteries()).find((l) => l.key === 'daily') });
   w.chain.warp(NOW + 3_600);
@@ -114,9 +114,7 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
     return held?.owner === loot.LOOT_PROGRAM && held.data.length ? loot.decodeRound(held.data) : null;
   };
   assert.equal(roundAt(0).status, 'Drawn');
-  await app.claim((await app.claims()).find((c) => c.kind === 'settle-round'));
-  assert.equal(roundAt(0).status, 'Swept');
-  assert.equal(lottery().round, 1, 'the sweep moved the lottery to its next round');
+  assert.equal(lottery().round, 1, 'the ask moved the lottery to its next round');
   const mine = (await app.claims()).find((c) => c.kind === 'pull');
   const yours = (await theirs.claims()).find((c) => c.kind === 'pull');
   assert.ok(Boolean(mine) !== Boolean(yours), 'whoever won sees their place');
@@ -129,11 +127,10 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
   assert.equal(roundAt(1).sold, 1n);
   assert.ok(roundAt(1).terms.draws_at > BigInt(w.chain.now()));
 
-  // That round has one buyer. Once it is drawn, a player who didn't win may move it on; the winner pulls their place.
+  // That round has one buyer. A player who didn't win may reveal it; the winner pulls their place.
   w.chain.warp(Number(roundAt(1).terms.draws_at) + 10);
   await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
   assert.equal(roundAt(1).status, 'Drawn');
-  await app.claim((await app.claims()).find((c) => c.kind === 'settle-round'));
   const place = (await theirs.claims()).find((c) => c.kind === 'pull');
   assert.ok(place, 'the winner sees their place');
   await theirs.claim(place);

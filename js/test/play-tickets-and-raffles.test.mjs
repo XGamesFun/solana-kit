@@ -78,13 +78,14 @@ test('Shelter Fair: one ticket a wallet, rent to the plot named, the shelter and
   await app.openBox('crate', { listing: (await app.boxes()).find((l) => l.key === 'crate'), chosenRecipient: plot });
   assert.equal((await wrapped(w, landlord.address)) - before, 500_000n, '10% of the 0.005 SOL crate');
 
-  // Raffle tickets wait in escrow; the shelter and referrer are fixed for the eventual draw.
+  // Raffle tickets wait in the round's own account; the referrer the buyer chose is paid as they buy, and the shelter's
+  // share waits for the draw.
   w.chain.airdrop(referrer.address, 1_000_000_000n);
   w.chain.send(referrer.address, [createAssociatedTokenAccountIdempotent(referrer.address, referrer.address, NATIVE_MINT)]);
   const shelterBefore = await wrapped(w, SHELTER);
   await app.buyTickets('raffle', 5, { chosenRecipient: referrer.address, listing: (await app.lotteries()).find((l) => l.key === 'raffle') });
   assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 0n);
-  assert.equal(await wrapped(w, referrer.address), 0n);
+  assert.equal(await wrapped(w, referrer.address), 500_000n, '5% of 0.01 SOL to the buyer’s choice, as they buy');
   await assert.rejects(app.buyTickets('raffle', 6, { listing: (await app.lotteries()).find((l) => l.key === 'raffle') }), /OverWindow/, 'ten tickets a wallet a round');
 
   // The open grant: the ticket holder claims a badge once.
@@ -97,13 +98,11 @@ test('Shelter Fair: one ticket a wallet, rent to the plot named, the shelter and
   const lottery = () => w.read('Lottery', address);
   w.chain.warp(Number(lottery().terms.draws_at));
   await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
-  // The sweep pays the shelter's share; the referrer's part waits in the round for its pull, and so does the place.
-  await app.claim((await app.claims()).find((c) => c.kind === 'settle-round'));
-  assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 2_000_000n, '20% of 0.01 SOL at the sweep');
+  // The ask moved the lottery on: drawn once, it has ended. The place and the shelter's share are pulled, in any order.
   assert.equal(lottery().round, 1, 'drawn once: it has ended');
   await app.claim((await app.claims()).find((c) => c.kind === 'pull'));
   await app.claim((await app.claims()).find((c) => c.kind === 'payout'));
-  assert.equal(await wrapped(w, referrer.address), 500_000n, '5% of 0.01 SOL to the buyer’s fixed choice');
+  assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 2_000_000n, '20% of 0.01 SOL, pulled in common');
   assert.deepEqual((await app.claims()).filter((c) => c.key === 'raffle'), [], 'everyone paid, the round closed');
   assert.equal((await app.lotteries()).find((l) => l.key === 'raffle').status, 'Ended');
 });

@@ -1,7 +1,7 @@
-// Listings, rentals, raffles, unbonding and sealed schedules through js/play, against the real program: a rental listed
-// and taken, its renter read with one account and its NFT home once it is over; a raffle whose winner gets the NFT
-// before the seller is paid, each step offered by claims(); tokens out of an unbonding farm once their wait is over;
-// and a sealed schedule's vested runs claimed.
+// Listings, rentals, raffles, farm exits and sealed schedules through js/play, against the real program: a rental listed
+// and taken, its renter read with one account and its NFT home once it is over; a raffle whose winner pulls the NFT and
+// whose seller is paid, each step offered by claims(); tokens out of a farm at once; and a sealed schedule's vested runs
+// claimed.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
@@ -53,7 +53,7 @@ test('a rental: listed, taken for two periods, its renter read, and its NFT home
   assert.equal(ownerOf(w, cabin), w.player);
 });
 
-test('a raffle through the page: the winner’s NFT first, then the seller’s money, each step a claim', { skip }, async () => {
+test('a raffle through the page: the winner’s NFT and the seller’s money each pulled, each step a claim', { skip }, async () => {
   const { w, appOf } = fixture('play-raffle');
   const art = w.make(1, w.creator);
   const seller = appOf(w.creator);
@@ -69,19 +69,19 @@ test('a raffle through the page: the winner’s NFT first, then the seller’s m
   assert.equal(w.balance(w.creator) - before, 4n * PRICE, 'and the seller was paid every ticket');
 });
 
-test('an unbonding farm’s tokens come out once their wait is over; a sealed schedule’s vested runs are claimed', { skip }, async () => {
+test('a farm’s tokens come out at once; a sealed schedule’s vested runs are claimed', { skip }, async () => {
   const { w, appOf } = fixture('play-wait');
-  w.pool(3, w.mint, 0n);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, rewardsMint: w.mint, stakedMint: w.mint,
-    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0, unbond: 600 } })]);
+    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }], boosts: [], max_boost_bps: 0 } })]);
   // A wallet someone holds the key of (on the curve): a sealed schedule pays no other.
   const me = freshKeypair().address;
   w.chain.airdrop(me, 10_000_000_000n);
   w.fund(me, w.mint, 100n * PRICE);
   const app = appOf(me);
   await app.stake('vault', 10);
+  const out = w.balance(me);
   await app.unstake('vault', 4);
-  assert.ok(!(await app.claims()).some((c) => c.kind === 'withdraw'), 'still waiting');
+  assert.equal(w.balance(me) - out, 4n * PRICE, 'no unbonding wait: what is taken out leaves at once');
   // Vesting for the player, sealed: nothing for a minute, then 3 runs a minute apart.
   const now = w.chain.now();
   const action = { from: { Vest: [w.mint] }, to: { Wallet: [me] }, amount: { Fixed: [2n * PRICE] }, halve_every: 0 };
@@ -90,26 +90,26 @@ test('an unbonding farm’s tokens come out once their wait is over; a sealed sc
   w.chain.warp(now + 601);
   const held = w.balance(me);
   const kinds = (await app.claims()).map((c) => c.kind);
-  assert.ok(kinds.includes('withdraw') && kinds.includes('vest'), kinds.join());
+  assert.ok(kinds.includes('vest'), kinds.join());
   await claimAll(app);
-  assert.equal(w.balance(me) - held, 4n * PRICE + 6n * PRICE, 'the unbonded 4 and all 3 vested runs');
+  assert.equal(w.balance(me) - held, 6n * PRICE, 'all 3 vested runs');
 });
 
-test('moving a stake onto a tier whose rewards wait for its lock harvests first, in the same transaction', { skip }, async () => {
+test('a stake moves onto a tier with an early exit and keeps what it was owed: a harvest pays it whenever', { skip }, async () => {
   const { w, appOf } = fixture('play-harvest-first');
-  w.pool(3, w.mint, 0n);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, rewardsMint: w.mint, stakedMint: w.mint,
     args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }, { lock: 3600, bps: 20_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
   const app = appOf(w.player);
-  // Funded before the stake, which counts it: the farm releases it over a day, its longest lock being shorter.
+  // Funded into its rewards vault before the stake, which counts it: the farm releases it over a day.
   w.fund(w.creator, w.mint, 1_000n);
-  w.payIn(w.creator, w.mint, 1_000n, [{ to: { Pool: [3] }, bps: 10_000 }]);
+  w.payIn(w.creator, w.mint, 1_000n, [{ to: { Account: [loot.pda.rewards(loot.pda.farm(w.project, 1))] }, bps: 10_000 }]);
   await app.stake('vault', 10, 0);
   w.chain.warp(w.chain.now() + 86_401);
-  const held = w.balance(w.player);
   await app.stake('vault', 1, 1);
-  // It staked 1 more and was paid what it was owed (the 1,000 released, less rounding) in the same transaction.
-  const paid = w.balance(w.player) - held + PRICE;
-  assert.ok(paid >= 999n && paid <= 1_000n, `paid ${paid}`);
   assert.equal(w.read('Seat', loot.pda.seat(loot.pda.farm(w.project, 1), w.player)).tier, 1);
+  // A tier with an early exit no longer holds its rewards back: harvested while the lock runs.
+  const held = w.balance(w.player);
+  await app.harvest('vault');
+  const paid = w.balance(w.player) - held;
+  assert.ok(paid >= 999n && paid <= 1_000n, `paid ${paid}`);
 });

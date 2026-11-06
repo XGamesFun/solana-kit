@@ -21,7 +21,6 @@ const transferCore = (asset, collection, owner, to) => ({
 
 test('in a watch farm the player module harvests with `held` and a new holder takes the seat over', { skip }, async () => {
   const w = world({ seed: 'watch-browser' });
-  w.pool(5, w.mint);
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args: { custody: 'Watch', tiers: [{ lock: 60, bps: 10_000 }], boosts: [], max_boost_bps: 0, gates: [] }, rewardsMint: w.mint, stakedMint: null })]);
   const farm = w.read('Farm', loot.pda.farm(w.project, 1));
   assert.equal(farm.custody, 'Watch', 'a variant without data decodes as its name');
@@ -31,9 +30,9 @@ test('in a watch farm the player module harvests with `held` and a new holder ta
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'watch', id: 1, stakes: 'collectibles', custody: 'watch' }] };
   const appOf = (address) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
 
-  // Funded before the stake: the stake counts it, and the farm releases it over a day.
+  // Funded into its rewards vault before the stake: the stake counts it, and the farm releases it over a day.
   w.fund(w.creator, w.mint, 1_000_000n);
-  w.payIn(w.creator, w.mint, 1_000_000n, [{ to: { Pool: [5] }, bps: 10_000 }]);
+  w.payIn(w.creator, w.mint, 1_000_000n, [{ to: { Account: [loot.pda.rewards(loot.pda.farm(w.project, 1))] }, bps: 10_000 }]);
   await appOf(w.player).stakeNft('watch', asset);
   const seatAddress = loot.pda.seat(loot.pda.farm(w.project, 1), asset);
   assert.equal(w.read('Seat', seatAddress).player, w.player);

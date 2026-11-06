@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
+import { mintToIx } from '../chain/token.js';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
@@ -23,12 +24,13 @@ test('a ship staked in escrow is refuelled and let out early by recipes, its sea
   const w = world({ seed: 'time-farm' });
   w.upsert({ Item: { id: 1, args: collectible('Ship') } });
   const gem = w.newMint(w.creator);
-  w.pool(7, gem, 1_000_000n);
   const args = {
     custody: 'Escrow', tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
     rate: { per_day: 1_000n, mints: false }, lock_key: 'free_at', upkeep_key: 'fuel',
   };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: gem })]);
+  // Its rate pays from what its rewards vault holds free.
+  w.chain.send(w.creator, [mintToIx({ mint: gem, to: pda.rewards(pda.farm(w.project, 3)), authority: w.creator, amount: 1_000_000n })]);
   const coin = w.mint;
   const use = { Use: { item: 1 } }, burn = { Pay: { mint: coin, amount: 10n, to: 'Burn' } };
   w.upsert({ Recipe: { id: 1, args: { active: true, inputs: [use, burn], outputs: [], needs: [], keeps: [], raises: [{ place: 0, key: 'fuel', by: DAY, most: 3 * DAY, from_now: true }] } } });
@@ -104,12 +106,13 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   const w = world({ seed: 'time-refuel-refresh' });
   w.upsert({ Item: { id: 1, args: collectible('Ship') } });
   const gem = w.newMint(w.creator);
-  w.pool(7, gem, 1_000_000n);
   const args = {
     custody: 'Escrow', tiers: [{ lock: 3 * DAY, bps: 10_000 }], boosts: [], max_boost_bps: 0,
     rate: { per_day: 1_000n, mints: false }, lock_key: 'free_at', upkeep_key: 'fuel',
   };
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, args, rewardsMint: gem })]);
+  // Its rate pays from what its rewards vault holds free.
+  w.chain.send(w.creator, [mintToIx({ mint: gem, to: pda.rewards(pda.farm(w.project, 3)), authority: w.creator, amount: 1_000_000n })]);
   const use = { Use: { item: 1 } }, burn = { Pay: { mint: w.mint, amount: 10n, to: 'Burn' } };
   w.upsert({ Recipe: { id: 1, args: { active: true, inputs: [use, burn], outputs: [], needs: [], keeps: [], raises: [{ place: 0, key: 'fuel', by: DAY, most: 3 * DAY, from_now: true }] } } });
   const kp = freshKeypair();
@@ -137,12 +140,10 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   const fuel = numberOf(w, ship, 'fuel');
   assert.equal(fuel, w.chain.now() + DAY, 'fuelled a day');
   assert.equal(Number(w.read('Seat', seatAt).earns_until), fuel, 'and the seat read it in the same transaction');
-  // Once the fuel runs out, claims() lists the seat's refresh (free, anyone), until it is refreshed.
-  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'refresh-seat'), []);
-  w.chain.warp(fuel + 60);
-  const [refresh] = (await app.claims()).filter((c) => c.kind === 'refresh-seat');
-  assert.deepEqual([refresh?.key, refresh?.by], ['mine', ship]);
-  await app.claim(refresh);
-  assert.ok(Number(w.read('Seat', seatAt).credited_at) >= fuel, 'credited past its fuel');
-  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'refresh-seat'), [], 'refreshed: nothing left to do');
+  // Once the fuel runs out the seat needs no refresh: touched however late, it is paid only up to its fuel.
+  w.chain.warp(fuel + 3 * DAY);
+  assert.deepEqual(await app.claims(), [], 'nothing to do at its end');
+  const held = w.balance(kp.address, gem);
+  w.chain.send(kp.address, [loot.harvestIx({ player: kp.address, project: w.project, id: 3, farm, by: ship })]);
+  assert.equal(w.balance(kp.address, gem) - held, 1_000n, 'one day of fuel, one day of pay');
 });

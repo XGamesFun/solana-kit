@@ -110,3 +110,35 @@ test('a player claims grants that give an NFT and a collectible at once, through
   assert.equal(parseCoreAsset(w.chain.get(badge).data).owner, player.address);
   assert.deepEqual((await app.claims()).filter((c) => c.kind === 'settle'), [], 'nothing left to finish');
 });
+
+test('a lottery place that gives a roll: its winner’s pull asks for it in the same transaction, and a key settles it', { skip }, async () => {
+  const w = world({ seed: 'play-lottery-roll' });
+  w.upsert({ Item: { id: 1, args: collectible('Relic') } });
+  const nfts = [0, 1].map(() => w.make(1, w.authority));
+  for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
+  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
+  w.upsert({ Box: { id: CHEST, args: chest } });
+  const places = [{ bps: 10_000, prize: { Roll: [CHEST] }, times: 1 }];
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  const player = freshKeypair();
+  w.chain.airdrop(player.address, 10_000_000_000n);
+  w.fund(player.address, w.mint, 10n * PRICE);
+  const spec = {
+    version: 2, name: 'Draw', currency: 'gold', tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
+    lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
+    live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
+  };
+  const wallet = asWallet(player);
+  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+  await app.buyTickets('draw', 2, { listing: (await app.lotteries()).find((l) => l.key === 'draw') });
+  w.chain.warp(w.chain.now() + 3601);
+  await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
+  const pull = (await app.claims()).find((c) => c.kind === 'pull');
+  assert.deepEqual(pull.pulls, [{ entry: 0, parts: [{ Pot: [0] }, { Prize: [0] }] }], 'its place: the pot and the roll');
+  const before = wallet.prompts;
+  await app.claim(pull);
+  assert.equal(wallet.prompts, before + 1, 'one prompt: the roll asked for in the pull, settled by a key');
+  assert.equal(nfts.filter((n) => parseCoreAsset(w.chain.get(n).data).owner === player.address).length, 1, 'the stash’s NFT is theirs');
+  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'settle'), [], 'nothing left waiting');
+  assert.equal(w.round(1), null, 'every part pulled: the round closed');
+});

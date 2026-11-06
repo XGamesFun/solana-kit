@@ -24,10 +24,10 @@ const lootIxName = (data) => instructionOf(data)?.name ?? null;
  * What a player may sign, and what an owner may sign while setting an economy up (`open_auction` hands the seller's own
  * collectible to the game, inside the loot program, for an auction of it).
  */
-const PLAYER_LOOT = new Set(['pay', 'pay_nft', 'buy', 'open_box', 'settle', 'refund', 'buy_tickets', 'draw_lottery', 'settle_round', 'pull', 'stake_tokens', 'unstake_tokens', 'stake_nft', 'unstake_nft', 'harvest', 'refresh_seat', 'craft', 'hold', 'release', 'enter', 'claim', 'claim_grant', 'run_schedule', 'open_auction', 'bid', 'end_auction',
-  // What the program lets anyone send: asking the oracle for a waiting roll, cancelling an unanswered draw, proving a
+const PLAYER_LOOT = new Set(['pay', 'pay_nft', 'buy', 'open_box', 'settle', 'refund', 'buy_tickets', 'draw_lottery', 'pull', 'stake_tokens', 'unstake_tokens', 'stake_nft', 'unstake_nft', 'harvest', 'refresh_seat', 'craft', 'hold', 'release', 'enter', 'claim', 'claim_grant', 'run_schedule', 'open_auction', 'bid', 'end_auction',
+  // What the program lets anyone send: asking the oracle for a waiting roll, proving a
   // compressed NFT or its traits, closing a stale leaf record.
-  'ask_roll', 'cancel_lottery', 'prove_leaf', 'close_leaf', 'prove_traits']);
+  'ask_roll', 'prove_leaf', 'close_leaf', 'prove_traits']);
 const OWNER_LOOT = new Set([...PLAYER_LOOT, 'create_project', 'update_project', 'open_pool', 'upsert', 'open_farm', 'move_tokens', 'collectible', 'open_contest', 'decide', 'roll', 'stash', 'set_traits']);
 
 /**
@@ -48,7 +48,8 @@ export function checkTransaction(message, { address, role, game = null, grants =
   if (keys[0] !== address) findings.push(`The fee payer is ${keys[0]}, not this wallet.`);
   const signers = keys.slice(0, header.numRequiredSignatures);
   const own = new Set([address, associatedTokenAddress(address, NATIVE_MINT), associatedTokenAddress(address, NATIVE_MINT, TOKEN_2022_PROGRAM)]);
-  const funds = new Set(game ? grants.map((id) => pda.grant(game, id)) : []);
+  // A grant's funds; for an owner setting up, a lottery's SOL for its rounds' rent (`roundRent`), at the same ids.
+  const funds = new Set(game ? [...grants.map((id) => pda.grant(game, id)), ...(role === 'owner' ? grants.map((id) => pda.lottery(game, id)) : [])] : []);
   const opensBox = instructions.some((ix) => keys[ix.programIndex] === LOOT_PROGRAM && lootIxName(ix.data) === 'open_box');
   for (const ix of instructions) {
     const program = keys[ix.programIndex];
@@ -79,7 +80,7 @@ export function checkTransaction(message, { address, role, game = null, grants =
         // The player module's one-prompt box: the open funds a throwaway key with its settle's fee (a few thousand
         // lamports), and that key hands the rest back when it settles.
         else if (acct(0) === address && lamports <= 10_000_000n && opensBox) summary.push(`funds the settle key ${to} (${lamports} lamports)`);
-        else if (acct(0) === address && !own.has(to) && !funds.has(to)) findings.push(`Sends ${Number(lamports) / 1e9} SOL from this wallet to ${to}, which is not its own wrapped-SOL account or a grant's funds.`);
+        else if (acct(0) === address && !own.has(to) && !funds.has(to)) findings.push(`Sends ${Number(lamports) / 1e9} SOL from this wallet to ${to}, which is not its own wrapped-SOL account, a grant's funds or a lottery's round rent.`);
       } else if (kind === 0n) summary.push(`create account ${acct(1)}`);
       else findings.push(`An unexpected System instruction (${kind}).`);
       continue;

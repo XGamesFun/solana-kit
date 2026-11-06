@@ -1,4 +1,4 @@
-// js/play on farms with transfer hooks: NFT exits, static and dynamic reward hooks, early exits that give rewards back,
+// js/play on farms with transfer hooks: NFT exits, static and dynamic reward hooks, early exits that keep their rewards,
 // and the hook accounts every farm builder keeps.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -46,9 +46,10 @@ function fixture({ hook = false, dynamic = false } = {}) {
   };
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'nfts', id: 1, stakes: 'collectibles' }, { key: 'tokens', id: 2, stakes: 'coin' }] };
   const app = solanaApp({ spec, rpc, wallet: { address: w.player, async signTransaction(wire) { calls.sign++; return wire; } }, now: () => w.chain.now() });
-  const seed = (amount) => w.chain.send(w.creator, [mintToIx({ mint: reward.mint, to: loot.pda.pool(w.project, 5), authority: w.creator, amount, tokenProgram: hook ? TOKEN_2022_PROGRAM : undefined })]);
-  // A sharing farm releases what lands in its pool over its release span (its longest lock, a day at least), counted at
-  // the first move after it lands: fund it before the stake, then let the day run.
+  // Into a farm's rewards vault (farm 1's by default), minted there: no transfer, so no fee and no hook on the way in.
+  const seed = (amount, id = 1) => w.chain.send(w.creator, [mintToIx({ mint: reward.mint, to: loot.pda.rewards(loot.pda.farm(w.project, id)), authority: w.creator, amount, tokenProgram: hook ? TOKEN_2022_PROGRAM : undefined })]);
+  // A sharing farm releases what lands in its vault over its release span (its longest lock, a day at least), counted
+  // at the first move after it lands: fund it before the stake, then let the day run.
   const releaseDay = () => w.chain.warp(w.chain.now() + 86_401);
   return { w, app, asset, calls, denied, seed, releaseDay, ...reward };
 }
@@ -89,34 +90,31 @@ for (const loose of [false, true]) test(`NFT exit follows the asset's ${loose ? 
   assert.equal(parseCoreAsset(w.chain.get(asset).data).frozen, false);
 });
 
-test('static reward hooks run for pool credit and the fee-adjusted NFT payout', { skip }, async () => {
+test('a static reward hook runs for the fee-adjusted NFT payout, the only transfer: crediting moves no tokens', { skip }, async () => {
   const { w, app, asset, mint, counter, seed, releaseDay } = fixture({ hook: true });
   seed(100n);
   await app.stakeNft('nfts', asset);
   releaseDay();
   await app.unstakeNft('nfts', asset);
-  assert.equal(w.chain.tokens(loot.ata(w.player, mint, TOKEN_2022_PROGRAM)), 81n, '10% incoming fee leaves 90 owed; payout fee leaves 81');
-  assert.equal(readUintLE(w.chain.get(counter).data, 0, 8), 2n, 'hook runs for both transfers');
+  assert.equal(w.chain.tokens(loot.ata(w.player, mint, TOKEN_2022_PROGRAM)), 90n, '100 owed; the payout’s 10% fee leaves 90');
+  assert.equal(readUintLE(w.chain.get(counter).data, 0, 8), 1n, 'the hook runs for the payout');
 });
 
-test('an early exit gives its rewards back to the pool through the reward hook, in the same move', { skip }, async () => {
+test('an early exit keeps the rewards it was credited, paid through the reward hook in the same move', { skip }, async () => {
   const { w, mint, counter, seed } = fixture({ hook: true });
-  // A farm of the project's coin whose only tier leaves early for 10%: its rewards wait for the lock, and leaving early
-  // gives them back to the pool, a transfer out of the rewards vault that runs the reward mint's hook.
+  // A farm of the project's coin whose only tier leaves early for 10%: leaving early pays what the seat was credited, a
+  // transfer out of the rewards vault that runs the reward mint's hook.
   w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 3, rewardsMint: mint, stakedMint: w.mint,
     args: { custody: 'Escrow', tiers: [{ lock: 3600, bps: 10_000, exit_bps: 1000 }], boosts: [], max_boost_bps: 0, exit_to: 'Burn' } })]);
   const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'early', id: 3, stakes: 'coin' }] };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: w.player, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
-  seed(100_000n);
+  seed(100_000n, 3);
   await app.stake('early', '1', 0);
   w.chain.warp(w.chain.now() + 1800);
-  const [runs, pool] = [readUintLE(w.chain.get(counter).data, 0, 8), w.chain.tokens(loot.pda.pool(w.project, 5))];
+  const runs = readUintLE(w.chain.get(counter).data, 0, 8);
   await app.unstake('early', '1');
-  const vault = loot.pda.rewards(loot.pda.farm(w.project, 3));
-  assert.equal(readUintLE(w.chain.get(counter).data, 0, 8) - runs, 2n, 'the hook ran for the release in and for the give-back out');
-  assert.equal(w.chain.tokens(vault), 0n, 'nothing the seat gave up stays in the rewards vault');
-  assert.ok(w.chain.tokens(loot.pda.pool(w.project, 5)) < pool, 'the pool lost only the transfer fees of the round trip');
-  assert.equal(w.chain.tokens(loot.ata(w.player, mint, TOKEN_2022_PROGRAM)), 0n, 'leaving early pays no rewards');
+  assert.equal(readUintLE(w.chain.get(counter).data, 0, 8) - runs, 1n, 'the hook ran for the payout');
+  assert.ok(w.chain.tokens(loot.ata(w.player, mint, TOKEN_2022_PROGRAM)) > 0n, 'leaving early keeps what it was credited');
 });
 
 test('dynamic reward hooks require exact transfer plans before signing and use fee-adjusted payout amounts', { skip }, async () => {
@@ -129,14 +127,11 @@ test('dynamic reward hooks require exact transfer plans before signing and use f
   await assert.rejects(app.unstakeNft('nfts', asset), /exact transfers keyed by mint/);
   assert.equal(calls.sign, before);
   const vault = loot.pda.rewards(loot.pda.farm(w.project, 1)), destination = loot.ata(w.player, mint, TOKEN_2022_PROGRAM);
-  const transfers = [
-    { source: loot.pda.pool(w.project, 5), destination: vault, authority: w.project, amount: 100n },
-    { source: vault, destination, authority: w.project, amount: 90n },
-  ];
+  const transfers = [{ source: vault, destination, authority: w.project, amount: 100n }];
   const counters = transfers.map((t) => pdaOf([addressBytes(t.destination), uintLE(t.amount, 8)], HOOK));
   for (const counter of counters) w.chain.put(counter, { owner: HOOK, lamports: w.chain.rent(16), data: new Uint8Array(16) });
   await app.unstakeNft('nfts', asset, { transfers: { [mint]: transfers } });
-  assert.equal(w.chain.tokens(destination), 81n);
+  assert.equal(w.chain.tokens(destination), 90n);
   for (const counter of counters) assert.equal(readUintLE(w.chain.get(counter).data, 0, 8), 1n);
 });
 

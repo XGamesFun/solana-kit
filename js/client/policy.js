@@ -43,8 +43,8 @@ export const lotteryDrawStuck = (round, slot) => round?.status === 'Drawing' && 
 
 /**
  * Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
- * `LOTTERY_TIMEOUT_SLOTS` of the first ask (asking again doesn't move it): anyone may cancel the round and refund it. A
- * round nobody asked to draw is never cancelled.
+ * `LOTTERY_TIMEOUT_SLOTS` of the first ask (asking again doesn't move it): the next ask of that round (`drawLotteryIx`
+ * with its address) cancels it, and every entry is refunded. A round nobody asked to draw is never cancelled.
  */
 export const lotteryCancellable = (round, slot) => round?.status === 'Drawing' && BigInt(slot) > BigInt(round.asked_first) + LOTTERY_TIMEOUT_SLOTS;
 

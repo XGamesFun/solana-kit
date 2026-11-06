@@ -31,7 +31,7 @@ import * as loot from '../client/index.js';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 /** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
-const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'settle-round', 'pull', 'payout']);
+const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 /** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
 const BATCHED = new Set(['contest', 'release', 'lookup-table', ...LOTTERY_STEPS]);
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -410,7 +410,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    * Its size is checked before the wallet signs (`sendFitting`): a transaction too big for a legacy one goes as one v0
    * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
    * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
-   * go alone, after the table and before the rest.
+   * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
+   * signing (`loot.withLeafCloses`), so its rent comes straight back.
    */
   /**
    * The project's standing lookup tables (made at go-live, `spec.live.tables`), each as the chain holds it now: one
@@ -431,6 +432,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
 
   async function send(instructions, extra = [], { keepWrapped = false } = {}) {
     if (!wallet?.address) throw new Error('Connect a wallet first.');
+    // A compressed NFT's record is closed in the transaction that used it, its prover signing: its rent comes back.
+    instructions = loot.withLeafCloses(instructions);
     if (!keepWrapped) instructions = await unwrapAfter(instructions);
     const sign = async (message) => {
       const { signers } = readTransaction(wireTransaction(message));
@@ -457,7 +460,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const latest = await client.latestBlockhash();
       lastValidBlockHeight = latest.lastValidBlockHeight;
       const tables = await standing();
-      for (const l of lists) messages.push(compileFitting({ payer: wallet.address, blockhash: latest.blockhash, instructions: await unwrapAfter(l), tables }));
+      for (const l of lists) messages.push(compileFitting({ payer: wallet.address, blockhash: latest.blockhash, instructions: await unwrapAfter(loot.withLeafCloses(l)), tables }));
       const wires = messages.filter(Boolean).map((m) => wireTransaction(m));
       const back = wires.length > 1 ? await wallet.signTransactions(wires).catch(() => null) : null;
       if (back) signed = messages.map((m) => (m ? back.shift() : null));
@@ -497,6 +500,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
    * or v0 with the project's standing tables (which cost it nothing); the key holds no rent for a table of its own.
    */
   async function sendAs(key, instructions) {
+    instructions = loot.withLeafCloses(instructions);
     return (await sendFitting({ rpc: client, payer: key.address, instructions, sign: async (message) => wireTransaction(message, [await key.sign(message)]), table: false, standing: await standing() }).catch(inWords)).signature;
   }
 
@@ -1067,13 +1071,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   }
 
   /**
-   * A lottery and its rounds that have a record: the current one (null when nobody bought into it yet), and the one
-   * before it while it still pays out (swept or cancelled, some part owed). Each { address, round } (`loot.decodeRound`).
+   * A lottery and its rounds that have a record: the current one (null when nobody bought into it yet), and the two
+   * before it while they wait for their draw or still pay out (the ask moves the lottery on, so a round drawing or
+   * owing parts is an older one). Each { address, round } (`loot.decodeRound`).
    */
   async function roundOf(l) {
     const address = loot.pda.lottery(project, l.id);
     const lottery = await read('Lottery', address);
-    const keys = [loot.currentRound(address, lottery), ...(lottery.round > 0 ? [loot.pda.round(address, lottery.incarnation, lottery.round - 1)] : [])];
+    const back = [1, 2].filter((k) => lottery.round >= k).map((k) => loot.pda.round(address, lottery.incarnation, lottery.round - k));
+    const keys = [loot.currentRound(address, lottery), ...back];
     const found = await client.accounts(keys);
     const rounds = keys.map((key, i) => ({ address: key, round: found[i]?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found[i].data) : null }));
     return { address, lottery, current: rounds[0].round, rounds: rounds.filter((r) => r.round) };
@@ -1095,60 +1101,97 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     }
     return [...out.values()];
   }
-  /** The mints a round's settle and pulls move: its pot's, its payment's and each token run's. */
+  /** The mints a round's ask and pulls move: its pot's, its payment's and each token run's. */
   const roundMints = (r, poolMints = {}) => [r.terms.mint, loot.paymentMint(r.terms), ...r.terms.places.map((p) => p.prize?.Tokens?.from).filter(Boolean).map((from) => (from.Pool ? poolMints[from.Pool[0]] : from.Mint?.[0] ?? from.Vest?.[0]))];
 
-  /** What one settle_round part of a drawn round needs, and the instruction (the next place's prize, or the sweep). */
-  async function settleRoundStep(key, r, signer) {
-    const winner = r.entries[loot.entryOf(r, loot.ticketOfPlace(r, Math.min(Number(r.cursor), Math.max(0, loot.roundWinners(r) - 1))))]?.buyer ?? signer;
-    const given = await prizeInputs(r.terms.places.map((p) => p.prize), signer, winner);
-    const raffles = r.terms.places.some((p) => p.prize === 'Raffled');
-    const stash = raffles ? loot.decodeStash((await client.account(loot.pda.lotteryStash(r.lottery)))?.data ?? null) : null;
-    // A raffled NFT is drawn now: its kind, for its move.
-    const drawn = stash ? loot.raffledNft(stash, r.answer, Number(r.cursor)) : null;
-    if (drawn && !given.nfts[drawn]) {
-      const { before, hasAuthority: _, ...nft } = await nftOf(drawn, signer, { to: winner });
-      given.nfts[drawn] = nft;
-      given.before.push(...before);
-    }
-    const shares = r.terms.shares.filter((x) => !x.to.Holder && !x.to.Chosen);
-    const holders = await holdersOf(shares);
-    const projectState = await projectNow();
-    const extra = await hookTail(roundMints(r, given.poolMints));
-    // Token runs a call, as many as fit 64 accounts and one transaction (the program stops at the first run a call
-    // doesn't carry; `claims()` lists the round again while the cursor hasn't reached the sweep). A call that gives
-    // token runs asks for the larger heap: several hooked runs with a long tail outgrow 32 KiB.
-    const built = (runs) => {
-      const ix = loot.settleRoundIx({ payer: signer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints: given.poolMints, projectMint: mintOf(), items: given.items, nfts: given.nfts, collection: given.collection, stash, runs, extra });
-      const tokenRuns = r.terms.places.some((p) => p.prize?.Tokens) && Number(r.cursor) < loot.roundWinners(r);
-      return [computeUnitLimit(800_000), ...(tokenRuns ? [requestHeapFrame(loot.LARGE_SETTLE_HEAP)] : []), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
-    };
-    let runs = r.terms.places.length;
-    while (runs > 1 && transactionLocks(signer, built(runs)) > 64) runs--;
-    return built(runs);
-  }
-
-  /** The pulls of `parts` of entry `i` of a round (`partsOwed`), signed by `signer`. */
-  async function pulls(key, r, i, parts, signer) {
-    const e = r.entries[i];
-    const out = [];
-    // A run's token prize is in its own mint: the prizes the round recorded name each.
-    const extra = await hookTail([...roundMints(r), ...r.prizes.map((p) => p.mint)]);
-    for (const part of parts) {
-      let ticket = {};
-      let handBack = false;
-      if (part === 'Own' && e.nft !== NOBODY) {
-        const then = r.status === 'Cancelled' || r.terms.returns ? null : r.terms.nft_ticket?.then;
-        handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
-        const to = !then || handBack ? e.buyer : then.Give ? then.Give[0] : undefined;
-        const { before = [], hasAuthority: _, ...kind } = await nftOf(e.nft, signer, { to });
-        out.push(...before);
-        ticket = kind;
-      }
-      // No pull carries the close: the step that leaves nothing owed closes the round after them (`claim`).
-      out.push(loot.pullIx({ payer: signer, project, roundAddress: key, round: { ...r, owed: Number.MAX_SAFE_INTEGER }, entry: i, part, projectState: await projectNow(), ticket, handBack, programs, extra }));
+  /** Each pool a round's places give tokens from, mapped to its mint (one never opened: the economy's currency). */
+  async function roundPoolMints(terms) {
+    const out = {};
+    for (const p of terms.places) {
+      const pool = p.prize?.Tokens?.from.Pool?.[0];
+      if (pool === undefined || pool in out) continue;
+      const account = await client.account(loot.pda.pool(project, pool));
+      out[pool] = account ? encodeBase58(account.data.subarray(0, 32)) : mintOf();
     }
     return out;
+  }
+
+  /** The ask for a round's draw (`round` decoded, `key` its address; null for the current round with no record). */
+  async function drawStep(l, lottery, key, round, signer) {
+    const terms = round?.terms ?? lottery.terms;
+    const poolMints = await roundPoolMints(terms);
+    const extra = await hookTail(roundMints({ terms }, poolMints));
+    return [computeUnitLimit(600_000), loot.drawLotteryIx({ payer: signer, project, id: l.id, lottery, round, roundAddress: key, poolMints, extra })];
+  }
+
+  /** The nonce a pull of entry `i` of the round at `key` names: a place's roll is made at `prizeRollNonce(nonce + place)`. */
+  const pullNonce = (key, i) => loot.prizeNonce(key, BigInt(i));
+
+  /** How many of a round's owed parts a pull of `part` (of entry `i`) settles. */
+  const pullSettles = (r, i, part) => {
+    if (part === 'Own' || part.Common) return 1;
+    const run = Number((part.Pot ?? part.Prize)[0]);
+    return part.Pot || loot.tokenRun(r, run) ? loot.placesPulled(r, i, run, Boolean(part.Prize)) : loot.prizePlacesOwed(r, i, run).length;
+  };
+
+  /**
+   * The pulls of `parts` of entry `i` of a round (`partsOwed`; `i` null for parts owed in common, `commonOwed`), signed by
+   * `signer`, and the rolls they make ([{ order, box }], `loot.pullRolls`). With `closes`, the last pull carries the
+   * round's close (when the parts it pays are the last owed).
+   */
+  async function pulls(key, r, i, parts, signer, { closes = false } = {}) {
+    const e = i == null ? null : r.entries[i];
+    const out = [];
+    const rolls = [];
+    const g = await projectNow();
+    // A run's token prize is in its own mint: the prizes the round recorded name each.
+    const extra = await hookTail([...roundMints(r), ...r.prizes.map((p) => p.mint)]);
+    for (const [k, part] of parts.entries()) {
+      const more = {};
+      if (part === 'Own' && e.nft !== NOBODY) {
+        const then = r.status === 'Cancelled' || r.terms.returns ? null : r.terms.nft_ticket?.then;
+        more.handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
+        const to = !then || more.handBack ? e.buyer : then.Give ? then.Give[0] : undefined;
+        const { before = [], hasAuthority: _, ...kind } = await nftOf(e.nft, signer, { to });
+        out.push(...before);
+        more.ticket = kind;
+      } else if (part.Prize && !loot.tokenRun(r, Number(part.Prize[0]))) {
+        // Each of the entry's places in the run: an NFT of the lottery's own stash (which one, as the pull takes them
+        // out), a project stash's NFT, an item, or a roll (asked in the same transaction).
+        const run = Number(part.Prize[0]);
+        const given = r.terms.places[run].prize;
+        const inputs = await prizeInputs([given], signer, e.buyer);
+        out.push(...inputs.before);
+        const stash = loot.ownStash(r.terms.places[run]) ? loot.decodeStash((await client.account(loot.pda.lotteryStash(r.lottery)))?.data ?? null) : null;
+        if (stash) {
+          const predicted = loot.stashNfts(r, stash);
+          for (const place of loot.prizePlacesOwed(r, i, run)) {
+            const nft = predicted[loot.nftSlot(r, place)];
+            if (!nft || inputs.nfts[nft]) continue;
+            const { before, hasAuthority: _, ...kind } = await nftOf(nft, signer, { to: e.buyer });
+            inputs.nfts[nft] = kind;
+            out.push(...before);
+          }
+        }
+        const stashes = given.Nft ? { [given.Nft.stash]: loot.decodeStash((await client.account(loot.pda.stash(project, given.Nft.stash)))?.data ?? null) ?? { nfts: [] } } : {};
+        more.prize = { stash, stashes, nfts: inputs.nfts, collection: inputs.collection, poolMints: inputs.poolMints, items: inputs.items, projectMint: mintOf() };
+        more.nonce = pullNonce(key, i);
+        rolls.push(...loot.pullRolls({ project, round: r, entry: i, part, nonce: more.nonce }));
+      } else if (part.Common) {
+        // Where a part owed in common goes: a share's payee (a collectible's holder now), the pot, a pool; one that can't
+        // take it (a pool never opened, the pot closed since, an account gone) sends it to the treasury.
+        const c = Number(part.Common[0]);
+        const n = r.terms.shares.length;
+        const to = c < n ? r.terms.shares[c].to : c === n ? { Account: [loot.pda.pot(r.lottery)] } : r.terms.places[Number(r.prizes[c - n - 1].run)].prize.Tokens.from;
+        if (to.Holder) more.holders = await holdersOf([{ to }]);
+        const target = to.Pool ? loot.pda.pool(project, to.Pool[0]) : to.Account?.[0];
+        if (target && !(await client.account(target))) more.toTreasury = true;
+      }
+      const last = k === parts.length - 1;
+      const round = closes && last ? { ...r, owed: pullSettles(r, i, part) } : { ...r, owed: Number.MAX_SAFE_INTEGER };
+      out.push(loot.pullIx({ payer: signer, project, roundAddress: key, round, entry: i ?? 0, part, projectState: g, programs, extra, ...more }));
+    }
+    return { instructions: out, rolls };
   }
 
   return {
@@ -1329,23 +1372,24 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const mint = loot.paymentMint(terms);
       const { shares } = terms;
       const choosesHolder = shares.some((s) => s.to.Chosen && s.to.Chosen.item != null);
-      // Who holds each collectible a share pays now (and the one the buyer chose): fixed at purchase.
-      const holders = await holdersOf([...shares, ...(choosesHolder && chosenRecipient ? [{ to: { Holder: [chosenRecipient] } }] : [])]);
+      // A share the buyer chooses is paid now, from their own account: to the holder of the collectible they chose (read
+      // now), the wallet they named, or with no choice the treasury.
+      const holders = choosesHolder && chosenRecipient ? await holdersOf([{ to: { Holder: [chosenRecipient] } }]) : {};
       // A payment mint with a transfer hook: its accounts ride along.
-      const extra = await hookTail([mint, ...(round ? [] : [terms.mint])]);
-      const ix = loot.buyTicketsIx({ player: wallet.address, project, id: l.id, lottery, round, mint, count: BigInt(count), shown, listProof, chosenRecipient, chosen: choosesHolder ? chosenRecipient : null, nft, holders, programs, extra });
+      const extra = await hookTail([mint]);
+      const ix = loot.buyTicketsIx({ player: wallet.address, project, id: l.id, lottery, round, mint, count: BigInt(count), shown, listProof, chosenRecipient, chosen: choosesHolder ? chosenRecipient : null, nft, holders, treasury: (await projectNow()).treasury, programs, extra });
       // An overdue round nobody bought into moves to its next date by itself when a ticket is bought.
       if (round?.status === 'Open' && BigInt(now()) >= BigInt(round.terms.draws_at)) throw new Error('This round’s draw is due: reveal it first (claims() lists it), then buy for the next one.');
       // A ticket paid with an NFT: its way out must land too, the NFT handed on once the round is drawn or back to its
       // buyer when it is cancelled, each sized before the NFT goes in.
       if (nft) {
         const g = await projectNow();
-        const entry = { buyer: wallet.address, nft: paidWith, start: 0n, end: 1n, amount: 0n, to: [], paid: 0n };
-        for (const status of ['Swept', 'Cancelled']) {
+        const entry = { buyer: wallet.address, nft: paidWith, start: 0n, end: 1n, amount: 0n, paid: 0n };
+        for (const status of ['Drawn', 'Cancelled']) {
           const r = { lottery: loot.pda.lottery(project, l.id), status, terms, accounts: [], owed: 2, opener: wallet.address, entries: [entry] };
           const exit = [computeUnitLimit(1_400_000), ...before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.pullIx({ payer: wallet.address, project, roundAddress: loot.currentRound(r.lottery, lottery), round: r, entry: 0, part: 'Own', projectState: g, ticket: kindOnly(nft), programs })];
           if (!sendPlan({ payer: wallet.address, instructions: exit, alone: isProveLeaf }))
-            throw new Error(`Not bought: this NFT couldn't come out of “${l.name}” again (${status === 'Swept' ? 'handed on once the round is drawn' : 'back to you if the round is cancelled'}): that transaction would lock more accounts than one can (${transactionLocks(wallet.address, exit, { asV0: true })} with its lookup table; at most 64), so it would stay with the lottery.`);
+            throw new Error(`Not bought: this NFT couldn't come out of “${l.name}” again (${status === 'Drawn' ? 'handed on once the round is drawn' : 'back to you if the round is cancelled'}): that transaction would lock more accounts than one can (${transactionLocks(wallet.address, exit, { asV0: true })} with its lookup table; at most 64), so it would stay with the lottery.`);
         }
       }
       return send([...before, ...withSolWrap(wallet.address, mint, BigInt(terms.price) * BigInt(count), [ix])]);
@@ -1373,19 +1417,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       shown ??= await passing(farm.gates, 'stake here');
       const mint = farm.farmed.Tokens.mint;
       const value = units(amount, decimalsOf(f.stakes));
-      // Moving to, or topping up on, a tier whose rewards wait for its lock (an early exit) first takes what the seat
-      // may take now (HarvestFirst), in the same transaction; a seat can't move to a larger exit fee while locked.
+      // A seat can't move to a larger exit fee while its lock runs.
       const mine = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address));
-      let harvestFirst = false;
       if (mine && BigInt(mine.amount) > 0n) {
         const [from, to] = [farm.tiers[mine.tier], farm.tiers[tier]];
         const locked = (await chainNow()) < BigInt(mine.since) + BigInt(from.lock);
         if (locked && Number(to.exit_bps) > Number(from.exit_bps)) throw new Error('While its lock runs, this stake can\'t move to a tier with a larger early-exit fee.');
-        harvestFirst = Number(to.exit_bps) > 0 && !(Number(from.exit_bps) > 0 && locked);
       }
-      const token = await farmTokens([mint, farm.rewards_mint], harvestFirst ? [farm.rewards_mint] : [], { extra, transfers });
+      const token = await farmTokens([mint], [], { extra, transfers });
       const ix = loot.stakeTokensIx({ player: wallet.address, project, id: f.id, farm, amount: value, tier, shown, ...token });
-      const harvest = harvestFirst ? [...token.before, loot.harvestIx({ player: wallet.address, project, id: f.id, farm, ...token })] : [];
       // A new tier on a seat with a booster that grows: its growth so far is written first, in the same transaction.
       const seat = farm.growth.length ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address)) : null;
       const before = [];
@@ -1393,13 +1433,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         const { before: proof, ...nft } = await nftOf(seat.asset);
         before.push(...proof, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by: wallet.address, seat, ...nft }));
       }
-      return send([...before, ...harvest, ...withSolWrap(wallet.address, mint, value, [ix])]);
+      return send([...before, ...withSolWrap(wallet.address, mint, value, [ix])]);
     },
 
     /**
      * Takes `amount` out once its lock has run (0: only rewards); `forfeit` gives up rewards that cannot move. Before the
-     * lock, a tier with an early exit lets it leave for its fee, and gives up what the seat is owed; in a farm that
-     * unbonds, what is taken out waits first (`withdraw` takes it out once free).
+     * lock, a tier with an early exit lets it leave for its fee, keeping what the seat was credited.
      */
     async unstake(farmKey, amount = 0, { forfeit = false, extra, transfers, ...others } = NO_OPTIONS) {
       only(others, ['forfeit', 'extra', 'transfers'], 'unstake');
@@ -1433,23 +1472,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const { before, ...nft } = await nftOf(asset);
       const seat = farm.custody === 'Watch' && farm.farmed === 'Collectibles' ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), asset)) : null;
       const previous = seat && seat.player !== wallet.address ? seat.player : null;
-      // A booster boosts a stake: a farm of tokens takes one only on a seat with tokens staked (NotFarmed). Putting
-      // one on starts the lock again, so on a tier whose rewards wait for its lock what the seat may take now is
-      // harvested first, in the same transaction (HarvestFirst).
-      const harvest = [];
+      // A booster boosts a stake: a farm of tokens takes one only on a seat with tokens staked (NotFarmed).
       if (farm.farmed.Tokens) {
         const mine = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address));
         if (!mine || BigInt(mine.amount) === 0n) throw new Error(`Stake some ${f.stakes} in “${f.name ?? f.key}” first: a booster boosts a stake.`);
-        const t = farm.tiers[mine.tier];
-        if (Number(t.exit_bps) > 0 && (await chainNow()) >= BigInt(mine.since) + BigInt(t.lock)) {
-          const rewards = await farmTokens([farm.rewards_mint], [farm.rewards_mint], { extra, transfers });
-          harvest.push(...rewards.before, loot.harvestIx({ player: wallet.address, project, id: f.id, farm, ...rewards }));
-        }
       }
       // Its way out must land too: its unstake from this tier, with the tier's
       // prize and as a forfeit, is sized before it goes in, and an NFT that could never come back out isn't staked.
       if (!farm.farmed.Tokens) await exitFits(f, farm, asset, nft, before, tier, token);
-      return send([...before, ...harvest, loot.stakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, previous, tier, ...token })]);
+      return send([...before, loot.stakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, previous, tier, ...token })]);
     },
 
     /**
@@ -1496,16 +1527,16 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * and reads its boosts again. Anyone may send it; the player pays for what the write adds. `by`: the collectible,
      * or the player for their token seat's booster.
      */
-    async refresh(farmKey, by, { extra, transfers, ...others } = NO_OPTIONS) {
+    async refresh(farmKey, by, { extra, ...others } = NO_OPTIONS) {
+      // `transfers` (a token's transfer plan) is taken and needs nothing: a refresh moves no tokens.
       only(others, ['extra', 'transfers'], 'refresh');
       const f = part('farms', farmKey);
       const farm = await read('Farm', loot.pda.farm(project, f.id));
       const seat = await read('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
       const held = seat.asset !== NOBODY;
       const { before, ...nft } = held ? await nftOf(seat.asset) : { before: [], hasAuthority: true };
-      // Like every move, it brings the farm's rewards in (and sends back what a seat gave up): the mint's hook accounts.
-      const token = await farmTokens([farm.rewards_mint], [], { extra, transfers });
-      return send([...before, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by, seat, ...nft, extra: token.extra })]);
+      // A refresh moves no tokens (a farm's rewards are numbers until a seat is paid): only a collectible's own tail.
+      return send([...before, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by, seat, ...nft, extra: extra ?? [] })]);
     },
 
     /**
@@ -1516,13 +1547,6 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       only(others, ['compound', 'extra', 'transfers'], 'harvest');
       const f = part('farms', farmKey);
       const farm = await read('Farm', loot.pda.farm(project, f.id));
-      // A tier with an early exit keeps its rewards until its lock has run (RewardsLocked).
-      if (farm.farmed.Tokens) {
-        const seat = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
-        const tier = seat && farm.tiers[seat.tier];
-        const ends = tier ? BigInt(seat.since) + BigInt(tier.lock) : 0n;
-        if (tier && Number(tier.exit_bps) > 0 && (await chainNow()) < ends) throw new Error(`This stake can leave early, so its rewards wait for its lock: harvest after ${new Date(Number(ends) * 1000).toISOString()}. Leaving early gives them up.`);
-      }
       const token = await farmTokens([farm.rewards_mint], [farm.rewards_mint], { extra, transfers });
       // In a farm that watches: what shows the seat's NFT is still the player's (a compressed one proven first).
       let [held, tree, before] = [null, null, []];
@@ -1540,17 +1564,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
 
     /**
      * Adds what a token seat is owed to its stake, without restarting its lock (a farm of tokens whose rewards are the
-     * staked token). The farm's toll, if any, is taken first.
+     * staked token).
      */
     async compound(farmKey, opts = {}) {
       only(opts, ['extra', 'transfers'], 'compound');
       return this.harvest(farmKey, wallet.address, { ...opts, compound: true });
-    },
-
-    /** Takes out the tokens whose unbonding wait is over (a farm with `unbond`), and what the seat is owed. */
-    async withdraw(farmKey, opts = {}) {
-      only(opts, ['forfeit', 'extra', 'transfers'], 'withdraw');
-      return this.unstake(farmKey, 0, opts);
     },
 
     /**
@@ -1558,8 +1576,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * no booster), what it holds staked (`amount`, in whole units of the staked token, a number for display that can
      * round past 2^53 base units; `amountUnits`, in base units exactly, a bigint; 1 for an NFT), its tier, when it
      * came in (`since`) and when its lock is over (`freeAt`, unix seconds; null when the NFT says it, `lockKey`), its
-     * boost in percent, and what it is owed now: `waiting` (whole units of the rewards, `rewards` their token) and
-     * `owedUnits` (base units). What it is owed is the program's own sum, from a refresh of the seat dry-run on the
+     * boost in percent, until when it earns (`earnsUntil`, unix seconds, null for no end: a tier's term, an upkeep), and
+     * what it is owed now: `waiting` (whole units of the rewards, `rewards` their token) and `owedUnits` (base units). What it is owed is the program's own sum, from a refresh of the seat dry-run on the
      * network (nothing is signed or sent): what the farm released or its rate paid since its last move is in it, by the
      * farm's rounding. When the dry run fails, it is what the seat was last credited, and `counted` is false.
      * One search of the chain, and one dry run per seat: read it when the page opens and after a stake or a harvest.
@@ -1571,12 +1589,14 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const farm = await read('Farm', farmAddress);
       const rewards = [...tokens.values()].find((t) => mintOf(t.key) === farm.rewards_mint);
       const nfts = f.stakes === 'collectibles';
-      const found = await client.programAccounts(loot.LOOT_PROGRAM, [
+      // A seat names its player (offset 1), not its farm: a seat of this farm is the one at its own address here.
+      const found = (await client.programAccounts(loot.LOOT_PROGRAM, [
         { memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.Seat)) } },
-        { memcmp: { offset: 1, bytes: farmAddress } },
-        { memcmp: { offset: 33, bytes: player } },
-      ]);
-      const token = await farmTokens([farm.rewards_mint], []).catch(() => ({ extra: [] }));
+        { memcmp: { offset: 1, bytes: player } },
+      ])).filter(({ pubkey, account }) => {
+        const seat = loot.decode('Seat', account.data);
+        return pubkey === loot.pda.seat(farmAddress, nfts ? seat.asset : player);
+      });
       const { blockhash } = await client.latestBlockhash();
       // Who the dry run names as the refresh's signer and fee payer: the network wants one that holds SOL, whoever it is
       // (nothing is signed): the player, else the wallet looking, else the project's authority.
@@ -1594,7 +1614,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
           payer ??= await funded();
           const { before, ...nft } = held ? await nftOf(seat.asset, payer) : { before: [] };
           const by = nfts ? seat.asset : player;
-          const ix = loot.refreshSeatIx({ signer: payer, project, id: f.id, farm, by, seat, ...nft, extra: token.extra });
+          const ix = loot.refreshSeatIx({ signer: payer, project, id: f.id, farm, by, seat, ...nft });
           const message = compileMessage({ payer, blockhash, instructions: [...before, ix] });
           const after = (await client.simulate(wireTransaction(message), { accounts: [pubkey], replaceBlockhash: true })).accounts[0];
           if (after?.data) [seat, counted] = [loot.decode('Seat', after.data), true];
@@ -1614,6 +1634,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
           rewards: rewards?.key ?? null,
           waiting: show(seat.owed, rewards ? decimalsOf(rewards.key) : 0),
           owedUnits: BigInt(seat.owed),
+          // Until when it earns and grows (unix seconds): its tier's term or its fuel, the sooner; null for no end.
+          earnsUntil: BigInt(seat.earns_until) >= loot.NO_END ? null : Number(seat.earns_until),
           counted,
         });
       }
@@ -2351,15 +2373,6 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         // is the lender's once due.
         if (!hold.debt && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: hold.player === project ? 'An NFT owed to the treasury: send it there.' : 'Your collectible back: its hold is over.' });
       }
-      // A seat whose upkeep ran out since it was last credited: refreshing it (free, anyone) stops it at its
-      // `earns_until`, so it earns no more than its fuel paid for and a pool's sharers are not short meanwhile.
-      for (const f of (spec.farms ?? []).filter((x) => x.upkeepAttribute)) {
-        for (const { account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Seat'), at(1, loot.pda.farm(project, f.id)), at(33, me)])) {
-          const seat = loot.decode('Seat', account.data);
-          const until = BigInt(seat.earns_until);
-          if (until > 0n && until < loot.NO_END && time >= until && BigInt(seat.credited_at) < until) out.push({ kind: 'refresh-seat', key: f.key, by: seat.asset === NOBODY ? me : seat.asset, says: 'A staked collectible ran out of fuel: refresh its seat so it stops earning there (free).' });
-        }
-      }
       const auctions = spec.auctions ?? [];
       const found = await client.accounts(auctions.map((a) => auctionAt(a)));
       auctions.forEach((a, i) => {
@@ -2371,32 +2384,29 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         // A lottery the page names but nobody has written yet (a raffle still to open) has nothing to finish.
         if (!(await client.account(loot.pda.lottery(project, l.id)))) continue;
         const { current, rounds } = await roundOf(l);
-        if (loot.lotteryCancellable(current, slot)) out.push({ kind: 'cancel-draw', key: l.key, says: `The oracle never answered the draw of “${l.name}”: make ticket payments refundable.` });
-        else if (current?.status === 'Open' && time >= BigInt(current.terms.draws_at)) out.push({ kind: 'reveal', key: l.key, says: `The draw of “${l.name}” is due: reveal the winners.` });
-        else if (loot.lotteryDrawStuck(current, slot)) out.push({ kind: 'reveal', key: l.key, says: `The oracle never answered the draw of “${l.name}”: ask it again.` });
+        if (current?.status === 'Open' && time >= BigInt(current.terms.draws_at)) out.push({ kind: 'reveal', key: l.key, says: `The draw of “${l.name}” is due: reveal the winners.` });
         for (const { address: round, round: r } of rounds) {
-          // A drawn round gives its places' prizes, a part at a time, then sweeps; anyone may move it on.
-          if (r.status === 'Drawn') out.push({ kind: 'settle-round', key: l.key, round, says: `Complete the draw of “${l.name}” so its winners can collect.` });
-          // What this wallet is owed: a refund, its NFT ticket, its places' parts of the pot and token prizes, a recipient's part.
+          // The ask moved the lottery on: a round waiting for the oracle is an older one, asked again by its address,
+          // and after the timeout the next ask cancels it.
+          if (loot.lotteryCancellable(r, slot)) out.push({ kind: 'cancel-draw', key: l.key, round, says: `The oracle never answered the draw of “${l.name}”: make ticket payments refundable.` });
+          else if (loot.lotteryDrawStuck(r, slot)) out.push({ kind: 'reveal', key: l.key, round, says: `The oracle never answered the draw of “${l.name}”: ask it again.` });
+          if (r.status !== 'Drawn' && r.status !== 'Cancelled') continue;
+          // What this wallet is owed: a refund, its NFT ticket, its places' parts of the pot and their prizes.
           const mine = r.entries.flatMap((e, i) => {
-            const parts = loot.partsOwed(r, i).filter((part) => (part.Share ? e.to[part.Share[0]] === me : e.buyer === me));
+            const parts = e.buyer === me ? loot.partsOwed(r, i) : [];
             return parts.length ? [{ entry: i, parts }] : [];
           });
           if (mine.length) out.push({ kind: 'pull', key: l.key, round, pulls: mine, says: r.status === 'Cancelled' ? `Recover your ticket payment for “${l.name}”.` : `Take what you are owed in “${l.name}”.` });
-          // Anyone may pay everyone else what they are owed (about 0.002 SOL of account rent for each who has no account
-          // for it yet, which stays with them): the last pull closes the round, and its opener's deposit comes back.
+          // Anyone may pay everyone else what they are owed, and the parts owed in common (about 0.002 SOL of account
+          // rent for each payee who has no account for it yet, which stays with them): the last pull closes the round,
+          // and its rent goes back to whoever fronted it (the lottery, or its first buyer).
           const others = r.entries.flatMap((e, i) => (loot.partsOwed(r, i).length && !mine.some((m) => m.entry === i) ? [i] : []));
-          if ((r.status === 'Swept' || r.status === 'Cancelled') && (others.length || (loot.roundFinished(r) && r.opener === me)))
-            out.push({ kind: 'payout', key: l.key, round, says: r.opener === me ? `Pay everyone of “${l.name}” what they are owed: the round then closes, and your deposit for it comes back.` : `Pay the others of “${l.name}” what they are owed, so its round can close.` });
+          const fronted = r.opener === me;
+          if (others.length || loot.commonOwed(r).length || (loot.roundFinished(r) && !mine.length))
+            out.push({ kind: 'payout', key: l.key, round, says: fronted ? `Pay everyone of “${l.name}” what they are owed: the round then closes, and your deposit for it comes back.` : `Pay the others of “${l.name}” what they are owed, so its round can close.` });
         }
       }
-      // Tokens whose unbonding wait is over, in a farm of tokens.
       const chainTime = await chainNow();
-      for (const f of (spec.farms ?? []).filter((x) => x.stakes !== 'collectibles')) {
-        const seat = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), me));
-        const free = seat ? loot.withdrawable(seat, chainTime) : 0n;
-        if (free > 0n) out.push({ kind: 'withdraw', key: f.key, says: `Your tokens leaving “${f.name ?? f.key}” are free: take them out.` });
-      }
       // A sealed schedule that pays this wallet: its runs that are due (vesting nobody can take back).
       for (const sc of spec.schedules ?? []) {
         const schedule = await readMaybe('Schedule', loot.pda.schedule(project, sc.id));
@@ -2488,35 +2498,55 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         return send([...before, loot.releaseIx({ signer: me, project, asset: c.asset, ...nft, collection: (await collectionOf(c.asset)) ?? MPL_CORE, hold, address: c.hold, treasury: g.treasury })]);
       }
       if (c.kind === 'auction') return (await this.endAuction(c.key)).signature;
-      if (c.kind === 'withdraw') return this.withdraw(c.key);
       if (c.kind === 'vest') return this.runSchedule(c.key);
       if (c.kind === 'unlist') return this.unlist(c.asset);
-      if (c.kind === 'refresh-seat') return this.refresh(c.key, c.by);
       if (c.kind === 'lookup-table') {
         const table = readTable(await client.account(c.table));
         const step = table && tableStep(table, await slotNow(), await recentSlots());
         if (!step || step === 'cooling') return null;
         return send([step === 'close' ? closeTableIx({ table: c.table, authority: me }) : deactivateTableIx({ table: c.table, authority: me })], [], { keepWrapped: true });
       }
-      if (!['reveal', 'cancel-draw', 'settle-round', 'pull', 'payout'].includes(c.kind)) throw new Error(`Nothing to do for a claim of kind ${c.kind}.`);
+      if (!LOTTERY_STEPS.has(c.kind)) throw new Error(`Nothing to do for a claim of kind ${c.kind}.`);
       const l = part('lotteries', c.key);
       const lottery = await read('Lottery', loot.pda.lottery(project, l.id));
-      if (c.kind === 'reveal') return send([loot.drawLotteryIx({ payer: me, project, id: l.id, lottery })]);
-      if (c.kind === 'cancel-draw') return send([loot.cancelLotteryIx({ project, id: l.id, lottery })]);
-      const found = await client.account(c.round);
+      const key = c.round ?? loot.currentRound(loot.pda.lottery(project, l.id), lottery);
+      const found = await client.account(key);
       const r = found?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found.data) : null;
+      // The ask: the current round's once due, or an older round's again (after the timeout, it cancels the round).
+      if (c.kind === 'reveal' || c.kind === 'cancel-draw') {
+        const steps = await drawStep(l, lottery, c.round ?? null, r, me);
+        return build ? steps : send(steps);
+      }
       if (!r) return null;
-      if (c.kind === 'settle-round') return r.status === 'Drawn' ? send(await settleRoundStep(c.round, r, me)) : null;
-      // Pulls: this wallet's own parts, or (`payout`) everyone's, a few to a transaction; the last pull closes the round.
-      const owed = c.kind === 'pull' ? c.pulls : r.entries.flatMap((_, i) => (loot.partsOwed(r, i).length ? [{ entry: i, parts: loot.partsOwed(r, i) }] : []));
-      if (!owed.length) return loot.roundFinished(r) ? send([loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: r, projectState: g, programs })]) : null;
-      const instructions = [];
-      for (const { entry, parts } of owed.slice(0, 4)) instructions.push(...(await pulls(c.round, r, entry, parts, me)));
-      // When these pulls leave nothing owed, the round closes in the same transaction (its deposit back to its opener).
-      // Each pull settles one part, a run's places as many as take something of the first `MOST_A_PULL` it pays.
-      const settles = owed.slice(0, 4).reduce((n, { entry, parts }) => n + parts.reduce((m, p) => m + (p.Pot || p.Prize ? loot.placesPulled(r, entry, Number((p.Pot ?? p.Prize)[0]), Boolean(p.Prize)) : 1), 0), 0);
-      if (settles >= Number(r.owed) && (r.status === 'Swept' || r.status === 'Cancelled')) instructions.push(loot.settleRoundIx({ payer: me, project, roundAddress: c.round, round: { ...r, owed: 0 }, projectState: g, programs }));
-      return send(instructions);
+      // Pulls: this wallet's own parts, or (`payout`) everyone's and the parts owed in common, a few to a transaction;
+      // when they are the last owed, the last pull closes the round. A round that owes nothing is only closed.
+      const owed = c.kind === 'pull'
+        ? c.pulls
+        : [...loot.commonOwed(r).map((p) => ({ entry: null, parts: [p] })), ...r.entries.flatMap((_, i) => (loot.partsOwed(r, i).length ? [{ entry: i, parts: loot.partsOwed(r, i) }] : []))];
+      if (!owed.length) {
+        if (!loot.roundFinished(r)) return null;
+        const close = [loot.pullIx({ payer: me, project, roundAddress: key, round: r, projectState: g, programs })];
+        return build ? close : send(close);
+      }
+      const batch = owed.slice(0, 4);
+      const settles = batch.reduce((n, { entry, parts }) => n + parts.reduce((m, p) => m + pullSettles(r, entry, p), 0), 0);
+      const closes = settles >= Number(r.owed);
+      const instructions = [computeUnitLimit(1_400_000)];
+      const rolls = [];
+      for (const [k, { entry, parts }] of batch.entries()) {
+        const built = await pulls(key, r, entry, parts, me, { closes: closes && k === batch.length - 1 });
+        instructions.push(...built.instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM));
+        rolls.push(...built.rolls);
+      }
+      // A place's roll is asked for in the pull's own transaction (catalog P1): the winner's own, with a key that settles
+      // it after (one prompt); someone else's, asked for when the box can give, else left for its winner to ask.
+      if (!rolls.length) return build ? instructions : send(instructions);
+      if (c.kind === 'pull' && !build) return (await sendRolling(instructions)).signature;
+      const asks = [];
+      for (const { order, box } of rolls) asks.push(...(await asksFor(me, order, { project, loot_box: loot.pda.box(project, box) })));
+      const all = [...instructions, ...asks];
+      const asked = (await dryRun(me, all)).ok ? all : instructions;
+      return build ? asked : send(asked);
     },
 
     /**

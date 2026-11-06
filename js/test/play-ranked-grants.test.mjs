@@ -109,14 +109,13 @@ test('Stakers’ Draw: race rewards by rank from one grant, a draw only locked s
   const pot = await held(w, loot.pda.pot(lotteryAddress));
   assert.equal(pot, 100_000_000n + 10_000_000n, 'the seed and half a badge');
 
-  // The draw: every ticket goes back to its buyer, and the two places share the pot. A stranger reveals it, moves it on
-  // (its sweep), and pays each buyer what they are owed: their tickets back, and a place's part of the pot.
+  // The draw: every ticket goes back to its buyer, and the two places share the pot. A stranger reveals it and pays each
+  // buyer what they are owed: their tickets back, and a place's part of the pot.
   const wrapped = (k) => held(w, associatedTokenAddress(k.address, NATIVE_MINT));
   const before = { alice: await wrapped(alice), bob: await wrapped(bob) };
   const round = loot.currentRound(lotteryAddress, lottery());
   w.chain.warp(Number(lottery().terms.draws_at));
   await k.claim((await k.claims()).find((c) => c.kind === 'reveal'));
-  await k.claim((await k.claims()).find((c) => c.kind === 'settle-round'));
   // The stranger pays everyone, a few pulls a transaction, so what comes back lands in each buyer's account untouched.
   for (let c = (await k.claims()).find((x) => x.kind === 'payout'); c; c = (await k.claims()).find((x) => x.kind === 'payout')) await k.claim(c);
   const won = (await wrapped(alice)) + (await wrapped(bob)) - before.alice - before.bob - 50_000_000n;

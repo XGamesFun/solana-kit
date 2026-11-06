@@ -294,3 +294,30 @@ test('go-live writes a box before a box that names it to roll, which passes that
   spec.boxes[0].outcomes = [{ gives: 'roll', box: inner.key, chance: 50 }, { gives: 'nothing', chance: 50 }];
   assert.ok(check(spec, { now: NOW }).refusals.some((x) => x.where === 'economy.boxes.mystery.outcomes' && /BadEntries/.test(x.message)));
 });
+
+test('a compressed NFT’s record closes in the transaction that proves it, its prover signing; once a record', () => {
+  const compressed = { id: WALLET, tree: pda.platform(), proof: [pda.identity()], owner: WALLET, delegate: WALLET, collection: null, root: new Uint8Array(32), dataHash: new Uint8Array(32), creatorHash: new Uint8Array(32), flags: 0, nonce: 0n };
+  const prove = loot.proveLeafIx({ signer: pda.identity(), compressed });
+  const other = loot.setSuspendedIx({ admin: WALLET, project: pda.platform(), suspended: false });
+  const out = loot.withLeafCloses([prove, other, prove]);
+  assert.equal(out.length, 4, 'one close for the record, after the rest');
+  const close = out[3];
+  assert.equal(loot.instructionOf(close.data).name, 'close_leaf');
+  assert.deepEqual(close.keys.slice(0, 3).map((k) => [k.pubkey, k.isSigner]), [[pda.leaf(WALLET), false], [pda.platform(), false], [pda.identity(), true]]);
+  assert.equal(loot.withLeafCloses(out).length, 4, 'a record closed already is left alone');
+  assert.equal(loot.withLeafCloses([other]).length, 1);
+});
+
+test('a lottery holds SOL for its rounds’ rent (`roundRent`): one step sends it to the lottery, and the cost counts it', async () => {
+  const { cost } = await import('../economy/cost.mjs');
+  const raffle = example('nft-raffle');
+  const spec = structuredClone(raffle);
+  spec.lotteries[0].roundRent = 0.05;
+  assert.ok(codes(spec).ok);
+  const p = plan(spec, { now: NOW });
+  const step = p.steps.find((s) => s.id === 'rent:lottery:art');
+  assert.ok(step, p.steps.map((s) => s.id).join());
+  const [before, after] = [cost(raffle, { now: NOW }), cost(spec, { now: NOW })];
+  assert.ok(Math.abs(Number(after.setup.totalSol) - Number(before.setup.totalSol) - 0.05) < 1e-6, `${before.setup.totalSol} → ${after.setup.totalSol}`);
+  assert.ok(edit(raffle, (s) => (s.lotteries[0].roundRent = '0.0000000001')).refused.includes('E-AMOUNT economy.lotteries.art.roundRent'));
+});
