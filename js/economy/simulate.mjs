@@ -8,7 +8,7 @@
 // It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxOrderBytes } from './plan.mjs';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, escrowUnits, holdsRent, outcomeBurns, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
+import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
@@ -166,8 +166,9 @@ export function simulate(economy, { now = 0 } = {}) {
   /** NFTs taken out of a stash a day, by each box that gives one; and the rolls of a box prizes give a day. */
   const stashTakes = [];
   const prizeTakes = [];
-  /** The SOL a prize's order holds while it waits (its rent, and the SOL for a collectible when the box can give one), back to the winner at settle. */
-  const orderHeld = (box) => orderRent(m.box.get(box), m) + sol(ESCROW_LAMPORTS) * (m.box.get(box) ? escrowUnits(m.box.get(box), m) : 0);
+  /** The SOL a prize's order holds while it waits (its rent), back to the winner at settle. Whoever settles it pays a
+   * collectible's rent. */
+  const orderHeld = (box) => orderRent(m.box.get(box), m);
   /**
    * A route gives prize line `line` `times` a day (prize.rs), `payer` ({ rent, oracle }) paying what it opens: a
    * collectible's rent, the winner's token account (the bound, not the average), a roll's order (back to the winner at
@@ -251,7 +252,6 @@ export function simulate(economy, { now = 0 } = {}) {
     const w = weights(b);
     const total = w.reduce((a, x) => a + x, 0) || 1;
     let value = 0;
-    let burnChance = 0;
     const unpriced = [];
     const other = {};
     // One part of what an outcome gives (model `outcomeParts`), landing with chance `p`: its row, and its flows.
@@ -300,8 +300,7 @@ export function simulate(economy, { now = 0 } = {}) {
     const outcomes = (b.outcomes ?? []).map((o, i) => {
       const p = w[i] / total;
       const parts = outcomeParts(o).map((part) => partRow(part, p));
-      if (outcomeBurns(o)) burnChance += p;
-      if (o.gives === 'bundle') return { gives: 'bundle', chance: round(p * 100, 6), prizes: parts, ...(o.burns ? { burns: true } : {}) };
+      if (o.gives === 'bundle') return { gives: 'bundle', chance: round(p * 100, 6), prizes: parts };
       return parts[0] ?? { gives: o.gives, chance: round(p * 100, 6) };
     });
     // Every part of every outcome, each with its outcome's chance.
@@ -314,28 +313,25 @@ export function simulate(economy, { now = 0 } = {}) {
       const square = rows.reduce((n, o) => n + (o.chance / 100) * o.amount ** 2, 0);
       if (pools.has(key)) pools.get(key).variance += opens * (square - mean ** 2);
     }
-    // Money: the payment is split unless the roll burns it all.
-    carryOut(b.split, token, opens * price * (1 - burnChance), `box:${b.key}`);
-    add(burned, token, opens * price * burnChance);
+    // Money: the payment is split (a share may burn it).
+    carryOut(b.split, token, opens * price, `box:${b.key}`);
     add(players.pay, token, opens * price);
     add(players.get, token, opens * value);
     for (const [t, v] of Object.entries(other)) add(players.get, t, opens * v);
-    // Two signatures: the open, then the settle that carries the outcome out, both from the player's wallet. A box
-    // that needs no roll is bought in one (`buy`), with no order; one of one entry that rolls on an NFT opens an order
-    // that needs no oracle.
-    const rolled = boxRolls(b, m);
+    // Two signatures: the open, then the settle that carries the outcome out (a throwaway key the open funds sends it).
+    // A box that needs no roll is bought in one (`buy`), with no order; every open asks the oracle.
     const bought = boxBuys(b, m);
     const signatures = bought ? 1 : 2;
     playerAction(opens, signatures);
-    if (rolled) players.oracle += opens * ORACLE;
+    if (!bought) players.oracle += opens * ORACLE;
     const collectibles = drawsOf(b) * partsOf.filter((o) => holdsRent(o, m) && m.item.get(o.item)?.kind !== 'normal').reduce((n, o) => n + o.chance / 100, 0);
     players.rent += opens * collectibles * COLLECTIBLE_RENT;
     const known = !unpriced.length && !shares.length && !Object.keys(other).length;
     // What one open really takes from the player's wallet: the price, the platform's fee, the oracle's and the network's.
     const isSol = Boolean(m.tokens.get(token)?.wsol);
-    const oracle = rolled ? ORACLE : 0;
-    // A collectible's rent comes out of the SOL the order holds when it settles: on average, the chance of one.
-    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(ESCROW_LAMPORTS) * escrowUnits(b, m) + orderRent(b, m) });
+    const oracle = bought ? 0 : ORACLE;
+    // A collectible's rent comes out of the SOL the open lends its settle key: on average, the chance of one.
+    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleUnits(b, m) + orderRent(b, m) });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);
     return {
@@ -853,7 +849,7 @@ export function simulate(economy, { now = 0 } = {}) {
       burned: totals(burned),
       accounts: totals(accounts),
     },
-    fees: { playerSol: PLAYER_FEE, projectSol: PROJECT_FEE, oracleSol: ORACLE, networkPerSignatureSol: NETWORK_FEE, escrowSol: sol(ESCROW_LAMPORTS), ticketLineRentSol: round(ticketLine({})), collectibleRentSol: COLLECTIBLE_RENT, burnRefundSol: BURN_REFUND },
+    fees: { playerSol: PLAYER_FEE, projectSol: PROJECT_FEE, oracleSol: ORACLE, networkPerSignatureSol: NETWORK_FEE, settleRentUnitSol: sol(SETTLE_RENT_UNIT), ticketLineRentSol: round(ticketLine({})), collectibleRentSol: COLLECTIBLE_RENT, burnRefundSol: BURN_REFUND },
     notes,
   };
 }
@@ -908,7 +904,7 @@ export function explain(sim, economy) {
     const all = `; ${inAll(b.realCost)}`;
     lines.push(`Box “${b.name}”: costs ${n(b.price)} ${sym(b.token)} (${all.slice(2)}), gives back ${back}${edge}.`);
     const part = (o) => (o.gives === 'pay' ? `${n(o.amount)} ${sym(o.token)} from ${o.pool}` : o.gives === 'mint' ? `${n(o.amount)} ${sym(o.token)}, minted` : o.gives === 'share' ? `${o.percent}% of ${o.pool}` : o.gives === 'stash' ? `an NFT of the stash “${o.stash}”, at random` : o.gives === 'nft' ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”` : o.gives === 'roll' ? `a roll of “${o.box}”` : o.gives === 'item' ? `${o.item}${o.worth !== null ? ` (worth ${n(o.worth)})` : ' (no value given)'}` : o.gives);
-    for (const o of b.outcomes) lines.push(`  ${n(o.chance)}%: ${o.gives === 'bundle' ? `${o.prizes.map(part).join(' + ')}${o.burns ? ', and the payment burned' : ''}` : part(o)}`);
+    for (const o of b.outcomes) lines.push(`  ${n(o.chance)}%: ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`);
     if (b.unpriced.length) lines.push(`  Give ${b.unpriced.join(', ')} a "value" to count them in the return.`);
   }
   for (const it of sim.items) lines.push(`Shop “${it.name}”: ${n(it.price)} ${sym(it.token)}; ${inAll(it.realCost)}.`);

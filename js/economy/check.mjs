@@ -27,10 +27,11 @@ import {
   model,
   placeOf,
   poolFillers,
-  outcomeBurns,
   outcomeParts,
   boxBuys,
   boxRolls,
+  drawsOf,
+  lifeLines,
   prizeLine,
   prizePool,
   prizeToken,
@@ -65,33 +66,15 @@ const U64_MAX = 2n ** 64n - 1n;
 const measured = (input, detail) => (detail ? { bytes: transactionSize(input), locks: transactionLocks(input) } : transactionSize(input));
 
 const label = (part) => `“${part?.name ?? part?.key}”`;
+/** The bytes of a loot instruction's tag: 1, or 8 for the oracle's callbacks. */
+const tagBytes = (name) => IDL.instructions.find((i) => i.name === name).discriminator.length;
 const isCollectible = (it) => (it?.kind ?? 'collectible') === 'collectible';
 
 // ---------------------------------------------------------------- a player's craft, in bytes
 
 /**
- * The roll accounts of box `key` (`order::rollable`, the client's `rollAccounts`), which a route the player pays or asks
- * for (a craft, a buy, a grant's claim) passes after a roll's box and order, and a write naming the box after the box:
- * each outcome's prizes' (an item, with its tables when it draws traits from them; a pool; a stash), then each mint its
- * tokens are in, in the order first named, and the project's vault for it.
- */
-export function rollKeys(key, m) {
-  const parts = (m.box.get(key)?.outcomes ?? []).flatMap(outcomeParts);
-  const entry = parts.flatMap((o) => {
-    if (o.gives === 'item') return [`pda:item/${o.item}`, ...(m.item.get(o.item)?.drawn ?? []).filter((d) => d.table !== undefined).map((d) => `pda:table/${d.table}`)];
-    if (o.gives === 'pay' || o.gives === 'share') return [`pda:pool/${o.pool}`];
-    if (o.gives === 'stash' || o.gives === 'nft') return [`pda:stash/${o.stash}`];
-    return [];
-  });
-  const mints = [...new Set(parts.flatMap((o) => (o.gives === 'mint' ? [o.currency ?? m.currencyKey] : o.gives === 'pay' || o.gives === 'share' ? [m.pool.get(o.pool)?.currency ?? m.currencyKey] : [])))];
-  return [...entry, ...mints.flatMap((t) => [`mint:${t}`, `vault:${t}`])];
-}
-/** A box's roll accounts, as each write naming it passes them after the box. */
-export const rollMintKeys = rollKeys;
-
-/**
  * The transaction a player sends to craft `recipe`, estimated (txsize.mjs): the craft's own accounts, then each
- * line's (craft.rs; a roll's with its box's prize mints, `rollMintKeys`), a compute limit (a big recipe needs more
+ * line's (craft.rs; a roll's box and order), a compute limit (a big recipe needs more
  * than the default) and, for each token it gives, the player's token account created if missing.
  */
 export function craftSize(recipe, m, { detail = false } = {}) {
@@ -128,8 +111,8 @@ export function craftSize(recipe, m, { detail = false } = {}) {
     if (line.gives === 'item' && line.compressed) rest.push(`pda:item/${line.item}`, 'pda:tree-config', 'account:tree', `${collectionOf(line.item)}`, 'program:bubblegum', 'program:compression', 'program:noop', 'program:core', 'account:bubblegum-signer');
     else if (line.gives === 'item') rest.push(`pda:item/${line.item}`, ...(m.item.get(line.item)?.kind === 'normal' ? [] : [`${collectionOf(line.item)}`, `pda:asset/${line.item}/${i}`, 'program:core']));
     else if (line.gives === 'nft') rest.push(`pda:stash/${line.stash}`, ...Array.from({ length: PIECE_SLOTS }, (_, k) => (k === 0 ? `asset:nft/${i}` : k < 3 ? `nft/${i}/${k}` : 'program:loot')));
-    // A roll (given, or on a kept collectible): the box, the order, then the box's prize mints (`rollMintKeys`).
-    else if (line.gives === 'roll') rest.push(`pda:box/${line.box}`, `pda:order/${i}`, ...rollMintKeys(line.box, m));
+    // A roll (given, or on a kept collectible): the box and the order (its roll is asked for after, `ask_roll`).
+    else if (line.gives === 'roll') rest.push(`pda:box/${line.box}`, `pda:order/${i}`);
     else {
       const currency = line.gives === 'share' ? m.pool.get(line.pool)?.currency : line.from?.startsWith('pool:') ? m.pool.get(line.from.slice(5))?.currency : line.currency ?? m.currencyKey;
       const pool = line.gives === 'share' ? line.pool : line.from?.startsWith('pool:') ? line.from.slice(5) : null;
@@ -138,7 +121,7 @@ export function craftSize(recipe, m, { detail = false } = {}) {
     }
   });
   for (const currency of gives) extra.push({ program: 'associated-token', accounts: ['wallet:player', `ata:player/${currency}`, 'wallet:player', mintOf(currency), 'program:system', 'program:token'], data: 1 });
-  return measured({ signers, instructions: [...extra, { program: 'loot', accounts: [...fixed, ...rest], data: 8 + 4 + 8 }] }, detail);
+  return measured({ signers, instructions: [...extra, { program: 'loot', accounts: [...fixed, ...rest], data: tagBytes('craft') + 4 + 8 + 8 }] }, detail);
 }
 
 // ---------------------------------------------------------------- a player's purchase of a box, in bytes
@@ -160,8 +143,6 @@ export function openBoxSize(b, m, { detail = false } = {}) {
   const vault = (key) => `vault:${key}`;
   const none = 'program:loot';
   const outcomes = b.outcomes ?? [];
-  // A stash's NFT is picked at random: a box of one stash outcome is rolled too.
-  const rolls = boxRolls(b, m);
   const limited = Boolean(b.perWallet || b.perWalletEach?.count);
   const chosenItem = (b.split ?? []).some((s) => /^chosen:./.test(String(s.to)));
   // The NFT it rolls on fills the `piece` slots: a Core collectible of the game's, else at its largest a pNFT's
@@ -177,7 +158,8 @@ export function openBoxSize(b, m, { detail = false } = {}) {
     'wallet:player', 'pda:project', 'pda:platform', 'pda:order', mint(currency), `ata:player/${currency}`, vault(currency),
     'program:token', 'program:token-2022', 'program:system', 'program:associated-token',
     ...piece, ...Array.from({ length: PIECE_SLOTS - piece.length }, () => none),
-    ...(rolls ? ['vrf:queue', 'pda:identity', 'program:vrf', 'sysvar:slot-hashes'] : [none, none, none, none]),
+    // Every open asks the oracle.
+    'vrf:queue', 'pda:identity', 'program:vrf', 'sysvar:slot-hashes',
     chosenItem ? 'asset:chosen' : none,
     limited ? 'pda:counts/player' : none,
   ];
@@ -202,7 +184,7 @@ export function openBoxSize(b, m, { detail = false } = {}) {
     ? [{ program: 'system', accounts: ['wallet:player', ata], data: 12 }, { program: 'token', accounts: [ata], data: 1 }]
     : [];
   const unwrap = wrap.length ? [{ program: 'token', accounts: [ata, 'wallet:player', 'wallet:player'], data: 1 }] : [];
-  const data = 8 + 8 + 8 + (chosenItem || (b.split ?? []).some((s) => s.to === 'chosen') ? 33 : 1) + 4;
+  const data = tagBytes('open_box') + 8 + 8 + (chosenItem || (b.split ?? []).some((s) => s.to === 'chosen') ? 33 : 1) + 4 + 4;
   return measured({ signers: ['wallet:player'], instructions: [...wallet, create, ...wrap, { program: 'loot', accounts: [...own, ...rest], data }, ...unwrap] }, detail);
 }
 
@@ -346,9 +328,8 @@ export function settleSize(b, o, m) {
   const hooks = keys.filter((k) => k.startsWith('hook:') || k === 'program:hook').length;
   const entries = 38 + (compressedSubject ? LONGEST_PROOF : 0) + won + split + hooks + (memo ? 1 : 0);
   const named = keys.filter((k) => k !== 'program:compute-budget' && k !== 'program:loot');
-  // Its data: the discriminator, `upto`, `prize_accounts` and no proven rows: the tables the tools write are never
-  // committed, so no unit's rows are proven in a settle (`MAX_PROVEN_BYTES`).
-  const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: 8 + 4 + 2 + 4 };
+  // Its data: the tag, `upto` and `prize_accounts`.
+  const settle = { program: 'loot', accounts: [...named, ...Array.from({ length: Math.max(0, entries - named.length) }, () => 'program:loot')], data: tagBytes('settle') + 4 + 2 };
   const budget = [{ program: 'compute-budget', accounts: [], data: 5 }, ...(moves >= 3 ? [{ program: 'compute-budget', accounts: [], data: 5 }] : [])];
   // A table holds every account but the signer and the programs the transaction calls.
   const held = keys.filter((k) => !['wallet:signer', 'program:compute-budget', 'program:loot'].includes(k)).length;
@@ -363,10 +344,10 @@ const showsNft = (gate) => Boolean(gate && !gate.wallets && !gate.list && !gate.
 /**
  * The transaction a player sends to buy box `b` (buy.rs), estimated as `openBoxSize` is: its compute limit and price,
  * the player's token account of the currency created if missing, then `buy`: its own accounts, what the gate takes
- * (a list's proof, or the NFT shown), the accounts its shares name, and each prize's (prize.rs; a roll's with its
- * box's prize mints, `rollMintKeys`).
+ * (a list's proof, or the NFT shown), the accounts its shares name, and each prize's (prize.rs; a roll's box and
+ * order), for each draw of a sale (a fixed amount of tokens once). `count`: the sales in one purchase.
  */
-export function buySize(b, m, { detail = false } = {}) {
+export function buySize(b, m, { detail = false, count = 1 } = {}) {
   const collectionOf = (key) => `collection:${m.item.get(key)?.collection ?? 'project'}`;
   const currency = b.currency ?? m.currencyKey;
   const none = 'program:loot';
@@ -385,10 +366,11 @@ export function buySize(b, m, { detail = false } = {}) {
     if (s.kind === 'wallet' || s.kind === 'treasury' || s.kind === 'chosen') rest.push(`wallet:${s.key}`, `ata:${s.key}/${currency}`);
     if (s.kind === 'holder') rest.push(`asset:${s.key}`, `wallet:holder/${s.key}`, `ata:holder/${s.key}`);
   }
-  outcomeParts(b.outcomes?.[0]).forEach((o, i) => {
+  const draws = drawsOf(b) * count;
+  outcomeParts(b.outcomes?.[0]).flatMap((o) => Array(o.gives === 'mint' || o.gives === 'pay' ? 1 : draws).fill(o)).forEach((o, i) => {
     if (o.gives === 'item') rest.push(`pda:item/${o.item}`, ...(m.item.get(o.item)?.kind === 'normal' ? [] : [collectionOf(o.item), `pda:asset/${o.item}/${i}`, 'program:mpl-core']));
     else if (o.gives === 'nft') rest.push(`pda:stash/${o.stash}`, ...Array.from({ length: PIECE_SLOTS }, (_, k) => (k === 0 ? `asset:nft/${i}` : k < 3 ? `nft/${i}/${k}` : none)));
-    else if (o.gives === 'roll') rest.push(`pda:box/${o.box}`, `pda:order/${i}`, ...rollMintKeys(o.box, m));
+    else if (o.gives === 'roll') rest.push(`pda:box/${o.box}`, `pda:order/${i}`);
     else {
       const c = o.gives === 'mint' ? o.currency ?? m.currencyKey : m.pool.get(o.pool)?.currency;
       rest.push(`mint:${c}`, ...(o.gives === 'mint' ? [] : [`pda:pool/${o.pool}`]), `ata:player/${c}`);
@@ -397,7 +379,7 @@ export function buySize(b, m, { detail = false } = {}) {
   const ata = `ata:player/${currency}`;
   const wallet = [{ program: 'compute-budget', accounts: [], data: 5 }, { program: 'compute-budget', accounts: [], data: 9 }];
   const create = { program: 'associated-token', accounts: ['wallet:player', ata, 'wallet:player', `mint:${currency}`, 'program:system', 'program:token'], data: 1 };
-  const data = 8 + 8 + (chosenItem || (b.split ?? []).some((s) => s.to === 'chosen') ? 33 : 1) + 4 + 8;
+  const data = tagBytes('buy') + 8 + (chosenItem || (b.split ?? []).some((s) => s.to === 'chosen') ? 33 : 1) + 4 + 8 + 4;
   return measured({ signers: ['wallet:player'], instructions: [...wallet, create, { program: 'loot', accounts: [...own, ...rest], data }] }, detail);
 }
 
@@ -433,8 +415,16 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     refuse('E-NETWORK', 'economy.network', `The economy names the network “${economy?.network ?? network}”. loot runs on devnet only: mainnet waits for an audit.`, 'Set the network to "devnet".');
   const oldVersion = economy?.version === 1;
   if (oldVersion) refuse('E-VERSION', 'economy.version', 'Only the current version 2 economy format is supported.', 'Write the economy using the current schema.');
+  // A roll no longer burns the payment for one outcome (loot 0.23): said in words, not again by the schema.
+  const burnsGone = new Set();
+  (Array.isArray(economy?.boxes) ? economy.boxes : []).forEach((b, i) => (Array.isArray(b?.outcomes) ? b.outcomes : []).forEach((o, j) => {
+    const at = `economy.boxes[${i}].outcomes[${j}]`;
+    if (o?.gives !== 'burn' && o?.burns === undefined) return;
+    burnsGone.add(o?.gives === 'burn' ? `${at}.gives` : `${at}.burns`);
+    refuse('E-ODDS', at, `An outcome of “${b?.name ?? b?.key}” burns the payment: a box's outcome no longer does (BadEntries). A box burns its price, whatever its roll gives, with a "burn" share in its split.`, o?.gives === 'burn' ? 'Make this outcome "nothing", and give the box a "burn" share in its "split".' : 'Leave "burns" out, and give the box a "burn" share in its "split".');
+  }));
   // An old version is said once, by E-VERSION, not again by the schema.
-  for (const e of validate(economy)) if (!(oldVersion && e.path === 'economy.version')) refuse('E-SCHEMA', e.path, `${e.path} ${e.message}.`, 'Fix that field (xsolana_guide lists what each part takes).');
+  for (const e of validate(economy)) if (!(oldVersion && e.path === 'economy.version') && !burnsGone.has(e.path)) refuse('E-SCHEMA', e.path, `${e.path} ${e.message}.`, 'Fix that field (xsolana_guide lists what each part takes).');
   if (refusals.length) return result();
 
   const m = model(economy, { now });
@@ -1022,9 +1012,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // A compressed item an outcome gives is minted at the settle, as any prize's (`compressedCheck`).
     outs.forEach((o, i) => outcomeParts(o).forEach((part) => part.gives === 'item' && part.compressed && m.item.get(part.item) && compressedCheck(m.item.get(part.item), `${where}.outcomes[${i}]`, label(b), 'E-ODDS')));
     const cards = slots.reduce((n, s) => n + s.count, 0);
-    const oneOfItems = outs.length === 1 && outcomeParts(outs[0]).every((p) => p.gives === 'item');
-    if (cards > 1 && (b.rollsOn || outs.some(outcomeBurns) || !(boxRolls(b, m) || oneOfItems)))
-      refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} times an open, but a pack has no NFT it rolls on and no outcome that burns the payment, and draws among outcomes that roll (or gives one outcome of items) (BadEntries).`, 'Leave "slots" out, or drop "rollsOn" and the burns.');
+    if (cards > 1 && b.rollsOn)
+      refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} times an open, but a pack has no NFT it rolls on (BadEntries).`, 'Leave "slots" out, or drop "rollsOn".');
     // An open's order holds every prize it can set aside: at most 10,240 bytes (about 243 one-prize draws).
     const orderSize = (() => {
       try {
@@ -1034,14 +1023,25 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       }
     })();
     if (orderSize > MAX_ORDER_BYTES) refuse('E-ODDS', `${where}.slots`, `${label(b)}’s order would be ${orderSize.toLocaleString('en-US')} bytes, more than the ${MAX_ORDER_BYTES.toLocaleString('en-US')} an order can be (BadEntries).`, 'Fewer draws an open, or fewer prizes in its largest outcome.');
-    // A box of one outcome opened (a pack, a roll on an NFT) sets its prize aside at the open: a minted prize in a mint
-    // that allows confidential transfers can't be (PrizeNotCovered); only a sale (`buy`, one draw, no NFT) gives it.
-    if (outs.length === 1 && !boxBuys(b, m)) {
-      for (const part of outcomeParts(outs[0])) {
-        const t = part.gives === 'mint' || (part.gives === 'tokens' && !prizePool(part)) ? m.tokens.get(part.currency ?? m.currencyKey) : null;
-        if (t?.powers?.confidentialTransfers) refuse('E-ODDS', `${where}.outcomes[0]`, `${label(b)} mints ${t.symbol}, whose mint allows confidential transfers, and is opened rather than bought: its open can’t set that prize aside (PrizeNotCovered).`, 'Sell it with one draw and no NFT rolled on (a shop sale), or give another prize.');
+    // A roll moves its prizes aside with no accounts of a transfer hook's, and can't move tokens whose mint allows
+    // confidential transfers or none at all: such a prize is out of stock in every roll (order.rs `mints_in_stock`), its
+    // outcome never comes up, and a box with nothing else in stock is refused when it is opened or asked for (SoldOut).
+    const rolledAtAll = !boxBuys(b, m) || rolls.some((r) => r.box === b.key);
+    if (rolledAtAll)
+      for (const [i, o] of outs.entries()) {
+        const tokenOf = (x) => (x.gives === 'pay' || x.gives === 'share' ? m.pool.get(x.pool)?.currency : x.gives === 'mint' ? x.currency ?? m.currencyKey : undefined);
+        const bad = outcomeParts(o).map((x) => m.tokens.get(tokenOf(x))).find((t) => t?.powers?.transferHook || t?.powers?.confidentialTransfers);
+        if (!bad) continue;
+        const why = bad.powers.transferHook ? 'whose mint has a transfer hook (a roll carries none of the accounts a hook asks for)' : 'whose mint allows confidential transfers';
+        warn('W-OUT-OF-STOCK', `${where}.outcomes[${i}]`, `${label(b)} pays a prize in ${bad.symbol ?? bad.key}, ${why}: a roll can’t move it, so this outcome is out of stock in every roll of the box and never comes up${outs.length === 1 ? '; with nothing else in it, every opening or roll of the box is refused (SoldOut)' : ''}.`, `Pay its prizes in a token without ${bad.powers.transferHook ? 'a transfer hook' : 'confidential transfers'}${boxRolls(b, m) || b.rollsOn ? '' : ', or sell the box in one step (one outcome, nothing random, no NFT rolled on: the purchase moves its prize with the hook’s accounts)'}.`);
       }
-    }
+    // A roll is given only by a box that sells in one step (`buy`): one oracle answer can't serve a second draw. In a
+    // box that rolls it is refused; in an order (an open, a prize's or a recipe's roll of the box) it is out of stock.
+    const givesRoll = outs.some((o) => outcomeParts(o).some((x) => x.gives === 'roll'));
+    if (givesRoll && boxRolls(b, m))
+      refuse('E-ODDS', `${where}.outcomes`, `${label(b)} rolls (more than one outcome, or an NFT of a stash at random), and gives a roll of a box: a box that rolls can’t give one (BadEntries).`, 'Give the roll from a box of one outcome that sells in one step, or give the box’s prizes directly.');
+    else if (givesRoll && rolledAtAll)
+      warn('W-OUT-OF-STOCK', `${where}.outcomes`, `${label(b)} gives a roll of a box, which only its sale in one step gives: ${b.rollsOn ? 'it rolls on an NFT, so it is opened' : `${[...new Set(rolls.filter((r) => r.box === b.key).map(roller))].join(', ')} roll${rolls.filter((r) => r.box === b.key).length === 1 ? 's' : ''} it`}, and in an order the roll is out of stock: that order gives nothing${outs.length === 1 && outcomeParts(outs[0]).length === 1 ? ' (with nothing else in it, the roll is refused, SoldOut)' : ''}.`, 'Give the roll from a box nothing rolls, or give the box’s prizes directly.');
     const tok = token(b.currency, `${where}.currency`);
     const price = units(b.price, tok, `${where}.price`, `${label(b)}’s price`);
     prices(b, tok, where);
@@ -1130,23 +1130,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const prizedBy = rolls.filter((r) => r.box === b.key && !['mission', 'recipe'].includes(r.route)).map(roller);
     if (prizedBy.length && b.active !== false && !b.shopOf)
       warn('W-ROLL-PRIZE', `${where}.active`, `${label(b)} is a prize of ${[...new Set(prizedBy)].join(', ')}, and is for sale too: anyone can open it for its price${price === 0n ? ' (free)' : ''}, and each opening takes from what the prize gives (a stash’s NFTs, a pool’s prizes).`, 'Set "active": false for a box only prizes roll.');
-    // A prize moves in the roll, which carries none of the accounts a transfer hook asks for (order.rs): the program
-    // refuses a hooked prize mint at every open of a box that rolls, and fails every waiting roll of a box (a recipe's,
-    // a mission's, a prize's, another box's outcome's, of any number of outcomes) at its ask, after the player gave what
-    // it took.
-    const rolledHere = [...new Set(rolls.filter((r) => r.box === b.key).map(roller))];
-    if (boxRolls(b, m) || rolledHere.length)
-      for (const [i, o] of outcomes.entries()) {
-        const hookedKey = outcomeParts(o)
-          .map((x) => (x.gives === 'pay' || x.gives === 'share' ? m.pool.get(x.pool)?.currency : x.gives === 'mint' ? x.currency ?? m.currencyKey : undefined))
-          .find((k) => k && m.tokens.get(k)?.powers?.transferHook);
-        if (!hookedKey) continue;
-        const fails = [
-          boxRolls(b, m) && 'every opening of it fails',
-          rolledHere.length && `every roll of it ${rolledHere.join(', ')} make${rolledHere.length === 1 ? 's' : ''} fails when it is asked for, keeping what the player gave for it (a recipe’s inputs, a mission’s return, a grant’s round, a box’s price), or is refused at once on a route that can’t give it (a purchase in one step)`,
-        ].filter(Boolean);
-        refuse('E-BOX', `${where}.outcomes[${i}]`, `${label(b)} pays a prize in “${hookedKey}”, a token whose mint has a transfer hook, and its prizes move in a roll, which carries none of the accounts a hook asks for: the program refuses them (PrizeHasHook), so ${fails.join(', and ')}.`, `Pay its prizes in a token without a transfer hook${rolledHere.length ? '' : ', or give it one outcome (a box of one outcome moves its prize in the purchase, with the hook’s accounts)'}.`);
-      }
     if (prizedBy.length && b.rollsOn)
       warn('W-ROLL-PRIZE', `${where}.rollsOn`, `${label(b)} rolls on an NFT, but ${[...new Set(prizedBy)].join(', ')} give${prizedBy.length === 1 ? 's' : ''} a roll of it on nothing: its outcomes are given, and their shifts and where they send an NFT are not.`, 'Give prizes a box with no "rollsOn".');
     if (price === 0n && !rolledBy.length && b.active !== false)
@@ -1169,8 +1152,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     for (const [i, outcome] of outcomes.entries()) {
       const at = `${where}.outcomes[${i}]`;
       if (outcome.gives === 'bundle' && !(outcome.prizes ?? []).length) refuse('E-ODDS', `${at}.prizes`, `A bundle of ${label(b)} gives nothing.`, 'List up to three prizes in "prizes".');
-      if (outcome.burns && outcome.gives !== 'bundle') refuse('E-ODDS', `${at}.burns`, `"burns" is a bundle's; this outcome is “${outcome.gives}”.`, 'Use "gives": "burn" for an outcome that only burns, or make it a bundle.');
-      if (outcomeBurns(outcome) && outcome.gives !== 'burn' && tok?.wsol) refuse('E-WSOL-BURN', at, `${label(b)} is paid in SOL, and wrapped SOL cannot be burned.`, 'Leave "burns" out.');
       for (const [k, o] of outcomeParts(outcome).entries()) {
         const at = outcome.gives === 'bundle' ? `${where}.outcomes[${i}].prizes[${k}]` : `${where}.outcomes[${i}]`;
         // A prize line's own kinds: tokens minted, a named NFT, a roll of a box (prize.rs).
@@ -1195,7 +1176,6 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           else if (!m.stash.get(o.stash)) refuse('E-REF', `${at}.stash`, `There is no stash “${o.stash}”.`, 'Add it to "stashes", or name one that is there.');
         }
       }
-      if (outcome.gives === 'burn' && tok?.wsol) refuse('E-WSOL-BURN', at, `${label(b)} is paid in SOL, and wrapped SOL cannot be burned.`, 'Make that outcome "nothing", or send its share somewhere.');
     }
     // The oracle's answer to a roll carries the order, the box, its ticket, an account for each outcome that wins
     // something, and with prizes the token programs, the game and a mint and a vault for each pool (catalog.rs).
@@ -1222,8 +1202,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       effect(o.add, `${at}.add`, `${label(b)}’s odds`);
     }
     if ((b.odds ?? []).length && outcomes.length < 2) warn('W-ODDS', `${where}.odds`, `${label(b)} has one outcome, so odds change nothing.`);
-    // A box sells only while its pool covers every fixed prize (order.rs, PrizeNotCovered): the odds on the page are
-    // always odds it can pay. A prize won leaves the pool for the game's vault at the roll.
+    // A fixed prize is in stock only while its pool holds all of it (order.rs): a prize won leaves the pool for the
+    // game's vault at the roll.
     for (const z of prizes) {
       if (z.amount === null) continue;
       const need = seedNeeds.get(z.pool.key) ?? { pool: z.pool, amount: 0n, box: b, boxes: new Set() };
@@ -1234,8 +1214,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (b.stockOdds && !parts.some((o) => o.gives === 'item' && m.item.get(o.item)?.supply > 0))
       warn('W-ODDS', `${where}.stockOdds`, `${label(b)} has odds that shrink with stock, but none of its items has a limited supply, so nothing changes.`, 'Give its items a supply, or turn stockOdds off.');
   }
-  // A box sells only while its pool covers every fixed prize (order.rs, PrizeNotCovered): a pool whose seed is short of
-  // the largest prize a box pays from it holds up every box it pays.
+  // A fixed prize a pool can't cover is out of stock (order.rs): its outcome never comes up until the pool holds it, a
+  // box with nothing else in stock is refused (SoldOut), and a sale in one step is refused (PrizeNotCovered).
   for (const { pool: p, amount: most, box, boxes } of seedNeeds.values()) {
     const tok = m.tokens.get(p.currency);
     const sym = tok?.symbol ?? p.currency;
@@ -1244,7 +1224,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (seed === null || seed >= most) continue;
     const amount = fromUnits(most, tok?.decimals ?? 0);
     const others = [...boxes].filter((x) => x !== box).map(label);
-    warn('W-PRIZE-SEED', `economy.pools.${p.key}.seed`, `“${p.key}” starts with ${fromUnits(seed, tok?.decimals ?? 0)} ${sym}, but a win in ${label(box)} pays ${amount} ${sym}. The program sells a box only while its pool holds every fixed prize, so ${label(box)} can’t be opened until the pool holds ${amount} ${sym}, and stops selling whenever a run of wins takes the pool below that${others.length ? ` (${others.join(', ')} pay${others.length === 1 ? 's' : ''} fixed prizes from it too, each held up the same way below its own largest)` : ''}.`, `Seed “${p.key}” with at least ${amount} ${sym}; more rides out a run of wins (the simulation suggests how much). For a prize that grows with sales, use a share of the pool ("gives": "share") instead.`);
+    warn('W-PRIZE-SEED', `economy.pools.${p.key}.seed`, `“${p.key}” starts with ${fromUnits(seed, tok?.decimals ?? 0)} ${sym}, but a win in ${label(box)} pays ${amount} ${sym}. A fixed prize its pool can’t cover is out of stock: that outcome never comes up until the pool holds ${amount} ${sym} (a box with nothing else in stock is refused, SoldOut), and it drops out again whenever a run of wins takes the pool below that${others.length ? ` (${others.join(', ')} pay${others.length === 1 ? 's' : ''} fixed prizes from it too, each out of stock the same way below its own amount)` : ''}.`, `Seed “${p.key}” with at least ${amount} ${sym}; more rides out a run of wins (the simulation suggests how much). For a prize that grows with sales, use a share of the pool ("gives": "share") instead.`);
   }
 
   // ---- a live box's roll rewritten: an order waiting for its roll is rolled only on the version it paid for, so
@@ -1314,7 +1294,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         // The line names its farm (craft.rs, `Input::Staked { item, farm }`): the craft takes the piece only from its seat
         // there, a farm of collectibles that holds or freezes it (a watched one could be sold while staked).
         const f = line.farm === undefined ? null : m.farm.get(line.farm);
-        const raised = (r.raises ?? []).filter((x) => x.place === taken).map((x) => x.key);
+        // The recipe's own raises on it, and its life's (uses, a cooldown: `lifeLines`).
+        const raised = [...(r.raises ?? []).filter((x) => x.place === taken).map((x) => x.key), ...lifeLines(r, m).raises.filter((x) => x.place === taken).map((x) => x.shift.key)];
         const candidates = m.farms.filter((x) => x.stakes === 'collectibles' && (x.custody ?? 'escrow') !== 'watch' && (!x.item || x.item === it.key));
         if (line.farm === undefined)
           refuse('E-RECIPE', `${at}.farm`, `${label(r)} takes ${label(it)} only while it is staked, but does not say in which farm: the program takes the piece only from its seat in the farm the line names.`, candidates.length ? `Add "farm": ${candidates.map((x) => `"${x.key}"`).join(' or ')}.` : `Add a farm of collectibles that takes ${label(it)} with "custody": "escrow" or "freeze", and name it in "farm".`);

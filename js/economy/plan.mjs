@@ -11,14 +11,14 @@ import { createCollectionInstruction } from '../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, NATIVE_MINT, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
-import { computeUnitLimit, createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
+import { createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx, setAuthorityIx, transferCheckedIx } from '../chain/token.js';
 import { compileMessage, transactionSize } from '../chain/tx.js';
 import { sha256 } from '../chain/sha256.js';
 import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
 import { check } from './check.mjs';
-import { ACCOUNT_OVERHEAD, boxBuys, boxRolls, compressedTree, destination, effectOf, gateOf, listOf, lotterySplit, model, MOST_RENT_PER_BYTE, outcomeBurns, outcomeParts, perWalletOf, placeOf, prizeLine, prizePool, prizeRolls, prizeToken, rarityNumber, ruleOf, sharesOf, spendOf, stashNfts, toBy, toEnum, toSeconds, toTime, toUnits, weights, wholeCount, windowOf } from './model.mjs';
+import { ACCOUNT_OVERHEAD, boxBuys, boxRolls, compressedTree, destination, effectOf, gateOf, listOf, lotterySplit, model, MOST_RENT_PER_BYTE, outcomeParts, perWalletOf, placeOf, lifeLines, prizeLine, prizePool, prizeRolls, prizeToken, rarityNumber, ruleOf, sharesOf, spendOf, stashNfts, toBy, toEnum, toSeconds, toTime, toUnits, weights, wholeCount, windowOf } from './model.mjs';
 import { BUDGET } from './txsize.mjs';
 
 const owner = 'owner';
@@ -35,8 +35,8 @@ const tokenProgramOf = (t) => (t?.program === 'token-2022' ? TOKEN_2022_PROGRAM 
 
 export function itemArgs(it, m) {
   const kind = it.kind === 'normal' ? 'Normal' : 'Collectible';
-  // A collectible is minted into its own `collection`, or the one the setup makes ("@collection" until it exists).
-  const life = it.life && kind !== 'Normal' ? { ready_after: toSeconds(it.life.readyAfter), lasts: toSeconds(it.life.lasts), uses: it.life.uses ?? 0, cooldown: toSeconds(it.life.cooldown) } : null;
+  // A collectible is minted into its own `collection`, or the one the setup makes ("@collection" until it exists). Its
+  // life is written into each recipe that takes it (`lifeLines`).
   return {
     kind,
     rarity: rarityNumber(it.rarity),
@@ -45,7 +45,6 @@ export function itemArgs(it, m) {
     name: it.name,
     uri: it.uri ?? '',
     max_supply: it.supply ?? 0,
-    life,
     active: it.active !== false,
     collection: kind === 'Normal' ? NOBODY : it.collection ?? '@collection',
     // A fresh collectible's traits, each drawn per unit (a table's row, or a number in a range).
@@ -105,7 +104,7 @@ export function boxArgs(b, m) {
     // when distinct. None is one draw among every outcome.
     slots: (b.slots ?? []).map((s) => ({ count: s.count, only: s.from ?? [], distinct: Boolean(s.distinct) })),
     // An entry gives its prizes (a bundle of any number), and may burn the payment in place of the split.
-    entries: (b.outcomes ?? []).map((o, i) => ({ prizes: outcomeParts(o).map((part) => partPrize(part, m)), burns: outcomeBurns(o), weight: w[i] })),
+    entries: (b.outcomes ?? []).map((o, i) => ({ prizes: outcomeParts(o).map((part) => partPrize(part, m)), weight: w[i] })),
     gate: gateOf(b.gate, m),
     odds: (b.odds ?? []).map((o) => ({ entry: o.outcome, boost: { rule: ruleOf(o.when, m), effect: effectOf(o.add) } })),
     window: windowOf(b, m.now),
@@ -116,14 +115,14 @@ export function boxArgs(b, m) {
       const shifts = (o.shifts ?? []).map((x) => ({ key: x.attribute, by: toBy(x.by), most: toSeconds(x.upTo ?? 0), from_now: Boolean(x.fromNow) }));
       // An outcome's own `then`, or the box's: an NFT taken as its price goes there whatever the roll gives.
       const then = thenOf(o.then ?? b.then, m);
-      return shifts.length || then !== 'Back' ? [{ entry: i, shifts, then }] : [];
+      return shifts.length || then !== null ? [{ entry: i, shifts, then }] : [];
     }),
   };
 }
 
-/** Where an outcome sends the NFT a box rolls on: back, burned, given (the treasury's wallet is filled in when the economy goes live), or into a stash. */
+/** Where an outcome sends the NFT a box rolls on: back (null), burned, given (the treasury's wallet is filled in when the economy goes live), or into a stash. */
 export const thenOf = (then, m) => {
-  if (!then || then === 'back') return 'Back';
+  if (!then || then === 'back') return null;
   if (then === 'burn') return 'Burn';
   if (then.stash) return { Stash: [m?.stash.get(then.stash)?.id ?? 0] };
   return { Give: [then === 'treasury' ? '@treasury' : then.giveTo] };
@@ -141,21 +140,24 @@ export function recipeArgs(r, m) {
     if (l.takes === 'use') return { Use: { item: m.item.get(l.item)?.id ?? 0 } };
     // A staked one names the farm it sits in (craft.rs): the craft takes it only from its seat there.
     if (l.takes === 'staked') return { Staked: { item: m.item.get(l.item)?.id ?? 0, farm: m.farm.get(l.farm)?.id ?? 0 } };
-    if (l.takes === 'renew') return { Renew: { item: m.item.get(l.item)?.id ?? 0 } };
+    // A renew keeps the collectible as a use does; its life's raise counts its uses from 0 again (`lifeLines`).
+    if (l.takes === 'renew') return { Use: { item: m.item.get(l.item)?.id ?? 0 } };
     if (l.takes === 'show') return { Show: { collection: l.collection ?? '@collection' } };
     // A trade-in: one NFT of `collection`, any kind, burned, given on, or put in a stash.
     if (l.takes === 'trade') return { Trade: { collection: l.collection ?? '@collection', then: spendOf(l.then, m) } };
     return { Pay: { mint: `@mint:${l.currency ?? m.currencyKey}`, amount: amount(l.amount, tok(l.currency)), to: toEnum(l.to, m) } };
   });
+  const life = lifeLines(r, m);
   // A line is a prize (prize.rs), or a roll on a collectible it keeps (`on`).
   const outputs = (r.out ?? []).map((l) => (l.gives === 'roll' && l.on !== undefined ? { RollOn: { box_id: m.box.get(l.box)?.id ?? 0, place: l.on } } : { Prize: [prizeArgs(l, m)] }));
   return {
     active: r.active !== false,
     inputs,
     outputs,
-    needs: (r.needs ?? []).map((n) => ({ place: n.place, key: n.key, at_least: n.atLeast })),
+    // The recipe's own needs and raises, then what the life of each collectible it takes adds (`lifeLines`).
+    needs: [...(r.needs ?? []).map((n) => ({ place: n.place, key: n.key, test: { AtLeast: [n.atLeast ?? 0] } })), ...life.needs],
     keeps: (r.keeps ?? []).map((k) => ({ key: k.key, from: k.from, to: k.to })),
-    raises: (r.raises ?? []).map((x) => ({ place: x.place, key: x.key, by: toBy(x.by), most: x.upTo === undefined && farmTime(x.key, m) && !x.fromNow ? NO_CAP : toSeconds(x.upTo ?? 0), from_now: Boolean(x.fromNow) })),
+    raises: [...(r.raises ?? []).map((x) => ({ place: x.place, shift: { key: x.key, by: toBy(x.by), most: x.upTo === undefined && farmTime(x.key, m) && !x.fromNow ? NO_CAP : toSeconds(x.upTo ?? 0), from_now: Boolean(x.fromNow) } })), ...life.raises],
     window: windowOf(r, m.now),
     per_wallet: perWalletOf(r),
   };
@@ -287,6 +289,8 @@ export function farmArgs(f, m) {
     roll: t.roll ? m.box.get(t.roll)?.id ?? 0 : null,
     // A token seat may leave before this tier's lock by leaving this share of what it takes out.
     exit_bps: Math.round((t.exitFee ?? 0) * 100),
+    // How long a seat of this tier earns from its stake (0: no end). The spec has no field for it yet.
+    earns_for: 0,
   }));
   // Every rule of its gate; with none, a farm of one item's collectibles takes that item.
   const named = listOf(f.gate);
@@ -359,8 +363,8 @@ export function grantArgs(g, m) {
       wallet: perWalletOf(l),
       per_person: l.perPerson ?? 0,
       per_key: l.perKey ?? 0,
-      per_day: l.perDay ?? 0,
-      total: l.total ?? 0,
+      // Every wallet's claims together: in all, and a day (a window of 86,400 seconds, from the unix epoch).
+      all: { total: l.total ?? 0, per_window: l.perDay ?? 0, window: l.perDay ? 86_400 : 0 },
       window: windowOf({ opens: l.opens, closes: l.until }, m.now),
     },
     active: g.active !== false,
@@ -555,42 +559,14 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     const t = m.tokens.get(p.currency);
     add({ id: `pool:${p.key}`, part: `pool:${p.key}`, says: `Open the pool “${p.key}” for ${t?.symbol}`, creates: [{ what: `the pool “${p.key}”`, bytes: 165 }], build: (ctx) => [loot.openPoolIx({ owner: ctx.owner, project: project(ctx), index: p.index, mint: ctx.mints[p.currency] })] });
   }
-  /**
-   * What a write naming boxes `ids` to roll later passes for them (`loot.boxesAccounts`), from the spec as it goes live:
-   * each box's args, the items its prizes name and each pool's mint (pools open, tables are sealed and items written
-   * before any box, and a box before anything that names it).
-   */
-  const rollsFor = (ids, ctx) => {
-    const out = { boxes: {}, items: {}, poolMints: {}, programs: programsOf(ctx) };
-    for (const id of ids) {
-      const b = m.allBoxes.find((x) => x.id === id);
-      const box = (out.boxes[id] = b ? resolve(boxArgs(b, m), ctx) : null);
-      for (const p of box?.entries.flatMap((e) => e.prizes) ?? []) {
-        const item = p.Item?.[0] ?? p.Compressed?.item;
-        if (item !== undefined) {
-          const it = m.items.find((x) => x.id === item);
-          out.items[item] = it ? resolve(itemArgs(it, m), ctx) : null;
-        }
-        const pool = p.Tokens?.from.Pool?.[0];
-        if (pool !== undefined) {
-          const found = m.pools.find((x) => x.index === pool);
-          out.poolMints[pool] = found ? ctx.mints[found.currency] : null;
-        }
-      }
-    }
-    return out;
-  };
-  /** A write that names boxes to roll: a transaction of its own, with all the compute one may have. */
-  const naming = (ids, ctx, instructions) => (ids.length ? [computeUnitLimit(1_400_000), ...instructions] : instructions);
   const record = (part, def, says, kind, what, options = () => ({})) => {
     const [variant] = Object.keys(def);
     const bytes = recordBytesOf(kind, def[variant]);
     // A lottery's first write opens its pot: a token account as well as the record (each round holds its own money).
     const pot = kind === 'Lottery' ? [{ what: `${what}’s pot`, bytes: 165 }] : def.Schedule?.args.action.from.Vest ? [{ what: `${what}’s sealed vault`, bytes: 165 }] : [];
-    const named = loot.defRolls(def);
     add({
-      id: `${part}:${kind}`, part, says, creates: [{ what, bytes }, ...pot], alone: named.length > 0,
-      build: (ctx) => naming(named, ctx, [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), rolls: named.length ? rollsFor(named, ctx) : {}, ...options(ctx) })]),
+      id: `${part}:${kind}`, part, says, creates: [{ what, bytes }, ...pot],
+      build: (ctx) => [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), ...options(ctx) })],
     });
   };
   // Each table, a batch of rows a transaction (`TABLE_BATCH_BYTES` of rows at most), sealed with its last batch.
@@ -604,7 +580,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         part: `table:${t.key}`,
         says: `Write ${rows.length} row${rows.length === 1 ? '' : 's'} of the table “${t.key}”${seal ? ', and seal it: its weights never change from now on' : ''}`,
         creates: i === 0 ? [{ what: `the table “${t.key}”, ${t.rows.length} rows`, bytes: loot.tableRowAt(len, t.rows.length - 1) + len }] : [],
-        build: (ctx) => [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: { Table: { id: t.id, args: { payload: t.kind === 'numbers' ? 'Number' : 'Label', rows, seal, committed: false } } } })],
+        build: (ctx) => [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: { Table: { id: t.id, args: { payload: t.kind === 'numbers' ? 'Number' : 'Label', rows, seal } } } })],
       });
     });
   }
@@ -614,7 +590,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     const ws = weights(b);
     const total = ws.reduce((n, w) => n + w, 0) || 1;
     const part = (o) => (o.gives === 'item' ? m.item.get(o.item)?.name ?? o.item : o.gives === 'stash' ? `an NFT of “${m.stash.get(o.stash)?.name ?? o.stash}”` : o.gives === 'pay' ? `${o.amount} ${m.poolToken(o.pool)?.symbol ?? ''}`.trim() : o.gives === 'share' ? `${o.percent}% of “${o.pool}”` : o.gives === 'mint' ? `${o.amount} ${m.tokens.get(o.currency ?? m.currencyKey)?.symbol ?? ''}`.trim() : o.gives === 'nft' ? `the NFT ${String(o.nft).slice(0, 4)}…` : o.gives === 'roll' ? `a roll of “${m.box.get(o.box)?.name ?? o.box}”` : '');
-    const what = (o) => outcomeParts(o).map(part).join(' + ') || (outcomeBurns(o) ? 'a burn' : 'nothing');
+    const what = (o) => outcomeParts(o).map(part).join(' + ') || 'nothing';
     return (b.outcomes ?? []).map((o, i) => `${what(o)} ${Math.round((ws[i] / total) * 10_000) / 100}%`).join(', ');
   };
   const wasLive = new Set((live?.published?.boxes ?? []).map((b) => b.key));
@@ -685,7 +661,6 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   }
   for (const g of m.grants) record(`grant:${g.key}`, { Grant: { id: g.id, args: grantArgs(g, m) } }, `Write the grant “${g.name}”`, 'Grant', `the grant “${g.name}”`);
   /** The boxes a farm's tiers roll, tier by tier (its roll, then a prize that is a roll). */
-  const farmRolls = (f) => farmArgs(f, m).tiers.flatMap((t) => [t.roll, t.prize?.Roll?.[0]].filter((x) => x != null));
   for (const f of m.farms) {
     if (live?.farms?.includes(f.key)) continue;
     const rewards = m.poolToken(f.rewards);
@@ -694,8 +669,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       part: `farm:${f.key}`,
       says: `Open the farm “${f.name}”: stake ${f.stakes === 'collectibles' ? 'collectibles' : m.tokens.get(f.stakes)?.symbol}, earn ${rewards?.symbol} from “${f.rewards}”`,
       creates: [{ what: `the farm “${f.name}”`, bytes: encodedSize('Farm', { project: NOBODY, id: 0, farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } }, ...placeholders(farmArgs(f, m)), rewards_mint: NOBODY, rate_at: 0n, rate_carry: 0n, total_weight: 0n, reward_per_weight: 0n, reward_remainder: 0n, given: 0n, unreleased: 0n, released_at: 0n, release_ends: 0n, release_from: 0n, release_base: 0n }) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }])],
-      alone: farmRolls(f).length > 0,
-      build: (ctx) => naming(farmRolls(f), ctx, [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes], rolls: rollsFor(farmRolls(f), ctx) })]),
+      build: (ctx) => [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes] })],
     });
   }
 
@@ -766,12 +740,10 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         : a.lot?.roll
           ? `Open the auction “${a.name}” of a roll of the box “${m.box.get(a.lot.roll)?.name ?? a.lot.roll}”, made for its winner at the end (${terms})`
           : `Open the auction “${a.name}” of one new “${m.item.get(a.lot?.item)?.name ?? a.lot?.item}” (${terms})`,
-      alone: Boolean(args.lot.Roll),
-      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, serial: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, held: [] }) }],
+      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, pin: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, held: [] }) }],
       build: (ctx) => {
         const seller = auctionSeller(a, ctx);
-        const lot = args.lot.Roll ? [args.lot.Roll[0]] : [];
-        return naming(lot, ctx, [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx), rolls: rollsFor(lot, ctx) })]);
+        return [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx) })];
       },
     });
   }
@@ -889,7 +861,7 @@ export const recordBytesOf = (kind, body) => {
     Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),
     // Its terms and its round number: each round keeps the rest in a record of its own.
     Lottery: () => ({ project: NOBODY, id: 0, incarnation: 0n, revision: 0, ...placeholders(loot.withDefaults({ Lottery: { args } }).Lottery.args), round: 0 }),
-    Grant: () => ({ project: NOBODY, id: 0, incarnation: 0n, ...placeholders(args), counters: { claimed: 0, today: 0, day: 0n } }),
+    Grant: () => ({ project: NOBODY, id: 0, incarnation: 0n, ...placeholders(args), counted: { count: 0, window: 0, in_window: 0 } }),
   }[kind];
   return encodedSize(kind, base());
 };

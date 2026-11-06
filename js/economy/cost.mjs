@@ -5,7 +5,7 @@
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { boxOrderBytes, plan as compile, contestBytes } from './plan.mjs';
 import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
-import { boxBuys, boxRolls, COLLECTIBLE_RENT, drawsOf, escrowUnits, holdsRent, outcomeParts, ESCROW_LAMPORTS, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
+import { boxBuys, COLLECTIBLE_RENT, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -77,19 +77,19 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     rows.push({ part, action, who, feeSol: sol(fee), ...(oracle ? { oracleSol: sol(oracle) } : {}), networkSol: sol(SIGNATURE_FEE), deposits, ...(extra ? { note: extra } : {}), ...(r ? { inAllSol: r.totalSol ?? null, onTopSol: r.extrasSol, holdSol: r.holdSol, inAll: inAll(r) } : {}) });
   };
   const back = (what, lamports, when) => ({ what, sol: sol(lamports), back: when });
-  // An order holds a collectible's rent for each item the richest outcome gives (order.rs `escrow`).
-  // A pack's each draw is a card: one open holds the rent of its every card.
+  // An order holds its rent and the fee; the open lends its throwaway settle key what the settle may open or mint (a
+  // collectible's rent for each item the richest outcome gives, each card of a pack), back unspent.
   const itemsOf = (b) => drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((p) => holdsRent(p, m)).length));
   const order = (b) => [
     back('the order', rent(boxOrderBytes(b, m)), 'at settle or refund'),
-    ...(escrowUnits(b, m) ? [back(`the SOL the order holds for what its settle may open (${escrowUnits(b, m)} × ${sol(ESCROW_LAMPORTS)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on; the player fee is paid on top of it)`, ESCROW_LAMPORTS * BigInt(escrowUnits(b, m)), `at settle, less what it opens (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it, and the fee, on a refund`)] : []),
+    ...(settleUnits(b, m) ? [back(`the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleUnits(b, m)} × ${sol(SETTLE_RENT_UNIT)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`, SETTLE_RENT_UNIT * BigInt(settleUnits(b, m)), `once the key has settled, less what it opened (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it when the roll fails`)] : []),
   ];
   // A box that needs no roll is bought in one step (`buy`): no order, and a collectible's rent is paid at once.
   const bought = (b) => (itemsOf(b) ? [back(`${itemsOf(b)} new collectible${itemsOf(b) > 1 ? 's' : ''}`, COLLECTIBLE_RENT * BigInt(itemsOf(b)), `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`)] : []);
   for (const b of m.shop) row(`item:${b.shopOf}`, `buy “${b.name}”`, 'player', FEES.player, bought(b), 'One transaction: the price is split and the item given at once.');
   for (const b of m.boxes) {
     if (boxBuys(b, m)) row(`box:${b.key}`, `buy “${b.name}”`, 'player', FEES.player, bought(b), 'One transaction: the price is split and what it gives handed over at once.');
-    else row(`box:${b.key}`, `open “${b.name}”`, 'player', FEES.player, order(b), boxRolls(b, m) ? 'The oracle’s fee is paid by whoever asks for the roll (the player, at the open) and a refund doesn’t return it.' : undefined, boxRolls(b, m) ? ORACLE_FEE : 0n);
+    else row(`box:${b.key}`, `open “${b.name}”`, 'player', FEES.player, order(b), 'The oracle’s fee is paid by whoever asks for the roll (the player, at the open) and a refund doesn’t return it.', ORACLE_FEE);
   }
   for (const p of m.payments) row(`payment:${p.key}`, `pay “${p.name}”`, 'player', FEES.player);
   for (const r of m.recipes) {
@@ -132,13 +132,13 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   for (const r of prizeRolls(m).filter((r) => !['mission', 'recipe'].includes(r.route))) {
     const name = m.box.get(r.box)?.name ?? r.box;
     const who = r.route === 'grant' ? 'the grant’s funds (the sender, what they can’t)' : r.route === 'auction' ? 'whoever ends it' : r.route === 'contest' ? 'whoever claims the winning entry' : 'whoever pays the place';
-    // The order holds the SOL for a collectible's rent only when its box can give one (an item outcome).
+    // Whoever settles it pays a collectible's rent when its box gives one (an item outcome).
     const mints = (m.box.get(r.box)?.outcomes ?? []).flatMap(outcomeParts).some((o) => holdsRent(o, m));
-    row(r.by, `make a winner’s roll of “${name}” (${r.route})`, who, 0n, [back(mints ? 'the roll’s order and the SOL it holds for a collectible' : 'the roll’s order', rent(boxOrderBytes(m.box.get(r.box), m)) + (mints ? ESCROW_LAMPORTS : 0n), mints ? 'to the winner when it is settled, less a collectible’s rent when it gives one' : 'to the winner when it is settled')], 'Then anyone asks the oracle for the roll (its fee, below) and anyone settles it.');
+    row(r.by, `make a winner’s roll of “${name}” (${r.route})`, who, 0n, [back('the roll’s order', rent(boxOrderBytes(m.box.get(r.box), m)), 'to the winner when it is settled')], `Then anyone asks the oracle for the roll (its fee, below) and anyone settles it${mints ? `, paying the collectible’s rent when it gives one (about ${sol(COLLECTIBLE_RENT)} SOL)` : ''}.`);
     row(r.by, `ask for the roll of “${name}”`, 'anyone (a keeper, or the winner)', 0n, [], 'It asks MagicBlock’s oracle, which takes its fee from whoever asks; a refund doesn’t return it.', ORACLE_FEE);
   }
   for (const d of m.decisions) row(`decision:${d.key}`, d.when, 'authority', FEES.project, [], d.does === 'roll' ? 'The roll asks MagicBlock’s oracle, which takes its own fee from the authority.' : undefined, d.does === 'roll' ? ORACLE_FEE : 0n);
-  if (m.allBoxes.some((b) => !boxBuys(b, m))) row('orders', 'settle an order', 'anyone (a keeper, or the player)', 0n, [], 'A roll won (an outcome that gives one) makes its order now: the sender pays its rent, which goes to the player when it settles.');
+  if (m.allBoxes.some((b) => !boxBuys(b, m))) row('orders', 'settle an order', 'anyone (a keeper, or the player)', 0n, [], 'The sender pays what the settle opens or mints (a collectible’s rent, a token account the player lacks); the order’s rent goes back to the player. js/play’s throwaway key sends it with what the open lent it.');
   if (m.schedules.length) row('schedules', 'run a schedule when it is due', 'anyone (a sealed one’s recipient, from their page)', 0n, [], m.schedules.some((sc) => sc.sealed) ? 'Several runs that fell behind go in one transaction; a sealed schedule pays from its own vault.' : undefined);
   if (m.lotteries.length) {
     row('lotteries', 'ask for a draw', 'anyone (a keeper, or a player)', 0n, [], 'The draw asks MagicBlock’s oracle for the winning numbers; the oracle takes its fee from whoever sends the draw.', ORACLE_FEE);

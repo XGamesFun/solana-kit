@@ -15,10 +15,10 @@ import { runTool } from '../mcp/server.mjs';
 
 const NOW = 1_800_000_000;
 
-// E-BOX refuses a hooked prize in a box a grant, a recipe, a mission, a lottery, a contest or an auction rolls, and
-// also in one another box's outcome or bundle part rolls, or one a rolled box rolls in turn. On chain
-// that roll is made at the outer box's settle (or a grant's round) and fails at its ask (PrizeHasHook), after the
-// player paid; a one-step purchase of it is refused outright. The same list of rolls feeds W-STASH-SHARED, E-ROLL,
+// W-OUT-OF-STOCK warns of a hooked prize in a box a grant, a recipe, a mission, a lottery, a contest or an auction
+// rolls, and in one another box's one-step sale rolls, or one a rolled box rolls in turn: a roll moves prizes with none
+// of a hook's accounts, so that prize is out of stock and every roll of a box of nothing else is refused (SoldOut). A
+// box that rolls can't give a roll at all (BadEntries). The same list of rolls feeds W-STASH-SHARED, E-ROLL,
 // W-ROLL-PRIZE and W-LIVE-ROLLS.
 const MINT = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const STASHED = ['4vd1uA3jK28MwhufZnbtQpyJkVMXEVpKHzDRPUH9DT3v', 'E53iEjsuDnz1jP6MJbnhecvTBRWCs5MsmjusfhYNDjD4'];
@@ -36,37 +36,38 @@ const vault = { key: 'vault', name: 'Vault', price: 0, active: false, outcomes: 
 const mid = { key: 'mid', name: 'Mid', price: 0, active: false, outcomes: [{ gives: 'roll', box: 'vault', chance: 100 }] };
 const crate = (outcomes) => ({ key: 'crate', name: 'Crate', price: 0.02, outcomes });
 const shapes = {
-  outcome: { boxes: [vault, crate([{ gives: 'roll', box: 'vault', chance: 30 }, { gives: 'item', item: 'gem', chance: 70 }])] },
-  bundle: { boxes: [vault, crate([{ gives: 'bundle', prizes: [{ gives: 'item', item: 'rock' }, { gives: 'roll', box: 'vault' }], chance: 40 }, { gives: 'item', item: 'gem', chance: 60 }])] },
   buy: { boxes: [vault, crate([{ gives: 'roll', box: 'vault', chance: 100 }])] },
+  bundle: { boxes: [vault, crate([{ gives: 'bundle', prizes: [{ gives: 'item', item: 'rock' }, { gives: 'roll', box: 'vault' }], chance: 100 }])] },
   'grant through a box': { boxes: [vault, mid], grants: [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'mid' }, limits: { perWallet: 1 } }] },
   'recipe through a box': { boxes: [vault, mid], recipes: [{ key: 'forge', name: 'Forge', in: [{ takes: 'burn', item: 'gem' }], out: [{ gives: 'roll', box: 'mid' }] }] },
 };
-const eBox = (s) => check(s, { now: NOW }).refusals.filter((r) => r.code === 'E-BOX');
+const stock = (s) => check(s, { now: NOW }).warnings.filter((r) => r.code === 'W-OUT-OF-STOCK' && r.where === 'economy.boxes.vault.outcomes[0]');
 
-test('E-BOX refuses a hooked prize in a box another box’s outcome, a bundle part or a rolled box rolls', () => {
+test('W-OUT-OF-STOCK warns of a hooked prize in a box another box’s sale, a bundle part or a rolled box rolls', () => {
   for (const [shape, parts] of Object.entries(shapes)) {
-    const [r, ...more] = eBox(spec(parts));
+    const v = check(spec(parts), { now: NOW });
+    assert.equal(v.ok, true, `${shape}: ${v.refusals.map((r) => r.message).join(' ')}`);
+    const [r, ...more] = stock(spec(parts));
     assert.equal(more.length, 0, shape);
-    assert.equal(r?.where, 'economy.boxes.vault.outcomes[0]', shape);
-    assert.match(r.message, /fails when it is asked for/, shape);
-    assert.match(r.message, shape.includes('through') ? /box:mid/ : /box:crate/, shape);
+    assert.match(r?.message ?? '', /transfer hook.*SoldOut/, shape);
   }
-  const chained = eBox(spec(shapes['grant through a box']))[0].message;
-  assert.match(chained, /grant:gift through box:mid/, 'the route at the head of the chain is named');
 });
 
-test('the controls: a grant’s direct roll is refused as before; a plain token, or a box nothing rolls, checks', () => {
-  assert.equal(eBox(spec({ boxes: [vault], grants: [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'vault' }, limits: { perWallet: 1 } }] }))[0]?.where, 'economy.boxes.vault.outcomes[0]');
+test('the controls: a box that rolls gives no roll; a plain token, or a box nothing rolls, is not warned of', () => {
+  const refused = (outcomes) => check(spec({ boxes: [vault, crate(outcomes)] }, {}), { now: NOW }).refusals.find((r) => r.where === 'economy.boxes.crate.outcomes');
+  assert.match(refused([{ gives: 'roll', box: 'vault', chance: 30 }, { gives: 'item', item: 'gem', chance: 70 }])?.message ?? '', /BadEntries/);
+  assert.match(refused([{ gives: 'bundle', prizes: [{ gives: 'item', item: 'rock' }, { gives: 'roll', box: 'vault' }], chance: 40 }, { gives: 'item', item: 'gem', chance: 60 }])?.message ?? '', /BadEntries/);
+  assert.equal(stock(spec({ boxes: [vault], grants: [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'vault' }, limits: { perWallet: 1 } }] })).length, 1, 'a grant’s direct roll');
   for (const [shape, parts] of Object.entries(shapes)) {
     const plain = spec(parts, {});
-    assert.deepEqual(eBox(plain), [], shape);
+    assert.deepEqual(stock(plain), [], shape);
     assert.equal(check(plain, { now: NOW }).ok, true, shape);
   }
   // the hooked one-outcome box sold alone: its prize moves in the purchase, with the hook's accounts
-  assert.deepEqual(eBox(spec({ boxes: [{ ...vault, price: 0.01, active: true }] })), []);
-  // the outer box rolls nothing hooked of its own: only the box it rolls is refused
-  assert.ok(eBox(spec(shapes.outcome)).every((r) => !r.where.includes('crate')));
+  assert.deepEqual(stock(spec({ boxes: [{ ...vault, price: 0.01, active: true }] })), []);
+  // a roll a box rolled in an order gives is out of stock there: the mid box a grant rolls is warned of
+  const mid = check(spec(shapes['grant through a box'], {}), { now: NOW }).warnings.find((r) => r.code === 'W-OUT-OF-STOCK' && r.where === 'economy.boxes.mid.outcomes');
+  assert.match(mid?.message ?? '', /grant:gift/);
 });
 
 test('rollsOf follows a chain of rolls to its end, once a route, and stops on a loop', () => {
@@ -97,7 +98,7 @@ test('E-ROLL counts a mission’s or a recipe’s roll through a box: the box it
 
 test('W-ROLL-PRIZE and W-STASH-SHARED count a box’s own outcome’s roll', () => {
   // a box for sale that another box's outcome rolls
-  const sold = check(spec({ boxes: [{ ...vault, price: 0.01, active: true }, ...shapes.outcome.boxes.slice(1)] }, {}), { now: NOW });
+  const sold = check(spec({ boxes: [{ ...vault, price: 0.01, active: true }, ...shapes.buy.boxes.slice(1)] }, {}), { now: NOW });
   const w = sold.warnings.find((x) => x.code === 'W-ROLL-PRIZE' && x.where === 'economy.boxes.vault.active');
   assert.match(w?.message ?? '', /is a prize of box:crate/);
   // a stash a grant's roll and another box's outcome both take from
@@ -106,11 +107,11 @@ test('W-ROLL-PRIZE and W-STASH-SHARED count a box’s own outcome’s roll', () 
   const grants = [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'loot' }, limits: { perWallet: 1 } }];
   const shared = (boxes) => check(spec({ boxes: [loot, ...boxes], stashes, grants }, {}), { now: NOW }).warnings.find((x) => x.code === 'W-STASH-SHARED');
   assert.equal(shared([]), undefined, 'one route alone');
-  assert.match(shared([crate([{ gives: 'roll', box: 'loot', chance: 50 }, { gives: 'item', item: 'rock', chance: 50 }])])?.message ?? '', /given by box:crate, grant:gift|given by grant:gift, box:crate/);
+  assert.match(shared([crate([{ gives: 'roll', box: 'loot', chance: 100 }])])?.message ?? '', /given by box:crate, grant:gift|given by grant:gift, box:crate/);
 });
 
 test('W-LIVE-ROLLS names a box whose outcome won the rolls that now fail', () => {
-  const s = spec({ boxes: [{ ...vault, outcomes: [{ gives: 'item', item: 'rock', chance: 50 }, { gives: 'item', item: 'gem', chance: 50 }] }, ...shapes.outcome.boxes.slice(1)] }, {});
+  const s = spec({ boxes: [{ ...vault, outcomes: [{ gives: 'item', item: 'rock', chance: 50 }, { gives: 'item', item: 'gem', chance: 50 }] }, ...shapes.buy.boxes.slice(1)] }, {});
   const { live: _, ...published } = structuredClone(s);
   const changed = { ...structuredClone(s), live: { program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ', project: 'So11111111111111111111111111111111111111112', published } };
   changed.boxes[0].outcomes[0].chance = 40;
@@ -120,7 +121,7 @@ test('W-LIVE-ROLLS names a box whose outcome won the rolls that now fail', () =>
 });
 
 test('the explainer says which box rolls a box that is never sold', () => {
-  const s = spec({ boxes: [{ ...vault, outcomes: [{ gives: 'item', item: 'rock', chance: 100 }] }, ...shapes.outcome.boxes.slice(1)] }, {});
+  const s = spec({ boxes: [{ ...vault, outcomes: [{ gives: 'item', item: 'rock', chance: 100 }] }, ...shapes.buy.boxes.slice(1)] }, {});
   const { ok, text } = explainEconomy(s, { now: NOW });
   assert.equal(ok, true, text);
   assert.match(text, /“Vault” is never sold: the box “Crate” rolls it/);

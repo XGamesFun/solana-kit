@@ -231,44 +231,53 @@ test('a compressed prize of a collection without Bubblegum’s plugin mints noth
   assert.ok(!sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))));
 });
 
-test('a box of one outcome that is opened, minting a token with confidential transfers, is refused (PrizeNotCovered)', () => {
+test('a prize a roll can’t move (a mint with confidential transfers) is warned of as out of stock; sold in one step it is not', () => {
   const arena = example('coin-flip-arena');
   const spec = structuredClone(arena);
   spec.tokens.push({ key: 'veil', source: 'game', symbol: 'VEIL', decimals: 0, powers: { confidentialTransfers: true } });
   spec.boxes.push({ key: 'veiled', name: 'Veiled pack', price: 0.01, slots: [{ count: 2 }], outcomes: [{ gives: 'tokens', currency: 'veil', amount: 1 }] });
+  // A fixed pack is bought in one step, its prize given in the purchase: nothing to warn of.
+  const stock = (r) => r.warnings.some((x) => x.code === 'W-OUT-OF-STOCK' && x.where === 'economy.boxes.veiled.outcomes[0]');
+  assert.ok(!stock(check(spec, { now: NOW })));
+  // Given as a prize's roll, it is rolled: its one outcome is out of stock, and every roll of it refused (SoldOut).
+  spec.grants = [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'veiled' }, limits: { perWallet: 1 } }];
+  spec.boxes.at(-1).active = false;
   const r = check(spec, { now: NOW });
-  assert.ok(r.refusals.some((x) => x.where === 'economy.boxes.veiled.outcomes[0]' && /PrizeNotCovered/.test(x.message)), r.refusals.map((x) => `${x.where} ${x.message}`).join('\n'));
-  // Sold with one draw, it is bought, not opened: no such refusal.
-  spec.boxes.at(-1).slots = undefined;
-  assert.ok(!check(spec, { now: NOW }).refusals.some((x) => /PrizeNotCovered/.test(x.message) && x.where === 'economy.boxes.veiled.outcomes[0]'));
+  assert.ok(stock(r) && r.warnings.some((x) => /SoldOut/.test(x.message)), r.warnings.map((x) => `${x.where} ${x.message}`).join('\n'));
 });
 
-test('a settle’s first call splits the payment with its shares; SETTLE_SPLIT does only that; later calls carry no shares', () => {
+test('a settle’s first call splits the payment with its shares; upto 0 does only that; later calls carry no shares', () => {
   const k = (n) => pda.stash(WALLET, n);
   const shares = [{ to: { Wallet: [k(1)] }, bps: 500 }, { to: { Wallet: [k(2)] }, bps: 500 }];
-  const order = { project: WALLET, player: WALLET, mint: k(3), won: [{ Tokens: { mint: k(4), amount: 1n } }], burns: false, shares, subject: null, held: false, fate: null, settled: 0, drew: 1, undrawn: 0 };
+  const order = { project: WALLET, player: WALLET, mint: k(3), won: [{ Tokens: { mint: k(4), amount: 1n } }], shares, subject: null, held: false, fate: null, settled: 0, drew: 1, undrawn: 0 };
   const build = (o, upto) => loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
   const has = (ix, a) => ix.keys.some((m) => m.pubkey === a);
-  assert.equal(loot.SETTLE_SPLIT, 4_294_967_295);
-  const split = build(order, loot.SETTLE_SPLIT);
+  const upto = (ix) => [...ix.data.subarray(1, 5)];
+  const split = build(order, 0);
   assert.ok(has(split, k(1)) && has(split, k(2)), 'the split carries the shares');
   assert.ok(!has(split, k(4)), 'and no prize');
-  assert.deepEqual([...split.data.subarray(8, 12)], [255, 255, 255, 255]);
-  const after = build({ ...order, drew: 0 }, 0);
+  assert.deepEqual(upto(split), [0, 0, 0, 0]);
+  const after = build({ ...order, drew: 0 });
   assert.ok(!has(after, k(1)) && has(after, k(4)), 'split made: the last part carries the prize, no shares');
+  assert.deepEqual(upto(after), [255, 255, 255, 255], 'the last part is past the end (SETTLE_LAST)');
+  const part = build({ ...order, drew: 0 }, 1);
+  assert.ok(has(part, k(4)) && upto(part)[0] === 1, 'a part up to the end gives the prizes only');
 });
 
-test('go-live writes a box before a box that names it to roll, each naming write alone with all the compute', () => {
+test('go-live writes a box before a box that names it to roll, which passes that box alone', () => {
   const arena = example('coin-flip-arena');
   const spec = structuredClone(arena);
   const inner = spec.boxes.find((b) => (b.outcomes ?? []).length);
-  // A box that rolls the arena's box, listed before it.
-  spec.boxes.unshift({ key: 'mystery', name: 'Mystery', price: 0.01, outcomes: [{ gives: 'roll', box: inner.key, chance: 50 }, { gives: 'nothing', chance: 50 }] });
+  // A box that gives a roll of the arena's box (one outcome: only a box sold in one step gives a roll), listed before it.
+  spec.boxes.unshift({ key: 'mystery', name: 'Mystery', price: 0.01, outcomes: [{ gives: 'roll', box: inner.key, chance: 100 }] });
   const p = plan(spec, { now: NOW });
   assert.ok(p.ok, JSON.stringify(p.refusals));
   const ids = p.steps.map((s) => s.id);
   assert.ok(ids.indexOf(`box:${inner.key}:LootBox`) < ids.indexOf('box:mystery:LootBox'), ids.join(' '));
-  const t = p.transactions.find((x) => x.steps.some((s) => s.id === 'box:mystery:LootBox'));
-  assert.equal(t.steps.length, 1, 'alone');
-  assert.equal(t.instructions[0].data[0], 2, 'a compute limit first');
+  // Its write passes the box it names after its own accounts, one account, and nothing of what that box gives.
+  const write = (id) => p.transactions.flatMap((x) => x.steps.map((st, i) => [st.id, x.built[i]])).find(([at]) => at === id)[1].find((ix) => loot.instructionOf(ix.data)?.name === 'upsert');
+  assert.equal(write('box:mystery:LootBox').keys.length - write(`box:${inner.key}:LootBox`).keys.length, 1, 'the naming write is one account longer: the box it names');
+  // A roll a box gives is a box that doesn't roll: refused in one that does (BadEntries).
+  spec.boxes[0].outcomes = [{ gives: 'roll', box: inner.key, chance: 50 }, { gives: 'nothing', chance: 50 }];
+  assert.ok(check(spec, { now: NOW }).refusals.some((x) => x.where === 'economy.boxes.mystery.outcomes' && /BadEntries/.test(x.message)));
 });

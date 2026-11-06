@@ -355,7 +355,7 @@
     "life": {
       "type": "object",
       "additionalProperties": false,
-      "description": "When a recipe may take a collectible of this item. 0 switches a rule off. Fixed once one is issued.",
+      "description": "When a recipe may take a collectible of this item. The kit writes it into each recipe that takes the item, as needs and raises on the collectible (a recipe line that burns, uses, renews or takes it staked): `readyAfter` (its `made` time at least that long ago) and `lasts` (made less than that long ago) on every such line; `uses` (its `used` count raised by one, up to it: the craft is refused past it, MaxedOut) and `cooldown` (its `next_use` time passed, then set that far from now) on a line that uses it or takes it staked; a renew line counts its uses from zero again. 0 switches a rule off. A recipe can be edited at any time, and so can the life it carries.",
       "properties": {
         "readyAfter": {
           "$ref": "#/$defs/duration"
@@ -717,7 +717,7 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), a burn of the payment, or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle.",
+      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle. A box burns its price with a \"burn\" share in its `split`, whatever the roll gives.",
       "properties": {
         "gives": {
           "enum": [
@@ -729,7 +729,6 @@
             "nft",
             "roll",
             "bundle",
-            "burn",
             "nothing"
           ]
         },
@@ -926,11 +925,6 @@
               }
             }
           }
-        },
-        "burns": {
-          "type": "boolean",
-          "default": false,
-          "description": "For bundle: the payment is burned, all of it, in place of the box's split."
         },
         "compressed": {
           "type": "boolean",
@@ -1130,7 +1124,7 @@
         "takes"
       ],
       "additionalProperties": false,
-      "description": "burn: `count` collectibles of `item`, burned. use: one collectible of `item`, kept (counts a use). renew: one kept, its uses counted from zero again. staked: one collectible of `item`, kept as `use` keeps it, that must be staked in `farm`: on its own seat in that farm of this spec, which escrows or freezes it (a watched one could be sold). A set bound into a badge takes its pieces this way and moves that farm's `lockAttribute` far ahead, so they stay staked while the badge exists; a recipe that raises anything on a staked piece must raise its farm's `lockAttribute` (to raise a stat and leave the lock alone, use `use`). show: one NFT of `collection` the player holds, kept (any Core NFT, or a Token Metadata NFT verified in it; the game's own collection when left out), read with what the game wrote in its Sheet. pay: `amount` of `currency`, sent `to` a destination. trade: one NFT of `collection` the player holds, any kind, traded in: burned, given on, or put in a stash (`then`).",
+      "description": "burn: `count` collectibles of `item`, burned. use: one collectible of `item`, kept (counts a use of its life). renew: one kept, its uses counted from zero again (its `used` count). staked: one collectible of `item`, kept as `use` keeps it, that must be staked in `farm`: on its own seat in that farm of this spec, which escrows or freezes it (a watched one could be sold). A set bound into a badge takes its pieces this way and moves that farm's `lockAttribute` far ahead, so they stay staked while the badge exists; a recipe that raises anything on a staked piece must raise its farm's `lockAttribute` (to raise a stat and leave the lock alone, use `use`). show: one NFT of `collection` the player holds, kept (any Core NFT, or a Token Metadata NFT verified in it; the game's own collection when left out), read with what the game wrote in its Sheet. pay: `amount` of `currency`, sent `to` a destination. trade: one NFT of `collection` the player holds, any kind, traded in: burned, given on, or put in a stash (`then`).",
       "properties": {
         "takes": {
           "enum": [

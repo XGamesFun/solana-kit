@@ -18,10 +18,11 @@ export const FEES = Object.freeze({ player: 2_000_000n, project: 10_000n });
  */
 export const ORACLE_FEE = 500_000n;
 /**
- * Put in the order itself on every purchase, with the player fee on top of it (order.rs: ESCROW_LAMPORTS + fee); what
- * a collectible's rent doesn't use goes back at settle, and a refund returns all of it (constants.rs).
+ * What js/play's throwaway settle key is funded with, in the purchase's own transaction, for each prize its settle may
+ * open or mint (`loot.SETTLE_RENT_UNIT`): whoever settles pays that rent, the order lends nothing. What the settle
+ * doesn't spend goes back to the player when the key empties itself, and all of it when the roll fails.
  */
-export const ESCROW_LAMPORTS = 6_000_000n;
+export const SETTLE_RENT_UNIT = 6_000_000n;
 /** Rent: (bytes + 128) × 5,080 lamports, as `solana rent` reads it on devnet and mainnet-beta. */
 export const RENT_PER_BYTE = 5_080n;
 export const ACCOUNT_OVERHEAD = 128n;
@@ -45,8 +46,9 @@ export const WSOL = 'So11111111111111111111111111111111111111112';
  * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32) and the two
  * caps that keep a farm's numbers from overflowing. Since loot 0.22 the program caps no count or size of its own. */
 export const LIMITS = Object.freeze({ callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000 });
-/** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs). */
-export const RESERVED_ATTRIBUTES = Object.freeze(['made', 'used', 'used_at', 'item_id', 'rarity', 'serial', 'origin']);
+/** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
+ * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
+export const RESERVED_ATTRIBUTES = Object.freeze(['made', 'used', 'next_use', 'item_id', 'rarity', 'serial', 'origin']);
 export const RARITIES = Object.freeze(['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']);
 
 // ---------------------------------------------------------------- units
@@ -437,28 +439,26 @@ export function prizeWords(p, m) {
 export function outcomeParts(o) {
   if (!o) return [];
   if (o.gives === 'bundle') return (o.prizes ?? []).flatMap(outcomeParts);
-  if (o.gives === 'burn' || o.gives === 'nothing') return [];
+  if (o.gives === 'nothing') return [];
   if (o.gives === 'tokens') return [o.from?.startsWith('pool:') ? { gives: 'pay', pool: o.from.slice(5), amount: o.amount } : { gives: 'mint', currency: o.currency, amount: o.amount }];
   return [o];
 }
-
-/** Whether an outcome burns the payment in place of the box's split: "burn", or a bundle that says `burns`. */
-export const outcomeBurns = (o) => o?.gives === 'burn' || Boolean(o?.burns);
 
 /** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
 /** How many draws one open of a box makes: its slots' counts, or one. */
 export const drawsOf = (b) => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
-/** Whether a box's prize holds a collectible's rent in its order (order.rs `escrow`): an item minted as a Core NFT, or a
- * fresh compressed one (its traits' Sheet). A plain compressed NFT costs no rent. */
+/** Whether a box's prize costs its settle a collectible's rent: an item minted as a Core NFT, or a fresh compressed one
+ * (its traits' Sheet). A plain compressed NFT costs no rent. */
 export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
 
 /**
- * The units of `ESCROW_LAMPORTS` an order of box `b` holds for what its settle may open (order.rs `escrow`), given back
- * unspent: for each draw, each part of the richest outcome that opens an account (a collectible, a fresh compressed
- * NFT's Sheet, a stash's NFT); once an order, each source of tokens it may pay, and the fate of the NFT it rolls on.
+ * The units of `SETTLE_RENT_UNIT` a settle of box `b`'s order may spend (`loot.settleRent`), which js/play funds its
+ * throwaway settle key with and gets back unspent: for each draw, each part of the richest outcome that opens an
+ * account (a collectible, a fresh compressed NFT's Sheet, a stash's NFT); once an order, each source of tokens it may
+ * pay, and the fate of the NFT it rolls on.
  */
-export function escrowUnits(b, m) {
+export function settleUnits(b, m) {
   const opens = (p) => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
   const parts = (b.outcomes ?? []).map((o) => outcomeParts(o));
   const most = Math.max(0, ...parts.map((ps) => ps.filter(opens).length));
@@ -468,9 +468,41 @@ export function escrowUnits(b, m) {
 
 export const boxRolls = (b, m) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
 
-/** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll, rolls on no NFT and draws once a sale
- * (a pack of several draws goes through `open_box`: `Rolls`). */
-export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn && drawsOf(b) === 1;
+/** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll and rolls on no NFT, any number of draws
+ * a sale (a fixed pack: its prizes given once for each draw). */
+export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn;
+
+/** The most a raise lowers a number by (an i32's least but one): a renew's, which counts a collectible's uses from 0. */
+const RENEW_BY = -2_147_483_647;
+
+/**
+ * What a recipe's lines owe the life of each collectible they take (an item's `life`), as the program's needs and
+ * raises (craft.rs `Need`, `Raise`), at each collectible's place in the recipe (each burned unit, then each kept one, in
+ * line order; a pay line takes none): ready after `readyAfter` (`made` older than it), for `lasts` (`made` within it),
+ * on every line that takes it; `uses` times (`used` raised by 1 up to it) and a `cooldown` (`next_use` passed, then
+ * raised to that far from now) on a line that uses it or takes it staked; a renew line counts its uses from 0 again.
+ * { needs, raises }, in the program's shapes.
+ */
+export function lifeLines(r, m) {
+  const places = (r.in ?? []).flatMap((l) => (l.takes === 'pay' ? [] : Array(l.takes === 'burn' ? l.count ?? 1 : 1).fill(l)));
+  const needs = [];
+  const raises = [];
+  places.forEach((l, place) => {
+    const it = l.item ? m.item.get(l.item) : null;
+    if (!it?.life || it.kind === 'normal') return;
+    const [ready, lasts, uses, cooldown] = [toSeconds(it.life.readyAfter ?? 0), toSeconds(it.life.lasts ?? 0), it.life.uses ?? 0, toSeconds(it.life.cooldown ?? 0)];
+    if (ready) needs.push({ place, key: 'made', test: { Older: [ready] } });
+    if (lasts) needs.push({ place, key: 'made', test: { Within: [lasts] } });
+    if (l.takes === 'renew') raises.push({ place, shift: { key: 'used', by: RENEW_BY, most: 0, from_now: false } });
+    if (l.takes !== 'use' && l.takes !== 'staked') return;
+    if (uses) raises.push({ place, shift: { key: 'used', by: 1, most: uses, from_now: false } });
+    if (cooldown) {
+      needs.push({ place, key: 'next_use', test: 'Passed' });
+      raises.push({ place, shift: { key: 'next_use', by: cooldown, most: cooldown, from_now: true } });
+    }
+  });
+  return { needs, raises };
+}
 
 /** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
 export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 } : { percent: p, prize: null, times: 1 });

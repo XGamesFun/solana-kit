@@ -3,7 +3,7 @@
 // going live costs, and what the owner must know. Deterministic. Pure.
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
-import { boxBuys, farmEndWords, listOf, lotterySplit, model, outcomeBurns, outcomeParts, placeOf, prizeLine, prizeRolls, prizes, prizeWords, rollsOf, sharesOf, stashNfts, toSeconds } from './model.mjs';
+import { boxBuys, farmEndWords, listOf, lotterySplit, model, outcomeParts, placeOf, prizeLine, prizeRolls, prizes, prizeWords, rollsOf, sharesOf, stashNfts, toSeconds } from './model.mjs';
 import { playSteps } from './plan.mjs';
 import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 
@@ -86,7 +86,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const edge = b.houseEdgePercent !== null ? `; the house keeps ${num(b.houseEdgePercent)}%` : b.unpriced.length ? `, plus what ${b.unpriced.join(', ')} ${b.unpriced.length === 1 ? 'is' : 'are'} worth` : '';
     const back = b.returnPercent !== null ? `gives back ${num(b.expectedBack)} ${sym(b.token)} on average (${num(b.returnPercent)}% of its price${edge})` : 'gives back what its items are worth to the player';
     const part = (o) => (o.gives === 'pay' ? `${num(o.amount)} ${sym(o.token)} from “${o.pool}”` : o.gives === 'mint' ? `${num(o.amount)} ${sym(o.token)}, minted` : o.gives === 'share' ? `${o.percent}% of “${o.pool}”` : o.gives === 'stash' ? `an NFT of “${m.stash.get(o.stash)?.name ?? o.stash}”, picked at random` : o.gives === 'nft' ? `the NFT ${String(o.nft).slice(0, 4)}… of “${m.stash.get(o.stash)?.name ?? o.stash}”` : o.gives === 'roll' ? `a roll of “${m.box.get(o.box)?.name ?? o.box}”` : o.gives === 'item' ? `${o.item}` : o.gives === 'burn' ? 'burned' : 'nothing');
-    const outs = b.outcomes.map((o) => `${num(o.chance)}% ${o.gives === 'bundle' ? `${o.prizes.map(part).join(' + ')}${o.burns ? ' (the payment burned)' : ''}` : part(o)}`).join(', ');
+    const outs = b.outcomes.map((o) => `${num(o.chance)}% ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`).join(', ');
     const odds = (src.odds ?? []).map((o) => `outcome ${o.outcome} ${effectWords(o.add)} for a player who shows ${ruleWords(o.when)}`);
     // A roll on an NFT: what each outcome does to it.
     const fates = (src.outcomes ?? []).flatMap((o, i) => {
@@ -112,7 +112,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     }
     const verb = boxBuys(src, m) ? 'Buy' : 'Open';
     const oneStep = boxBuys(src, m) ? ' It sells in one step: the price is split and what it gives handed over in the same transaction.' : '';
-    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${src.outcomes.some(outcomeBurns) ? 'on a burn, all of it is burned; otherwise ' : ''}${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? ` It sells only while its pools hold every fixed prize${boxBuys(src, m) ? '' : ', and a prize won is set aside for its winner at once'}.` : ''}${oneStep}`);
+    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? (boxBuys(src, m) ? ' It sells only while its pools hold every fixed prize.' : ' A fixed prize its pool can’t cover never comes up until the pool holds it; a prize won is set aside for its winner at once.') : ''}${oneStep}`);
   }
   for (const p of sim.payments) actions.push(`Pay “${p.name}”: ${p.atLeast ? `whatever the player chooses, at least ${num(p.amount)} ${sym(p.token)} (the page keeps the least; the chain takes any amount)` : `${num(p.amount)} ${sym(p.token)}`}, ${inAll(p.realCost)}. The money: ${splitOf(m.payments.find((x) => x.key === p.key)?.split, ['payer', 'payment'])}.`);
   for (const r of sim.recipes) actions.push(`Craft “${r.name}”: ${r.takes.join(' + ') || 'nothing'} → ${r.gives.join(' + ') || 'nothing'} (+ ${fee} SOL player fee).`);

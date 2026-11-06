@@ -154,7 +154,7 @@ describe('xsolana approve', () => {
   test('a setup cut short before its tree landed opens the tree on going on, and its prizes name that tree', { skip: cannotRunCompressed() ?? false }, async () => {
     const badges = JSON.parse(readFileSync(new URL('../../examples/event-badges.json', import.meta.url), 'utf8'));
     // A long metadata link: the tree's step falls out of the first transaction (the collection and the project).
-    badges.collection = { ...badges.collection, uri: `https://arweave.net/${'a'.repeat(180)}` };
+    badges.collection = { ...badges.collection, uri: `https://arweave.net/${'a'.repeat(198)}` };
     const fails = { on: true, send: 2 };
     const { w, owner, file, chain } = setup(badges, { compressed: true, fails });
     const first = await createApproval({ file, chain, now: () => NOW });

@@ -1,6 +1,6 @@
-// The checker refuses a box whose prizes move in a roll and are paid in a token with a transfer hook, which the program
-// refuses only once the roll is made; the quick simulation's walk of a rising or falling price is bounded, by the
-// schema and by the walk itself; xsolana_save saves over every spec it would write itself, one with no currency included.
+// The checker warns that a prize a roll can't move (a token with a transfer hook) is out of stock, whose outcome the
+// program never draws; the quick simulation's walk of a rising or falling price is bounded, by the schema and by the
+// walk itself; xsolana_save saves over every spec it would write itself, one with no currency included.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,9 +13,9 @@ import { runTool } from '../mcp/server.mjs';
 
 const NOW = 1_800_000_000;
 
-// A roll carries none of the accounts a transfer hook asks for, so the program refuses a prize in a hooked mint
-// in every box that rolls (open_box, PrizeHasHook) and fails every waiting roll of such a box at its ask, whatever its
-// number of outcomes: a recipe's inputs, a mission's return or a grant's round are spent by then.
+// A roll carries none of the accounts a transfer hook asks for, so a prize in a hooked mint is out of stock in every
+// roll of a box (order.rs): its outcome never comes up, and a box with nothing else in stock refuses its open or ask
+// (SoldOut), so a recipe's inputs, a mission's return or a grant's round are kept.
 const MINT = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const hooked = (powers = { transferHook: true }) => ({
   version: 2,
@@ -27,39 +27,39 @@ const hooked = (powers = { transferHook: true }) => ({
 });
 const roll = [{ gives: 'pay', pool: 'jackpot', amount: 10, chance: 50 }, { gives: 'nothing', chance: 50 }];
 const one = [{ gives: 'pay', pool: 'jackpot', amount: 10 }];
-const hookRefusals = (spec) => check(spec, { now: NOW }).refusals.filter((r) => r.code === 'E-BOX');
+const outOfStock = (spec) => check(spec, { now: NOW }).warnings.filter((r) => r.code === 'W-OUT-OF-STOCK');
 
-test('a box that rolls a prize in a token with a transfer hook is refused', () => {
+test('a box that rolls a prize in a token with a transfer hook is warned of: that outcome is out of stock', () => {
   const spec = { ...hooked(), boxes: [{ key: 'crate', name: 'Crate', price: 0.01, outcomes: roll }] };
-  const [r, ...more] = hookRefusals(spec);
+  assert.equal(check(spec, { now: NOW }).ok, true, 'the program writes it: the prize is out of stock, not an error');
+  const [r, ...more] = outOfStock(spec);
   assert.equal(more.length, 0);
   assert.equal(r.where, 'economy.boxes.crate.outcomes[0]');
   assert.match(r.message, /transfer hook/);
-  assert.match(r.message, /PrizeHasHook/);
-  assert.match(r.message, /every opening of it fails/);
+  assert.match(r.message, /never comes up/);
+  assert.doesNotMatch(r.message, /SoldOut/, 'its other outcome is in stock');
 });
 
-test('a box of one outcome is refused too once a recipe, a mission or a prize rolls it', () => {
+test('a box of one outcome is warned of too once a recipe, a mission or a prize rolls it: every roll of it is refused', () => {
   const forge = { key: 'forge', name: 'Forge', price: 0, active: false, outcomes: one };
   const routes = {
     recipe: { recipes: [{ key: 'sacrifice', name: 'Sacrifice', in: [{ takes: 'burn', item: 'hero' }], out: [{ gives: 'roll', box: 'forge' }] }] },
     grant: { grants: [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'forge' }, limits: { total: 10, perWallet: 1 } }] },
   };
   for (const [route, parts] of Object.entries(routes)) {
-    const [r, ...more] = hookRefusals({ ...hooked(), boxes: [forge], ...parts });
+    const [r, ...more] = outOfStock({ ...hooked(), boxes: [forge], ...parts });
     assert.equal(more.length, 0, route);
     assert.equal(r?.where, 'economy.boxes.forge.outcomes[0]', route);
-    assert.match(r.message, /fails when it is asked for/, route);
-    assert.doesNotMatch(r.message, /every opening/, route);
+    assert.match(r.message, /SoldOut/, route);
   }
 });
 
-test('a box of one outcome nothing else rolls, or a token without a hook, still checks', () => {
+test('a box of one outcome nothing else rolls, or a token without a hook, is not warned of', () => {
   // one outcome, sold, rolled by nothing: its prize moves in the purchase, where the hook's accounts come along
-  assert.deepEqual(hookRefusals({ ...hooked(), boxes: [{ key: 'chest', name: 'Chest', price: 0.01, outcomes: one }] }), []);
+  assert.deepEqual(outOfStock({ ...hooked(), boxes: [{ key: 'chest', name: 'Chest', price: 0.01, outcomes: one }] }), []);
   // the same rolled box in a Token-2022 coin with no hook
   const plain = { ...hooked({}), boxes: [{ key: 'crate', name: 'Crate', price: 0.01, outcomes: roll }] };
-  assert.deepEqual(hookRefusals(plain), []);
+  assert.deepEqual(outOfStock(plain), []);
   assert.equal(check(plain, { now: NOW }).ok, true);
 });
 
