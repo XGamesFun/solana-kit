@@ -49,16 +49,18 @@ money; it holds no files and serves nothing.
   for every value drawn: the project hosts a file for every value a table or range can give (every row's label, every
   number from `min` to `max`), or a server that renders them on request. A link with nothing behind it is a card
   that shows no picture, for good.
-- **A committed table needs a keeper of its rows.** The program keeps only its root; each settle of a card it drew
-  needs that row's proof, so someone keeps the posted rows and serves proofs for as long as cards are drawn. The tools
-  write tables of rows on chain, which need nobody.
 - **Large tables cost rent the owner pays, never back**: about 8 bytes a row of numbers and 40 a row of labels, at
   5,080 lamports (0.00000508 SOL) a byte: 1,000 labels about 0.2 SOL, 100,000 numbers about 4.1 SOL. Quote
   `xsolana_cost` for the real figure.
-- **A pack's cards each hold a collectible's rent until settled.** The order holds 0.006 SOL for each Core card it may
-  mint; Core keeps about 0.0031 SOL of it in each card the player gets, and the rest comes back at the settle. A plain
-  compressed card holds none. Anyone settles; a pack too big for one transaction settles in parts (about 14 Core cards
-  a part), which the page sends.
+- **A pack's cards each cost a collectible's rent when settled.** Whoever settles pays what the settle mints: Core
+  keeps about 0.0031 SOL in each card the player gets. The page lends its throwaway settle key 0.006 SOL for each Core
+  card it may mint, in the purchase's one prompt, and the key sends back what it didn't spend. A plain compressed card
+  costs none. A pack of fixed cards (nothing random) is bought in one step, its cards minted in the purchase; a pack
+  too big for one transaction settles in parts (about 14 Core cards a part), which the page sends.
+- **A prize the program can't give right now is out of stock, not an error.** A prize in a token with a transfer hook
+  (or confidential transfers) is never moved by a roll, a fixed prize its pool can't cover waits until the pool holds
+  it, an item sold out or a stash emptied is skipped: that outcome never comes up, and a box with nothing in stock is
+  refused (SoldOut). `xsolana_check` warns of each (W-OUT-OF-STOCK, W-PRIZE-SEED).
 - **The oracle's answer reads at most 21 accounts**, so a box's distinct prize accounts (its items, pools, stashes,
   the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
   `xsolana_check` counts them.

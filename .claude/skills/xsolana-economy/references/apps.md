@@ -69,7 +69,11 @@ await app.balances();                     // what they hold of each of the econo
 - **Packs**: `app.openBox(key, { listing, count: 10 })` opens ten packs in one purchase: one wallet prompt, one oracle
   answer, `maxPrice` a pack's. It returns `won` (every card) and `assets`; a pack too big for one transaction is
   settled in parts, each its own transaction (`parts`: their signatures), sent by the throwaway key the purchase funds (`oneSignature`, the default),
-  so the player signs once. A compressed card's id is not in `assets` (it is the tree's count when minted): read it
+  so the player signs once. A pack of fixed cards (one outcome, nothing random) is bought in one step: its cards come
+  in the purchase, no oracle and no settle (one too big for a transaction is opened instead).
+- **A roll a route makes** (a craft, a bundle bought, a grant claimed, an auction won): the page asks for it in the
+  route's own transaction and settles it after with a throwaway key, so the player signs once. When the rolled box has
+  nothing in stock, nothing is sent and the call rejects with SoldOut: tell the player to try again later. A compressed card's id is not in `assets` (it is the tree's count when minted): read it
   from `claims()` or the player's assets. Show each card as it lands.
 - **What an auction looks like**: show the high bid, the least next bid (`nextBid`) and a countdown (`secondsLeft`;
   a late bid moves the end, so read `auctions()` again after every bid). A player who was outbid has their bid back

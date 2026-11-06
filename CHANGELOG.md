@@ -32,44 +32,61 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   tree, attributes }` (`makeIx`) take several NFTs, seats or owners (`more`).
 - **Smaller**: u16 pool indexes; a hold names `payer` and `rent_to`; a burn names the holder, who gets its rent; anyone
   closes a burned NFT's Sheet (`closeSheetIx`); `run_schedule(upto)` catches up in one call, sealed schedules up to
-  100,000 runs; an order's reserve counts every unit its settle may open (`orderEscrow`); a token exit that would lose
-  its seat's growth refreshes first (`refreshFirst`); a watched farm refuses an NFT it can't read (`NotProven`).
+  100,000 runs; a token exit that would lose its seat's growth refreshes first (`refreshFirst`); a watched farm refuses
+  an NFT it can't read (`NotProven`).
+- **Leaner (the optimization batches A and B)**: instructions take 1-byte tags (the oracle's three callbacks keep 8;
+  `instructionOf`), and the program logs an error's name, not its sentence (`lootError` gives the IDL's). Every open
+  asks the oracle; a box with nothing random sells with `buy`, which takes a `count` (a fixed pack: `buyGives`). A
+  write or a route naming a box to roll passes the box alone (`boxesAccounts`); the roll is read when it is asked, a
+  fresh item's tables only while they fit the box's table budget (`tableBudget`). One out-of-stock rule: a prize
+  the roll can't move or pay (a hooked, confidential or non-transferable mint, a pool short of a fixed amount, an empty
+  or unsealed table, a fresh item past the budget) never comes up; `ask_roll` refuses a box with nothing in stock
+  (SoldOut) unless the order's own player asks in a later slot. No order reserve: whoever settles pays what the settle
+  opens or mints (`settleRent`, what js/play funds its settle key with). settle's `upto`: 0 the split alone, past the
+  end (`SETTLE_LAST`) the last part; no `rows`. No committed tables. A box burns its price with a `Burn` share (no
+  entry `burns`), gives a roll only when it doesn't roll (`Won::Roll` and `Won::Fresh` are gone: `Won::Item { drawn
+  }`), and a roll lot's winning bid stays in the vault as its order's payment (`Auction.pin`). An item's life is its
+  recipes' needs and raises (`Need { test }`, `Raise { place, shift }`, `rules::Test::Older`; no `Item.life`, no
+  `Renew`). Grants count with `Limits.all` and `Grant.counted` (`OverDay` is gone; codes after it moved). `Debt.paid` is
+  gone (a repaid loan is a plain hold that is over). `Fate.then` is `Option<Spend>`. A seat earns until a time
+  (`Seat.earns_until`, a tier's `earns_for`). An order of a box that gives items has room for its draws' rows.
 
 ### The tools
 
 - The spec: a lottery place's `times`, a lottery's `nfts` and a `raffled` prize, a contest's `losersEach`, a grant's
   `wallets` and `rounds` (its shard bits). The plan puts several stash NFTs in a call; the cost and the simulation
-  count entries' bytes that never come back and the reserve's units.
+  count entries' bytes that never come back and what a settle key is lent. An item's `life` is written into each
+  recipe that takes it (`lifeLines`). An outcome no longer burns the payment (`"gives": "burn"`, `burns`: refused in
+  words). The checker warns of a prize out of stock (W-OUT-OF-STOCK) and refuses a roll in a box that rolls.
 - js/play: lotteries read their rounds; `claims()` lists `settle-round`, `pull` and `payout`; a contest's claim picks a
   winner's share; grant claims read the shards.
 - js/play keys: a step after the wallet's prompt is a throwaway key's job (funded in that transaction for what it pays,
   the rent minimum read from the cluster and a spare fee; simulated, sent, or else sent by the wallet; emptied back).
-  A craft, a mission left, a grant's or contest's roll prize and a roll lot the winner ends ask for their roll in the
-  same transaction and a key settles it: one prompt (`rolled`, `rolls`). `repay(asset, due)` repays alone and a key
+  A craft, a bundle bought, a mission left, a grant's or contest's roll prize and a roll lot the winner ends ask for
+  their roll in the same transaction and a key settles it: one prompt (`rolled`, `rolls`); on a box with nothing in
+  stock the whole transaction is refused (SoldOut) and nothing is sent. A box's open funds its settle key with what
+  the settle mints (`settleRent`); the key's last settle sends back the rest in the same transaction. `repay(asset, due)` repays alone and a key
   sends the NFT home. `claimAll()` signs independent claims in one prompt with a wallet that signs several
   (`signTransactions`).
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
-- Every write naming a box to roll passes the box and its roll accounts (`rollAccounts`, `boxesAccounts`,
-  `defRolls`; `rolls` on `upsertIx`, `openAuctionIx`, `openContestIx`, `openFarmIx`), and strict routes the roll accounts
-  in place of the prize mints (`rolls` replaces `boxes`/`rollPools`; `rollMints` is gone). The plan writes a box before
-  what names it, each such write alone with 1.4M compute; js/play reads them (`rollsOf`).
+- Every write naming a box to roll passes the box alone (`boxesAccounts`, `defRolls`); a roll's accounts are its
+  ask's (`rollAccounts`, `askRollIx({ items })`). The plan writes a box before what names it.
 - A collectible's upsert names its collection (`Item.compressed`: whether it carries Bubblegum's plugin). A split pool
   prize's `open_contest` names its pool. A hold owed to the treasury (player: the project's address) is released to the
   project's treasury (`releaseIx({ treasury })`), and `claims()` lists those for the treasury's wallet. `unstakeNft`
   refuses to leave while the NFT's last mission roll is unfinished, saying what to do. A Sheet or profile that shrinks
   refunds nobody.
-- A settle splits the payment with its first call (`SETTLE_SPLIT` alone when no prize fits beside the shares); js/play
-  sends it so. `buy` takes one draw only (`boxBuys`). `stashIx({ drop })` leaves an NFT in its hold, owed to the
+- A settle splits the payment with its first call (`upto` 0 alone when no prize fits beside the shares); js/play
+  sends it so. `stashIx({ drop })` leaves an NFT in its hold, owed to the
   treasury; the project's address is refused. A compressed prize of a collection without Bubblegum's plugin shifts the
   next one's Sheet (`unminted`; `parseCoreCollection` reads the plugin). `claims()` lists a seat's refresh once its
-  upkeep ran out. The checker refuses a box opened with one outcome minting a confidential token.
+  upkeep ran out.
 - `repay` names the debt its payer was shown (`repayIx({ repay })`); js/play's `loan()` reads it and `repay(asset, due,
   { repay })` passes it. A pool run's mark carries its mint and pool alone. js/play reads a hooked mint's accounts
   (`resolveTransfers`) for ticket purchases, a round's settle and its pulls: a hooked lottery runs from the page.
-- An open of a box of one entry and more than 100 draws, and a call giving a roll of one, asks for a 256 KiB heap
-  (`boxHeapFrame`; js/play adds it). `settleRoundIx` takes `runs`, the most token runs a call; js/play fits them to 64
+- `settleRoundIx` takes `runs`, the most token runs a call; js/play fits them to 64
   accounts and asks for the larger heap. A box's order size counts its stored shares.
 - `end_auction` takes `hold`: an NFT lot and a bid's winning NFTs become holds released after (`endAuctionIx({ hold })`;
   js/play's `endAuction` does so when the end doesn't fit). A claim of a split pool prize names its pool (`prize_pool`).
