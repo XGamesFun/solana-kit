@@ -80,8 +80,8 @@ test('a transaction with an error gives no receipts, though its logs show every 
   const [buyLogs] = failsAfterSuccess(w, buy());
   assert.deepEqual(loot.receipts({ meta: { err: { InsufficientFundsForRent: { account_index: 6 } }, logMessages: buyLogs } }), []);
   const sent = w.chain.send(w.player, [buy()]);
-  assert.deepEqual(loot.receipts({ meta: { err: null, logMessages: sent.logs } }).map((r) => r.name), ['PrizeGiven', 'Bought']);
-  assert.deepEqual(loot.receipts(sent.logs, null).map((r) => r.name), ['PrizeGiven', 'Bought']);
+  assert.deepEqual(loot.receipts({ meta: { err: null, logMessages: sent.logs } }).map((r) => r.name), ['Bought', 'PrizeGiven']);
+  assert.deepEqual(loot.receipts(sent.logs, null).map((r) => r.name), ['Bought', 'PrizeGiven']);
 });
 
 test('the approval reads an existing mint’s decimals and refuses a spec that says otherwise', { skip }, async () => {

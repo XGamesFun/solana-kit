@@ -72,7 +72,7 @@ test('a listing is bought or rented only on the terms shown: one listed again at
 test('a voucher is plain JSON (its incarnation as text), and js/play claims it as a server would send it', { skip }, async () => {
   const { w, appOf } = fixture('guard-voucher');
   const host = await newKey();
-  const limits = { wallet: { total: 5, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 5, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Item: [1] }, vouchers: [host.address, A, A], list_root: new Uint8Array(32), limits, active: true, gate: null } } });
   const { incarnation } = w.read('Grant', loot.pda.grant(w.project, 1));
   assert.equal(typeof incarnation, 'bigint');

@@ -30,7 +30,7 @@ test('an open grant with voucher keys and an NFT gate counts the NFT shown', { s
   w.upsert({ Item: { id: 27, args: collectible('Grant badge') } });
   const badge = w.make(27, w.player);
   w.pool(1, w.mint, 100n);
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 41, args: { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [w.authority, NOBODY, NOBODY], list_root: new Uint8Array(32), key_root: new Uint8Array(32), open: true, active: true, limits, gate: { Holds: [{ of: { Item: [27] }, key: '', test: 'Any' }] } } } });
   const address = loot.pda.grant(w.project, 41);
   const grant = w.read('Grant', address);

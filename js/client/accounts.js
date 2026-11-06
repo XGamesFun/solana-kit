@@ -198,9 +198,8 @@ function attributesAt(data, name) {
   return { attributes, end: at, head: (from) => encodeBase58(data.subarray(from, from + 32)) };
 }
 
-/** What a table's rows carry (its payload byte; 128 more marks a committed table). */
+/** What a table's rows carry (its payload byte). */
 export const PAYLOAD = Object.freeze({ Number: 0, Label: 1, Nft: 2 });
-const COMMITTED = 0x80;
 const TABLE_HEAD = 51;
 
 /** Where row `r` of a table of `len`-byte rows is: groups of 64 blocks of 64 rows, each led by its weight in stock. */
@@ -211,19 +210,17 @@ export function tableRowAt(len, r) {
 }
 
 /**
- * A table (`["table", project, id]`, `table.rs`): { project, id, payload ('Number' | 'Label'), committed, sealed,
- * count, total (the weight in stock), rows: [{ weight, left, label }] (none for a committed table), root (hex, a
- * committed table's once sealed) }. A row's `left` is `NO_LIMIT` (4294967295) for a stock that never runs out.
+ * A table (`["table", project, id]`, `table.rs`): { project, id, payload ('Number' | 'Label'), sealed, count, total
+ * (the weight in stock), rows: [{ weight, left, label }] }. A row's `left` is `NO_LIMIT` (4294967295) for a stock that
+ * never runs out.
  */
 export function decodeTable(data) {
   if (data == null || data.length === 0) return null;
   if (!(data instanceof Uint8Array) || data[0] !== TAGS.Table || data.length < TABLE_HEAD) throw new Error('Not a Table account');
-  const committed = (data[37] & COMMITTED) !== 0;
-  const payload = Object.keys(PAYLOAD).find((k) => PAYLOAD[k] === (data[37] & ~COMMITTED));
+  const payload = Object.keys(PAYLOAD).find((k) => PAYLOAD[k] === data[37]);
   if (!payload || payload === 'Nft') throw new Error('Not a Table account');
   const count = Number(readUintLE(data, 39, 4));
-  const head = { project: encodeBase58(data.subarray(1, 33)), id: Number(readUintLE(data, 33, 4)), payload, committed, sealed: data[38] === 1, count, total: readUintLE(data, 43, 8) };
-  if (committed) return { ...head, rows: [], root: head.sealed ? toHex(data.subarray(TABLE_HEAD, TABLE_HEAD + 32)) : null };
+  const head = { project: encodeBase58(data.subarray(1, 33)), id: Number(readUintLE(data, 33, 4)), payload, sealed: data[38] === 1, count, total: readUintLE(data, 43, 8) };
   const len = payload === 'Label' ? 40 : 8;
   if (count && tableRowAt(len, count - 1) + len > data.length) throw new Error('Table account is truncated');
   const rows = Array.from({ length: count }, (_, r) => {
@@ -231,7 +228,7 @@ export function decodeTable(data) {
     const label = payload === 'Label' ? new TextDecoder().decode(data.subarray(at + 8, at + 40)).replace(/\0+$/, '') : '';
     return { weight: Number(readUintLE(data, at, 4)), left: Number(readUintLE(data, at + 4, 4)), label };
   });
-  return { ...head, rows, root: null };
+  return { ...head, rows };
 }
 
 /** A stash (`["stash", project, id]`, or a lottery's own): { project, id, nfts, weights }, the NFTs the project holds to
@@ -559,7 +556,8 @@ export const ERRORS = Object.freeze(Object.fromEntries(IDL.errors.map((e) => [e.
 
 /**
  * The loot error in a failed transaction's logs ("custom program error: 0x…", or Anchor's "Error Code: …" line), or
- * null. Only loot's own: another program the transaction calls (Bubblegum, the VRF program, …) has codes of its own
+ * null: { code, name, msg }, `msg` the IDL's sentence (the program's own log names the error only: its text is
+ * compiled out). Only loot's own: another program the transaction calls (Bubblegum, the VRF program, …) has codes of its own
  * that may be the same numbers, so an error is loot's only when loot is the program that logged it or failed with it.
  * The first program that fails is where the error came from; the programs that called it fail after it with the same
  * code.
@@ -586,7 +584,7 @@ export function lootError(logs) {
     // A line that names no program (a log line, or an error's own text) is the running program's, when it is known.
     if (running.length && running.at(-1) !== LOOT_PROGRAM) continue;
     const named = /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)\.?$/.exec(line);
-    if (named) return { code: Number(named[2]), name: named[1], msg: named[3] };
+    if (named) return { code: Number(named[2]), name: named[1], msg: ERRORS[Number(named[2])]?.name === named[1] ? ERRORS[Number(named[2])].msg : named[3] };
     const m = /custom program error: 0x([0-9a-f]+)/i.exec(line);
     if (m && ERRORS[parseInt(m[1], 16)]) return { code: parseInt(m[1], 16), ...ERRORS[parseInt(m[1], 16)] };
   }

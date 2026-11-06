@@ -4,7 +4,7 @@
 // claim it. Addresses are written in full, so an owner sees a payee that an edit re-pointed before they sign.
 import { decodeBorsh } from '../chain/borsh.js';
 import { equalBytes, toHex } from '../chain/bytes.js';
-import { accountKind, decode, IDL, keyLeaf, merkleRoot } from '../client/index.js';
+import { accountKind, decode, IDL, instructionOf, keyLeaf, merkleRoot } from '../client/index.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { fromUnits } from '../economy/model.mjs';
 import { grantArgs } from '../economy/plan.mjs';
@@ -18,7 +18,7 @@ const leafNames = (list) => list.flatMap((a) => (a.accounts ? leafNames(a.accoun
 /** A loot instruction read back: { name, args, accounts: { name: address } }, or null for another program's. */
 function readLootInstruction(ix) {
   if (ix.programId !== LOOT_PROGRAM) return null;
-  const def = IDL.instructions.find((i) => i.discriminator.length <= ix.data.length && i.discriminator.every((b, j) => ix.data[j] === b));
+  const def = instructionOf(ix.data);
   if (!def) return null;
   const args = {};
   let at = def.discriminator.length;
@@ -196,8 +196,8 @@ function grantTerms(args, names) {
     l.wallet?.per_window ? `each wallet ${times(l.wallet.per_window)} every ${l.wallet.window} seconds` : null,
     l.per_person ? `each person ${times(l.per_person)}` : null,
     l.per_key ? `each voucher key ${times(l.per_key)}` : null,
-    l.per_day ? `${times(l.per_day)} a day` : null,
-    l.total ? `${times(l.total)} in all` : null,
+    l.all?.per_window ? `${times(l.all.per_window)} ${Number(l.all.window) === 86_400 ? 'a day' : `every ${l.all.window} seconds`}` : null,
+    l.all?.total ? `${times(l.all.total)} in all` : null,
     BigInt(l.window?.opens_at ?? 0) ? `opens ${when(l.window.opens_at)}` : null,
     BigInt(l.window?.closes_at ?? 0) ? `closes ${when(l.window.closes_at)}` : null,
   ].filter(Boolean);

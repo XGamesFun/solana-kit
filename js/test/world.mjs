@@ -103,7 +103,6 @@ export const collectible = (name, maxSupply = 0, more = {}) => ({
   name,
   uri: `https://example.invalid/${name.toLowerCase().replace(/ /g, '-')}.json`,
   max_supply: maxSupply,
-  life: null,
   active: true,
   ...more,
 });
@@ -124,7 +123,7 @@ export const boxArgs = (price, entries, more = {}) => ({
 });
 
 /** A box entry that gives these prizes. */
-export const drop = (prizes, weight = 1, burns = false) => ({ prizes, burns, weight });
+export const drop = (prizes, weight = 1) => ({ prizes, weight });
 export const itemDrop = (id, weight = 1) => drop([{ Item: [id] }], weight);
 /** `amount` tokens from pool `pool`. */
 export const fromPool = (pool, amount) => ({ Tokens: { from: { Pool: [pool] }, amount: { Fixed: [BigInt(amount)] } } });
@@ -241,10 +240,10 @@ export function world({ seed = 'world', platform = true, project = true, compres
     // A lottery written again names its current round's record (its own, as it is now).
     const lottery = def.Lottery ? chain.get(loot.pda.lottery(w.project, def.Lottery.id)) : null;
     const lotteryState = lottery?.data?.length ? chain.account('Lottery', loot.pda.lottery(w.project, def.Lottery.id)) : null;
-    const named = loot.defRolls(def);
-    return chain.send(w.creator, [...(named.length ? [computeUnitLimit(1_400_000)] : []), loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState, rolls: w.rolls(named) })]);
+    return chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState })]);
   };
-  /** What a write naming boxes `ids` to roll passes for them (`loot.boxesAccounts`), as the chain holds them now. */
+  /** What an ask for a roll of boxes `ids` needs of them (`loot.askRollIx`, `loot.rollAccounts`): each box, the items
+   * its prizes name and each pool's mint, as the chain holds them now. */
   w.rolls = (ids = []) => {
     const out = { boxes: {}, items: {}, poolMints: {}, programs: {} };
     const record = (name, address) => (chain.get(address)?.owner === loot.LOOT_PROGRAM && chain.get(address).data.length ? chain.account(name, address) : null);

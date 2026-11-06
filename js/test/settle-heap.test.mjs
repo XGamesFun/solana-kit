@@ -63,8 +63,8 @@ test('js/play settles a roll that won three NFTs with the 256 KiB heap frame, on
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
   for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  w.upsert({ Box: { id: 5, args: { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }, { Stash: [1] }, { Stash: [1] }], burns: false, weight: 1 }], odds: [] } } });
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  w.upsert({ Box: { id: 5, args: { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }, { Stash: [1] }, { Stash: [1] }], weight: 1 }], odds: [] } } });
+  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [5] }, vouchers: [SYSTEM_PROGRAM, SYSTEM_PROGRAM, SYSTEM_PROGRAM], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const player = freshKeypair();
   w.chain.airdrop(player.address, 10_000_000_000n);

@@ -59,13 +59,15 @@ export async function checkCluster(rpc) {
 const decodeAccount = (raw) =>
   raw ? { owner: raw.owner, lamports: raw.lamports, data: fromBase64(raw.data[0]), executable: raw.executable } : null;
 
-/** The program's own words for a failed run (`AnchorError … Error Message: …`), else the last error log line. */
+/** The program's own words for a failed run (`AnchorError … Error Message: …`), else the last error log line. A program
+ * built without its errors' text logs the error's name as its message: then the name alone (the client's IDL has
+ * the sentence: `loot.lootError`). */
 export function programError(err, logs) {
   const anchor = logs?.find((line) => line.includes('AnchorError'));
   const said = anchor ? /Error Message: (.+?)\.?$/.exec(anchor)?.[1] : undefined;
   const code = anchor ? /Error Code: (\w+)/.exec(anchor)?.[1] : undefined;
   const last = logs?.filter((l) => /error|failed|insufficient/i.test(l)).at(-1);
-  if (said) return code ? `${said} (${code})` : said;
+  if (said) return code && code !== said ? `${said} (${code})` : said;
   return last ?? (typeof err === 'string' ? err : JSON.stringify(err));
 }
 

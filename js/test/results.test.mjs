@@ -65,7 +65,7 @@ test('a host’s own voucher pays its winner on the program, once: the same roun
   w.upsert({ Item: { id: 7, args: collectible('Trophy') } });
   const host = await newKey();
   const nobody = '11111111111111111111111111111111';
-  const limits = { wallet: { total: 5, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+  const limits = { wallet: { total: 5, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Item: [7] }, vouchers: [host.address, nobody, nobody], list_root: new Uint8Array(32), limits, active: true, gate: null } } });
   const address = loot.pda.grant(w.project, 1);
   w.chain.airdrop(address, 1_000_000_000n);

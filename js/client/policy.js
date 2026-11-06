@@ -47,3 +47,6 @@ export const lotteryDrawStuck = (round, slot) => round?.status === 'Drawing' && 
  * round nobody asked to draw is never cancelled.
  */
 export const lotteryCancellable = (round, slot) => round?.status === 'Drawing' && BigInt(slot) > BigInt(round.asked_first) + LOTTERY_TIMEOUT_SLOTS;
+
+/** A farm seat's `earns_until` when nothing ends its earning (i64::MAX): no tier term and no fuel it reads. */
+export const NO_END = (1n << 63n) - 1n;

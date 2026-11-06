@@ -18,7 +18,7 @@ const skip = cannotRunCompressed() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
 const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';
-const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } };
+const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
 const grantArgs = (gives) => ({ gives, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true });
 
 /** The owner makes the tree's account empty and opens it as the project's tree, in one transaction. */

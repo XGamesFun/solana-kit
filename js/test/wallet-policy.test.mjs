@@ -17,7 +17,7 @@ const bh = freshKeypair().address;
 const verdict = (instructions, role = 'player') => checkTransaction(compileMessage({ payer: me, blockhash: bh, instructions }), { address: me, role });
 
 test('signs a plain purchase', () => {
-  const box = { box_id: 1, version: 0, price: 10n, currency: mint, entries: [{ prizes: [], burns: false, weight: 1 }] };
+  const box = { box_id: 1, version: 0, price: 10n, currency: mint, entries: [{ prizes: [], weight: 1 }] };
   const v = verdict([createAssociatedTokenAccountIdempotent(me, me, mint), loot.openBoxIx({ player: me, project: loot.pda.project(mint), box, nonce: 1n })]);
   assert.equal(v.ok, true, v.findings.join(' '));
 });
@@ -58,7 +58,7 @@ test('reads a v0 transaction’s accounts from its lookup tables: a SOL-priced o
   const { closeTableIx, planTable } = await import('../chain/lookup.js');
   const { withSolWrap } = await import('../chain/programs.js');
   const { NATIVE_MINT } = await import('../chain/pda.js');
-  const box = { box_id: 1, version: 0, price: 10n, currency: NATIVE_MINT, entries: [{ prizes: [], burns: false, weight: 1 }] };
+  const box = { box_id: 1, version: 0, price: 10n, currency: NATIVE_MINT, entries: [{ prizes: [], weight: 1 }] };
   const open = loot.openBoxIx({ player: me, project: loot.pda.project(mint), box, nonce: 1n });
   // Wide enough to go as v0: forty more accounts of the box's own.
   const wide = { ...open, keys: [...open.keys, ...Array.from({ length: 40 }, () => meta(freshKeypair().address, false, false))] };

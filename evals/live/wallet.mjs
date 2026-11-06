@@ -8,7 +8,7 @@ import { addressBytes, decodeBase58, encodeBase58 } from '../../js/chain/base58.
 import { readUintLE } from '../../js/chain/bytes.js';
 import { readMessage, readTransaction, wireTransaction } from '../../js/chain/tx.js';
 import { readTable } from '../../js/chain/lookup.js';
-import { IDL } from '../../js/client/ix.js';
+import { IDL, instructionOf } from '../../js/client/ix.js';
 import { LOOT_PROGRAM, MPL_CORE_PROGRAM, pda } from '../../js/client/pda.js';
 import { NATIVE_MINT, TOKEN_2022_PROGRAM, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM, COMPUTE_BUDGET_PROGRAM, SYSTEM_PROGRAM, associatedTokenAddress } from '../../js/chain/pda.js';
 
@@ -18,7 +18,8 @@ const MEMO = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 // fills, deactivates and later closes (js/chain/lookup.js).
 const LOOKUP_TABLE = 'AddressLookupTab1e1111111111111111111111111';
 const PROGRAMS = new Set([SYSTEM_PROGRAM, COMPUTE_BUDGET_PROGRAM, TOKEN_PROGRAM, TOKEN_2022_PROGRAM, ASSOCIATED_TOKEN_PROGRAM, MPL_CORE_PROGRAM, LOOT_PROGRAM, ED25519, MEMO, LOOKUP_TABLE]);
-const LOOT_BY_DISC = new Map(IDL.instructions.map((i) => [Buffer.from(i.discriminator).toString('hex'), i.name]));
+/** A loot instruction's name, by its tag (1 byte; 8 for the oracle's callbacks). */
+const lootIxName = (data) => instructionOf(data)?.name ?? null;
 /**
  * What a player may sign, and what an owner may sign while setting an economy up (`open_auction` hands the seller's own
  * collectible to the game, inside the loot program, for an auction of it).
@@ -48,7 +49,7 @@ export function checkTransaction(message, { address, role, game = null, grants =
   const signers = keys.slice(0, header.numRequiredSignatures);
   const own = new Set([address, associatedTokenAddress(address, NATIVE_MINT), associatedTokenAddress(address, NATIVE_MINT, TOKEN_2022_PROGRAM)]);
   const funds = new Set(game ? grants.map((id) => pda.grant(game, id)) : []);
-  const opensBox = instructions.some((ix) => keys[ix.programIndex] === LOOT_PROGRAM && LOOT_BY_DISC.get(Buffer.from(ix.data.subarray(0, 8)).toString('hex')) === 'open_box');
+  const opensBox = instructions.some((ix) => keys[ix.programIndex] === LOOT_PROGRAM && lootIxName(ix.data) === 'open_box');
   for (const ix of instructions) {
     const program = keys[ix.programIndex];
     const acct = (i) => keys[ix.accountIndexes[i]];
@@ -102,7 +103,7 @@ export function checkTransaction(message, { address, role, game = null, grants =
       continue;
     }
     if (program === LOOT_PROGRAM) {
-      const name = LOOT_BY_DISC.get(Buffer.from(ix.data.subarray(0, 8)).toString('hex')) ?? 'unknown';
+      const name = lootIxName(ix.data) ?? 'unknown';
       summary.push(`loot ${name}`);
       const allowed = role === 'owner' ? OWNER_LOOT : PLAYER_LOOT;
       if (!allowed.has(name)) findings.push(`A ${role} is asked to sign loot's ${name}, which is the ${name === 'init_platform' || name.startsWith('set_') || name === 'collect_fees' ? 'platform’s' : 'authority’s'} to sign.`);
@@ -122,7 +123,7 @@ const CREATED_AT = IDL.instructions.find((i) => i.name === 'create_project').acc
 /** The games a transaction creates (loot create_project: its `project` account). */
 function createdGames(message) {
   const { keys, instructions } = readMessage(message);
-  return instructions.filter((ix) => keys[ix.programIndex] === LOOT_PROGRAM && LOOT_BY_DISC.get(Buffer.from(ix.data.subarray(0, 8)).toString('hex')) === 'create_project').map((ix) => keys[ix.accountIndexes[CREATED_AT]]);
+  return instructions.filter((ix) => keys[ix.programIndex] === LOOT_PROGRAM && lootIxName(ix.data) === 'create_project').map((ix) => keys[ix.accountIndexes[CREATED_AT]]);
 }
 
 /** The script a page runs before its own: registers the test wallet both ways. */

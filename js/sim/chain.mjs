@@ -14,8 +14,8 @@ import { readUintLE } from '../chain/bytes.js';
 import { SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { compileMessage, readMessage, readTransaction, signersOf } from '../chain/tx.js';
 import { programError } from '../chain/rpc.js';
-import { decode, receipts } from '../client/accounts.js';
-import { callbackLotteryIx, callbackRandomIx, callbackRollIx, IDL } from '../client/ix.js';
+import { decode, lootError, receipts } from '../client/accounts.js';
+import { callbackLotteryIx, callbackRandomIx, callbackRollIx, IDL, instructionOf } from '../client/ix.js';
 import { BPF_LOADER_UPGRADEABLE, LOOT_PROGRAM, pda, VRF_QUEUE } from '../client/pda.js';
 
 /** Slots are about 400 ms. */
@@ -53,16 +53,27 @@ export function seeded(seed = 'loot') {
 /** A fresh address nobody holds a key to (none is needed: signatures are not checked). */
 export const newAddress = (random) => encodeBase58(random(32));
 
-/** Each loot instruction's 8-byte discriminator → its name and its account names, flattened in order. */
-const BY_DISCRIMINATOR = new Map(
+/** Each loot instruction's name → its account names, flattened in order. */
+const NAMES = new Map(
   IDL.instructions.map((def) => {
     const names = [];
     const walk = (list) => list.forEach((a) => (a.accounts ? walk(a.accounts) : names.push(a.name)));
     walk(def.accounts);
-    return [Buffer.from(def.discriminator).toString('hex'), { name: def.name, names }];
+    return [def.name, names];
   }),
 );
-export const lootName = (ix) => (ix.programId === LOOT_PROGRAM ? BY_DISCRIMINATOR.get(Buffer.from(ix.data.subarray(0, 8)).toString('hex')) ?? null : null);
+/** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
+export const lootName = (ix) => {
+  const def = ix.programId === LOOT_PROGRAM ? instructionOf(ix.data) : null;
+  return def ? { name: def.name, names: NAMES.get(def.name), tag: def.discriminator.length } : null;
+};
+
+/** A failed run in words: loot's error with the IDL's sentence (the program logs the error's name only), else the
+ * program's own words (`programError`). */
+const refused = (said, logs) => {
+  const e = lootError(logs);
+  return e ? `${e.msg} (${e.name})` : programError(said, logs);
+};
 
 /** A token account's mint, owner and amount (classic and Token-2022 share these offsets). */
 export function tokenAccount(account) {
@@ -188,7 +199,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     if (failed) {
       const err = result.err();
       const said = typeof err === 'number' ? (TX_ERRORS[err] ?? `transaction error ${err}`) : String(err?.toString?.() ?? 'failed');
-      throw Object.assign(new Error(programError(said, logs)), { logs, label });
+      throw Object.assign(new Error(refused(said, logs)), { logs, label });
     }
     const after = snapshot(keys);
     tick();
@@ -242,7 +253,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
       if (known.name === 'open_box' || known.name === 'ask_roll') {
         const order = account('order');
         const orderState = decode('Order', get(order).data);
-        if (!['Pending', 'Asked'].includes(orderState.status)) continue; // a box of one entry gave it at once
+        if (!['Pending', 'Asked'].includes(orderState.status)) continue;
         const box = decode('LootBox', get(orderState.loot_box).data);
         // Each prize pool's mint: tokens won move to the project's vault for it in the roll. A pool not opened has none.
         const poolMints = {};
@@ -271,7 +282,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
       } else {
         const project = account('project');
         restoreQueue();
-        answers.push(sendRaw(oracle, [callbackRandomIx({ project, reference: ix.data.subarray(8, 40), randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
+        answers.push(sendRaw(oracle, [callbackRandomIx({ project, reference: ix.data.subarray(known.tag, known.tag + 32), randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
       }
     }
     return answers;
@@ -297,7 +308,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     if (failed) {
       const err = result.err();
       const said = typeof err === 'number' ? (TX_ERRORS[err] ?? `transaction error ${err}`) : String(err?.toString?.() ?? 'failed');
-      throw Object.assign(new Error(programError(said, logs)), { logs, label });
+      throw Object.assign(new Error(refused(said, logs)), { logs, label });
     }
     tick();
     const { keys, instructions: compiled } = readMessage(message);
@@ -357,7 +368,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
       const result = svm.simulateTransaction({ messageBytes: message, signatures: Object.fromEntries(signers.map((s, i) => [s, slots[i]])) });
       if (typeof result.err === 'function') {
         const logs = result.meta().logs();
-        throw Object.assign(new Error(`The network refused this in a dry run: ${programError(String(result.err()), logs)}`), { logs });
+        throw Object.assign(new Error(`The network refused this in a dry run: ${refused(String(result.err()), logs)}`), { logs });
       }
       const post = new Map(result.postAccounts().map((x) => [x.address, x]));
       const accounts = await Promise.all(watch.map(async (a) => {

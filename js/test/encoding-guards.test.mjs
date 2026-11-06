@@ -111,7 +111,10 @@ test('decodeProven refuses an account too short for its asset data hash', () => 
 
 test('constants come from the IDL, and missing arguments are named', () => {
   const constant = (name) => BigInt(IDL.constants.find((c) => c.name === name).value);
-  assert.equal(loot.ESCROW_LAMPORTS, constant('ESCROW_LAMPORTS'));
+  // A constant the program dropped is gone from the client too: the order holds no reserve, and settle's last part
+  // is past the end (`SETTLE_LAST`).
+  for (const gone of ['ESCROW_LAMPORTS', 'SETTLE_SPLIT']) assert.equal(IDL.constants.find((c) => c.name === gone), undefined);
+  assert.equal(loot.SETTLE_LAST, 4_294_967_295);
   assert.equal(loot.dayOf(constant('DAY_SECONDS') * 3n + 1n), 3);
   assert.throws(() => loot.withDefaults({ Box: { id: 1, args: { currency: A } } }), /entries/);
   assert.throws(() => loot.openFarmIx({ owner: A, project: B, id: 0, args: { rewards_pool: 0 }, rewardsMint: C }), /args\.tiers/);

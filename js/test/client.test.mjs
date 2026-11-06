@@ -125,14 +125,14 @@ describe('money in', () => {
     assert.equal(w.balance(owner), PRICE / 20n);
   });
 
-  t('a shop item is a box of one entry: given at once, then settled', () => {
+  t('a box of one entry is opened like any: the oracle answers it, then it is settled', () => {
     const w = world();
     w.upsert({ Item: { id: 1, args: collectible('Crown', 10) } });
     w.upsert({ Box: { id: 1001, args: boxArgs(PRICE, [itemDrop(1)]) } });
     const box = w.read('LootBox', pda.box(w.project, 1001));
     const r = w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, projectMint: w.mint, box, nonce: 1n })]);
-    assert.deepEqual(names(r), ['OrderRolled']);
-    assert.equal(r.answers.length, 0);
+    assert.equal(r.answers.length, 1, 'every open asks the oracle');
+    assert.deepEqual(names(r.answers[0]), ['OrderRolled']);
     const orderAddress = pda.order(w.project, w.player, 1n);
     const order = w.read('Order', orderAddress);
     w.chain.nextSlot();
@@ -146,7 +146,7 @@ describe('money in', () => {
     const w = world();
     w.pool(1, w.mint, 50n * PRICE);
     w.upsert({ Item: { id: 1, args: collectible('Gem') } });
-    const entries = [itemDrop(1, 1), drop([fromPool(1, 2n * PRICE)]), drop([], 1, true), drop([])];
+    const entries = [itemDrop(1, 1), drop([fromPool(1, 2n * PRICE)]), drop([]), drop([])];
     w.upsert({ Box: { id: 1, args: boxArgs(PRICE, entries, { shares: [{ to: { Pool: [1] }, bps: 5000 }] }) } });
     const box = w.read('LootBox', pda.box(w.project, 1));
     fails(() => w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, projectMint: w.mint, box, nonce: 9n, maxPrice: PRICE - 1n })]), 'PriceAboveMax');
@@ -158,7 +158,7 @@ describe('money in', () => {
       const order = w.read('Order', orderAddress);
       assert.equal(w.chain.get(orderAddress).data.length, loot.orderBytes(box, 1), 'sized to its box: its prizes, its one share');
       assert.equal(order.status, 'Rolled');
-      seen.add(order.won.length ? Object.keys(order.won[0])[0] : order.burns ? 'Burn' : 'Nothing');
+      seen.add(order.won.length ? Object.keys(order.won[0])[0] : 'Nothing');
       w.chain.nextSlot();
       const items = { 1: w.read('Item', pda.item(w.project, 1)) };
       const s = w.chain.send(w.player, [loot.settleIx({ signer: w.player, orderAddress, order, projectState: w.projectState(), items })]);
@@ -411,7 +411,7 @@ describe('auctions', () => {
 
     fails(() => w.chain.send(w.cranker, [loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: read(), item: w.read('Item', pda.item(w.project, 1)), now: w.chain.now() })]), 'AuctionRunning');
     w.chain.warp(now + 4_200);
-    const asset = pda.itemAsset(pda.item(w.project, 1), read().serial);
+    const asset = pda.itemAsset(pda.item(w.project, 1), read().pin);
     const ended = w.chain.send(w.cranker, [loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: read(), item: w.read('Item', pda.item(w.project, 1)), now: w.chain.now() })]);
     assert.deepEqual(names(ended), ['AuctionEnded']);
     assert.equal(ended.receipts[0].data.winner, w.player);
@@ -654,7 +654,7 @@ describe('grants', () => {
     const w = world();
     w.upsert({ Item: { id: 7, args: collectible('Starter Pet') } });
     const signer = keyFromSeed(new Uint8Array(32).fill(9));
-    const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 1, per_key: 0, per_day: 100, total: 100, window: { opens_at: 0n, closes_at: 0n } };
+    const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 1, per_key: 0, all: { total: 100, per_window: 100, window: 86_400 }, window: { opens_at: 0n, closes_at: 0n } };
     const nobody = '11111111111111111111111111111111';
     w.upsert({ Grant: { id: 1, args: { gives: { Item: [7] }, vouchers: [signer.publicKey, nobody, nobody], list_root: new Uint8Array(32), limits, active: true, gate: null } } });
     const grantAddress = pda.grant(w.project, 1);
@@ -698,7 +698,7 @@ describe('grants', () => {
     w.pool(1, w.mint, 100n);
     const signer = keyFromSeed(new Uint8Array(32).fill(7));
     const nobody = '11111111111111111111111111111111';
-    const args = { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [signer.publicKey, nobody, nobody], list_root: new Uint8Array(32), key_root: new Uint8Array(32), limits: { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, per_day: 0, total: 0, window: { opens_at: 0n, closes_at: 0n } }, active: true, gate: null };
+    const args = { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [signer.publicKey, nobody, nobody], list_root: new Uint8Array(32), key_root: new Uint8Array(32), limits: { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } }, active: true, gate: null };
     w.upsert({ Grant: { id: 3, args } });
     const address = pda.grant(w.project, 3), wallet = w.who();
     const first = w.read('Grant', address);

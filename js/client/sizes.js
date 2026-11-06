@@ -48,26 +48,52 @@ export const ACCOUNT_BYTES = Object.freeze({
 /** A project's bytes with `collections` collections, as the program sizes the account. */
 export const projectBytes = (collections = 0) => 153 + 32 * collections;
 
+/** The most accounts the oracle's answer to a roll carries (`MAX_CALLBACK_ACCOUNTS`). */
+export const MAX_CALLBACK_ACCOUNTS = 21;
+
+/**
+ * The most accounts a roll of `entries` hands the oracle (`catalog::callback_accounts`): the order, the box and the
+ * ticket; one for each prize that needs one at the roll (an item, a pool, a stash); and with tokens, the two token
+ * programs, the project, and a mint and a vault for each source of tokens.
+ */
+export function callbackAccounts(entries) {
+  const sources = new Set();
+  let named = 0;
+  for (const prize of entries.flatMap((e) => e.prizes)) {
+    if (prize.Item || prize.Compressed || prize.Nft || prize.Stash) named += 1;
+    else if (prize.Tokens) {
+      if (prize.Tokens.from.Pool) named += 1;
+      sources.add(JSON.stringify(prize.Tokens.from));
+    }
+  }
+  return 3 + named + (sources.size ? 3 + 2 * sources.size : 0);
+}
+
+/**
+ * How many fresh items' table accounts the oracle's answer to a roll of `entries` can carry (`order::table_budget`):
+ * what the box's own accounts leave of `MAX_CALLBACK_ACCOUNTS`. Negative: the box can't be rolled at all.
+ */
+export const tableBudget = (entries) => MAX_CALLBACK_ACCOUNTS - callbackAccounts(entries);
+
 const draws = (lootBox) => (lootBox.slots?.length ? lootBox.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 const ZERO = '11111111111111111111111111111111';
 
-/** The bytes of an order of `lootBox` with `shares` shares and `opens` opens, as the program sizes it at the purchase
- * (`Order::space_for`): the largest order it can be, every prize its draws can set aside the largest kind of `Won`,
- * its odds, and its largest fate. A pack's order grows with its cards. */
 /** The most an order can be (`MAX_ORDER_BYTES`, not in the IDL): a box whose one open's order would be more is refused
- * at its upsert (`BadEntries`): about 243 one-prize draws. */
+ * at its upsert (`BadEntries`): about 243 one-prize draws of tokens or NFTs, 91 of a box of one item entry. */
 export const MAX_ORDER_BYTES = 10_240;
 
-/** The most bytes the rows of committed tables one fresh unit draws may be, proven in a settle's data (`MAX_PROVEN_BYTES`,
- * not in the IDL): each row `52 + 32 × depth` (`provenRowBytes`). An item past it is out of stock: a purchase is refused,
- * a roll goes on without it. Tables the economy tools write are never committed, so their items never reach it. */
-export const MAX_PROVEN_BYTES = 800;
-/** A proven row's bytes in a settle's data: its index, from, weight and payload, and a 32-byte node a level of its tree. */
-export const provenRowBytes = (rows) => 52 + 32 * Math.ceil(Math.log2(Math.max(1, Number(rows))));
-
+/**
+ * The bytes of an order of `lootBox` with `shares` shares and `opens` opens, as the program sizes it at the purchase
+ * (`Order::space_for`): the largest order it can be, every prize its draws can set aside the largest kind of `Won`,
+ * its odds, and its largest fate; and for a box that gives items, 4 bytes for each table row a draw may carry (the
+ * box's table budget, `tableBudget`, for each draw of each open). A pack's order grows with its cards.
+ */
 export function orderBytes(lootBox, shares = 0, opens = 1) {
   const most = Math.max(0, ...lootBox.entries.map((e) => e.prizes.length));
-  const won = most * draws(lootBox) * Math.max(1, opens);
+  const drawn = draws(lootBox) * Math.max(1, opens);
+  const won = most * drawn;
+  const items = lootBox.entries.some((e) => e.prizes.some((p) => p.Item || p.Compressed));
+  const rows = items ? Math.max(0, tableBudget(lootBox.entries)) : 0;
   const fates = lootBox.fates ?? [];
   const fate = fates.reduce((a, f) => (a && encodeBorsh(IDL, { defined: { name: 'Fate' } }, a).length >= encodeBorsh(IDL, { defined: { name: 'Fate' } }, f).length ? a : f), null);
   const largest = {
@@ -75,12 +101,12 @@ export function orderBytes(lootBox, shares = 0, opens = 1) {
     odds_bps: new Array(lootBox.odds?.length ?? 0).fill(0),
     status: 'Waiting',
     won: new Array(won).fill({ Tokens: { mint: ZERO, amount: 0n } }),
-    burns: false, paid: 0n, fee: 0n,
+    paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
     opens: 0, settled: 0, undrawn: 0, drew: 0, answer: new Uint8Array(32), drawn: [],
     requested_slot: 0n, asked_first: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
   };
-  return encodeAccount(IDL, 'Order', largest).length;
+  return encodeAccount(IDL, 'Order', largest).length + drawn * rows * 4;
 }
 
 // Lists of records (tag 26, `list.rs`): a tag byte and a 6-byte header, then fixed-width records.
