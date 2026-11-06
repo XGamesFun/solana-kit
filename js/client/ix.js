@@ -1734,6 +1734,13 @@ export function stakeRefreshFirst(farm, seat, { tier = seat?.tier, now, compound
 }
 
 /**
+ * Whether a booster put on a token seat of `farm` (decoded) needs the seat refreshed first, in the same transaction
+ * (`stake_nft`'s `RefreshFirst`): in a farm of tokens whose growth writes its players' profiles, the booster's growth
+ * starts from now, so what the seat grew before is written first.
+ */
+export const boosterRefreshFirst = (farm) => Boolean(farm.farmed?.Tokens) && (farm.growth ?? []).some((g) => g.profile);
+
+/**
  * Whether a farm (decoded) takes a stake at lock tier `tier` at `now` (Unix seconds, the chain's clock), as the program
  * judges it: a farm with an end (`ends_at`, 0 for never) takes none at its end or after it, nor one whose lock
  * would run past it (`FarmOver`). A stake of tokens, a booster, a new tier and a watched NFT's takeover all ask it.

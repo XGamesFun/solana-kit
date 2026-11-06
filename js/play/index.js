@@ -1440,12 +1440,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       shown ??= await passing(farm.gates, 'stake here');
       const mint = farm.farmed.Tokens.mint;
       const value = units(amount, decimalsOf(f.stakes));
-      // A seat can't move to a larger exit fee while its lock runs.
+      // While its lock runs, a seat moves only to a tier with no early exit, or one whose early exit costs at least as
+      // much as its own (`ExitWhileLocked`): never to a way out it didn't have, or a cheaper one.
       const mine = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address));
-      if (mine && BigInt(mine.amount) > 0n) {
-        const [from, to] = [farm.tiers[mine.tier], farm.tiers[tier]];
-        const locked = (await chainNow()) < BigInt(mine.since) + BigInt(from.lock);
-        if (locked && Number(to.exit_bps) > Number(from.exit_bps)) throw new Error('While its lock runs, this stake can\'t move to a tier with a larger early-exit fee.');
+      if (mine && BigInt(mine.amount) > 0n && Number(mine.tier) !== Number(tier)) {
+        const [from, to] = [Number(farm.tiers[mine.tier].exit_bps), Number(farm.tiers[tier].exit_bps)];
+        const locked = (await chainNow()) < BigInt(mine.since) + BigInt(farm.tiers[mine.tier].lock);
+        if (locked && !(to === 0 || (from > 0 && to >= from))) throw new Error('While its lock runs, this stake can only move to a tier with no early exit, or one whose early exit costs at least as much as its own.');
       }
       const token = await farmTokens([mint], [], { extra, transfers });
       const ix = loot.stakeTokensIx({ player: wallet.address, project, id: f.id, farm, amount: value, tier, shown, ...token });
@@ -1491,15 +1492,18 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const { before, ...nft } = await nftOf(asset);
       const seat = farm.custody === 'Watch' && farm.farmed === 'Collectibles' ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), asset)) : null;
       const previous = seat && seat.player !== wallet.address ? seat.player : null;
-      // A booster boosts a stake: a farm of tokens takes one only on a seat with tokens staked (NotFarmed).
+      // A booster boosts a stake: a farm of tokens takes one only on a seat with tokens staked (NotFarmed). In a farm
+      // whose growth writes the profile, the seat is refreshed first, in the same transaction (`boosterRefreshFirst`).
+      const refresh = [];
       if (farm.farmed.Tokens) {
         const mine = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address));
         if (!mine || BigInt(mine.amount) === 0n) throw new Error(`Stake some ${f.stakes} in “${f.name ?? f.key}” first: a booster boosts a stake.`);
+        if (loot.boosterRefreshFirst(farm)) refresh.push(...(await refreshOf(f, farm, mine)));
       }
       // Its way out must land too: its unstake from this tier, with the tier's
       // prize and as a forfeit, is sized before it goes in, and an NFT that could never come back out isn't staked.
       if (!farm.farmed.Tokens) await exitFits(f, farm, asset, nft, before, tier, token);
-      return send([...before, loot.stakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, previous, tier, ...token })]);
+      return send([...refresh, ...before, loot.stakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, previous, tier, ...token })]);
     },
 
     /**

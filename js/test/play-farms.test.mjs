@@ -167,3 +167,24 @@ test("staked lists the player's seats with what each is owed by the program's ow
   await app.harvest('nfts', asset);
   assert.equal((await app.staked('nfts'))[0].owedUnits, 0n);
 });
+
+test('a booster put on a token seat whose growth writes the profile refreshes the seat first, in the same transaction', { skip }, async () => {
+  const w = world({ seed: 'booster-profile' });
+  w.upsert({ Item: { id: 1, args: collectible('Badge') } });
+  const growth = [{ key: 'xp', per_day: 86_400, level: '', steps: [], streak: false, profile: true, at_least: 0n }];
+  const boost = { rule: { of: { Item: [1] }, key: 'level', test: 'Any' }, effect: { PerPoint: { bps: 1000, most: 9 } } };
+  w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, rewardsMint: w.mint, stakedMint: w.mint,
+    args: { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }], boosts: [boost], max_boost_bps: 10_000, gate: null, growth } })]);
+  const farm = w.read('Farm', loot.pda.farm(w.project, 1));
+  assert.equal(loot.boosterRefreshFirst(farm), true);
+  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'xp', id: 1, stakes: 'coin' }] };
+  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: w.player, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
+  await app.stake('xp', '1', 0);
+  w.chain.warp(w.chain.now() + 100);
+  const badge = w.make(1, w.player, [{ key: 'level', value: '2' }]);
+  assert.throws(() => w.chain.send(w.player, [loot.stakeNftIx({ player: w.player, project: w.project, id: 1, farm, asset: badge, collection: w.collection })]), /RefreshFirst/);
+  await app.stakeNft('xp', badge);
+  assert.equal(w.read('Seat', loot.pda.seat(loot.pda.farm(w.project, 1), w.player)).asset, badge, 'the booster is on');
+  const xp = loot.decodeProfile(w.chain.get(loot.pda.profile(w.project, w.player)).data).attributes.find((a) => a.key === 'xp');
+  assert.ok(Number(xp.value) >= 100, 'what the seat grew before is on the profile');
+});
