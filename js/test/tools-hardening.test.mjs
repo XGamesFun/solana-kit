@@ -419,7 +419,7 @@ describe('devnet only, and MCP files inside the project folder', () => {
 
 describe('a throwaway key never keeps the player’s SOL', () => {
   test('a settle someone else sent first: the key gives its lamports back', { skip }, async () => {
-    const { w, player, live } = await shop('hardening-burner');
+    const { w, owner, player, live } = await shop('hardening-burner');
     let burner = null;
     let raced = false;
     const rpc = {
@@ -435,7 +435,7 @@ describe('a throwaway key never keeps the player’s SOL', () => {
             const order = loot.decode('Order', o.data);
             if (order.player !== player.address) continue;
             const items = Object.fromEntries(order.won.filter((x) => x.Item).map((x) => [x.Item.item, w.read('Item', pda.item(live.live.project, x.Item.item))]));
-            w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.settleIx({ signer: w.cranker, orderAddress: o.address, order, projectState: w.read('Project', live.live.project), items })]);
+            w.chain.send(owner.address, [computeUnitLimit(600_000), loot.settleIx({ signer: owner.address, orderAddress: o.address, order, projectState: w.read('Project', live.live.project), items })]);
           }
         }
         return w.chain.rpc.send(wire);

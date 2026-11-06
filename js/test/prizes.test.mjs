@@ -36,7 +36,7 @@ function rollAndSettle(w, orderAddress) {
   assert.equal(order.status, 'Rolled');
   const [{ Nft: { nft } }] = order.won;
   w.chain.nextSlot();
-  w.chain.send(w.cranker, [computeUnitLimit(400_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), nfts: { [nft]: { collection: w.collection } } })]);
+  w.chain.send(w.authority, [computeUnitLimit(400_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: w.projectState(), nfts: { [nft]: { collection: w.collection } } })]);
   assert.equal(ownerOf(w, nft), order.player);
   return nft;
 }
@@ -61,7 +61,7 @@ t('a stash takes what the project’s keys put in, and a box gives one of its NF
   assert.deepEqual([order.status, order.held, nfts.slice(1).includes(nft)], ['Rolled', false, true]);
   assert.equal(stashOf(w, 1).length, 1, 'taken out of the stash at the roll');
   w.chain.nextSlot();
-  w.chain.send(w.cranker, [computeUnitLimit(400_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: g, nfts: { [nft]: { collection: w.collection } } })]);
+  w.chain.send(w.authority, [computeUnitLimit(400_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: g, nfts: { [nft]: { collection: w.collection } } })]);
   assert.equal(ownerOf(w, nft), w.player);
 });
 
@@ -111,7 +111,7 @@ t('a contest’s winning entry gets a roll of a box with its part of the pot', (
   w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, 1)), side: 0 })]);
   contest = w.read('Contest', pda.contest(w.project, 1));
   // The loser sends nothing; the winner's claim pays its part and makes its roll.
-  w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player })]);
+  w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player })]);
   assert.ok(nfts.includes(rollAndSettle(w, pda.order(w.project, w.player, loot.prizeRollNonce(loot.prizeNonce(pda.contest(w.project, 1), w.player))))));
 });
 

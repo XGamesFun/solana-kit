@@ -185,7 +185,7 @@ describe('money in', () => {
     assert.ok(!r.answers[0].receipts.some((x) => x.name === 'OddsRaised'), 'the roll uses the stored boost');
   });
 
-  t('a rolled order is settled by anyone, a normal item too, and never refunded however long it waits', () => {
+  t('a rolled order is settled by its player, the key they named or the project’s keys, never a stranger, a normal item too, and never refunded however long it waits', () => {
     const w = world();
     w.upsert({ Item: { id: 1, args: collectible('Crown') } });
     w.upsert({ Item: { id: 2, args: { ...collectible('Sword'), kind: 'Normal' } } });
@@ -202,7 +202,8 @@ describe('money in', () => {
       fails(() => w.chain.send(w.cranker, [loot.refundIx({ signer: w.cranker, orderAddress: address, order })]), 'BadOrderState');
       const id = order.won[0].Item.item;
       const items = { [id]: w.read('Item', pda.item(w.project, id)) };
-      const r = w.chain.send(w.cranker, [loot.settleIx({ signer: w.cranker, orderAddress: address, order, projectState: w.projectState(), items })]);
+      fails(() => w.chain.send(w.cranker, [loot.settleIx({ signer: w.cranker, orderAddress: address, order, projectState: w.projectState(), items })]), 'NotAuthority');
+      const r = w.chain.send(w.authority, [loot.settleIx({ signer: w.authority, orderAddress: address, order, projectState: w.projectState(), items })]);
       assert.deepEqual(names(r), ['OrderSettled']);
     }
   });
@@ -336,7 +337,8 @@ describe('holds and contests', () => {
     const had = w.balance(w.player);
     contest = w.read('Contest', pda.contest(w.project, 1));
     // The winner's claim pays its part and, the last owed, closes the contest and its list; the loser sends nothing.
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]);
+    fails(() => w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]), 'WinnerPicks');
+    w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]);
     assert.equal(w.balance(w.player) - had, (2n * PRICE * 95n) / 100n);
     assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'closed');
 
@@ -461,9 +463,10 @@ describe('mechanics that run by themselves', () => {
     const args = { active: true, action: { from: { Pool: [0] }, to: { Pool: [1] }, amount: { Bps: [1000] }, halve_every: 0 }, every: 60n, next_at: BigInt(w.chain.now() + 60), max_runs: 0 };
     w.upsert({ Schedule: { id: 1, args } });
     const schedule = w.read('Schedule', pda.schedule(w.project, 1));
-    fails(() => w.chain.send(w.cranker, [loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule, poolMint: w.mint })]));
+    fails(() => w.chain.send(w.authority, [loot.runScheduleIx({ payer: w.authority, project: w.project, id: 1, schedule, poolMint: w.mint })]));
     w.chain.warp(w.chain.now() + 61);
-    const r = w.chain.send(w.cranker, [loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule, poolMint: w.mint })]);
+    fails(() => w.chain.send(w.cranker, [loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule, poolMint: w.mint })]), 'NotAuthority');
+    const r = w.chain.send(w.authority, [loot.runScheduleIx({ payer: w.authority, project: w.project, id: 1, schedule, poolMint: w.mint })]);
     assert.deepEqual(names(r), ['ScheduleRan']);
     assert.equal(w.chain.tokens(pda.pool(w.project, 1)), PRICE);
   });

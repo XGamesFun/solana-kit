@@ -79,11 +79,13 @@ test('a page runs a schedule that is due, and not before', { skip: skip ?? false
     pools: [{ key: 'rewards', currency: 'ore' }],
     schedules: [{ key: 'drip', does: 'issue', pool: 'rewards', amount: 1000, every: '1h' }],
   });
-  const wallet = { address: player.address, async signTransaction(wire) { const t = readTransaction(wire); const sigs = [...t.signatures]; sigs[t.signers.indexOf(player.address)] = player.sign(t.message); return wireTransaction(t.message, sigs); } };
-  const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+  const walletOf = (key) => ({ address: key.address, async signTransaction(wire) { const t = readTransaction(wire); const sigs = [...t.signatures]; sigs[t.signers.indexOf(key.address)] = key.sign(t.message); return wireTransaction(t.message, sigs); } });
+  const page = (key) => solanaApp({ spec: live, rpc: w.chain.rpc, wallet: walletOf(key), now: () => w.chain.now() });
+  const app = page(owner);
   const pool = loot.pda.pool((live.live.project ?? live.live.game), live.pools[0].index);
   assert.equal(await app.runSchedule('drip'), null, 'not due yet');
   w.chain.warp(NOW + 3601);
+  await assert.rejects(page(player).runSchedule('drip'), /NotAuthority/, 'a player it does not pay');
   assert.ok(await app.runSchedule('drip'));
   assert.equal(await w.chain.rpc.tokenBalance(pool), 1_000_000_000n);
 });

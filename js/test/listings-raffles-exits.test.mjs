@@ -127,7 +127,7 @@ t('a contest’s token prize is set aside at the decision and split by what each
   const [p0, r0] = [w.balance(w.player), w.balance(rival)];
   for (const player of [rival, w.player]) {
     contest = w.read('Contest', pda.contest(w.project, 1));
-    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player, prizeMint: w.mint })]);
+    w.chain.send(w.authority, [loot.claimIx({ payer: w.authority, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player, prizeMint: w.mint })]);
   }
   assert.equal(w.balance(w.player) - p0, 200n, 'one part in three');
   assert.equal(w.balance(rival) - r0, 400n, 'two parts in three');
@@ -185,7 +185,7 @@ t('a sealed schedule pays from its own vault, catches up in one transaction, and
   const due = loot.runsDue(schedule, w.chain.now());
   assert.equal(due, 3);
   // One call makes every run due.
-  w.chain.send(w.cranker, [loot.runScheduleIx({ payer: w.cranker, project: w.project, id: 1, schedule, upto: Number(schedule.runs) + due })]);
+  w.chain.send(w.authority, [loot.runScheduleIx({ payer: w.authority, project: w.project, id: 1, schedule, upto: Number(schedule.runs) + due })]);
   assert.equal(w.balance(teammate), 1_000n, 'two runs of 300, then the last pays the rest');
   assert.equal(w.chain.tokens(pda.vest(address)), 0n);
 });

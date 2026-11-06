@@ -125,7 +125,7 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     won: [],
     paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
-    opens: 0, settled: 0, undrawn: 0, back: 0n, drew: 0, answer: new Uint8Array(32), drawn: [],
+    opens: 0, settled: 0, undrawn: 0, back: 0n, settler: ZERO, drew: 0, answer: new Uint8Array(32), drawn: [],
     requested_slot: 0n, asked_first: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
   };
   return encodeAccount(IDL, 'Order', empty).length + drawn * (aDraw + rows * 4);
@@ -133,10 +133,10 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
 
 // What one oracle answer's roll spends, counted at no less than each part costs (`order.rs`'s `RollCost`, measured by
 // the program's `tests/roll_costs.rs`), against the compute and the heap the oracle gives its answer, less a margin.
-const ROLL_BUDGET = 270_000n;
+const ROLL_BUDGET = 255_000n;
 const ROLL_HEAP = 32n * 1024n - 512n;
-const COST = { fixed: 20_000n, entry: 3_500n, blank: 1_400n, weigh: 1_000n, weighEntry: 40n, pair: 150n, item: 1_500n, tokens: 6_000n, draw: 6_000n, group: 250n, reread: 1_000n, finish: 15_000n, won: 150n, drawn: 50n };
-const BYTES = { start: 2_500n, prizeRead: 380n, entryRead: 80n, minted: 760n, pooled: 1_000n, prize: 200n, draw: 40n, finish: 2_000n, won: 120n };
+const COST = { fixed: 20_000n, entry: 3_500n, blank: 1_400n, weigh: 1_000n, weighEntry: 40n, pair: 150n, item: 1_500n, tokens: 6_000n, draw: 9_000n, group: 250n, reread: 1_000n, finish: 15_000n, won: 150n, drawn: 50n, odds: 1_000n, share: 1_000n, slot: 500n, slotEntry: 350n, openSlot: 150n };
+const BYTES = { start: 2_500n, prizeRead: 500n, entryRead: 80n, minted: 760n, pooled: 1_000n, prize: 200n, draw: 40n, finish: 2_000n, won: 120n };
 
 /** The account a prize reads, as a string, when it reads one the box can name: entries naming the same share it. */
 const accountOf = (p) => {
@@ -150,11 +150,11 @@ const accountOf = (p) => {
 
 /**
  * Whether all of `opens` opens of `entries` by `slots` fit one oracle answer (`order::draws_fit`), each draw at the
- * dearest its slot could make, with what is known from the box alone (no table rows, a stash of one group). `slots`
- * may be a number: that many draws among every entry. The program refuses a box whose one open doesn't fit at its
+ * dearest its slot could make, with what is known from the box alone (no table rows, a stash of one group), its `odds`
+ * and `shares` counted. `slots` may be a number: that many draws among every entry. The program refuses a box whose one open doesn't fit at its
  * upsert, and a purchase that doesn't at `open_box`, where it also reads what the accounts hold (`PackTooLarge`).
  */
-export function drawsFit(entries, slots, opens = 1) {
+export function drawsFit(entries, slots, opens = 1, { odds = 0, shares = 0, oracle = false } = {}) {
   const list = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
   const draws = list.reduce((n, s) => n + BigInt(s.count), 0n) * BigInt(opens);
   if (draws <= 1n) return true;
@@ -172,6 +172,7 @@ export function drawsFit(entries, slots, opens = 1) {
   let spent = COST.fixed + COST.pair * n * n * most * most + entries.reduce((c, e) => c + (e.prizes.length ? COST.entry : COST.blank), 0n);
   let used = BYTES.start + BYTES.entryRead * n + BYTES.prizeRead * BigInt(entries.reduce((c, e) => c + e.prizes.length, 0));
   let won = 0n;
+  spent += (COST.slot + COST.slotEntry * n) * BigInt(Math.max(1, list.length)) + COST.openSlot * BigInt(list.length) * BigInt(opens) + COST.odds * BigInt(odds) + COST.share * BigInt(shares);
   for (const s of list) {
     const count = BigInt(s.count) * BigInt(opens);
     const among = entries.map((_, i) => i).filter((i) => !(s.only ?? []).length || (s.only ?? []).includes(i));
@@ -180,7 +181,10 @@ export function drawsFit(entries, slots, opens = 1) {
     used += count * dearest((i) => cost[i].bytes);
     won += count * dearest((i) => BigInt(entries[i].prizes.length));
   }
-  return spent + COST.finish + COST.won * won + COST.drawn * draws <= ROLL_BUDGET && used + BYTES.finish + BYTES.won * won + draws <= ROLL_HEAP;
+  // A box that doesn't roll sells by `buy`, whose sender can ask for more heap; through the oracle (`oracle`: its
+  // `open_box`), its purchase is held to the answer's heap too.
+  const rolls = oracle || entries.length > 1 || entries.some((e) => e.prizes.some((p) => p.Stash != null));
+  return spent + COST.finish + COST.won * won + COST.drawn * draws <= ROLL_BUDGET && (!rolls || used + BYTES.finish + BYTES.won * won + draws <= ROLL_HEAP);
 }
 
 /** The most program rent and fee one order takes from its player, in lamports (0.01 SOL): a client cap (`opensAnOrder`). */
@@ -197,7 +201,7 @@ const PLAYER_FEE = 2_000_000n;
  * orders, each its own answer.
  */
 export function opensAnOrder(lootBox, { shares = (lootBox.shares ?? []).length, items = {}, rentPerByte = RENT_PER_BYTE } = {}) {
-  const fits = (n) => drawsFit(lootBox.entries, lootBox.slots?.length ? lootBox.slots : 1, n) && (BigInt(orderBytes(lootBox, shares, n, items)) + 128n) * rentPerByte + PLAYER_FEE <= ORDER_COST_CAP;
+  const fits = (n) => drawsFit(lootBox.entries, lootBox.slots?.length ? lootBox.slots : 1, n, { odds: (lootBox.odds ?? []).length, shares, oracle: true }) && (BigInt(orderBytes(lootBox, shares, n, items)) + 128n) * rentPerByte + PLAYER_FEE <= ORDER_COST_CAP;
   let n = 1;
   while (n < 4096 && fits(n + 1)) n += 1;
   return n;

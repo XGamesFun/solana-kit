@@ -38,6 +38,8 @@ export { IDL, ASSOCIATED_TOKEN_PROGRAM };
 export const TOKEN_METADATA_PROGRAM = METAPLEX_METADATA_PROGRAM;
 
 const ZERO_REFERENCE = new Uint8Array(32);
+/** The default address: names nobody, and nobody signs as it. */
+const NOBODY_KEY = '11111111111111111111111111111111';
 const hashToAddress = (hash) => encodeBase58(hash);
 
 /** 32 bytes a project names a call by (a match id, a payout's reason). Zeros when not given. */
@@ -751,7 +753,7 @@ export function payIx({ player, project, mint, treasury, amount, shares = [], re
  * The player opens the project's vault for the price's mint, and for each prize's, when it is not there. A box that
  * limits each wallet counts the purchase in the player's counts (`pda.counts`, its rent theirs).
  */
-export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, count = 1, items = {}, shown, listProof, subject, chosenRecipient = null, chosen = null, poolMints, playerToken, programs, extra = [] }) {
+export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, count = 1, items = {}, shown, listProof, subject, chosenRecipient = null, chosen = null, settler = NOBODY_KEY, poolMints, playerToken, programs, extra = [] }) {
   const mint = box.currency;
   poolMints = boxPoolMints(box, poolMints);
   const tokenProgram = tokenProgramOf(programs, mint);
@@ -771,7 +773,7 @@ export function openBoxIx({ player, project, box, boxAddress, nonce, maxPrice, c
   const gate = [...gateAccounts(project, { gate: box.gate, wallet: player, listProof }), ...(box.subject ? on.proof : shownAccounts(project, shown))];
   return lootIx(
     'open_box',
-    { nonce, max_price: maxPrice ?? box.price * BigInt(count), chosen_recipient: chosenRecipient, version: box.version, count },
+    { nonce, max_price: maxPrice ?? box.price * BigInt(count), chosen_recipient: chosenRecipient, version: box.version, count, settler },
     {
       loot_box: address,
       player,
@@ -1146,10 +1148,10 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
  * a free roll back to waiting (`Waiting`), for a restock or for its player to end it so. Once asked, every later ask
  * comes in a later slot than the last (`SameSlot`, `rollAskable`).
  */
-export function askRollIx({ payer, orderAddress, order, box, poolMints, items = {}, programs }) {
+export function askRollIx({ payer, orderAddress, order, box, settler = NOBODY_KEY, poolMints, items = {}, programs }) {
   poolMints = boxPoolMints(box, poolMints);
   const opens = prizeMints(box.entries, poolMints).map(({ mint }) => createAssociatedTokenAccountIdempotent(payer, order.project, mint, tokenProgramOf(programs, mint)));
-  const ask = lootIx('ask_roll', {}, { payer, order: orderAddress, loot_box: order.loot_box }, {
+  const ask = lootIx('ask_roll', { settler }, { payer, order: orderAddress, loot_box: order.loot_box }, {
     remaining: [...entryAccounts(order.project, box.entries, items), ...prizeAccounts(order.project, box.entries, poolMints, programs)],
   });
   return [...opens, ask];

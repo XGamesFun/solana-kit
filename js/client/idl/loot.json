@@ -59,7 +59,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "settler",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "bid",
@@ -801,7 +806,8 @@
         {
           "name": "payer",
           "docs": [
-            "Anyone. Opens the player's account of the mint when it is not there."
+            "Anyone, but for a winner's first claim within `CLAIM_GRACE_SECONDS` of the decision: the winner or",
+            "the project's keys. Opens the player's account of the mint when it is not there."
           ],
           "writable": true,
           "signer": true
@@ -3310,6 +3316,10 @@
         {
           "name": "count",
           "type": "u32"
+        },
+        {
+          "name": "settler",
+          "type": "pubkey"
         }
       ]
     },
@@ -5357,7 +5367,9 @@
         {
           "name": "payer",
           "docs": [
-            "Anyone. Opens the account the run pays into when it is not there."
+            "The project's owner or authority, or who the run pays (`To::Wallet`, the treasury), since nobody",
+            "else should say when a share of a pool is read. Anyone runs a sealed burn, which pays nobody.",
+            "Opens the account the run pays into when it is not there."
           ],
           "writable": true,
           "signer": true
@@ -5776,7 +5788,8 @@
         {
           "name": "signer",
           "docs": [
-            "Anyone, for every outcome. Opens the accounts the order pays into that are not there yet."
+            "The order's player, its project's owner or authority, or the key its player named",
+            "(`Order::settler`). Opens the accounts the order pays into that are not there yet."
           ],
           "writable": true,
           "signer": true
@@ -13630,6 +13643,14 @@
             "type": "u64"
           },
           {
+            "name": "settler",
+            "docs": [
+              "A key its player named to settle it for them (`open_box`, `ask_roll`): a wallet needn't be asked",
+              "a second time. The default names nobody, and nobody signs as it."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "drew",
             "docs": [
               "The draws its roll made; 0 once the first settle call split the payment."
@@ -16513,7 +16534,7 @@
       "docs": [
         "How long after a contest's decision a winner alone picks its share of the losers' NFTs and alone",
         "may go without a prize that can't be given. After it, anyone may do both, so no winner can hold",
-        "up the rest of the contest, on purpose or by losing its key."
+        "up the rest of the contest, on purpose or by losing its key (a frozen account waits for its issuer)."
       ],
       "type": "i64",
       "value": "2592000"

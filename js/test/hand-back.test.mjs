@@ -42,8 +42,8 @@ test('a box’s fate giving the Token Metadata NFT rolled on to the fee box send
   assert.deepEqual([order.held, order.status, w.chain.tokens(loot.ata(w.project, nft))], [true, 'Rolled', 1n], 'the project holds it until the settle');
   w.chain.nextSlot();
   // Built as before (the fee box's token account as the piece's), the settle fails and moves nothing; it can be sent again.
-  const settle = (handBack) => [computeUnitLimit(1_400_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), subject: tm, handBack })];
-  assert.throws(() => w.chain.send(w.cranker, settle(false)));
+  const settle = (handBack) => [computeUnitLimit(1_400_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: w.projectState(), subject: tm, handBack })];
+  assert.throws(() => w.chain.send(w.authority, settle(false)));
   assert.equal(w.chain.tokens(loot.ata(w.project, nft)), 1n);
   // js/play reads the fee box's owner and passes the player's token account.
   await app(w, { boxes: [{ key: 'mirror', id: 4, name: 'Mirror' }] }).collect(orderAddress);

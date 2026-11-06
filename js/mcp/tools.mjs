@@ -474,7 +474,7 @@ export const tools = [
         '  loot.decode("LootBox", data), loot.receipts(tx)            accounts, and the receipts of a getTransaction result (none when meta.err is set)',
         'IDL: @xgamesfun/solana/idl.json (Anchor 1.x format).',
         'A page builds the instruction, puts it in a transaction, and asks the player’s wallet (Wallet Standard: Phantom, Solflare, Backpack) to sign and send it. The app never holds a key.',
-        'Reads: the project’s records are plain accounts (loot.decode); every move leaves a receipt in the transaction’s logs (loot.receipts(tx)). A backend delivers only from a finalized transaction whose meta.err is null, once per order or reference: a failed transaction keeps its logs, and they can read as all-success.',
+        'Reads: the project’s records are plain accounts (loot.decode); every move leaves a receipt in the transaction’s logs (loot.receipts(tx)). A backend delivers only from a finalized transaction whose meta.err is null, once per order or reference, and only for a receipt whose data.project is its own (loot.receipts reads every project’s, and anyone can make a project): a failed transaction keeps its logs, and they can read as all-success.',
       ].join('\n');
       return { text: text + footer, ...PROGRAM_INFO };
     },

@@ -49,7 +49,7 @@ const loan = await app.loanOffer(lender, 1); // a lender's offer: { amount, repa
 await app.borrow(lender, 1, asset, { acceptRisks: true }); // only once the player saw the risks (refused without it)
 for (const c of await app.claims()) await app.claim(c);   // what this player can finish: a roll to collect, a refund,
                                           // a contest payout, a due draw, an auction to end
-await app.runSchedule('drip');            // a schedule that is due (anyone may run it); null when not yet
+await app.runSchedule('drip');            // a schedule that is due (the project's keys or who it pays); null when not yet
 await app.collectibles();                 // what the player owns: [{ asset, item, name, uri, attributes }] (`item`: its key)
 await app.balances();                     // what they hold of each of the economy's tokens
 ```

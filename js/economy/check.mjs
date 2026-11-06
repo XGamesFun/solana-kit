@@ -1014,8 +1014,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // can't be made gives back.
     const shared = slots.reduce((n, s) => n + Math.round((s.share ?? 0) * 100), 0);
     const named = outs.length > 1 && slots.some((s) => (s.from ?? []).length);
-    if (shared !== (named ? 10_000 : 0))
-      refuse('E-ODDS', `${where}.slots`, named ? `The slots of ${label(b)} name outcomes, so each says what it is worth as a share of an open's price, 100 together; these come to ${shared / 100}.` : `The slots of ${label(b)} all draw among every outcome, so every draw is worth the same: they take no share.`, named ? 'Give each slot a "share": a draw that can\'t be made gives its slot\'s worth back, so make a rare slot worth what the rare is.' : 'Leave "share" out.');
+    const zero = named && slots.some((s) => !s.share);
+    if (zero || shared !== (named ? 10_000 : 0))
+      refuse('E-ODDS', `${where}.slots`, named ? `The slots of ${label(b)} name outcomes, so each says what it is worth as a share of an open's price, more than 0 each and 100 together; these come to ${shared / 100}.` : `The slots of ${label(b)} all draw among every outcome, so every draw is worth the same: they take no share.`, named ? 'Give each slot a "share": a draw that can\'t be made gives its slot\'s worth back, so make a rare slot worth what the rare is.' : 'Leave "share" out.');
     // Every outcome is one some slot draws (BadEntries): one no slot draws would count as stock no roll can give.
     if (slots.length && !slots.some((s) => !(s.from ?? []).length)) {
       const undrawn = outs.map((_, i) => i).filter((i) => !slots.some((s) => (s.from ?? []).includes(i)));
@@ -1025,16 +1026,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // Every draw of one open fits one answer of the oracle's (PackTooLarge): a pack past it could only draw its first
     // cards, so the program refuses the box.
     if (cards > 1 && outs.length) {
-      const entries = (() => {
+      const args = (() => {
         try {
-          return boxArgs(b, m).entries;
+          return boxArgs(b, m);
         } catch {
           return null;
         }
       })();
-      if (entries && !drawsFit(entries, slots.map((s) => ({ count: s.count, only: s.from ?? [] })))) {
+      const entries = args?.entries;
+      const extras = { odds: (args?.odds ?? []).length, shares: (args?.shares ?? []).length };
+      if (entries && !drawsFit(entries, slots.map((s) => ({ count: s.count, only: s.from ?? [] })), 1, extras)) {
         let most = cards - 1;
-        while (most > 1 && !drawsFit(entries, most)) most -= 1;
+        while (most > 1 && !drawsFit(entries, most, 1, extras)) most -= 1;
         refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here), so the program refuses the box (PackTooLarge).`, 'Fewer cards an open (sell two packs instead of one), fewer outcomes, or fewer prizes in an outcome.');
       }
     }

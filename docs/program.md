@@ -90,7 +90,10 @@ project they chose to play.
 | **Deciders** | a contest verdict (any number, named at open), sent by anyone | name a side before entries close |
 | **Offer or listing maker** | their own offer or listing, alone | — the project's keys have no say over it |
 | **Auction seller** | `open_auction`, and calling off one with no bid | stop it once a bid is in |
-| **Anyone** | settle, refund, `ask_roll`, run a schedule, draw and finish a lottery, release an ended hold, claim a contest entry, end an auction, repay a loan, refresh a seat, prove a compressed NFT or traits | — |
+| **Anyone** | refund, `ask_roll`, draw and finish a lottery, release an ended hold, claim a called-off contest's entry or a loser's NFT once no winner has picks left, end an auction, repay a loan, refresh a seat, run a sealed burn, prove a compressed NFT or traits | — |
+| **Its player, the project's keys or the key its player named** | settle (`settler`, named at `openBoxIx` or the player's own `askRollIx`) | — |
+| **The winner or the project's keys** | a winner's first contest claim, for 30 days from the decision (`CLAIM_GRACE_SECONDS`); then anyone | — |
+| **The project's keys or who it pays** | run a schedule | — |
 
 The owner alone signs for a new authority or treasury, so a multisig vault, a server key or any wallet can take a role.
 The program refuses a key it can tell nobody signs for: a loot account, a token account or mint pasted as a wallet, or
@@ -207,14 +210,14 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | Boxes | `buy` (`buyIx`) | player | P | a box of one entry with nothing random, no subject (`Rolls`): `count` sales (at least 1) at the price each leaves, one `max_price` for all, each counted against `per_wallet`; price split, the entry's prizes given `draws × count` times (`buyGives`: a fixed amount of tokens once with the whole amount, any other prize once a draw, its rolls at `nonce`, `nonce + 1`, …), one instruction |
 | | `open_box` (`openBoxIx`) | player | P, held in the order | `count` opens in one purchase (more than 1 only for a box with no `subject`, `BadEntries`), each at the price the one before left: the price into the vault, an order made, the oracle asked (its accounts required: every box opened asks, one with nothing random too) |
 | | `callback_roll` | the oracle | — | draws every card of every open from one answer, sets aside what it won (at most 21 accounts; a fresh item's tables only while they fit the box's table budget) |
-| | `settle` (`settleIx`) | anyone; pays what it opens or mints | free | a part: delivers what was won from where the last part stopped up to `upto` (`settlePartEnd`; past the end, `SETTLE_LAST`, is the last part; 0 only splits the payment), `prize_accounts` of its accounts the prizes'. The last part pays the split, does the NFT's fate and closes the order |
+| | `settle` (`settleIx`) | its player, the project's keys or the key its player named; pays what it opens or mints | free | a part: delivers what was won from where the last part stopped up to `upto` (`settlePartEnd`; past the end, `SETTLE_LAST`, is the last part; 0 only splits the payment), `prize_accounts` of its accounts the prizes'. The last part pays the split, does the NFT's fate and closes the order |
 | | `refund` (`refundIx`) | anyone | free | a failed order at once, a pending one after 1,500 slots (`orderRefundSlot`); never a rolled or waiting one |
 | | `ask_roll` (`askRollIx`) | anyone, paying the oracle | free | asks for a waiting roll; again after `STALE_SLOTS` (`rollAskable`). On a box with no entry in stock only the order's player asks, in a later slot than the order's `requested_slot` (`SoldOut` otherwise) |
 | Project moves | `move_tokens` (`moveTokensIx`) | authority | J | from a pool or minted, to any `To`, fixed or a share of a pool |
 | | `collectible` (`collectibleIx`, `makeIx`) | authority | J | `Make { item, tree, attributes }` for several owners at the item's next serials (or compressed into `tree`), `Set` (or a Sheet), `Burn` (rent to its holder), `Profile` (a wallet's profile) |
 | | `roll` / `callback_random` (`rollIx`, `callbackRandomIx`) | authority / oracle | J / — | a random number for the project's own use |
 | | `stash` (`stashIx`) | owner or authority | J | NFTs into a stash (or a lottery's own), each with its weight in the draws (above 0), or out to a wallet |
-| | `run_schedule` (`runScheduleIx`) | anyone | free | every due run up to `upto` (`runsDue`), one transfer |
+| | `run_schedule` (`runScheduleIx`) | the project's keys or who it pays (a sealed burn: anyone) | free | every due run up to `upto` (`runsDue`), one transfer |
 | Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | an entry in the current round (its first purchase opens it; its address names the incarnation), naming the round's `revision` (`TermsChanged`) |
 | | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | the first ask of a due round fixes its money and moves the lottery on; asks again after `STALE_SLOTS`; after 7 days unanswered (`lotteryCancellable`) the next ask cancels the round; `skip_hooked` (the authority) leaves hooked sources out |
 | | `pull` (`pullIx`, `pullRolls`) | anyone; its payer opens accounts | free | one part (`partsOwed`, `commonOwed`): an entry's own, its places' pot parts or prizes in a run, a part owed in common; the last closes the round |
@@ -389,7 +392,7 @@ the first winning claim.
 of `sha256("prize" | n as u64 LE)`, `n` the route's `nonce` argument plus the place or index where the route says so
 (a `buy`'s `k`th roll given at `nonce + k`, `buyGives`). The sender pays the order's rent (a grant's funds, for a
 grant); the winner gets it back at settle. Anyone asks it (on a box with nothing in stock, only its player, in a later
-slot, which ends it with nothing) and anyone settles it, paying what the settle opens or mints.
+slot, which ends it with nothing) and its player, the project's keys or the key its player named settle it, paying what the settle opens or mints.
 
 ## Boxes and the shop
 
@@ -495,7 +498,7 @@ take.
 
 **Settling in parts.** An order is made at its smallest and grown at the purchase to all its box can set aside
 (`Order::space_for`, `orderBytes`), and for a box that gives items 4 bytes more for each table row a draw may carry
-(the box's table budget, for each draw of each open), so anyone settles it, in as many parts as the chain needs,
+(the box's table budget, for each draw of each open), so it settles, in as many parts as the chain needs,
 paying what each part opens or mints: each `settle` carries out the prizes from where the last part stopped
 (`Order.settled`) up to `upto`, and writes its receipt (`OrderPartSettled`) before it mints, so a log Solana cuts at
 10 KB keeps it. The first call splits the payment, its shares' accounts and their hook tail with it (`upto` 0 splits
@@ -547,7 +550,7 @@ purchase applied until the owner's next edit.
 route, not yet asked), `Asked`. Every order receipt carries `requested_slot`, naming the purchase at a reusable
 address. An order never settles or closes in its opening slot (`SameSlot`), and once asked, a roll is asked again only
 in a later slot than its last ask (`SameSlot`: never the same seed twice; `rollAskable`). A failed roll refunds at once; one that
-never arrives refunds after 1,500 slots (about 10 minutes). A rolled order is settled by anyone, never refunded
+never arrives refunds after 1,500 slots (about 10 minutes). A rolled order is settled by its player, the project's keys or the key its player named, never refunded
 (`BadOrderState`). Nothing goes back to `Waiting`.
 
 ## A roll on an NFT
@@ -584,7 +587,7 @@ at settle). Anyone asks (`ask_roll`, paying the oracle) while its box has an ent
 stock only the order's player asks, in a later slot than its `requested_slot` (`SoldOut` otherwise), so nobody else
 can land a winner's roll on an empty box; the player's own ask there ends the roll at once, with no oracle: rolled
 with nothing (settle sends an NFT it holds home as it was), or failed for its refund when its winner paid for it (an
-auction's roll lot). Anyone settles. A waiting or asked roll is never refunded; one unanswered within `STALE_SLOTS` is
+auction's roll lot). Its player, the key the player named (`settler`) or the project's keys settle. A waiting or asked roll is never refunded; one unanswered within `STALE_SLOTS` is
 asked again by anyone, and the first answer to any request rolls it. A free roll whose answer finds nothing at all in
 stock goes back to `Waiting` (not rolled): anyone asks it again after a restock, or its player ends it so. It fails at its
 ask, giving back only what it holds, if its box was edited since or its answer can't carry the box's own accounts. A
@@ -793,7 +796,7 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 - **A contest of NFTs** (`nft`, a rule): each entry stakes one NFT (not compressed); sides count NFTs and the NFTs are
   the pot. At the decision each winner's share of the losers' NFTs is fixed, `min(cap, losers ÷ winners)`, the first
   winners to enter taking one more when they don't divide evenly. A claim names the entries whose NFTs it moves by
-  their place in the list: its own back (anyone sends it), losers' picked by the winner (`WinnerPicks`), and once no
+  their place in the list: its own back, losers' picked by the winner (`WinnerPicks`), and once no
   winner has picks left, what they left to the opener (anyone). `end` leaves the rest of a winner's share to the
   opener; an NFT passed as its hold's address `["hold", nft, 0]` in place of its piece (`claimIx`'s `hold`) becomes a
   hold for whoever it goes to.
@@ -1197,7 +1200,10 @@ economy. `reference` is the project's own label, never read.
 
 **Delivering from a receipt**: only from a **finalized** transaction whose `meta.err` is null, once per order or
 reference. A transaction can fail after every instruction logged success (at the runtime's rent check at its end) and
-still carry the receipts. If a log is truncated, read the transaction again.
+still carry the receipts. Take a receipt only when its `data.project` is yours: `receipts` reads every project's, and
+anyone can make a project. Another program can log the same bytes, so a backend that needs more also checks that loot
+was the program logging it. A truncated log stays truncated when read again: go by the account instead (a settled
+order's `settled` count, or its closing).
 
 | Receipt | When |
 | --- | --- |

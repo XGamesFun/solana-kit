@@ -31,13 +31,13 @@ test('the checker refuses an outcome no slot draws (BadEntries) and a pack one a
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1], share: 50 }])), ['E-ODDS economy.boxes.pack.slots'], 'the epic is drawn by no slot');
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, share: 50 }])), [], 'a slot that names none draws among all');
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1, 2], share: 50 }])), []);
-  // Three entries of an item: one answer draws 58 (the program's `draws_fit`, `loot.drawsFit`).
-  const m = model(pack([{ count: 57 }]), { now: NOW });
-  assert.ok(loot.drawsFit(boxArgs(m.boxes[0], m).entries, 58) && !loot.drawsFit(boxArgs(m.boxes[0], m).entries, 59));
-  assert.deepEqual(refused(pack([{ count: 58 }])), []);
-  const big = check(pack([{ count: 59 }]), { now: NOW }).refusals;
+  // Three entries of an item: one answer draws 54 (the program's `draws_fit`, `loot.drawsFit`).
+  const m = model(pack([{ count: 53 }]), { now: NOW });
+  assert.ok(loot.drawsFit(boxArgs(m.boxes[0], m).entries, 54) && !loot.drawsFit(boxArgs(m.boxes[0], m).entries, 55));
+  assert.deepEqual(refused(pack([{ count: 54 }])), []);
+  const big = check(pack([{ count: 55 }]), { now: NOW }).refusals;
   assert.deepEqual(big.map((r) => `${r.code} ${r.where}`), ['E-ODDS economy.boxes.pack.slots']);
-  assert.match(big[0].message, /about 58 here.*PackTooLarge/);
+  assert.match(big[0].message, /about 54 here.*PackTooLarge/);
 });
 
 test('the checker asks what a slot that names outcomes is worth, and a pack sharing a pool counts its rereads', () => {
@@ -49,7 +49,7 @@ test('the checker asks what a slot that names outcomes is worth, and a pack shar
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 20 }, { count: 1, from: [1], share: 80 }])), []);
   assert.deepEqual(refused(pack([{ count: 3, share: 100 }])), ['E-ODDS economy.boxes.pack.slots'], 'draws among all are alike');
   const shared = Array.from({ length: 13 }, (_, i) => ({ prizes: [{ Tokens: { from: { Pool: [3] }, amount: { Fixed: [BigInt(i + 1)] } } }] }));
-  assert.ok(loot.drawsFit(shared, 7) && !loot.drawsFit(shared, 8), 'as the program counts it');
+  assert.ok(loot.drawsFit(shared, 6) && !loot.drawsFit(shared, 7), 'as the program counts it');
   assert.ok(loot.drawsFit(shared, [{ count: 3, only: [] }], 2) && !loot.drawsFit(shared, [{ count: 4, only: [] }], 2), 'by the opens');
 });
 

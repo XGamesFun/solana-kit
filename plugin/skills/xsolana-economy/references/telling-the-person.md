@@ -17,7 +17,7 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    the odds players are shown don't hold until then (`W-PRIZE-SEED`).
 4. **What going live costs.** "About 12.51 SOL on devnet, in one wallet approval: 12.5 SOL is the pond's seed, the
    rest is rent and fees."
-5. **Who does what while it runs** (`after-launch.md` has the table): what anyone can send (a draw, a schedule, an
+5. **Who does what while it runs** (`after-launch.md` has the table): what anyone can send (a draw, an
    auction's end, claims), what only they can (a contest's result, a payout, a held item, a collectible's new level)
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,
    a score): "Checking that a player really did it is up to you, on your own server: a game runs in the player's

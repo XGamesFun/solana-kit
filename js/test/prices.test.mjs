@@ -95,14 +95,14 @@ t('a rolled bundle: the roll sets each prize aside, and whoever settles pays wha
   const order = w.read('Order', orderAddress);
   assert.deepEqual(order.won, [{ Item: { item: 1, serial: 1, drawn: null } }, { Tokens: { mint: coin, amount: 40n } }]);
   w.chain.nextSlot();
-  const had = w.chain.get(w.cranker).lamports;
-  const s = w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), items: { 1: w.read('Item', pda.item(w.project, 1)) } })]);
+  const had = w.chain.get(w.authority).lamports;
+  const s = w.chain.send(w.authority, [computeUnitLimit(600_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: w.projectState(), items: { 1: w.read('Item', pda.item(w.project, 1)) } })]);
   const settled = s.receipts.find((x) => x.name === 'OrderSettled').data;
   // The receipt names what was won; what each became follows from it: the collectible at its item and serial.
   assert.deepEqual([settled.from, settled.won], [0, order.won]);
   assert.ok(w.chain.get(pda.itemAsset(pda.item(w.project, 1), 1)), 'the collectible is minted');
   assert.equal(w.balance(w.player, coin), 40n);
-  const spent = had - w.chain.get(w.cranker).lamports;
+  const spent = had - w.chain.get(w.authority).lamports;
   assert.ok(spent > 1_000_000n && spent < loot.settleRent(box), `the settler paid the collectible's rent and the coin's account: ${spent}`);
 });
 

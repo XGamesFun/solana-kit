@@ -34,7 +34,7 @@ test('a box rolls on the NFT a player brings: held until settled, then a level u
   assert.deepEqual([order.subject, order.held, order.status], [asset, true, 'Rolled']);
   assert.equal(parseCoreAsset(w.chain.get(asset).data).owner, w.project, 'the project holds it until the roll is settled');
   w.chain.nextSlot();
-  w.chain.send(w.cranker, [computeUnitLimit(400_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: g, subject: { collection: w.collection } })]);
+  w.chain.send(w.authority, [computeUnitLimit(400_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: g, subject: { collection: w.collection } })]);
   if (order.fate?.then === 'Burn') assert.ok(gone(w, asset));
   else assert.deepEqual([parseCoreAsset(w.chain.get(asset).data).owner, levelOf(w, asset)], [w.player, '4']);
 });
@@ -68,7 +68,7 @@ test('a mission rolls on the NFT leaving it: the roll waits for anyone to ask, t
   order = w.read('Order', orderAddress);
   assert.equal(order.status, 'Rolled', 'the oracle answered');
   w.chain.nextSlot();
-  w.chain.send(w.cranker, [computeUnitLimit(400_000), loot.settleIx({ signer: w.cranker, orderAddress, order, projectState: w.projectState(), subject: { collection: w.collection } })]);
+  w.chain.send(w.authority, [computeUnitLimit(400_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: w.projectState(), subject: { collection: w.collection } })]);
   if (order.fate?.then === 'Burn') assert.ok(gone(w, asset));
   else assert.equal(levelOf(w, asset), '2');
 });

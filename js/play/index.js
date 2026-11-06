@@ -631,11 +631,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const funds = [];
     const burners = [];
     for (const [orderAddress, order] of waiting) {
-      asks.push(...(await asksFor(wallet.address, orderAddress, order)));
       const box = await read('LootBox', order.loot_box);
       // Each order its own key, named by it (it can be made again after a reload, `recover`): its settle's fee, a spare
-      // for its parts and its give-back, and what its settle may open or mint.
+      // for its parts and its give-back, and what its settle may open or mint. The ask names it as the order's settler.
       const { key, fund } = await keyFor(SIGNATURE_FEE * 3n + loot.settleRent(box, Number(order.opens ?? 1), await itemsOf(box)), await jobKey(orderAddress));
+      asks.push(...(await asksFor(wallet.address, orderAddress, order, key.address)));
       funds.push(fund);
       burners.push(key);
     }
@@ -652,7 +652,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   /**
    * Waits for an order's roll (the oracle answers a moment after the open), then settles it. With `burner` (the
    * throwaway key the open funded), the burner signs and pays the settle, and gives the rest back: no wallet prompt.
-   * Anyone may settle a rolled order: when someone did first, the burner only gives its lamports back. `putBack`: NFTs
+   * The order names it (`settler`), so it may settle; when the player or the project did first, the burner only gives its lamports back. `putBack`: NFTs
    * won that the player puts back into their stash in place of taking them (one whose collection now refuses to let it
    * move); the player signs that settle.
    */
@@ -768,7 +768,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     // (`SETTLE_LAST`) with the NFT rolled on. The burner sends each, paying what each mints with what the open funded it
     // with; the player's wallet, a part it can't.
     const signatures = [];
-    const by = burner && !putBack.length ? burner.address : wallet.address;
+    // A key the order doesn't name can't settle it (`Order::settler`): then the player signs.
+    const by = burner && !putBack.length && order.settler === burner.address ? burner.address : wallet.address;
     const fits = async (instructions) => Boolean(compileFitting({ payer: by, blockhash: NOBODY, instructions, tables: await standing() })) && transactionLocks(by, instructions) <= 64;
     const part = async (end) => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(by, end)).ix];
     const sendPart = async (end) => signatures.push(by === wallet.address ? await send(await part(end)) : await sendAs(burner, await part(end)));
@@ -794,7 +795,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     // player's own choice: they sign.
     let signature = null;
     let emptied = false;
-    const byBurner = burner && !putBack.length ? await settleBy(burner.address) : null;
+    const byBurner = burner && !putBack.length && order.settler === burner.address ? await settleBy(burner.address) : null;
     const alone = byBurner && !byBurner.before.length ? [...budget, byBurner.ix] : null;
     const legacy = (instructions) => Boolean(compileFitting({ payer: burner.address, blockhash: NOBODY, instructions }));
     const tried = alone && legacy(alone) ? await dryRun(burner.address, alone, [burner.address]) : null;
@@ -863,13 +864,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   /** The instructions that ask the oracle for the roll of `order` (at `orderAddress`), `payer` paying it. Each prize
    * mint's token program is read from the mint when the app wasn't given it (`programs`): the ask opens the project's
    * vault of it. */
-  async function asksFor(payer, orderAddress, order) {
+  async function asksFor(payer, orderAddress, order, settler) {
     const box = await read('LootBox', order.loot_box);
     const poolMints = await poolMintsOf(box);
     const mints = [...Object.values(poolMints), ...box.entries.flatMap((e) => e.prizes.map((p) => p.Tokens?.from.Mint?.[0]))].filter((x) => x && !programs[x]);
     const owners = mints.length ? await client.accounts(mints) : [];
     const known = { ...programs, ...Object.fromEntries(mints.map((x, i) => [x, owners[i]?.owner ?? TOKEN_PROGRAM])) };
-    return loot.askRollIx({ payer, orderAddress, order, box, poolMints, items: await itemsOf(box), programs: known });
+    return loot.askRollIx({ payer, orderAddress, order, box, settler, poolMints, items: await itemsOf(box), programs: known });
   }
 
   /** Asks the oracle for a roll a mission, a recipe or a prize made (`Waiting`): the player pays the oracle. */
@@ -990,7 +991,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const orders = [];
     for (let left = count, k = 0n; left > 0; left -= each, k++) {
       const n = Math.min(each, left);
-      orders.push({ nonce: nonce + k, n, ix: loot.openBoxIx({ player: wallet.address, project, box, nonce: nonce + k, maxPrice: (bound / BigInt(count)) * BigInt(n), count: n, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs }) });
+      // Its key, named by the order as its settler (made again after a reload: `recover`), when the settle needs no prompt.
+      const settlerKey = oneSignature ? ((await jobKey(loot.pda.order(project, wallet.address, nonce + k))) ?? (await freshKey())) : null;
+      orders.push({ nonce: nonce + k, n, settlerKey, ix: loot.openBoxIx({ settler: settlerKey?.address, player: wallet.address, project, box, nonce: nonce + k, maxPrice: (bound / BigInt(count)) * BigInt(n), count: n, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs }) });
     }
     const before = [...proving, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint))];
     // (A compressed NFT's proof brings its own compute limit, the transaction's only one.)
@@ -1018,8 +1021,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const burners = [];
     const after = [];
     if (oneSignature) {
-      for (const [k, o] of orders.entries()) {
-        const { key, fund } = await keyFor(SIGNATURE_FEE * BigInt(loot.settleParts(box, o.n) + 1) + loot.settleRent(box, o.n, items), await jobKey(addresses[k]));
+      for (const o of orders) {
+        const { key, fund } = await keyFor(SIGNATURE_FEE * BigInt(loot.settleParts(box, o.n) + 1) + loot.settleRent(box, o.n, items), o.settlerKey);
         burners.push(key);
         after.push(fund);
       }
