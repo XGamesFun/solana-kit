@@ -1142,6 +1142,25 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     return [computeUnitLimit(600_000), loot.drawLotteryIx({ payer: signer, project, id: l.id, lottery, round, roundAddress: key, poolMints, extra })];
   }
 
+  /**
+   * When a draw of round `r` (at `key`) would cancel it (an open round short of its least tickets; a waiting one past
+   * the timeout), the pulls of `who`'s own parts as the cancelled round owes them (a few entries' worth), to go right
+   * after the draw in its transaction; none otherwise. The round's close rides on them when they are all it owes.
+   */
+  async function cancelPulls(key, r, who) {
+    const short = r.status === 'Open' && BigInt(r.sold) < BigInt(r.terms.min_sold ?? 0) && BigInt(now()) >= BigInt(r.terms.draws_at);
+    if (!short && !loot.lotteryCancellable(r, await slotNow())) return [];
+    // As the program cancels it: every entry's own part owed, and what the ask moved in owed back.
+    const potOwed = BigInt(r.pot_arrived) > BigInt(r.to_pot) ? BigInt(r.pot_arrived) - BigInt(r.to_pot) : 0n;
+    const pools = r.prizes.filter((p) => !p.minted && BigInt(p.arrived) > 0n).length;
+    const cancelled = { ...r, status: 'Cancelled', pot_owed: potOwed, owed: Number(r.owns) + (potOwed > 0n ? 1 : 0) + pools };
+    const mine = r.entries.flatMap((e, i) => (e.buyer === who && loot.partsOwed(cancelled, i).length ? [{ entry: i, parts: loot.partsOwed(cancelled, i) }] : [])).slice(0, 4);
+    const settles = mine.reduce((n, { entry, parts }) => n + parts.reduce((m, p) => m + pullSettles(cancelled, entry, p), 0), 0);
+    const out = [];
+    for (const [k, { entry, parts }] of mine.entries()) out.push(...(await pulls(key, cancelled, entry, parts, who, { closes: settles >= cancelled.owed && k === mine.length - 1 })).instructions);
+    return out;
+  }
+
   /** The nonce a pull of entry `i` of the round at `key` names: a place's roll is made at `prizeRollNonce(nonce + place)`. */
   const pullNonce = (key, i) => loot.prizeNonce(key, BigInt(i));
 
@@ -1370,7 +1389,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (listing && listing.key !== undefined && listing.key !== l.key) throw new Error(`That listing is “${listing.key}”, not “${l.key}”.`);
       const given = maxPrice ?? listing?.priceUnits;
       if (given === undefined || given === null) throw new Error(`Say the terms the player was shown for “${name}”: pass the lottery lotteries() showed (listing), or maxPrice (a ticket's most, in base units). The price read now is never the bound.`);
-      const { lottery: current, current: round } = await roundOf(l);
+      const { lottery: onChain, current: openRound } = await roundOf(l);
+      // A round whose draw is due takes no more tickets: its draw goes first, in this same transaction (the buyer pays
+      // the oracle's fee for it), and moves the lottery on, so this purchase is the next round's first. A lottery that
+      // draws once has no next round.
+      const due = openRound?.status === 'Open' && BigInt(now()) >= BigInt(openRound.terms.draws_at) ? openRound : null;
+      if (due && Number(onChain.every) === 0) throw new Error(`The one draw of “${l.name}” is due: it takes no more tickets. Reveal it (claims() lists it).`);
+      const draw = due ? (await drawStep(l, onChain, null, due, wallet.address)).filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM) : [];
+      const current = due ? { ...onChain, round: onChain.round + 1 } : onChain;
+      const round = due ? null : openRound;
       // The terms signed are those shown: the round's own copy once someone bought into it, the lottery's before. A
       // lottery written again or changed since is refused here, and by the program (TermsChanged) if it changes after
       // this read.
@@ -1402,7 +1429,6 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const extra = await hookTail([mint]);
       const ix = loot.buyTicketsIx({ player: wallet.address, project, id: l.id, lottery, round, mint, count: BigInt(count), shown, listProof, chosenRecipient, chosen: choosesHolder ? chosenRecipient : null, nft, holders, treasury: (await projectNow()).treasury, programs, extra });
       // An overdue round nobody bought into moves to its next date by itself when a ticket is bought.
-      if (round?.status === 'Open' && BigInt(now()) >= BigInt(round.terms.draws_at)) throw new Error('This round’s draw is due: reveal it first (claims() lists it), then buy for the next one.');
       // A ticket paid with an NFT: its way out must land too, the NFT handed on once the round is drawn or back to its
       // buyer when it is cancelled, each sized before the NFT goes in.
       if (nft) {
@@ -1415,7 +1441,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
             throw new Error(`Not bought: this NFT couldn't come out of “${l.name}” again (${status === 'Drawn' ? 'handed on once the round is drawn' : 'back to you if the round is cancelled'}): that transaction would lock more accounts than one can (${transactionLocks(wallet.address, exit, { asV0: true })} with its lookup table; at most 64), so it would stay with the lottery.`);
         }
       }
-      return send([...before, ...withSolWrap(wallet.address, mint, BigInt(terms.price) * BigInt(count), [ix])]);
+      const buy = [...before, ...withSolWrap(wallet.address, mint, BigInt(terms.price) * BigInt(count), [ix])];
+      return send(draw.length ? [computeUnitLimit(800_000), ...draw, ...buy.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)] : buy);
     },
 
     /**
@@ -2415,11 +2442,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         // A lottery the page names but nobody has written yet (a raffle still to open) has nothing to finish.
         if (!(await client.account(loot.pda.lottery(project, l.id)))) continue;
         const { current, rounds } = await roundOf(l);
-        if (current?.status === 'Open' && time >= BigInt(current.terms.draws_at)) out.push({ kind: 'reveal', key: l.key, says: `The draw of “${l.name}” is due: reveal the winners.` });
+        const bought = (r) => r.entries.some((e) => e.buyer === me);
+        if (current?.status === 'Open' && time >= BigInt(current.terms.draws_at)) {
+          const short = BigInt(current.sold) < BigInt(current.terms.min_sold ?? 0);
+          out.push({ kind: 'reveal', key: l.key, says: short ? `“${l.name}” sold fewer tickets than it needs: call it off${bought(current) ? ' and take your ticket payment back, in one step' : ''}.` : `The draw of “${l.name}” is due: reveal the winners.` });
+        }
         for (const { address: round, round: r } of rounds) {
           // The ask moved the lottery on: a round waiting for the oracle is an older one, asked again by its address,
           // and after the timeout the next ask cancels it.
-          if (loot.lotteryCancellable(r, slot)) out.push({ kind: 'cancel-draw', key: l.key, round, says: `The oracle never answered the draw of “${l.name}”: make ticket payments refundable.` });
+          if (loot.lotteryCancellable(r, slot)) out.push({ kind: 'cancel-draw', key: l.key, round, says: `The oracle never answered the draw of “${l.name}”: call it off${bought(r) ? ' and take your ticket payment back, in one step' : ', so every ticket is refunded'}.` });
           else if (loot.lotteryDrawStuck(r, slot)) out.push({ kind: 'reveal', key: l.key, round, says: `The oracle never answered the draw of “${l.name}”: ask it again.` });
           if (r.status !== 'Drawn' && r.status !== 'Cancelled') continue;
           // What this wallet is owed: a refund, its NFT ticket, its places' parts of the pot and their prizes.
@@ -2547,6 +2578,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // The ask: the current round's once due, or an older round's again (after the timeout, it cancels the round).
       if (c.kind === 'reveal' || c.kind === 'cancel-draw') {
         const steps = await drawStep(l, lottery, c.round ?? null, r, me);
+        // A draw that cancels the round (short of its least tickets, or the oracle never answered by the timeout)
+        // refunds in the same transaction: this wallet's own parts are pulled right after it.
+        const refunds = r ? await cancelPulls(key, r, me) : [];
+        if (refunds.length) {
+          const all = [computeUnitLimit(1_400_000), ...[...steps, ...refunds].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)];
+          if ((await dryRun(me, all)).ok) return build ? all : send(all);
+        }
         return build ? steps : send(steps);
       }
       if (!r) return null;
