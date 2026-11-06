@@ -33,7 +33,7 @@ import * as loot from '../client/index.js';
 /** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
 const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 /** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
-const BATCHED = new Set(['contest', 'release', 'lookup-table', ...LOTTERY_STEPS]);
+const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...LOTTERY_STEPS]);
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
 const CHAIN = 'solana:devnet';
@@ -2081,7 +2081,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const poolMint = from.Pool ? encodeBase58((await client.account(loot.pda.pool(project, from.Pool[0]))).data.subarray(0, 32)) : null;
       holders ??= await holdersOf([{ to: schedule.action.to }]);
       const treasury = (await projectNow()).treasury;
-      return send([loot.runScheduleIx({ payer: wallet.address, project, id: sc.id, schedule, poolMint, holders, programs, treasury, upto: Number(schedule.runs) + due })]);
+      // A backlog of a share's runs is a step a run (about 150 CU each): room for the longest the program takes a call.
+      return send([computeUnitLimit(1_400_000), loot.runScheduleIx({ payer: wallet.address, project, id: sc.id, schedule, poolMint, holders, programs, treasury, upto: Number(schedule.runs) + due })]);
     },
 
     // ---------------------------------------------------------------- listings
@@ -2431,12 +2432,30 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         // is the lender's once due.
         if (!hold.debt && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: hold.player === project ? 'An NFT owed to the treasury: send it there.' : 'Your collectible back: its hold is over.' });
       }
+      // A loan this wallet made that is overdue and unpaid: its NFT is the lender's to take.
+      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project)])) {
+        const hold = loot.decode('Hold', account.data);
+        if (hold.debt?.lender === me && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: 'A loan you made is overdue and unpaid: take its NFT.' });
+      }
+      // A compressed NFT's proof record this wallet paid for and left open: closing it brings its rent back.
+      for (const { account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Proven')])) {
+        const leaf = (() => {
+          try {
+            return loot.decodeProven(account.data);
+          } catch {
+            return null;
+          }
+        })();
+        if (leaf?.payer === me) out.push({ kind: 'close-leaf', asset: leaf.asset, tree: leaf.tree, says: 'A compressed NFT’s proof record you paid for: close it, and its rent comes back.' });
+      }
       const auctions = spec.auctions ?? [];
       const found = await client.accounts(auctions.map((a) => auctionAt(a)));
       auctions.forEach((a, i) => {
         const x = found[i] && loot.decode('Auction', found[i].data);
-        if (!x || x.high_bidder !== me || time < loot.auctionEnds(x)) return;
-        out.push({ kind: 'auction', key: a.key, says: `You won “${a.name}”: take it.` });
+        if (!x || time < loot.auctionEnds(x)) return;
+        if (x.high_bidder === me) out.push({ kind: 'auction', key: a.key, says: `You won “${a.name}”: take it.` });
+        // The seller's own auction, over: ending it pays them (or brings an unsold lot home).
+        else if (x.seller === me) out.push({ kind: 'auction', key: a.key, says: BigInt(x.high) > 0n ? `Your auction “${a.name}” is over: end it, and the winning bid is paid to you.` : `Your auction “${a.name}” ended with no bid: take your lot back.` });
       });
       for (const l of spec.lotteries ?? []) {
         // A lottery the page names but nobody has written yet (a raffle still to open) has nothing to finish.
@@ -2557,9 +2576,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (c.kind === 'release') {
         const hold = await read('Hold', c.hold);
         const { before, hasAuthority: _, ...nft } = await nftOf(c.asset, me, { to: me });
-        return send([...before, loot.releaseIx({ signer: me, project, asset: c.asset, ...nft, collection: (await collectionOf(c.asset)) ?? MPL_CORE, hold, address: c.hold, treasury: g.treasury })]);
+        // An overdue loan's NFT goes to its lender.
+        return send([...before, loot.releaseIx({ signer: me, project, asset: c.asset, ...nft, collection: (await collectionOf(c.asset)) ?? MPL_CORE, hold, address: c.hold, treasury: g.treasury, ...(hold.debt ? { to: hold.debt.lender } : {}) })]);
       }
       if (c.kind === 'auction') return (await this.endAuction(c.key)).signature;
+      if (c.kind === 'close-leaf') return send([loot.closeLeafIx({ asset: c.asset, tree: c.tree, payer: me })]);
       if (c.kind === 'vest') return this.runSchedule(c.key);
       if (c.kind === 'unlist') return this.unlist(c.asset);
       if (c.kind === 'lookup-table') {
