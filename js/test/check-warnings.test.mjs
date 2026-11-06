@@ -122,7 +122,7 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
   const minting = Uint8Array.from(data);
   minting.set([1, 0, 0, 0], 0);
   assert.equal(loot.isNftMint(mint, minting), false, 'a mint authority that is not its edition');
-  const listing = { maker: WALLET, asset: WALLET, mint: WALLET, deal: { Rent: { price: 1n, lasts: 60, max_periods: 1 } }, shares: [] };
+  const listing = { project: pda.platform(), maker: WALLET, asset: WALLET, mint: WALLET, user: WALLET, until: 0n, stopped: false, deal: { Rent: { price: 1n, lasts: 60, max_periods: 1 } }, shares: [] };
   const compressed = { id: WALLET, tree: pda.platform(), proof: [pda.identity()], owner: WALLET, delegate: WALLET, collection: null };
   const ix = loot.takeListingIx({ taker: WALLET, project: pda.platform(), listing, compressed });
   const keys = ix.keys.map((k) => k.pubkey);

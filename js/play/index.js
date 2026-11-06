@@ -305,6 +305,14 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
   };
   /** The same for one the project holds: staked in escrow. */
   const escrowedIn = async (asset) => ((await ownerOf(asset).catch(() => null)) === project ? seatedIn(asset, ['escrow']) : null);
+  /** The same for one the project locks in the player's wallet: staked in a farm that freezes (a soulbound Core asset
+   * carries no lock to tell it is staked, so it goes alone). */
+  const lockedIn = async (asset) => {
+    const seated = await seatedIn(asset, ['freeze']);
+    if (!seated) return null;
+    const account = await client.account(asset);
+    return account?.owner === MPL_CORE && parseCoreAsset(account.data).soulbound ? null : seated;
+  };
   /** The player's collectibles of this project (in any of its collections), each with the item it is (its "item_id" attribute). */
   async function owned(owner = wallet?.address) {
     const found = (await Promise.all(collections.map((c) => client.programAccounts(MPL_CORE, ownedAssetFilters(owner, c))))).flat();
@@ -313,6 +321,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const itemId = a.attributes?.item_id !== undefined ? Number(a.attributes.item_id) : null;
       return { asset: pubkey, ...a, itemId, item: itemId === null ? null : itemKeyOf(itemId) };
     });
+  }
+  /** A token seat's refresh (`seat` decoded), with its booster's accounts (a compressed one proven first), to go first in
+   * a stake or a compound's transaction (`loot.stakeRefreshFirst`). */
+  async function refreshOf(f, farm, seat) {
+    const { before, ...nft } = seat.asset !== NOBODY ? await nftOf(seat.asset) : { before: [] };
+    return [...before, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by: seat.player, seat, ...nft })];
   }
   /**
    * For a gate (the program's Gate: a Rule an NFT must pass, or a list of wallets), one of the player's NFTs that
@@ -660,6 +674,10 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     while (['Pending', 'Asked'].includes(order?.status) && Date.now() - started < timeoutMs) {
       await sleep(1500);
       order = await current();
+    }
+    // A free roll whose answer found nothing at all in stock waits again: for a restock, or for its player to end it.
+    if (order?.status === 'Waiting') {
+      throw new Error('The box this rolls had nothing left to give when the roll landed, so the roll waits: collect it again once the box is restocked. Collected while the box is still empty, the player\'s own ask ends it with nothing.');
     }
     if (!order) {
       if (burner && !keepBurner) await emptyKey(burner);
@@ -1257,7 +1275,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       return send([...before, loot.refundIx({ signer: wallet.address, orderAddress, order, subject, programs })]);
     },
 
-    /** Asks the oracle for a roll a mission, a recipe or a prize made (anyone may; the asker pays the oracle). */
+    /** Asks the oracle for a roll a mission, a recipe or a prize made (anyone may; the asker pays the oracle). On a box
+     * with nothing in stock only the order's player may ask, a slot after it was made or last asked, and that ends the
+     * roll there with nothing, no oracle (a lot its winner paid for fails, for its refund). */
     askRoll: (orderAddress) => askRoll(orderAddress),
 
     /**
@@ -1426,13 +1446,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       }
       const token = await farmTokens([mint], [], { extra, transfers });
       const ix = loot.stakeTokensIx({ player: wallet.address, project, id: f.id, farm, amount: value, tier, shown, ...token });
-      // A new tier on a seat with a booster that grows: its growth so far is written first, in the same transaction.
-      const seat = farm.growth.length ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address)) : null;
-      const before = [];
-      if (seat && seat.tier !== tier && seat.asset !== NOBODY) {
-        const { before: proof, ...nft } = await nftOf(seat.asset);
-        before.push(...proof, loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by: wallet.address, seat, ...nft }));
-      }
+      // A seat with a booster on (its boost is read again), or one whose growth the stake changes, is refreshed first, in
+      // the same transaction.
+      const before = loot.stakeRefreshFirst(farm, mine, { tier, now: await chainNow() }) ? await refreshOf(f, farm, mine) : [];
       return send([...before, ...withSolWrap(wallet.address, mint, value, [ix])]);
     },
 
@@ -1559,7 +1575,10 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
           before = nft.compressed ? nft.before : [];
         }
       }
-      return send([...before, ...token.before, loot.harvestIx({ player: wallet.address, project, id: f.id, farm, by, held, tree, compound, ...token })]);
+      // A compound stakes more: a seat with a booster on, or whose growth reads the amount, is refreshed first.
+      const seat = compound ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by)) : null;
+      const first = loot.stakeRefreshFirst(farm, seat, { compound: true }) ? await refreshOf(f, farm, seat) : [];
+      return send([...before, ...token.before, ...first, loot.harvestIx({ player: wallet.address, project, id: f.id, farm, by, held, tree, compound, ...token })]);
     },
 
     /**
@@ -1682,6 +1701,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const keptAt = new Set(recipe.inputs.flatMap((input, i) => (input.Use ? [at(i)] : [])));
       // One a `staked` line takes: on its seat in the farm the line names, escrowed or frozen there.
       const stakedAt = new Map(recipe.inputs.flatMap((input, i) => (input.Staked ? [[at(i), input.Staked.farm]] : [])));
+      // The places a raise lowers a number on.
+      const lowered = new Set((recipe.raises ?? []).filter((raise) => BigInt(raise.shift.by) < 0n).map((raise) => Number(raise.place)));
       const handed = await Promise.all(assets.map(async (nft, i) => {
         if (stakedAt.has(i) && typeof nft === 'string') {
           const farm = stakedAt.get(i);
@@ -1691,17 +1712,20 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
           }
           return { asset: nft, farm };
         }
-        if (keptAt.has(i) && typeof nft === 'string') return (await escrowedIn(nft)) ?? nft;
+        if (keptAt.has(i) && typeof nft === 'string') return (await escrowedIn(nft)) ?? (await lockedIn(nft)) ?? nft;
         if (tradedAt.has(i) && typeof nft === 'string') {
           const { before, ...kind } = await nftOf(nft);
           proving.push(...before);
           return { asset: nft, ...kind };
         }
         if (!shownAt.has(i) || typeof nft !== 'string') return nft;
+        // Shown on a seat of a farm that freezes, with a raise lowering a number on it: its seat and farm go with it.
+        const seated = lowered.has(i) ? await lockedIn(nft) : null;
+        const on = seated ? { farm: seated.farm } : {};
         const account = await client.account(nft);
-        if (account?.owner !== MPL_CORE) return { mint: nft, owner: wallet.address };
+        if (account?.owner !== MPL_CORE) return { mint: nft, owner: wallet.address, ...on };
         const theirs = await collectionOf(nft);
-        return ours(theirs) ? nft : { asset: nft, collection: theirs };
+        return ours(theirs) ? (seated ? { asset: nft, ...on } : nft) : { asset: nft, collection: theirs, ...on };
       }));
       // A recipe that rolls makes its roll in an order of the player's, which `collect` then finishes.
       const rolls = recipe.outputs.some((o) => o.RollOn || o.Prize?.[0]?.Roll);
@@ -2508,7 +2532,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       }
       if (!LOTTERY_STEPS.has(c.kind)) throw new Error(`Nothing to do for a claim of kind ${c.kind}.`);
       const l = part('lotteries', c.key);
-      const lottery = await read('Lottery', loot.pda.lottery(project, l.id));
+      // An older round, named by its address, needs no lottery: one closed since never strands it.
+      const lottery = c.round ? await readMaybe('Lottery', loot.pda.lottery(project, l.id)) : await read('Lottery', loot.pda.lottery(project, l.id));
       const key = c.round ?? loot.currentRound(loot.pda.lottery(project, l.id), lottery);
       const found = await client.account(key);
       const r = found?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found.data) : null;

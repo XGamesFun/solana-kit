@@ -42,8 +42,10 @@ t('a listing sells an NFT at its price, and rents another by the period to one r
   const renter = w.who();
   w.fund(renter, w.mint, 10n * PRICE);
   w.chain.send(renter, [loot.takeListingIx({ taker: renter, project: w.project, listing, periods: 3 })]);
+  const shown = listing;
   listing = w.read('Listing', pda.listing(w.project, cabin));
   assert.equal(loot.renterOf(listing, w.chain.now()), renter, 'one account read names the renter');
+  assert.deepEqual(loot.listingTerms(w.chain.get(pda.listing(w.project, cabin)).data), loot.listingTerms(shown), 'a rental changes no terms: its renter and its end are left out');
   assert.equal(w.balance(renter), 7n * PRICE, 'three periods paid');
   const other = w.who();
   w.fund(other, w.mint, 10n * PRICE);

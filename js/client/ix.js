@@ -16,7 +16,7 @@
 // Values are the IDL's own shapes (`chain/borsh.js`): addresses base58 strings, u64/u128/i64 bigints (or numbers),
 // enums 'Variant', { Variant: [values] } or { Variant: { field: value } }, structs with snake_case fields.
 import { addressBytes, encodeBase58, NO_ADDRESS } from '../chain/base58.js';
-import { encodeBorsh, encodeInstruction } from '../chain/borsh.js';
+import { encodeAccount, encodeInstruction } from '../chain/borsh.js';
 import { compareBytes, concat, intLE, readUintLE, toBigInt, uintLE, utf8 } from '../chain/bytes.js';
 import { addressWithSeed, ASSOCIATED_TOKEN_PROGRAM, findProgramAddress, METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { allocateWithSeedIx, createAccountWithSeedIx, initializeAccount3Ix, MINT_BYTES, TOKEN_ACCOUNT_BYTES } from '../chain/token.js';
@@ -24,7 +24,7 @@ import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '
 import { sha256 } from '../chain/sha256.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import IDL from './idl/loot.js';
-import { chosenAtPurchase, CLAIMED, ENDED, idleRound, nftSlot, ownStash, paymentMint, placesPulled, prizePlacesOwed, roundFinished, roundWinners, shareOf, tokenRun } from './accounts.js';
+import { chosenAtPurchase, CLAIMED, decode, ENDED, idleRound, nftSlot, ownStash, paymentMint, placesPulled, prizePlacesOwed, roundFinished, roundWinners, shareOf, tokenRun } from './accounts.js';
 import { stream, TAG, weighted } from './random.js';
 import { tableBudget } from './sizes.js';
 import { ata, BUBBLEGUM_PROGRAM, COMPRESSION_PROGRAM, LOOT_PROGRAM, MPL_CORE_PROGRAM, NOOP_PROGRAM, pda, vault, VRF_QUEUE } from './pda.js';
@@ -1144,7 +1144,10 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
  * project's vault for each prize mint when it is not there (idempotent; the program refuses the ask without them,
  * since tokens won wait there), then the ask. A box with nothing in stock is refused (`SoldOut`) unless the order's own
  * player asks in a later slot than the order was made or last asked in: a route that makes a roll and asks for it in
- * the same transaction fails whole on an empty box, and the player keeps what the route took.
+ * the same transaction fails whole on an empty box, and the player keeps what the route took. The player's own ask on
+ * an empty box ends the roll there, with no oracle: rolled with nothing (an NFT it holds goes home as it was), or failed
+ * for its refund when its winner paid for it (an auction's roll lot). An answer that finds nothing at all in stock puts
+ * a free roll back to waiting (`Waiting`), for a restock or for its player to end it so.
  */
 export function askRollIx({ payer, orderAddress, order, box, poolMints, items = {}, programs }) {
   poolMints = boxPoolMints(box, poolMints);
@@ -1411,19 +1414,20 @@ export function buyTicketsIx({ player, project, id, lottery, round = null, mint,
  * Anyone asks for the draw of a lottery's round once it is due (`lottery` decoded). `round`: the decoded record of the
  * round asked for (null when nobody bought into the current one: it moves on, or a lottery that draws once ends, with
  * no ask), and `roundAddress` its address when it is not the current round's (an older round still waiting for its
- * answer: asked again after `STALE_SLOTS`, or after the timeout cancelled; without `round`, the current round's, with the
- * lottery's terms). A round's first ask fixes its money: it takes
+ * answer: asked again after `STALE_SLOTS`, or after the timeout cancelled, with no lottery account, so `lottery` may be
+ * null then; without `round`, the current round's, with the lottery's terms). A round's first ask fixes its money: it takes
  * the lottery's pot, its mint and the round's account of it, then each run of token prizes in place order, its mint and
  * for a pool, the pool and the round's account of the mint (`poolMints`: a pool's index to its mint). With `skipHooked`
  * (the project's authority only) a hooked pool or pot gives the round nothing. `extra`: hook accounts.
  */
 export function drawLotteryIx({ payer, project, id, lottery, round = null, roundAddress = null, skipHooked = false, poolMints = {}, extra = [] }) {
-  const address = pda.lottery(project, id);
+  const address = id === undefined || id === null ? null : pda.lottery(project, id);
   const key = roundAddress ?? currentRound(address, lottery);
   const rest = [];
   // A round with no record moves on and a round asked before is asked again, reading none of these: they are passed
   // unless the round is known to have been asked.
-  if (!round || round.status === 'Open') {
+  const current = !round || round.status === 'Open';
+  if (current) {
     const { terms } = round ?? lottery;
     rest.push(meta(pda.pot(address), false, true), meta(terms.mint, false, false), meta(pda.roundTokens(key, terms.mint), false, true));
     for (const place of terms.places) {
@@ -1436,7 +1440,9 @@ export function drawLotteryIx({ payer, project, id, lottery, round = null, round
       }
     }
   }
-  return lootIx('draw_lottery', { skip_hooked: skipHooked }, { payer, project, lottery: address, round: key }, { remaining: [...rest, ...tailOf(extra)] });
+  // The lottery goes with its current round only: a round whose draw waits is asked again or cancelled without it, so a
+  // lottery closed since never strands it.
+  return lootIx('draw_lottery', { skip_hooked: skipHooked }, { payer, project, lottery: current ? address : null, round: key }, { remaining: [...rest, ...tailOf(extra)] });
 }
 
 /** The oracle's answer to a round's draw (for a local simulation): the round's record is its only account. */
@@ -1677,9 +1683,9 @@ function tokenSeat({ player, project, id, farm, programs, paid = false }) {
 }
 
 /**
- * `player` stakes `amount` at lock tier `tier`. `farm` is decoded; `extra` carries token hook/memo accounts. A new tier
- * on a seat with a booster, in a farm with growth, needs the booster's growth written first: put a `refreshSeatIx` of
- * the seat before it, in the same transaction.
+ * `player` stakes `amount` at lock tier `tier`. `farm` is decoded; `extra` carries token hook/memo accounts. A seat with
+ * a booster on, or one whose growth the stake changes, needs a `refreshSeatIx` of it first, in the same transaction
+ * (`stakeRefreshFirst`).
  */
 export const stakeTokensIx = ({ player, project, id, farm, amount, tier = 0, programs, shown, extra = [] }) =>
   lootIx('stake_tokens', { amount, tier }, tokenSeat({ player, project, id, farm, programs }), { remaining: [...shownAccounts(project, shown), ...tailOf(extra)] });
@@ -1706,6 +1712,28 @@ export const refreshFirst = (farm, seat, amount, forfeit = false) =>
     const least = BigInt(g.at_least ?? 0) > 0n ? BigInt(g.at_least) : 1n;
     return BigInt(seat.amount) >= least && BigInt(seat.amount) - BigInt(amount) < least;
   });
+
+/**
+ * Whether a stake of tokens at `tier` in a token seat (decoded `seat`; null for a new one), or with `compound` a
+ * compound of what it is owed, needs a `refreshSeatIx` of it first, in the same transaction (`RefreshFirst`), at `now`
+ * (Unix seconds, the chain's clock): a seat with a booster on (its boost is read again there, so a top-up never stakes
+ * more at a boost its booster no longer gives), or a seat that grows (a booster's growth, or its player's profile's)
+ * when the stake changes how: a new tier, a farm whose growth reads the amount, a seat past its term; a compound when
+ * that growth reads the amount.
+ * @param {any} farm
+ * @param {any} seat
+ * @param {{ tier?: number, now?: bigint | number, compound?: boolean }} [options]
+ */
+export function stakeRefreshFirst(farm, seat, { tier = seat?.tier, now, compound = false } = {}) {
+  if (!seat) return false;
+  const growth = farm.growth ?? [];
+  const booster = seat.asset !== undefined && seat.asset !== NO_ADDRESS;
+  const grows = BigInt(seat.amount) > 0n && growth.some((g) => g.profile || booster);
+  const amountGrows = growth.some((g) => g.profile || BigInt(g.at_least ?? 0) > 0n);
+  if (compound) return BigInt(seat.amount) > 0n && (booster || (grows && amountGrows));
+  const changes = Number(tier) !== Number(seat.tier) || amountGrows || (now !== undefined && BigInt(seat.earns_until ?? 0) <= BigInt(now));
+  return booster || (grows && changes);
+}
 
 /**
  * Whether a farm (decoded) takes a stake at lock tier `tier` at `now` (Unix seconds, the chain's clock), as the program
@@ -2111,7 +2139,8 @@ export const seatNonces = (project, id, farm, player, assets, nonce = 0n) =>
   Object.fromEntries(ascending(assets, (a) => pda.seat(pda.farm(project, id), farm.farmed.Tokens ? player : a)).map((a, i) => [a, toBigInt(nonce) + 2n * BigInt(i)]));
 
 /**
- * `player` collects what the seat of `by` owes (their own address for tokens, a collectible's asset). `held`: in a farm
+ * `player` collects what the seat of `by` owes (their own address for tokens, a collectible's asset); with `compound`, a
+ * token seat's is staked instead (a seat with a booster on needs a `refreshSeatIx` of it first: `stakeRefreshFirst`). `held`: in a farm
  * that watches, what shows the player still holds the seat's NFT (the Core asset, their token account of a Token
  * Metadata NFT, or a compressed NFT's record, `pda.leaf`, with its `tree`), which such a farm refuses to go without
  * (`NotProven`). `more` seats of the player's in the farm (each { by, held, tree }) collect in the same call, one fee,
@@ -2156,7 +2185,9 @@ export const refreshSeatIx = ({ signer, project, id, farm, by, seat, collection,
  * `player` crafts recipe `id` (`recipe` decoded, the version shown to them), `times` over. `assets`: the
  * collectibles handed in, in the recipe's order (the burned, the used, and for a `Show` line the NFT shown: its address
  * when it is the project's, `{ asset, collection }` for a Core NFT of another collection, `{ mint, owner }` for a Token
- * Metadata one; for a `Trade` line the NFT traded in, as `piece` takes it: `{ asset, collection, tokenMetadata,
+ * Metadata one, `{ compressed, tree }` for a compressed one; with `farm` (a farm's id: `{ asset, farm }` for the
+ * project's own) when the project locks it in the player's wallet on a seat of that farm, which freezes, and a raise on
+ * it lowers a number: its seat and farm follow it, and the raise may not lower a number that farm reads; for a `Trade` line the NFT traded in, as `piece` takes it: `{ asset, collection, tokenMetadata,
  * compressed }`). A collectible used that is staked in a farm holding it for the player (escrow) or locking it in their
  * wallet (freeze) is `{ asset, farm }`, `farm` that farm's id: its seat and farm follow it (a raise on it may not lower a
  * number its farm reads: `BadRecipe`). A `Staked` line names the farm its collectible
@@ -2204,11 +2235,19 @@ export function craftIx({ player, project, collection, id, recipe, assets = [], 
       // with its Sheet, then its collection), a Token Metadata NFT ({ mint, owner }: its metadata, the holder's
       // token account and its Sheet), or a compressed NFT ({ compressed, tree }: its record, proven earlier in the
       // transaction, its tree and its Sheet). What a raise writes on is writable.
+      // One the project locks in the player's wallet on a seat of a farm that freezes (`farm`, that farm's id) has its
+      // seat and farm after its accounts, when a raise on it lowers a number.
+      const place = assets.length - given.length;
       const nft = take(given, 'an NFT to show');
-      if (typeof nft === 'string') remaining.push(meta(nft, false, true), meta(input.Show.collection, false, false));
+      if (typeof nft === 'string' || (nft.asset && nft.farm !== undefined && !('collection' in nft))) remaining.push(meta(nft.asset ?? nft, false, true), meta(input.Show.collection, false, false));
       else if (nft.asset) remaining.push(meta(nft.asset, false, true), meta(pda.sheet(project, nft.asset), false, true), meta(nft.collection ?? MPL_CORE_PROGRAM, false, false));
       else if (nft.compressed) remaining.push(...[nft.compressed, pda.leaf(nft.compressed), nft.tree].map((key) => meta(key, false, false)), meta(pda.sheet(project, nft.compressed), false, true));
       else remaining.push(...[nft.mint, tokenMetadata.metadata(nft.mint), ata(nft.owner ?? player, nft.mint, TOKEN_PROGRAM)].map((key) => meta(key, false, false)), meta(pda.sheet(project, nft.mint), false, true));
+      const lowers = (recipe.raises ?? []).some((raise) => Number(raise.place) === place && BigInt(raise.shift.by) < 0n);
+      if (lowers && typeof nft !== 'string' && nft.farm !== undefined && nft.farm !== null) {
+        const farm = pda.farm(project, nft.farm);
+        remaining.push(meta(pda.seat(farm, nft.asset ?? nft.compressed ?? nft.mint), false, false), meta(farm, false, false));
+      }
     }
   }
   const made = {};
@@ -2393,23 +2432,30 @@ export function claimIx({ payer, project, projectState, id, contest, entries, pl
 
 // ---------------------------------------------------------------- auctions
 
-/** What a bid signs: sha256(mint | Borsh(AuctionArgs)). */
-export function auctionTerms(mint, args) {
-  return sha256(concat(addressBytes(mint), encodeBorsh(IDL, { defined: { name: 'AuctionArgs' } }, args)));
+/**
+ * What a taker signs for an auction, an offer or a listing, as the program works it out (`rail::terms`): sha256 of the
+ * record's bytes, all but the span `[start, end)` that changes as it is taken. `record` is the account's bytes as read,
+ * or its decoded value, written back to the same bytes (`encodeAccount`).
+ */
+function recordTerms(name, record, span) {
+  const data = record instanceof Uint8Array ? record : encodeAccount(IDL, name, record);
+  const [start, end] = span(data);
+  return sha256(concat(data.subarray(0, start), data.subarray(end)));
 }
 
-/** An auction's AuctionArgs from its decoded account (what `open_auction` fixed). */
-export const auctionArgsOf = (auction) => ({
-  lot: auction.lot,
-  reserve: auction.reserve,
-  min_raise_bps: auction.min_raise_bps,
-  starts_at: auction.starts_at,
-  ends_at: auction.ends_at,
-  extend: auction.extend,
-  shares: auction.shares,
-  gate: auction.gate ?? null,
-  nft_bids: auction.nft_bids ?? null,
-});
+/**
+ * What a bid signs: the auction's bytes but the bid, which sits last (`high_bidder`, `high`, `last_bid_at`, `held`:
+ * 52 bytes, and an auction of NFT bids' room for `MAX_BID_NFTS` after them). `auction`: the decoded Auction, or its
+ * account's bytes.
+ */
+export function auctionTerms(auction) {
+  if (auction instanceof Uint8Array) {
+    const room = decode('Auction', auction).nft_bids ? 32 * MAX_BID_NFTS : 0;
+    return recordTerms('Auction', auction, (data) => [data.length - 52 - room, data.length]);
+  }
+  // Written back with no bid's NFTs, its bytes end at the bid's 52.
+  return recordTerms('Auction', { ...auction, gate: auction.gate ?? null, nft_bids: auction.nft_bids ?? null, held: [] }, (data) => [data.length - 52, data.length]);
+}
 
 /** When bids close, as the program reckons it: `ends_at`, or `extend` seconds after the last bid when that is later. */
 export const auctionEnds = (auction) => {
@@ -2480,7 +2526,7 @@ export function bidIx({ bidder, project, id, auction, amount, shown, listProof, 
   }
   return lootIx(
     'bid',
-    { amount: auction.nft_bids ? BigInt(nfts.length) : amount, terms: auctionTerms(auction.mint, auctionArgsOf(auction)) },
+    { amount: auction.nft_bids ? BigInt(nfts.length) : amount, terms: auctionTerms(auction) },
     {
       bidder,
       project,
@@ -2571,11 +2617,9 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
 // attributes, a Token Metadata or compressed NFT with none, so an attribute test fails for an NFT that doesn't carry
 // the key itself (every Token Metadata or compressed one).
 
-/** The hash a taker signs, as the program rebuilds it: sha256(mint | rule | deal | shares), Borsh. `offer` is the decoded Offer. */
-export function offerTerms(offer) {
-  const borsh = (name, value) => encodeBorsh(IDL, { defined: { name } }, value);
-  return sha256(concat(addressBytes(offer.mint), borsh('Rule', offer.rule), borsh('Deal', offer.deal), encodeBorsh(IDL, { vec: { defined: { name: 'Share' } } }, offer.shares)));
-}
+/** What a taker signs: the offer's bytes but `left`, its last 2 (what a take changes). `offer`: the decoded Offer, or its
+ * account's bytes. */
+export const offerTerms = (offer) => recordTerms('Offer', offer, (data) => [data.length - 2, data.length]);
 
 /** What one take of a deal pays out of its offer's money: a bid's price, a loan's amount. */
 export const dealUnit = (deal) => BigInt(deal.Buy?.price ?? deal.Lend.amount);
@@ -2671,12 +2715,9 @@ export function repayIx({ payer, project, hold, repay, payerToken, programs, ext
 
 // ---------------------------------------------------------------- listings
 
-/** What a taker signs: sha256(maker | asset | mint | Borsh(ListingDeal) | Borsh(shares)). */
-export function listingTerms(listing) {
-  const deal = encodeBorsh(IDL, { defined: { name: 'ListingDeal' } }, listing.deal);
-  const shares = encodeBorsh(IDL, { vec: { defined: { name: 'Share' } } }, listing.shares ?? []);
-  return sha256(concat(addressBytes(listing.maker), addressBytes(listing.asset), addressBytes(listing.mint), deal, shares));
-}
+/** What a taker signs: the listing's bytes but `user`, `until` and `stopped` (bytes 129 to 170, what a rental changes).
+ * `listing`: the decoded Listing, or its account's bytes. */
+export const listingTerms = (listing) => recordTerms('Listing', listing, () => [129, 170]);
 
 /**
  * `maker` (any wallet, signing alone) lists an NFT they hold, of any kind (as `piece` takes it), for sale

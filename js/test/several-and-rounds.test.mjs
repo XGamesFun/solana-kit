@@ -280,6 +280,12 @@ test('a round’s first ask carries its pot and each run of token prizes; a roun
   const named = keys('Drawing').length;
   assert.equal(keys('Open').length - named, 7, 'the pot, its mint and the round’s account of it; a pool run’s mint, pool and account; a minted run’s mint');
   assert.equal(keys('Open')[named].pubkey, pda.pot(pda.lottery(MINT, 1)));
+  // The lottery goes with its current round only: a waiting round is asked again or cancelled without it.
+  const at = (list, name) => list[['payer', 'project', 'lottery', 'round'].indexOf(name)].pubkey;
+  assert.equal(at(keys('Open'), 'lottery'), pda.lottery(MINT, 1));
+  assert.equal(at(keys('Drawing'), 'lottery'), loot.LOOT_PROGRAM, 'none: the program’s id');
+  const again = loot.drawLotteryIx({ payer: MINT, project: MINT, lottery: null, round: { status: 'Drawing', terms }, roundAddress: NOBODY }).keys;
+  assert.deepEqual([at(again, 'lottery'), at(again, 'round')], [loot.LOOT_PROGRAM, NOBODY], 'no lottery needed: one closed since never strands its round');
 });
 
 test('a part owed in common goes where its share says, or to the treasury when nobody can take it', () => {

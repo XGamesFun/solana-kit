@@ -2,8 +2,8 @@
 // and its order, nothing more: what the roll can give is read when it is asked (`ask_roll`, with the box's roll
 // accounts, `loot.rollAccounts`). js/play asks in the route's own transaction (one prompt); on a box with nothing in
 // stock (here: its one prize in a coin with a transfer hook, which a roll can't move) that ask fails, and with it the
-// whole transaction (SoldOut): the player keeps what the route took. Later, the order's own player may still ask; it
-// rolls with nothing. On the real program, through the builders and js/play.
+// whole transaction (SoldOut): the player keeps what the route took. Later, the order's own player may still ask; that
+// ends it there with nothing, no oracle. On the real program, through the builders and js/play.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addressBytes } from '../chain/base58.js';
@@ -134,7 +134,7 @@ t('a craft’s roll asked in its own transaction: on a box with nothing in stock
   }
 });
 
-t('a roll made on a box with nothing in stock: a stranger’s ask is refused; its player’s own, a slot later, rolls with nothing', () => {
+t('a roll made on a box with nothing in stock: a stranger’s ask is refused; its player’s own, a slot later, ends it with nothing, no oracle', () => {
   const f = fixture('roll-mints-empty', true);
   const { w, hero, programs } = f;
   const nonce = loot.nonceOn(hero);
@@ -143,9 +143,10 @@ t('a roll made on a box with nothing in stock: a stranger’s ask is refused; it
   assert.equal(w.read('Order', order).status, 'Waiting');
   w.chain.nextSlot();
   assert.throws(() => w.chain.send(w.cranker, f.asks(w.cranker, order)), /SoldOut/, 'a stranger never lands a roll on an empty box');
-  w.chain.send(w.player, f.asks(w.player, order));
+  const asked = w.chain.send(w.player, f.asks(w.player, order));
+  assert.equal(asked.answers.length, 0, 'no oracle asked');
   const rolled = w.read('Order', order);
-  assert.deepEqual([rolled.status, rolled.won], ['Rolled', []], 'a free roll that finds nothing rolls with nothing');
+  assert.deepEqual([rolled.status, rolled.won], ['Rolled', []], 'a free roll its player ends on an empty box rolls with nothing');
   w.chain.nextSlot();
   w.chain.send(w.player, [loot.settleIx({ signer: w.player, orderAddress: order, order: rolled, projectState: w.projectState() })]);
   assert.equal(w.chain.get(order), null, 'settled: closed');

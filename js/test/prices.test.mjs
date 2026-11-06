@@ -185,10 +185,17 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   const lot = { lot: { Item: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(w.chain.now()), ends_at: BigInt(w.chain.now() + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
   w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
   const auction = () => w.read('Auction', pda.auction(w.project, w.authority, 1));
+  // Made with room for the most a bid holds, the seller's rent: bids write in place, and no bidder pays rent.
+  const opened = w.chain.get(pda.auction(w.project, w.authority, 1));
+  assert.equal(opened.data.length, loot.accountBytes('Auction', auction()) + 32 * loot.MAX_BID_NFTS);
   w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: auction(), nfts: [{ asset: c, ...kind }] })]);
   w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.bidIx({ bidder: w.cranker, project: w.project, id: 1, auction: auction(), nfts: [{ asset: d, ...kind }, { asset: e, ...kind }], held: [kind] })]);
   assert.equal(ownerOf(w, c), w.player, 'the bid it topped went back');
   assert.deepEqual(auction().held, [d, e]);
+  const bid = w.chain.get(pda.auction(w.project, w.authority, 1));
+  assert.deepEqual([bid.data.length, bid.lamports], [opened.data.length, opened.lamports], 'the same size and rent');
+  assert.deepEqual(loot.auctionTerms(bid.data), loot.auctionTerms(auction()), 'its terms, from its bytes or from what they decode to');
+  assert.deepEqual(loot.auctionTerms(bid.data), loot.auctionTerms(opened.data), 'a bid never changes them');
   w.chain.warp(w.chain.now() + 601);
   w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: auction(), item: w.read('Item', pda.item(w.project, 9)), held: [kind, kind] })]);
   assert.deepEqual([ownerOf(w, d), ownerOf(w, e)], [w.treasury, w.treasury], 'the winning NFTs went to the treasury, for the project’s item');

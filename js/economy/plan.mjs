@@ -747,7 +747,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         : a.lot?.roll
           ? `Open the auction “${a.name}” of a roll of the box “${m.box.get(a.lot.roll)?.name ?? a.lot.roll}”, made for its winner at the end (${terms})`
           : `Open the auction “${a.name}” of one new “${m.item.get(a.lot?.item)?.name ?? a.lot?.item}” (${terms})`,
-      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, pin: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, held: [] }) }],
+      // An auction of NFT bids is made with room for the most a bid holds (`MAX_BID_NFTS`), its seller's rent.
+      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, pin: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, held: [] }) + (args.nft_bids ? 32 * loot.MAX_BID_NFTS : 0) }],
       build: (ctx) => {
         const seller = auctionSeller(a, ctx);
         return [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx) })];

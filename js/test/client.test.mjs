@@ -9,7 +9,7 @@ import { sha256 } from '../chain/sha256.js';
 import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { closeTokenAccount, computeUnitLimit, meta } from '../chain/programs.js';
-import { setAuthorityIx } from '../chain/token.js';
+import { mintToIx, setAuthorityIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
 import { boxArgs, cannotRun, collectible, drop, FEES, fromPool, itemDrop, PRICE, world } from './world.mjs';
@@ -265,6 +265,8 @@ describe('offers', () => {
     assert.equal(owner(a), maker);
     assert.equal(w.balance(w.player) - had, (PRICE * 9n) / 10n);
     offer = w.read('Offer', pda.offer(w.project, maker, 1));
+    // A take changes only `left`, which its terms leave out: the second seller signs what the first did.
+    assert.deepEqual(loot.offerTerms(w.chain.get(pda.offer(w.project, maker, 1)).data), loot.offerTerms({ ...offer, left: 2 }));
     w.chain.send(maker, [loot.closeOfferIx({ maker, project: w.project, id: 1, offer })]);
     assert.equal(w.balance(maker), 9n * PRICE, 'the second take back');
 
@@ -314,7 +316,7 @@ describe('holds and contests', () => {
     assert.deepEqual(names(r), ['Released']);
   });
 
-  t('a contest: open, enter both sides, decide, claim; another called off pays everyone back', () => {
+  t('a contest: open, enter both sides, decide once entries close (the authority too), claim; another called off pays everyone back', () => {
     const w = world();
     const now = w.chain.now();
     const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [{ to: 'Burn', bps: 500 }], gate: null };
@@ -326,8 +328,9 @@ describe('holds and contests', () => {
     w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id: 1, contest, side: 0, amount: PRICE })]);
     assert.deepEqual(list().map((e) => [e.player, e.side, e.amount]), [[w.player, 0, PRICE]], 'one record a player, in the contest’s list');
     w.chain.send(rival, [loot.enterIx({ player: rival, project: w.project, id: 1, contest, side: 1, amount: PRICE })]);
-    w.chain.warp(now + 150);
     contest = w.read('Contest', pda.contest(w.project, 1));
+    fails(() => w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest, side: 0 })]), 'EntriesOpen');
+    w.chain.warp(now + 150);
     w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest, side: 0 })]);
     const had = w.balance(w.player);
     contest = w.read('Contest', pda.contest(w.project, 1));
@@ -336,6 +339,7 @@ describe('holds and contests', () => {
     assert.equal(w.balance(w.player) - had, (2n * PRICE * 95n) / 100n);
     assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'closed');
 
+    // A call-off is taken at any time, entries open or not.
     const args2 = { ...args, closes_at: BigInt(now + 1000), result_by: BigInt(now + 2000) };
     w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 2, mint: w.mint, args: args2 })]);
     let c2 = w.read('Contest', pda.contest(w.project, 2));
@@ -558,6 +562,36 @@ describe('mechanics that run by themselves', () => {
     assert.ok(names(u).includes('Unseated'));
   });
 
+  t('a top-up or a compound of a token seat with a booster on is refused unless the seat is refreshed first, in the same transaction', () => {
+    const w = world();
+    w.upsert({ Item: { id: 1, args: collectible('Badge') } });
+    const boost = { rule: { of: { Item: [1] }, key: 'level', test: 'Any' }, effect: { PerPoint: { bps: 1000, most: 9 } } };
+    const args = { custody: 'Escrow', tiers: [{ lock: 0, bps: 10_000 }], boosts: [boost], max_boost_bps: 10_000, gate: null };
+    w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args, rewardsMint: w.mint, stakedMint: w.mint })]);
+    const farm = w.read('Farm', pda.farm(w.project, 1));
+    const seatAddress = pda.seat(pda.farm(w.project, 1), w.player);
+    const stake = () => loot.stakeTokensIx({ player: w.player, project: w.project, id: 1, farm, amount: PRICE, tier: 0 });
+    const refresh = () => loot.refreshSeatIx({ signer: w.player, project: w.project, id: 1, farm, by: w.player, seat: w.read('Seat', seatAddress), collection: w.collection });
+    w.chain.send(w.player, [stake()]);
+    assert.equal(loot.stakeRefreshFirst(farm, w.read('Seat', seatAddress), { tier: 0, now: w.chain.now() }), false, 'no booster, no growth: none');
+    w.chain.nextSlot();
+    w.chain.send(w.player, [stake()]);
+    const badge = w.make(1, w.player, [{ key: 'level', value: '2' }]);
+    w.chain.send(w.player, [loot.stakeNftIx({ player: w.player, project: w.project, id: 1, farm, asset: badge, collection: w.collection })]);
+    assert.equal(loot.stakeRefreshFirst(farm, w.read('Seat', seatAddress), { tier: 0, now: w.chain.now() }), true, 'a booster on');
+    // The booster's stake read its boost: a second later, a top-up reads it again.
+    w.chain.warp(w.chain.now() + 1);
+    fails(() => w.chain.send(w.player, [stake()]), 'RefreshFirst');
+    w.chain.send(w.player, [refresh(), stake()]);
+    // Rewards into the farm's vault, released over time.
+    w.chain.send(w.creator, [mintToIx({ mint: w.mint, to: pda.rewards(pda.farm(w.project, 1)), authority: w.creator, amount: PRICE })]);
+    w.chain.warp(w.chain.now() + 60);
+    assert.equal(loot.stakeRefreshFirst(farm, w.read('Seat', seatAddress), { compound: true }), true);
+    const compound = () => loot.harvestIx({ player: w.player, project: w.project, id: 1, farm, compound: true });
+    fails(() => w.chain.send(w.player, [compound()]), 'RefreshFirst');
+    w.chain.send(w.player, [refresh(), compound()]);
+  });
+
   t('a farm of collectibles with a boost: stake one, refresh, take it out', () => {
     const w = world();
     w.pool(6, w.mint, 10n * PRICE);
@@ -627,6 +661,26 @@ describe('mechanics that run by themselves', () => {
     const [a, b] = [hero, friend].map((x) => parseCoreAsset(w.chain.get(x).data).attributes);
     assert.deepEqual([a.level, b.power], ['2', '10']);
     fails(() => w.chain.send(w.player, [computeUnitLimit(600_000), craft()]), 'MaxedOut');
+  });
+
+  t('a recipe lowering a number on a shown collectible frozen on a seat passes its seat and farm, and never lowers what the farm reads', () => {
+    const w = world();
+    w.upsert({ Item: { id: 1, args: collectible('Hero') } });
+    const boost = { rule: { of: { Item: [1] }, key: 'power', test: 'Any' }, effect: { PerPoint: { bps: 1000, most: 9 } } };
+    w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id: 1, args: { custody: 'Freeze', tiers: [{ lock: 0, bps: 10_000 }], boosts: [boost], max_boost_bps: 10_000, gate: null }, rewardsMint: w.mint })]);
+    const farm = w.read('Farm', pda.farm(w.project, 1));
+    const hero = w.make(1, w.player, [{ key: 'power', value: '5' }, { key: 'luck', value: '5' }]);
+    w.tokenAccount(w.player, w.mint);
+    w.chain.send(w.player, [loot.stakeNftIx({ player: w.player, project: w.project, id: 1, farm, asset: hero, collection: w.collection })]);
+    const lower = (id, key) => w.upsert({ Recipe: { id, args: { active: true, inputs: [{ Show: { collection: w.collection } }], outputs: [], needs: [], keeps: [], raises: [{ place: 0, key, by: -1, most: 0 }] } } });
+    lower(1, 'power');
+    lower(2, 'luck');
+    const craft = (id, shown) => [computeUnitLimit(600_000), loot.craftIx({ player: w.player, project: w.project, collection: w.collection, id, recipe: w.read('Recipe', pda.recipe(w.project, id)), assets: [shown] })];
+    // Without its seat and farm, the craft reads past its accounts.
+    fails(() => w.chain.send(w.player, craft(2, hero)));
+    fails(() => w.chain.send(w.player, craft(1, { asset: hero, farm: 1 })), 'BadRecipe');
+    w.chain.send(w.player, craft(2, { asset: hero, farm: 1 }));
+    assert.equal(parseCoreAsset(w.chain.get(hero).data).attributes.luck, '4', 'a number its farm doesn’t read, lowered');
   });
 
   t('a recipe: two collectibles and a payment in, one collectible and tokens from a pool out', () => {

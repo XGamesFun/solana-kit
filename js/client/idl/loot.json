@@ -96,7 +96,7 @@
           "name": "outbid",
           "docs": [
             "(`Tokens::wallet_account`): the bid this one tops goes back there (and, for NFTs, the rent of",
-            "its bytes and of the project's token account a Token Metadata NFT of theirs emptied)."
+            "the project's token account a Token Metadata NFT of theirs emptied)."
           ],
           "writable": true,
           "optional": true
@@ -1879,7 +1879,12 @@
         },
         {
           "name": "lottery",
-          "writable": true
+          "docs": [
+            "The lottery: for the current round only. A round whose draw waits is asked again or cancelled",
+            "without it, so a lottery closed since never strands it."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "round",
@@ -1965,7 +1970,7 @@
         {
           "name": "bidder",
           "docs": [
-            "bytes, and the rent of the project's token accounts its Token Metadata NFT bids emptied.",
+            "project's token accounts its Token Metadata NFT bids emptied.",
             "Unread with no bid."
           ],
           "writable": true
@@ -2742,8 +2747,10 @@
         {
           "name": "farm",
           "docs": [
-            "For `TokenSource::Farm`, the farm; its rewards vault is the `pool`."
+            "For `TokenSource::Farm`, the farm, credited first so what it holds free is current; its",
+            "rewards vault is the `pool`, and its rewards mint the `mint`."
           ],
+          "writable": true,
           "optional": true
         }
       ],
@@ -8833,206 +8840,201 @@
     },
     {
       "code": 6100,
-      "name": "BelowMinPot",
-      "msg": "This contest's sides hold less than its least pot"
-    },
-    {
-      "code": 6101,
       "name": "OverWindow",
       "msg": "Over this record's limit for one wallet in this window"
     },
     {
-      "code": 6102,
+      "code": 6101,
       "name": "WrongCounts",
       "msg": "This is not the list of counts, claims or rounds at the address its record, incarnation and subject name"
     },
     {
-      "code": 6103,
+      "code": 6102,
       "name": "BadLimits",
       "msg": "A grant's window needs times that are not before 1970"
     },
     {
-      "code": 6104,
+      "code": 6103,
       "name": "OverKey",
       "msg": "This voucher key has signed all the claims the grant allows one key"
     },
     {
-      "code": 6105,
+      "code": 6104,
       "name": "TooManyAccounts",
       "msg": "A box's roll would hand the oracle more accounts than its answer can carry: fewer entries, or fewer mints its prizes are in"
     },
     {
-      "code": 6106,
+      "code": 6105,
       "name": "NothingOwed",
       "msg": "This entry is owed nothing of this part: paid already, not owed, or not yet"
     },
     {
-      "code": 6107,
+      "code": 6106,
       "name": "BadPrize",
       "msg": "A prize this route can't give: a stash's NFT at random is a box's entry only"
     },
     {
-      "code": 6108,
+      "code": 6107,
       "name": "Rolls",
       "msg": "This box rolls (more than one entry, an NFT at random, a fresh item, several draws an open, or an NFT it rolls on): open it with open_box"
     },
     {
-      "code": 6109,
+      "code": 6108,
       "name": "OneTicket",
       "msg": "An NFT pays for one ticket at a time"
     },
     {
-      "code": 6110,
+      "code": 6109,
       "name": "CompressedBid",
       "msg": "A bid can't be a compressed NFT: bid Core or Token Metadata NFTs"
     },
     {
-      "code": 6111,
+      "code": 6110,
       "name": "OverPrize",
       "msg": "A claim's own amount is of a grant of a fixed amount of tokens, at most that amount, and named by a voucher or a list"
     },
     {
-      "code": 6112,
+      "code": 6111,
       "name": "NoSolForFee",
       "msg": "The signer holds too little SOL for the fee"
     },
     {
-      "code": 6113,
+      "code": 6112,
       "name": "BadOffer",
       "msg": "An offer takes a rule it can keep, at least one taker, a price or a loan above 0 (repaid with at least as much, within 5 years), shares only on a price, all its money as it arrives, and a mint whose accounts can't turn a payment away"
     },
     {
-      "code": 6114,
+      "code": 6113,
       "name": "WinnerPicks",
       "msg": "While losers' NFTs are left, only the winner claims, and picks which one they take"
     },
     {
-      "code": 6115,
+      "code": 6114,
       "name": "SubjectNonce",
       "msg": "A roll that moves an NFT's numbers is at the NFT's own nonce (its address's first 8 bytes): one at a time"
     },
     {
-      "code": 6116,
+      "code": 6115,
       "name": "NotALoan",
       "msg": "This hold is no loan, or it is repaid"
     },
     {
-      "code": 6117,
+      "code": 6116,
       "name": "LoanDue",
       "msg": "This loan is due: it can't be repaid, and its NFT goes to its lender"
     },
     {
-      "code": 6118,
+      "code": 6117,
       "name": "OwedToLender",
       "msg": "A loan that is due goes to its lender"
     },
     {
-      "code": 6119,
+      "code": 6118,
       "name": "Rented",
       "msg": "This NFT is rented: a rental runs until its end, and nobody takes the listing before (its maker may stop it)"
     },
     {
-      "code": 6120,
+      "code": 6119,
       "name": "BadListing",
       "msg": "A listing asks for a price above 0, and a rental for 1 period or more of a length above 0, all of them within 5 years"
     },
     {
-      "code": 6121,
+      "code": 6120,
       "name": "NotCompoundable",
       "msg": "Only a farm of tokens whose rewards are the staked token compounds"
     },
     {
-      "code": 6122,
+      "code": 6121,
       "name": "Sealed",
       "msg": "A sealed schedule is written once: nobody edits, switches off or re-seals it"
     },
     {
-      "code": 6123,
+      "code": 6122,
       "name": "NotInStash",
       "msg": "A lottery's held prize must be in its own stash when the lottery is written"
     },
     {
-      "code": 6124,
+      "code": 6123,
       "name": "Promised",
       "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended and its places have taken theirs"
     },
     {
-      "code": 6125,
+      "code": 6124,
       "name": "ListingStopped",
       "msg": "Its maker stopped this listing: it takes no more renters, and closes once the rental runs out"
     },
     {
-      "code": 6126,
+      "code": 6125,
       "name": "NotAnNft",
       "msg": "Only an NFT is taken: one token of a mint that can never mint another, not a unit of a semi-fungible item"
     },
     {
-      "code": 6127,
+      "code": 6126,
       "name": "OtherSide",
       "msg": "A wallet backs one side of a contest: it already has an entry on another side"
     },
     {
-      "code": 6128,
+      "code": 6127,
       "name": "ExitWhileLocked",
       "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
     },
     {
-      "code": 6129,
+      "code": 6128,
       "name": "WalletMustSign",
       "msg": "A grant's claim needs its wallet's signature"
     },
     {
-      "code": 6130,
+      "code": 6129,
       "name": "BurnLocked",
       "msg": "This Token-2022 mint's issuer keeps a burn authority (permissioned burn), so the program could never burn it later: it is refused before any money comes in"
     },
     {
-      "code": 6131,
+      "code": 6130,
       "name": "WrongProfile",
       "msg": "This needs the player's own profile in this project: it is missing, or another wallet's or another project's"
     },
     {
-      "code": 6132,
+      "code": 6131,
       "name": "WrongTable",
       "msg": "This is not the project's table at the address its id names"
     },
     {
-      "code": 6133,
+      "code": 6132,
       "name": "BadTable",
       "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
     },
     {
-      "code": 6134,
+      "code": 6133,
       "name": "BadItem",
       "msg": "A trait's key is the project's own (not item_id, rarity, serial or made), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
     },
     {
-      "code": 6135,
+      "code": 6134,
       "name": "BadList",
       "msg": "This is not a list of records of this width, or no record is at this place"
     },
     {
-      "code": 6136,
+      "code": 6135,
       "name": "GrantLive",
       "msg": "A grant's shards close only once the grant is closed or made again"
     },
     {
-      "code": 6137,
+      "code": 6136,
       "name": "ShardsFixed",
       "msg": "A grant keeps its shard bits (0 to 8) for its incarnation: an edit can't change them"
     },
     {
-      "code": 6138,
+      "code": 6137,
       "name": "BadRounds",
       "msg": "A claim by voucher or list names one round or more; an open claim names none"
     },
     {
-      "code": 6139,
+      "code": 6138,
       "name": "NotBurned",
       "msg": "This NFT is not burned: a Sheet closes once its Core asset is burned, its mint holds none, or a record proves its leaf burned"
     },
     {
-      "code": 6140,
+      "code": 6139,
       "name": "OutOfOrder",
       "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
     }
@@ -9217,24 +9219,6 @@
             "type": "u32"
           },
           {
-            "name": "high_bidder",
-            "docs": [
-              "Who bid `high`. The default address while there is no bid."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "high",
-            "docs": [
-              "The high bid, as it arrived (after any transfer fee). 0: no bid yet."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "last_bid_at",
-            "type": "i64"
-          },
-          {
             "name": "shares",
             "docs": [
               "The parts of the winning bid taken at the end; the rest goes to the seller of an NFT, or",
@@ -9281,9 +9265,27 @@
             }
           },
           {
+            "name": "high_bidder",
+            "docs": [
+              "Who bid `high`. The default address while there is no bid."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "high",
+            "docs": [
+              "The high bid, as it arrived (after any transfer fee). 0: no bid yet."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_bid_at",
+            "type": "i64"
+          },
+          {
             "name": "held",
             "docs": [
-              "The high bid's NFTs, held by the project."
+              "The high bid's NFTs, held by the project, in room for `MAX_BID_NFTS` made at open."
             ],
             "type": {
               "vec": "pubkey"
@@ -13356,13 +13358,6 @@
             }
           },
           {
-            "name": "left",
-            "docs": [
-              "How many more takes it pays for: its money in the vault is `left` times `deal.unit()`."
-            ],
-            "type": "u16"
-          },
-          {
             "name": "shares",
             "docs": [
               "Parts of a sale's price, taken before the seller's (a royalty, a pool's cut). None for a loan."
@@ -13374,6 +13369,14 @@
                 }
               }
             }
+          },
+          {
+            "name": "left",
+            "docs": [
+              "How many more takes it pays for: its money in the vault is `left` times `deal.unit()`. Last:",
+              "the only field a take changes (`Offer::terms`)."
+            ],
+            "type": "u16"
           }
         ]
       }
