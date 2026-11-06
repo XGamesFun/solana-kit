@@ -51,6 +51,10 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- Every write naming a box to roll passes the box and its roll accounts (`rollAccounts`, `boxesAccounts`,
+  `defRolls`; `rolls` on `upsertIx`, `openAuctionIx`, `openContestIx`, `openFarmIx`), and strict routes the roll accounts
+  in place of the prize mints (`rolls` replaces `boxes`/`rollPools`; `rollMints` is gone). The plan writes a box before
+  what names it, each such write alone with 1.4M compute; js/play reads them (`rollsOf`).
 - A collectible's upsert names its collection (`Item.compressed`: whether it carries Bubblegum's plugin). A split pool
   prize's `open_contest` names its pool. A hold owed to the treasury (player: the project's address) is released to the
   project's treasury (`releaseIx({ treasury })`), and `claims()` lists those for the treasury's wallet. `unstakeNft`

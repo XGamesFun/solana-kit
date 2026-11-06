@@ -70,17 +70,24 @@ const isCollectible = (it) => (it?.kind ?? 'collectible') === 'collectible';
 // ---------------------------------------------------------------- a player's craft, in bytes
 
 /**
- * The accounts a route the player pays or asks for (a craft, a buy, a grant's claim) passes after a roll's box and
- * order (`order::askable`, the client's `rollMints`): for each token prize of box `key`, in order, its pool and the
- * pool's mint, or the mint it mints from. Up to 10 distinct accounts a box.
+ * The roll accounts of box `key` (`order::rollable`, the client's `rollAccounts`), which a route the player pays or asks
+ * for (a craft, a buy, a grant's claim) passes after a roll's box and order, and a write naming the box after the box:
+ * each outcome's prizes' (an item, with its tables when it draws traits from them; a pool; a stash), then each mint its
+ * tokens are in, in the order first named, and the project's vault for it.
  */
-export function rollMintKeys(key, m) {
-  return (m.box.get(key)?.outcomes ?? []).flatMap(outcomeParts).flatMap((o) => {
-    if (o.gives === 'mint') return [`mint:${o.currency ?? m.currencyKey}`];
-    if (o.gives === 'pay' || o.gives === 'share') return [`pda:pool/${o.pool}`, `mint:${m.pool.get(o.pool)?.currency ?? m.currencyKey}`];
+export function rollKeys(key, m) {
+  const parts = (m.box.get(key)?.outcomes ?? []).flatMap(outcomeParts);
+  const entry = parts.flatMap((o) => {
+    if (o.gives === 'item') return [`pda:item/${o.item}`, ...(m.item.get(o.item)?.drawn ?? []).filter((d) => d.table !== undefined).map((d) => `pda:table/${d.table}`)];
+    if (o.gives === 'pay' || o.gives === 'share') return [`pda:pool/${o.pool}`];
+    if (o.gives === 'stash' || o.gives === 'nft') return [`pda:stash/${o.stash}`];
     return [];
   });
+  const mints = [...new Set(parts.flatMap((o) => (o.gives === 'mint' ? [o.currency ?? m.currencyKey] : o.gives === 'pay' || o.gives === 'share' ? [m.pool.get(o.pool)?.currency ?? m.currencyKey] : [])))];
+  return [...entry, ...mints.flatMap((t) => [`mint:${t}`, `vault:${t}`])];
 }
+/** A box's roll accounts, as each write naming it passes them after the box. */
+export const rollMintKeys = rollKeys;
 
 /**
  * The transaction a player sends to craft `recipe`, estimated (txsize.mjs): the craft's own accounts, then each

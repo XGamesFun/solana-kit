@@ -8,7 +8,7 @@ import { freshKeypair } from '../approve/ed25519.mjs';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
 import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { meta } from '../chain/programs.js';
+import { computeUnitLimit, meta } from '../chain/programs.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
@@ -105,7 +105,7 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args: { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule } })]);
   w.upsert({ Box: { id: 9, args: boxArgs(0n, [drop([{ Item: [2] }])], { active: false }) } });
   const lot = { lot: { Roll: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
+  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot, rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []) })]);
   const spec = specOf(w, { lotteries: [{ key: 'raffle', name: 'Raffle', id: 1 }], auctions: [{ key: 'mystery', name: 'Mystery lot', id: 1, seller: w.authority }] });
   const p = playerOf(w, spec);
   const q = playerOf(w, spec);

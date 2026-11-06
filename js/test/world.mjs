@@ -241,7 +241,29 @@ export function world({ seed = 'world', platform = true, project = true, compres
     // A lottery written again names its current round's record (its own, as it is now).
     const lottery = def.Lottery ? chain.get(loot.pda.lottery(w.project, def.Lottery.id)) : null;
     const lotteryState = lottery?.data?.length ? chain.account('Lottery', loot.pda.lottery(w.project, def.Lottery.id)) : null;
-    return chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState })]);
+    const named = loot.defRolls(def);
+    return chain.send(w.creator, [...(named.length ? [computeUnitLimit(1_400_000)] : []), loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState, rolls: w.rolls(named) })]);
+  };
+  /** What a write naming boxes `ids` to roll passes for them (`loot.boxesAccounts`), as the chain holds them now. */
+  w.rolls = (ids = []) => {
+    const out = { boxes: {}, items: {}, poolMints: {}, programs: {} };
+    const record = (name, address) => (chain.get(address)?.owner === loot.LOOT_PROGRAM && chain.get(address).data.length ? chain.account(name, address) : null);
+    for (const id of ids) {
+      const box = (out.boxes[id] = record('LootBox', loot.pda.box(w.project, id)));
+      for (const p of box?.entries.flatMap((e) => e.prizes) ?? []) {
+        const item = p.Item?.[0] ?? p.Compressed?.item;
+        if (item !== undefined) out.items[item] = record('Item', loot.pda.item(w.project, item));
+        const pool = p.Tokens?.from.Pool?.[0];
+        if (pool !== undefined) {
+          const held = chain.get(loot.pda.pool(w.project, pool));
+          out.poolMints[pool] = held?.data?.length ? encodeBase58(held.data.subarray(0, 32)) : null;
+          if (out.poolMints[pool]) out.programs[out.poolMints[pool]] = chain.get(out.poolMints[pool])?.owner;
+        }
+        const mint = p.Tokens?.from.Mint?.[0];
+        if (mint && chain.get(mint)) out.programs[mint] = chain.get(mint).owner;
+      }
+    }
+    return out;
   };
   /** The owner opens pool `index` of `mint` and puts `amount` in it. */
   w.pool = (index, mint = w.mint, amount = 0n) => {

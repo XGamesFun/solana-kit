@@ -194,7 +194,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | Project | `create_project` (`createProjectIx`) | owner | J | `id`, `authority`, `treasury`, `collections` (Core, update authority the owner or the project, none twice, `BadCollection`) |
 | | `update_project` (`updateProjectIx`) | owner, and a new owner if named | J | keys, treasury, `paused`, collections |
 | | `open_pool` (`openPoolIx`) | owner | J | a pool `index` in a mint, for good |
-| | `upsert` (`upsertIx`, `closeRecordIx`) | owner | J | writes an `Item`, `Box`, `Schedule`, `Lottery`, `Recipe`, `Grant` or `Table` (a table's rows in batches, then sealed); `None` closes one |
+| | `upsert` (`upsertIx`, `closeRecordIx`) | owner | J | writes an `Item`, `Box`, `Schedule`, `Lottery`, `Recipe`, `Grant` or `Table` (a table's rows in batches, then sealed); `None` closes one. A box, recipe, grant or lottery that names a box to roll passes each such box once, then its roll accounts (`boxesAccounts`, `defRolls`), so the roll can be asked: `WrongRecord` for a box not written, `PrizeHasHook` or `TooManyAccounts` for one that can't be asked, `BadTable` for an unsealed table; 1.4M compute. A box is written before what names it (it may name itself); a fresh item's tables are sealed and the item written before any box gives it |
 | | `open_farm` (`openFarmIx`) | owner | J | a farm, never edited |
 | | `open_tree` (`openTreeIx`) | owner or authority | J | a Bubblegum v2 tree for compressed prizes (the sender makes the empty tree account first, `treeSize`) |
 | | `set_traits` (`setTraitsIx`) | owner or authority | J | the root of off-chain traits the project vouches for |
@@ -456,6 +456,14 @@ rest settles.
 holds none; a fresh one's traits go in the project's Sheet of it, the order holding that rent. A soulbound item, or
 one whose URI could outgrow Bubblegum's 200 bytes with its values in it, is out of the box's table. The collection
 must carry Bubblegum's plugin: a settle into one without it fails, and a rolled order waits until it has it.
+
+**Roll accounts.** Every write that names a box to roll later (`upsert` of a box, a recipe, a grant or a lottery;
+`open_auction` of a roll lot; `open_contest` with a roll prize; `open_farm` for its tiers' rolls and roll prizes) and
+every route the player pays or asks for that makes a roll (a craft's `Prize::Roll` or `RollOn`, a `buy` bundle's roll, a
+grant claim) passes, after the box (and the order), the box's roll accounts as `open_box` takes them (`rollAccounts`):
+each entry's prizes' (an item, then its trait tables when it is written and has them; a pool; a stash), then each
+distinct mint first named and the project's vault for it (a pool's mint read from the pool; a pool not opened adds
+nothing). A strict `buy` of three heavy rolls asks for a 64 KiB heap.
 
 **Settling in parts.** An order is made at its smallest and grown at the purchase to all its box can set aside
 (`Order::space_for`, `orderBytes`), holding a collectible's rent for every card it may mint, so anyone settles it, in
@@ -722,7 +730,8 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 At `["auction", project, seller, id]`, so an id is its seller's own; the seller is its only signer.
 
 - **Lots** (`Lot`): `Item(id)` (a new unit, its serial reserved at open; project keys only); `Roll(box_id)` (a mystery
-  lot made into the winner's roll at the end; project keys only, a box already written, `LotRefused`); `Asset(address)`
+  lot made into the winner's roll at the end; project keys only, a box already written, `WrongRecord` otherwise, its
+  roll accounts after the box); `Asset(address)`
   (an NFT handed to the project until the end; a player's must be a Core NFT of one of the project's collections, the
   project's keys may put up any).
 - **Bids** sign `terms` (`auctionTerms`: sha256 of the mint and Borsh `AuctionArgs`). At least the reserve and 1, and

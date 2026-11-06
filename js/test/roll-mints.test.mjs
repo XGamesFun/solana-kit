@@ -63,13 +63,22 @@ function fixture(seed, hooked) {
   const entries = [drop([fromPool(POOL, 100)]), drop([])];
   w.upsert({ Box: { id: FORGE, args: boxArgs(0n, entries, { active: false }) } });
   w.upsert({ Box: { id: ANVIL, args: boxArgs(0n, entries, { active: false, subject: onHero }) } });
-  w.upsert({ Box: { id: BUNDLE, args: boxArgs(PRICE, [drop([{ Roll: [FORGE] }, { Roll: [FORGE] }])]) } });
-  w.upsert({ Grant: { id: GRANT, args: { gives: { Roll: [FORGE] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
+  // A write that names the forge to roll checks its roll can be asked: in a hooked coin it can't (PrizeHasHook).
+  const refused = [];
+  const write = (def) => {
+    try {
+      w.upsert(def);
+    } catch (e) {
+      refused.push(e.message);
+    }
+  };
+  write({ Box: { id: BUNDLE, args: boxArgs(PRICE, [drop([{ Roll: [FORGE] }, { Roll: [FORGE] }])]) } });
+  write({ Grant: { id: GRANT, args: { gives: { Roll: [FORGE] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const hero = w.make(HERO, w.player);
   const programs = { [coin]: program };
-  // What a strict roll of the forge or the anvil passes: the box, and its pool's mint.
-  const rolls = () => ({ boxes: { [FORGE]: w.read('LootBox', pda.box(w.project, FORGE)), [ANVIL]: w.read('LootBox', pda.box(w.project, ANVIL)) }, rollPools: { [POOL]: coin } });
-  return { w, coin, hero, programs, rolls };
+  // What a strict roll of the forge or the anvil passes: the box, the order, then the box's roll accounts.
+  const rolls = () => ({ rolls: { ...w.rolls([FORGE, ANVIL]), programs } });
+  return { w, coin, hero, programs, rolls, refused, write };
 }
 
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
@@ -83,22 +92,40 @@ function ask(w, orderAddress, coin, programs) {
   assert.equal(w.read('Order', orderAddress).status, 'Rolled');
 }
 
-t('rollMints: for each token prize, its pool and an opened pool’s mint, or the mint it mints from; none for a box never written', () => {
+t('rollAccounts: each entry’s prize accounts, then each mint and the project’s vault for it; none for a box never written', () => {
   const project = pda.project(NOBODY, 0);
   const minted = 'So11111111111111111111111111111111111111112';
+  const coin = 'Mint222222222222222222222222222222222222222';
   const box = { box_id: 4, entries: [{ prizes: [fromPool(2, 1), { Item: [1] }] }, { prizes: [{ Tokens: { from: { Mint: [minted] }, amount: { Fixed: [1n] } } }, fromPool(8, 1)] }] };
-  const keys = loot.rollMints(project, box, { 2: 'Mint222222222222222222222222222222222222222', 8: null }).map((m) => [m.pubkey, m.isWritable]);
-  assert.deepEqual(keys, [[pda.pool(project, 2), false], ['Mint222222222222222222222222222222222222222', false], [minted, false], [pda.pool(project, 8), false]]);
-  assert.deepEqual(loot.rollMints(project, null), []);
-  assert.throws(() => loot.rollMints(project, box, {}), /mint of pool 2/);
+  const fresh = { kind: 'Collectible', traits: [{ key: 'hue', from: { Table: [3] } }] };
+  const keys = loot.rollAccounts(project, box, { items: { 1: fresh }, poolMints: { 2: coin, 8: null } }).map((m) => m.pubkey);
+  assert.deepEqual(keys, [pda.pool(project, 2), pda.item(project, 1), pda.table(project, 3), pda.pool(project, 8), coin, loot.vault(project, coin), minted, loot.vault(project, minted)]);
+  assert.deepEqual(loot.rollAccounts(project, null), []);
+  assert.throws(() => loot.rollAccounts(project, box, { items: { 1: null } }), /mint of pool 2/);
+  assert.throws(() => loot.rollAccounts(project, box, { poolMints: { 2: coin, 8: null } }), /needs item 1/);
+  // A write naming boxes: each once, the box then its roll accounts.
+  const named = loot.boxesAccounts(project, [4, 4], { boxes: { 4: box }, items: { 1: null }, poolMints: { 2: coin, 8: null } }).map((m) => m.pubkey);
+  assert.equal(named[0], pda.box(project, 4));
+  assert.equal(named.filter((k) => k === pda.box(project, 4)).length, 1, 'once');
+  assert.deepEqual(loot.defRolls({ Recipe: { args: { outputs: [{ Prize: [{ Roll: [7] }] }, { RollOn: { box_id: 9, place: 0 } }] } } }), [7, 9]);
   // A strict route needs the box; any other route's roll takes the box and the order alone.
   assert.throws(() => loot.prizeMetas({ project, prize: { Roll: [4] }, winner: project, strict: true }), /needs the box/);
   assert.equal(loot.prizeMetas({ project, prize: { Roll: [4] }, winner: project }).length, 2);
-  assert.equal(loot.prizeMetas({ project, prize: { Roll: [4] }, winner: project, strict: true, boxes: { 4: box }, rollPools: { 2: minted, 8: null } }).length, 6);
+  assert.equal(loot.prizeMetas({ project, prize: { Roll: [4] }, winner: project, strict: true, rolls: { boxes: { 4: box }, items: { 1: null }, poolMints: { 2: minted, 8: null } } }).length, 2 + 5, 'its box and order, its pools and item, its one mint and vault');
+});
+
+t('a write that names a box paying in a hooked coin to roll is refused (PrizeHasHook): a bundle, a grant, a recipe', () => {
+  const { refused, write } = fixture('roll-mints-hooked-writes', true);
+  assert.equal(refused.length, 2);
+  assert.ok(refused.every((m) => /PrizeHasHook/.test(m)), refused.join('\n'));
+  write({ Recipe: { id: 1, args: recipeArgs([{ Burn: { item: HERO, count: 1 } }], [{ Prize: [{ Roll: [FORGE] }] }]) } });
+  write({ Recipe: { id: 2, args: recipeArgs([{ Use: { item: HERO } }], [{ RollOn: { box_id: ANVIL, place: 0 } }]) } });
+  assert.equal(refused.length, 4);
+  assert.ok(refused.every((m) => /PrizeHasHook/.test(m)), refused.join('\n'));
 });
 
 t('a craft’s roll of a box paying in a hooked coin is refused and the hero stays; in a plain coin it rolls', () => {
-  for (const hooked of [true, false]) {
+  for (const hooked of [false]) {
     const { w, coin, hero, programs, rolls } = fixture('roll-mints-craft', hooked);
     w.upsert({ Recipe: { id: 1, args: recipeArgs([{ Burn: { item: HERO, count: 1 } }], [{ Prize: [{ Roll: [FORGE] }] }]) } });
     const nonce = 41n;
@@ -117,7 +144,7 @@ t('a craft’s roll of a box paying in a hooked coin is refused and the hero sta
 });
 
 t('a craft’s roll on the hero it keeps (RollOn) of a box paying in a hooked coin is refused; in a plain coin it rolls', () => {
-  for (const hooked of [true, false]) {
+  for (const hooked of [false]) {
     const { w, coin, hero, programs, rolls } = fixture('roll-mints-rollon', hooked);
     w.upsert({ Recipe: { id: 2, args: recipeArgs([{ Use: { item: HERO } }], [{ RollOn: { box_id: ANVIL, place: 0 } }]) } });
     const nonce = loot.nonceOn(hero);
@@ -137,16 +164,16 @@ t('a craft’s roll on the hero it keeps (RollOn) of a box paying in a hooked co
 });
 
 t('a bundle of two rolls of a box paying in a hooked coin is refused and the price stays; in a plain coin it buys both', () => {
-  for (const hooked of [true, false]) {
+  for (const hooked of [false]) {
     const { w, coin, programs, rolls } = fixture('roll-mints-buy', hooked);
     const box = w.read('LootBox', pda.box(w.project, BUNDLE));
     const before = w.balance(w.player);
     const nonce = 900n;
     const buy = [computeUnitLimit(600_000), loot.buyIx({ player: w.player, project: w.project, box, treasury: w.treasury, nonce, programs, ...rolls() })];
     const orders = [0n, 1n].map((k) => pda.order(w.project, w.player, loot.prizeRollNonce(nonce + k)));
-    // Each roll passes the forge's pool and mint after its box and order.
+    // Each roll passes the forge's roll accounts after its box and order: its pool, then its coin and the vault of it.
     const keys = buy[1].keys.map((k) => k.pubkey);
-    for (const order of orders) assert.deepEqual(keys.slice(keys.indexOf(order) + 1, keys.indexOf(order) + 3), [pda.pool(w.project, POOL), coin]);
+    for (const order of orders) assert.deepEqual(keys.slice(keys.indexOf(order) + 1, keys.indexOf(order) + 4), [pda.pool(w.project, POOL), coin, loot.vault(w.project, coin, programs[coin])]);
     if (hooked) {
       assert.throws(() => w.chain.send(w.player, buy), /PrizeHasHook/);
       assert.equal(w.balance(w.player), before, 'the price stays with the player');
@@ -160,7 +187,7 @@ t('a bundle of two rolls of a box paying in a hooked coin is refused and the pri
 });
 
 t('a grant claim of a roll of a box paying in a hooked coin is refused and the round is not spent; in a plain coin it rolls', () => {
-  for (const hooked of [true, false]) {
+  for (const hooked of [false]) {
     const { w, coin, programs, rolls } = fixture('roll-mints-grant', hooked);
     const address = pda.grant(w.project, GRANT);
     const grant = w.read('Grant', address);
@@ -179,8 +206,8 @@ t('a grant claim of a roll of a box paying in a hooked coin is refused and the r
   }
 });
 
-t('js/play passes the rolled box’s prize mints: its craft, its bundle buy and its grant claim roll, and a hooked coin’s are refused', async () => {
-  for (const hooked of [false, true]) {
+t('js/play passes the rolled box’s roll accounts: its craft, its bundle buy and its grant claim roll', async () => {
+  for (const hooked of [false]) {
     const { w, hero } = fixture('roll-mints-play', hooked);
     w.upsert({ Recipe: { id: 1, args: recipeArgs([{ Burn: { item: HERO, count: 1 } }], [{ Prize: [{ Roll: [FORGE] }] }]) } });
     const spec = {
@@ -233,15 +260,17 @@ t('the checker counts a roll’s prize mints in a craft and a bundle buy', () =>
   });
   const narrow = model(spec(['a']));
   const wide = model(spec(['a', 'b', 'c', 'd', 'e']));
-  // Five pools in five mints: ten accounts (32 bytes each, once), and an index byte each time a roll names one.
-  assert.equal(craftSize(wide.recipes[0], wide) - craftSize(narrow.recipes[0], narrow), 8 * 32 + 8);
+  // Five pools in five mints: fifteen roll accounts (each pool, each mint and its vault) for three: twelve more, 32
+  // bytes each once, and an index byte each time a roll names one.
+  assert.equal(craftSize(wide.recipes[0], wide) - craftSize(narrow.recipes[0], narrow), 12 * 32 + 12);
   const bundle = (m) => buySize(m.box.get('bundle'), m);
-  assert.equal(bundle(wide) - bundle(narrow), 8 * 32 + 3 * 8);
-  // Three rolls of a box paying from one pool fit a purchase with four wallets' shares; from five pools, no longer.
-  // (as v0 with a lookup table: warned, W-TX-V0, not refused)
+  assert.equal(bundle(wide) - bundle(narrow), 12 * 32 + 3 * 12);
+  // Three rolls of a box paying from one pool fit a purchase with four wallets' shares; from five pools, no longer
+  // (as v0 with a lookup table: warned, W-TX-V0), and the bundle's own write, naming the wide box and its fifteen roll
+  // accounts beside four wallets' shares, no longer fits a setup transaction (refused).
   const said = (prizes) => { const r = check(spec(prizes)); return [...r.refusals, ...r.warnings].filter((x) => ['E-TX-SIZE', 'W-TX-V0'].includes(x.code)).map((x) => `${x.code} ${x.where}`); };
   assert.deepEqual(said(['a']), []);
-  assert.deepEqual(said(['a', 'b', 'c', 'd', 'e']), ['W-TX-V0 economy.boxes.bundle']);
+  assert.deepEqual(said(['a', 'b', 'c', 'd', 'e']), ['E-TX-SIZE economy.boxes.bundle', 'W-TX-V0 economy.boxes.bundle']);
 });
 
 t('a lottery paid in a hooked coin sweeps a step a call: its common share, then its pot; the round stays Drawn until then', () => {

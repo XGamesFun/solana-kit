@@ -257,3 +257,18 @@ test('a settle’s first call splits the payment with its shares; SETTLE_SPLIT d
   const after = build({ ...order, drew: 0 }, 0);
   assert.ok(!has(after, k(1)) && has(after, k(4)), 'split made: the last part carries the prize, no shares');
 });
+
+test('go-live writes a box before a box that names it to roll, each naming write alone with all the compute', () => {
+  const arena = example('coin-flip-arena');
+  const spec = structuredClone(arena);
+  const inner = spec.boxes.find((b) => (b.outcomes ?? []).length);
+  // A box that rolls the arena's box, listed before it.
+  spec.boxes.unshift({ key: 'mystery', name: 'Mystery', price: 0.01, outcomes: [{ gives: 'roll', box: inner.key, chance: 50 }, { gives: 'nothing', chance: 50 }] });
+  const p = plan(spec, { now: NOW });
+  assert.ok(p.ok, JSON.stringify(p.refusals));
+  const ids = p.steps.map((s) => s.id);
+  assert.ok(ids.indexOf(`box:${inner.key}:LootBox`) < ids.indexOf('box:mystery:LootBox'), ids.join(' '));
+  const t = p.transactions.find((x) => x.steps.some((s) => s.id === 'box:mystery:LootBox'));
+  assert.equal(t.steps.length, 1, 'alone');
+  assert.equal(t.instructions[0].data[0], 2, 'a compute limit first');
+});

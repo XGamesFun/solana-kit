@@ -93,12 +93,12 @@ describe('a prize’s roll is made at prizeRollNonce of the nonce its route name
     w.upsert({ Grant: { id: 1, args: { gives: { Roll: [5] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
     const victimNft = w.make(1, w.player);
     const nonce = loot.nonceOn(victimNft);
-    const boxes = { 5: w.read('LootBox', pda.box(w.project, 5)) };
+    const rolls = w.rolls([5]);
     // Every claim needs its wallet's own signature (WalletMustSign): a stranger may pay its fees, never claim for it.
-    const forThem = loot.claimGrantIx({ project: w.project, id: 1, grant: w.read('Grant', pda.grant(w.project, 1)), wallet: w.player, signer: w.cranker, projectState: w.projectState(), boxes, nonce });
+    const forThem = loot.claimGrantIx({ project: w.project, id: 1, grant: w.read('Grant', pda.grant(w.project, 1)), wallet: w.player, signer: w.cranker, projectState: w.projectState(), rolls, nonce });
     assert.ok(forThem.keys.some((k) => k.pubkey === w.player && k.isSigner), 'the player signs it');
     // Named by the player itself, the nonce of its NFT still lands the roll elsewhere.
-    w.chain.send(w.player, [loot.claimGrantIx({ project: w.project, id: 1, grant: w.read('Grant', pda.grant(w.project, 1)), wallet: w.player, signer: w.player, projectState: w.projectState(), boxes, nonce })]);
+    w.chain.send(w.player, [loot.claimGrantIx({ project: w.project, id: 1, grant: w.read('Grant', pda.grant(w.project, 1)), wallet: w.player, signer: w.player, projectState: w.projectState(), rolls, nonce })]);
     assert.equal(w.chain.get(pda.order(w.project, w.player, nonce)), null, 'the NFT’s own order address is still free');
     assert.equal(w.read('Order', pda.order(w.project, w.player, loot.prizeRollNonce(nonce))).status, 'Waiting');
   });

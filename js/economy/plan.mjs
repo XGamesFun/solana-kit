@@ -11,7 +11,7 @@ import { createCollectionInstruction } from '../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, NATIVE_MINT, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
-import { createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx, setAuthorityIx, transferCheckedIx } from '../chain/token.js';
 import { compileMessage, transactionSize } from '../chain/tx.js';
 import { sha256 } from '../chain/sha256.js';
@@ -555,12 +555,43 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     const t = m.tokens.get(p.currency);
     add({ id: `pool:${p.key}`, part: `pool:${p.key}`, says: `Open the pool “${p.key}” for ${t?.symbol}`, creates: [{ what: `the pool “${p.key}”`, bytes: 165 }], build: (ctx) => [loot.openPoolIx({ owner: ctx.owner, project: project(ctx), index: p.index, mint: ctx.mints[p.currency] })] });
   }
+  /**
+   * What a write naming boxes `ids` to roll later passes for them (`loot.boxesAccounts`), from the spec as it goes live:
+   * each box's args, the items its prizes name and each pool's mint (pools open, tables are sealed and items written
+   * before any box, and a box before anything that names it).
+   */
+  const rollsFor = (ids, ctx) => {
+    const out = { boxes: {}, items: {}, poolMints: {}, programs: programsOf(ctx) };
+    for (const id of ids) {
+      const b = m.allBoxes.find((x) => x.id === id);
+      const box = (out.boxes[id] = b ? resolve(boxArgs(b, m), ctx) : null);
+      for (const p of box?.entries.flatMap((e) => e.prizes) ?? []) {
+        const item = p.Item?.[0] ?? p.Compressed?.item;
+        if (item !== undefined) {
+          const it = m.items.find((x) => x.id === item);
+          out.items[item] = it ? resolve(itemArgs(it, m), ctx) : null;
+        }
+        const pool = p.Tokens?.from.Pool?.[0];
+        if (pool !== undefined) {
+          const found = m.pools.find((x) => x.index === pool);
+          out.poolMints[pool] = found ? ctx.mints[found.currency] : null;
+        }
+      }
+    }
+    return out;
+  };
+  /** A write that names boxes to roll: a transaction of its own, with all the compute one may have. */
+  const naming = (ids, ctx, instructions) => (ids.length ? [computeUnitLimit(1_400_000), ...instructions] : instructions);
   const record = (part, def, says, kind, what, options = () => ({})) => {
     const [variant] = Object.keys(def);
     const bytes = recordBytesOf(kind, def[variant]);
     // A lottery's first write opens its pot: a token account as well as the record (each round holds its own money).
     const pot = kind === 'Lottery' ? [{ what: `${what}’s pot`, bytes: 165 }] : def.Schedule?.args.action.from.Vest ? [{ what: `${what}’s sealed vault`, bytes: 165 }] : [];
-    add({ id: `${part}:${kind}`, part, says, creates: [{ what, bytes }, ...pot], build: (ctx) => [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), ...options(ctx) })] });
+    const named = loot.defRolls(def);
+    add({
+      id: `${part}:${kind}`, part, says, creates: [{ what, bytes }, ...pot], alone: named.length > 0,
+      build: (ctx) => naming(named, ctx, [loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), rolls: named.length ? rollsFor(named, ctx) : {}, ...options(ctx) })]),
+    });
   };
   // Each table, a batch of rows a transaction (`TABLE_BATCH_BYTES` of rows at most), sealed with its last batch.
   for (const t of m.tables) {
@@ -587,7 +618,19 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     return (b.outcomes ?? []).map((o, i) => `${what(o)} ${Math.round((ws[i] / total) * 10_000) / 100}%`).join(', ');
   };
   const wasLive = new Set((live?.published?.boxes ?? []).map((b) => b.key));
-  for (const b of m.allBoxes) {
+  // A box is written before any box that names it to roll (one may name itself): in that order.
+  const boxOrder = [];
+  const visit = (b, path = new Set()) => {
+    if (boxOrder.includes(b) || path.has(b)) return;
+    path.add(b);
+    for (const id of loot.defRolls({ Box: { args: boxArgs(b, m) } })) {
+      const named = m.allBoxes.find((x) => x.id === id);
+      if (named && named !== b) visit(named, path);
+    }
+    boxOrder.push(b);
+  };
+  for (const b of m.allBoxes) visit(b);
+  for (const b of boxOrder) {
     const says = b.shopOf ? `Put “${b.name}” in the shop at ${b.price} ${m.priceToken(b)?.symbol}` : `${b.active === false ? 'Switch off' : wasLive.has(b.key) ? 'Change' : 'Put on sale'} the box “${b.name}” at ${b.price} ${m.priceToken(b)?.symbol}${b.active === false ? '' : `: ${odds(b)}`}`;
     record(b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`, { Box: { id: b.id, args: boxArgs(b, m) } }, says, 'LootBox', b.shopOf ? `the shop listing of “${b.name}”` : `the box “${b.name}”`);
   }
@@ -641,6 +684,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     record(`lottery:${l.key}`, { Lottery: { id: l.id, args: lotteryArgs(l, m) } }, `Start the ${l.raffle ? 'raffle' : 'lottery'} “${l.name}”`, 'Lottery', `the lottery “${l.name}”`);
   }
   for (const g of m.grants) record(`grant:${g.key}`, { Grant: { id: g.id, args: grantArgs(g, m) } }, `Write the grant “${g.name}”`, 'Grant', `the grant “${g.name}”`);
+  /** The boxes a farm's tiers roll, tier by tier (its roll, then a prize that is a roll). */
+  const farmRolls = (f) => farmArgs(f, m).tiers.flatMap((t) => [t.roll, t.prize?.Roll?.[0]].filter((x) => x != null));
   for (const f of m.farms) {
     if (live?.farms?.includes(f.key)) continue;
     const rewards = m.poolToken(f.rewards);
@@ -649,7 +694,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       part: `farm:${f.key}`,
       says: `Open the farm “${f.name}”: stake ${f.stakes === 'collectibles' ? 'collectibles' : m.tokens.get(f.stakes)?.symbol}, earn ${rewards?.symbol} from “${f.rewards}”`,
       creates: [{ what: `the farm “${f.name}”`, bytes: encodedSize('Farm', { project: NOBODY, id: 0, farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } }, ...placeholders(farmArgs(f, m)), rewards_mint: NOBODY, rate_at: 0n, rate_carry: 0n, total_weight: 0n, reward_per_weight: 0n, reward_remainder: 0n, given: 0n, unreleased: 0n, released_at: 0n, release_ends: 0n, release_from: 0n, release_base: 0n }) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }])],
-      build: (ctx) => [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes] })],
+      alone: farmRolls(f).length > 0,
+      build: (ctx) => naming(farmRolls(f), ctx, [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes], rolls: rollsFor(farmRolls(f), ctx) })]),
     });
   }
 
@@ -720,10 +766,12 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         : a.lot?.roll
           ? `Open the auction “${a.name}” of a roll of the box “${m.box.get(a.lot.roll)?.name ?? a.lot.roll}”, made for its winner at the end (${terms})`
           : `Open the auction “${a.name}” of one new “${m.item.get(a.lot?.item)?.name ?? a.lot?.item}” (${terms})`,
+      alone: Boolean(args.lot.Roll),
       creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, serial: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, held: [] }) }],
       build: (ctx) => {
         const seller = auctionSeller(a, ctx);
-        return [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx) })];
+        const lot = args.lot.Roll ? [args.lot.Roll[0]] : [];
+        return naming(lot, ctx, [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx), rolls: rollsFor(lot, ctx) })]);
       },
     });
   }
@@ -941,7 +989,8 @@ export function pack(steps, ctx) {
     // A step with nothing to send (the lookup table of a plan built with no recent slot) is left out.
     if (!instructions.length) continue;
     const signerKind = step.signers.includes('authority') ? 'authority' : 'owner';
-    if (current && current.signer === signerKind) {
+    // A write that names boxes to roll takes all the compute a transaction has: alone.
+    if (current && current.signer === signerKind && !step.alone && !current.alone) {
       const next = [...current.instructions, ...instructions];
       if (sizeOf(next) <= BUDGET) {
         current.instructions = next;
@@ -954,7 +1003,7 @@ export function pack(steps, ctx) {
     const size = sizeOf(instructions);
     if (size > BUDGET) throw new Error(`The step “${step.says}” is ${size} bytes: too big for one transaction.`);
     // `built`: each step's own instructions, in the order of `steps`.
-    current = { signer: signerKind, steps: [step], built: [instructions], instructions, signers: [...step.signers] };
+    current = { signer: signerKind, steps: [step], built: [instructions], instructions, signers: [...step.signers], alone: Boolean(step.alone) };
     transactions.push(current);
   }
   for (const t of transactions) t.bytes = sizeOf(t.instructions);

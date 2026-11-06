@@ -234,9 +234,9 @@ export function shardBitsFor(wallets, rounds = 1) {
  * claims it counts in, then each round's prize (`grant.gives`, `prizeMetas`): `poolMint` for tokens from a pool, `item`
  * (the decoded Item) for a collectible or a compressed NFT of one, `nft` for an NFT of a stash; round `i`'s roll at
  * `prizeRollNonce(nonce + i)` (`nonce`: `prizeNonce` of the grant, the wallet and its rounds by default), then the rolled
- * box's prize mints (`rollMints`: `boxes`, `rollPools`). Send it with a compute limit of `CLAIM_COMPUTE_UNITS`.
+ * box's roll accounts (`rollAccounts`: `rolls`). Send it with a compute limit of `CLAIM_COMPUTE_UNITS`.
  */
-export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, rounds, round, expires, personHash, amount = 0n, proofs, proof = [], paidRounds = null, poolMint, item, nft, boxes = {}, rollPools = {}, shown, listProof, programs, voucherKey, nonce, extra = [] }) {
+export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, rounds, round, expires, personHash, amount = 0n, proofs, proof = [], paidRounds = null, poolMint, item, nft, rolls = {}, shown, listProof, programs, voucherKey, nonce, extra = [] }) {
   if (!signer) throw new Error('A claim needs its signer: whoever sends it');
   // Every claim is its winning wallet's own: the wallet signs it, whatever proves it (a voucher, a list, an open
   // grant), so nobody claims for a player (WalletMustSign). `signer` pays the fees and what the claim opens: the
@@ -274,7 +274,7 @@ export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, ro
   const prizes = owed.flatMap((r, made) => prizeMetas({
     project, prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: { Fixed: [r.amount] } } } : gives, winner: wallet, nonce: BigInt.asUintN(64, nonce + BigInt(r.i)), programs,
     poolMints: pool !== undefined ? { [pool]: poolMint } : {}, items: itemId !== undefined ? { [itemId]: item } : {}, nft, made,
-    strict: true, boxes, rollPools,
+    strict: true, rolls,
   }));
   proofs ??= listed && !voucherKey ? [proof] : proof.length ? [proof] : [];
   return lootIx(

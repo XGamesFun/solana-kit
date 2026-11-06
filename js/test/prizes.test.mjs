@@ -72,8 +72,7 @@ t('a grant gives a roll of a box', () => {
   const wallet = w.who();
   const grant = w.read('Grant', pda.grant(w.project, 1));
   const nonce = 77n;
-  const boxes = { [CHEST]: w.read('LootBox', pda.box(w.project, CHEST)) };
-  w.chain.send(wallet, [loot.claimGrantIx({ project: w.project, id: 1, grant, wallet, signer: wallet, projectState: w.projectState(), boxes, nonce })]);
+  w.chain.send(wallet, [computeUnitLimit(1_400_000), loot.claimGrantIx({ project: w.project, id: 1, grant, wallet, signer: wallet, projectState: w.projectState(), rolls: w.rolls([CHEST]), nonce })]);
   assert.ok(nfts.includes(rollAndSettle(w, pda.order(w.project, wallet, loot.prizeRollNonce(nonce)))));
 });
 
@@ -102,7 +101,7 @@ t('a contest’s winning entry gets a roll of a box with its part of the pot', (
   const { w, nfts } = stocked('prizes-contest');
   const now = w.chain.now();
   const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, prize: { Roll: [CHEST] } };
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args })]);
+  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args, rolls: w.rolls(args.prize?.Roll ? [args.prize.Roll[0]] : []) })]);
   let contest = w.read('Contest', pda.contest(w.project, 1));
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
@@ -120,7 +119,7 @@ t('an auction sells a roll of a box', () => {
   const { w, nfts } = stocked('prizes-auction');
   const now = w.chain.now();
   const args = { lot: { Roll: [CHEST] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [] };
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args })]);
+  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args, rolls: w.rolls(args.lot.Roll ? [args.lot.Roll[0]] : []) })]);
   const address = pda.auction(w.project, w.authority, 1);
   w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: w.read('Auction', address), amount: PRICE })]);
   w.chain.warp(now + 601);

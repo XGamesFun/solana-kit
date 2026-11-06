@@ -180,7 +180,7 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   const [c, d, e] = [mint(w.player), mint(w.cranker), mint(w.cranker)];
   const lot = { lot: { Roll: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(w.chain.now()), ends_at: BigInt(w.chain.now() + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
   w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(2)], { active: false }) } });
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
+  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot, rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []) })]);
   const auction = () => w.read('Auction', pda.auction(w.project, w.authority, 1));
   w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: auction(), nfts: [{ asset: c, ...kind }] })]);
   w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.bidIx({ bidder: w.cranker, project: w.project, id: 1, auction: auction(), nfts: [{ asset: d, ...kind }, { asset: e, ...kind }], held: [kind] })]);

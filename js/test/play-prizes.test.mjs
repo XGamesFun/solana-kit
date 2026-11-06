@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { parseCoreAsset } from '../chain/core.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
+import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { cannotRun, collectible, PRICE, world } from './world.mjs';
@@ -37,7 +38,7 @@ test('a player claims a grant and wins an auction that each give a roll, and tak
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [CHEST] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const now = w.chain.now();
   const lot = { lot: { Roll: [CHEST] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [] };
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
+  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot, rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []) })]);
 
   const player = freshKeypair();
   w.chain.airdrop(player.address, 10_000_000_000n);

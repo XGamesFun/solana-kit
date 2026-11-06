@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 9 build (program commit
-84f35e3, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r9-build`,
-`loot.so` sha256 27eaf5bf…); before it, the review 8 (218e9296…), review 7 (2e3d1ee3…), review 6 (d99463f9…), review 5 (a390dbbf…), review 4 (603f3a80…), review 3 (74b2415a…), review 2 (e6d170b9…), review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 10 build (program commit
+1800f04, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r10-build`,
+`loot.so` sha256 1d9d5a54…); before it, the review 9 (27eaf5bf…), review 8 (218e9296…), review 7 (2e3d1ee3…), review 6 (d99463f9…), review 5 (a390dbbf…), review 4 (603f3a80…), review 3 (74b2415a…), review 2 (e6d170b9…), review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -48,6 +48,8 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
       re-pin: refresh each upkeep seat at its `upkeep_until`, and send a settle's split first
 - [x] review 9 build: Item collection account and `compressed`, open_contest `prize_pool`, treasury holds
       (releaseIx `treasury`, claims), the mission stand-in guard in unstakeNft; Sheet shrink refunds nobody (docs)
+- [x] review 10 build: roll accounts on every write naming a box and on strict routes; plan box order and lone 1.4M
+      writes; checker roll keys; 64 KiB heap on 3-roll bundles
 
 ## Client-only items (plan "The client, with no program change")
 
@@ -67,6 +69,6 @@ Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against th
 - program: a lottery's per-wallet count keeps a u32 total of every round's tickets; 2^32 in all refuses that wallet's next purchase (Overflow). The 0.22 receipt kept no total.
 - program (fixed in review 1): a grant's tag was a profile's (24); now 27.
 
-- check: `npm run check` with the review 1 build: fixtures, skills, lint and 480 tests pass; `release-manifest --check`
+- check: `npm run check` with the latest build: fixtures, skills, lint and 482 tests pass; `release-manifest --check`
   fails only because release.json pins devnet's 0.22 IDL and client (left as is until the 0.23 upgrade).
 - program: the IDL's metadata version is still 0.22.0 (the package's too).
