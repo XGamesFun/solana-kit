@@ -85,7 +85,7 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   // collectible's rent for each item the richest outcome gives, each card of a pack), back unspent.
   const itemsOf = (b) => drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map((o) => outcomeParts(o).filter((p) => holdsRent(p, m)).length));
   const order = (b) => [
-    back('the order', rent(boxOrderBytes(b, m)), 'at settle or refund'),
+    back('the order', rent(boxOrderBytes(b, m, 1, { opened: true })), 'at settle or refund'),
     ...(settleUnits(b, m) ? [back(`the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleUnits(b, m)} × ${sol(SETTLE_RENT_UNIT)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`, SETTLE_RENT_UNIT * BigInt(settleUnits(b, m)), `once the key has settled, less what it opened (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it when the roll fails`)] : []),
   ];
   // A box that needs no roll is bought in one step (`buy`): no order, and a collectible's rent is paid at once.

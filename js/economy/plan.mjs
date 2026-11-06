@@ -52,11 +52,16 @@ export function itemArgs(it, m) {
   };
 }
 
-/** The bytes of an order of box `b` (`orderBytes`), its spec's names standing in as addresses. */
-export const boxOrderBytes = (b, m, opens = 1) => {
-  // Sized as the program sizes it (`space_for(box, shares, opens)`): with the shares its split stores.
+/**
+ * The bytes of an order of box `b` (`orderBytes`), its spec's names standing in as addresses, with the shares its split
+ * stores. `opened`: an open's (`open_box`, `Order::sized`: each draw at its dearest outcome's prizes as they are kept,
+ * rows only for the tables its fresh items draw); otherwise a roll made inside another call (a craft, a grant's claim,
+ * a mission, a lottery's place, a roll lot: `Order::space_for`, the box's whole table budget a draw).
+ */
+export const boxOrderBytes = (b, m, opens = 1, { opened = false } = {}) => {
   const args = boxArgs(b, m);
-  return loot.orderBytes(placeholders(args), (args.shares ?? []).length, opens);
+  const items = opened ? Object.fromEntries(m.items.map((it) => [it.id, itemArgs(it, m)])) : undefined;
+  return loot.orderBytes(placeholders(args), (args.shares ?? []).length, opens, items);
 };
 
 /** The most bytes of rows one table write carries: what a 1,232-byte transaction leaves after the upsert's accounts,

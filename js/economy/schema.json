@@ -209,7 +209,7 @@
       "items": {
         "$ref": "#/$defs/address"
       },
-      "description": "Core collections the owner already controls (their update authority) that the project takes too, besides the one it makes: up to eight in all. An NFT of any of them is the project's own: it reads and writes it as one, and an item may be minted into it (with the project as its update delegate)."
+      "description": "Core collections the owner already controls (their update authority) that the project takes too, besides the one it makes: as many as the project's setup transaction carries (about 25 in all). An NFT of any of them is the project's own: it reads and writes it as one, and an item may be minted into it (with the project as its update delegate)."
     },
     "compressedTree": {
       "type": "object",

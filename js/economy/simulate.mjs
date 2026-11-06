@@ -33,8 +33,8 @@ const BURN_REFUND = 0.00096;
 const claimRecordsRent = (g) => sol(BigInt(LIMIT_RECORD_BYTES + ((g.vouchers ?? []).length || (g.keys ?? []).length || (g.list ?? []).length ? ROUND_RECORD_BYTES : 0)) * RENT_PER_BYTE);
 /** A wallet's token account, which a grant that pays tokens opens from its funds when the winner has none. */
 const TOKEN_ACCOUNT_RENT = sol((165n + 128n) * RENT_PER_BYTE);
-/** An order of box `b`'s rent, sized to all its box can set aside (`orderBytes`), returned at settle or refund. */
-const orderRent = (b, m) => sol((BigInt(boxOrderBytes(b, m)) + 128n) * RENT_PER_BYTE);
+/** An order of box `b`'s rent (`orderBytes`), returned at settle or refund: an open's (`opened`, sized as `open_box` sizes it), or a roll's made inside another call. */
+const orderRent = (b, m, opened = false) => sol((BigInt(boxOrderBytes(b, m, 1, { opened })) + 128n) * RENT_PER_BYTE);
 const num = (v) => (v === undefined || v === null ? 0 : Number(v));
 export const round = (x, digits = 9) => (Number.isFinite(x) ? Number(x.toFixed(digits)) : x);
 
@@ -334,7 +334,7 @@ export function simulate(economy, { now = 0 } = {}) {
     const isSol = Boolean(m.tokens.get(token)?.wsol);
     const oracle = bought ? 0 : ORACLE;
     // A collectible's rent comes out of the SOL the open lends its settle key: on average, the chance of one.
-    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleUnits(b, m) + orderRent(b, m) });
+    const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleUnits(b, m) + orderRent(b, m, true) });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);
     return {

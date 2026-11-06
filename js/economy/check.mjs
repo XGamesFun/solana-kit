@@ -8,7 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { vault } from '../client/pda.js';
-import { MAX_ORDER_BYTES } from '../client/sizes.js';
+import { drawsFit, MAX_ORDER_BYTES } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
@@ -54,7 +54,7 @@ import {
   wholeCount,
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
-import { boxOrderBytes, placeholderContext, setupSteps, stepBytes } from './plan.mjs';
+import { boxArgs, boxOrderBytes, placeholderContext, setupSteps, stepBytes } from './plan.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
@@ -395,6 +395,8 @@ const MAX_CONTEST_SECONDS = Number(IDL.constants.find((c) => c.name === 'MAX_CON
 /** A sealed schedule's last run comes within this of going live (schedule.rs). */
 const MAX_SCHEDULE_SECONDS = Number(IDL.constants.find((c) => c.name === 'MAX_SCHEDULE_SECONDS')?.value ?? 315_360_000);
 /** The most runs a sealed schedule makes (schedule.rs). */
+/** The most places a run of a lottery's places given one by one holds (lottery.rs). */
+const MAX_RUN_PLACES = Number(IDL.constants.find((c) => c.name === 'MAX_RUN_PLACES')?.value ?? 4_096);
 const MAX_SEALED_RUNS = Number(IDL.constants.find((c) => c.name === 'MAX_SEALED_RUNS')?.value ?? 10_000);
 
 /**
@@ -837,7 +839,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
 
   // ---- the collections and items
   if (m.collection && toBps(m.collection.royaltyPercent) === null) refuse('E-PERCENT', 'economy.collection.royaltyPercent', 'The royalty is finer than hundredths of a percent.', 'Round it to two decimals.');
-  // A project takes up to eight collections (project.rs MAX_COLLECTIONS): the one it makes and the owner's others.
+  // A project takes the one collection it makes and the owner's others: as many as `create_project`'s transaction carries
+  // (about 25; no cap of the program's own), which the setup's size check below refuses past (E-TX-SIZE).
   m.collections.forEach((c, i) => isAddress(c) || refuse('E-REF', `economy.collections[${i}]`, `“${c}” is not an address.`, 'Write the Core collection’s address.'));
   if (m.collections.length) warn('W-COLLECTIONS', 'economy.collections', `The project takes ${m.collections.length} collection${m.collections.length === 1 ? '' : 's'} you already have: going live passes ${m.collections.length === 1 ? 'it' : 'them'} to the program, which refuses one whose update authority is not your wallet (BadCollection). An item minted into one needs the project as an update delegate of it, which you add to the collection yourself.`);
   const given = new Set();
@@ -1007,6 +1010,28 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // A compressed item an outcome gives is minted at the settle, as any prize's (`compressedCheck`).
     outs.forEach((o, i) => outcomeParts(o).forEach((part) => part.gives === 'item' && part.compressed && m.item.get(part.item) && compressedCheck(m.item.get(part.item), `${where}.outcomes[${i}]`, label(b), 'E-ODDS')));
     const cards = slots.reduce((n, s) => n + s.count, 0);
+    // Every outcome is one some slot draws (BadEntries): one no slot draws would count as stock no roll can give.
+    if (slots.length && !slots.some((s) => !(s.from ?? []).length)) {
+      const undrawn = outs.map((_, i) => i).filter((i) => !slots.some((s) => (s.from ?? []).includes(i)));
+      if (undrawn.length)
+        refuse('E-ODDS', `${where}.slots`, `No slot of ${label(b)} draws its outcome${undrawn.length === 1 ? '' : 's'} ${undrawn.join(', ')}: an outcome no slot draws is never given, so the program refuses the box (BadEntries).`, 'Name each outcome in some slot’s "from", leave "from" out of a slot (it draws among all), or drop the outcome.');
+    }
+    // Every draw of one open fits one answer of the oracle's (PackTooLarge): a pack past it could only draw its first
+    // cards, so the program refuses the box.
+    if (cards > 1 && outs.length) {
+      const entries = (() => {
+        try {
+          return boxArgs(b, m).entries;
+        } catch {
+          return null;
+        }
+      })();
+      if (entries && !drawsFit(entries, cards)) {
+        let most = cards - 1;
+        while (most > 1 && !drawsFit(entries, most)) most -= 1;
+        refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here), so the program refuses the box (PackTooLarge).`, 'Fewer cards an open (sell two packs instead of one), fewer outcomes, or fewer prizes in an outcome.');
+      }
+    }
     if (cards > 1 && b.rollsOn)
       refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} times an open, but a pack has no NFT it rolls on (BadEntries).`, 'Leave "slots" out, or drop "rollsOn".');
     // An open's order holds every prize it can set aside: at most 10,240 bytes (about 243 one-prize draws).
@@ -1511,6 +1536,10 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       // A run holds places alike: a named NFT, a roll or a share of a pool is one place's.
       if (p.times > 1 && ((p.prize?.gives === 'nft') || p.prize?.gives === 'roll' || p.prize?.gives === 'share'))
         refuse('E-LOTTERY', `${where}.places[${i}].times`, `${label(l)}’s place ${i + 1} repeats ${p.times} times a prize one place gives (a named NFT, a roll, a share of a pool) (BadLottery).`, 'Give it to one place, or make it a prize places can share alike (tokens, an item, an NFT drawn from the lottery’s stash).');
+      // A run of places given one by one (anything but tokens: a collectible, a compressed NFT, a raffled NFT) holds at
+      // most MAX_RUN_PLACES places: a pull walks the run from its first place (BadLottery).
+      if (p.prize && !['tokens', 'share'].includes(p.prize.gives) && p.times > MAX_RUN_PLACES)
+        refuse('E-LOTTERY', `${where}.places[${i}].times`, `${label(l)}’s place ${i + 1} gives ${prizeWords(p.prize, m)} to ${p.times.toLocaleString('en-US')} places in a row: a run of places given one by one holds at most ${MAX_RUN_PLACES.toLocaleString('en-US')}, since each pull walks it from its first place (BadLottery).`, `Split it into runs of ${MAX_RUN_PLACES.toLocaleString('en-US')} places or fewer, one after another.`);
       // A run's token prize in all, each place's amount times its places, fits a u64 (BadLottery).
       const t = p.prize?.amount !== undefined ? prizeToken(p.prize, m) : null;
       let each = 0n;
