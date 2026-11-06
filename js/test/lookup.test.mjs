@@ -271,7 +271,7 @@ describe('xsolana_check sizes every box’s settle', async () => {
     const k = (n) => key(2000 + n);
     const assets = [k(1), k(2), k(3), k(4)];
     const order = { project: k(5), player: k(6), mint: k(7), loot_box: k(8), status: 'Rolled', won: [k(9), k(10), k(11)].map((nft) => ({ Nft: { stash: 0, nft } })), burns: false, paid: 1n, fee: 0n,
-      shares: assets.map((a) => ({ to: { Holder: [a] }, bps: 500 })), subject: '11111111111111111111111111111111', held: false, fate: null, requested_slot: 1n };
+      shares: assets.map((a) => ({ to: { Holder: [a] }, bps: 500 })), subject: '11111111111111111111111111111111', held: false, fate: null, requested_slot: 1n, drew: 1 };
     const ix = loot.settleIx({ signer: k(12), orderAddress: k(13), order, projectState: { treasury: k(14) }, items: {}, nfts: Object.fromEntries(order.won.map((w) => [w.Nft.nft, { collection: k(15) }])), putBack: [], subject: {}, holders: Object.fromEntries(assets.map((a, i) => [a, k(20 + i)])), programs: { [k(7)]: TOKEN_PROGRAM } });
     const real = transactionSize(compileMessage({ payer: k(12), blockhash: BLOCKHASH, instructions: [computeUnitLimit(1_400_000), requestHeapFrame(loot.settleHeapFrame(order)), ix] }));
     assert.equal(est.legacy, real);

@@ -815,11 +815,13 @@ export function callbackRollIx({ order, orderState, box, boxAddress, randomness,
  *   Nft     the NFT as `piece` takes it (`nfts[nft]` its kind), going to the player, then a compressed NFT's proof
  *   Roll    the box, then the order its roll is made in (`rollNonce`)
  */
-export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeTo, putBack = [], programs, from = 0, upto = order.won.length, tree, treeMinted = 0n }) {
+export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeTo, putBack = [], programs, from = 0, upto = order.won.length, tree, treeMinted = 0n, unminted = [] }) {
   const project = order.project;
   // A compressed prize is minted into `tree` (any of the project's with room), the next NFT it mints: after
-  // `treeMinted`, and the compressed prizes before it in this part.
+  // `treeMinted`, and the compressed prizes before it in this part that were minted. One of an item whose collection
+  // lacks Bubblegum's plugin (`unminted`: those collections) gives nothing and mints nothing: the next takes its place.
   let minted = BigInt(treeMinted);
+  const skips = new Set(unminted);
   return order.won.slice(from, upto).flatMap((won, at) => {
     const k = from + at;
     if (won.Fresh || won.Compressed) {
@@ -831,7 +833,7 @@ export function wonAccounts({ orderAddress, order, items = {}, nfts = {}, prizeT
       if (won.Fresh) return [meta(address, false, true), meta(item.collection, false, true), meta(pda.itemAsset(address, serial), false, true), meta(MPL_CORE_PROGRAM, false, false), ...tables];
       if (!tree) throw new Error('settling a compressed prize needs the project tree it is minted into (tree, treeMinted)');
       const asset = pda.compressedAsset(tree, minted);
-      minted += 1n;
+      if (!skips.has(item.collection)) minted += 1n;
       return [
         meta(address, false, true), meta(pda.treeConfig(tree), false, true), meta(tree, false, true), meta(item.collection, false, true),
         meta(BUBBLEGUM_PROGRAM, false, false), meta(COMPRESSION_PROGRAM, false, false), meta(NOOP_PROGRAM, false, false), meta(MPL_CORE_PROGRAM, false, false), meta(BUBBLEGUM_CORE_SIGNER, false, false),
@@ -904,11 +906,12 @@ export const CARDS_AN_ORDER = 30;
 /** How many draws one open of `box` makes: its slots' counts, or one. */
 export const boxDraws = (box) => (box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
-/** How many settle parts an order of `opens` opens of `box` takes at most: each card, at its most calls. */
+/** How many settle parts an order of `opens` opens of `box` takes at most: each card, at its most calls, and with
+ * shares one more (the first call splits the payment, alone when no prize fits beside its shares: `SETTLE_SPLIT`). */
 export function settleParts(box, opens = 1) {
   const draws = box.slots?.length ? box.slots.reduce((n, s) => n + Number(s.count), 0) : 1;
   const cards = Math.max(1, ...box.entries.map((e) => e.prizes.length)) * draws * Math.max(1, opens);
-  return Math.max(1, Math.ceil(cards / Math.floor((TRACE_LIMIT - SETTLE_BASE_CALLS) / 7)));
+  return Math.max(1, Math.ceil(cards / Math.floor((TRACE_LIMIT - SETTLE_BASE_CALLS) / 7))) + ((box.shares ?? []).length ? 1 : 0);
 }
 
 /** The heap a settle that moves three or more NFTs asks for (`settleHeapFrame`): all a transaction may have, 256 KiB. */
@@ -957,6 +960,10 @@ export function settleComputeUnits(order) {
   return moves ? MAX_COMPUTE_UNITS : 800_000;
 }
 
+/** `settle`'s `upto` for a first call that only splits the payment, giving no prize (`SETTLE_SPLIT`, the IDL's constant):
+ * so a winner's account that can't take a prize yet holds up nobody's share of the price. */
+export const SETTLE_SPLIT = Number(IDL.constants?.find((c) => c.name === 'SETTLE_SPLIT')?.value ?? 4_294_967_295);
+
 /**
  * Carries out a rolled order: hands over what its roll set aside (`wonAccounts`: a collectible minted, the project's
  * backend delivering a normal item from the receipt; tokens from the project's vault; an NFT taken out of its stash;
@@ -968,26 +975,30 @@ export function settleComputeUnits(order) {
  * (`handsBack` of it as read), so the program gives it back to the player, and a Token Metadata NFT's `token` is the
  * player's. `extra`: a hook's or a memo's accounts.
  */
-export function settleIx({ signer, orderAddress, order, projectState, items, nfts, prizeTo, putBack, subject, handBack = false, holders, programs, upto = 0, rows = [], tree, treeMinted, extra = [] }) {
+export function settleIx({ signer, orderAddress, order, projectState, items, nfts, prizeTo, putBack, subject, handBack = false, holders, programs, upto = 0, rows = [], tree, treeMinted, unminted, extra = [] }) {
   const project = order.project;
   // A part: the order's prizes from where its last part stopped (`settled`) up to `upto` (0, or past the end: the last
-  // part, all that is left, maybe none). Only the last part takes the payment, the shares and the NFT rolled on, and
-  // closes the order; `upto` at the end gives every prize left and leaves the last part none. `rows` proves the rows of committed tables its fresh units
-  // drew (`ProvenRow`, in order).
+  // part, all that is left, maybe none; `SETTLE_SPLIT`: no prize). The first call splits the payment (its shares'
+  // accounts ride on it); the last carries out the NFT rolled on, pays the undrawn draws' share back and closes the
+  // order; `upto` at the end gives every prize left and leaves the last part none. `rows` proves the rows of committed
+  // tables its fresh units drew (`ProvenRow`, in order).
   const from = Number(order.settled ?? 0);
-  const last = !upto || Number(upto) > order.won.length;
-  const end = last ? order.won.length : Number(upto);
-  const prizes = wonAccounts({ orderAddress, order, items, nfts, prizeTo, putBack, programs, from, upto: end, tree, treeMinted });
+  const split = Number(upto) === SETTLE_SPLIT;
+  const last = !split && (!upto || Number(upto) > order.won.length);
+  const end = split ? from : last ? order.won.length : Number(upto);
+  // The payment is split once, by the first call (`drew` is 0 once it is made).
+  const splits = Number(order.drew ?? 0) > 0;
+  const prizes = wonAccounts({ orderAddress, order, items, nfts, prizeTo, putBack, programs, from, upto: end, tree, treeMinted, unminted });
   const tokenProgram = tokenProgramOf(programs, order.mint);
   const burns = order.burns || sharesBurn(order.shares);
   // The NFT it rolled on, as the settle moves it: given to a wallet that is an account of the loot program, it goes
   // back to its player (`handsBack`), into the player's token account for a Token Metadata NFT.
-  // A part before the last gives only its prizes: no NFT rolled on (its piece a stand-in), no shares.
+  // A part before the last gives only its prizes (and the first, the split): no NFT rolled on (its piece a stand-in).
   const receiver = last ? receiverOf(order) : null;
   const on = last ? orderPiece(project, orderAddress, order, subject, handBack && order.fate?.then?.Give ? order.player : receiver) : standIn(orderAddress);
   return lootIx(
     'settle',
-    { upto: last ? 0 : end, prize_accounts: prizes.length, rows },
+    { upto: split ? SETTLE_SPLIT : last ? 0 : end, prize_accounts: prizes.length, rows },
     {
       signer,
       order: orderAddress,
@@ -1003,8 +1014,8 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       player_token: Number(order.undrawn ?? 0) > 0 && last ? ata(order.player, order.mint, tokenProgram) : null,
     },
     {
-      remaining: [...on.proof, ...prizes, ...(last ? shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }) : []), ...tailOf(extra)],
-      writable: [...(burns && last ? ['mint'] : []), ...on.writable],
+      remaining: [...on.proof, ...prizes, ...(splits ? shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }) : []), ...tailOf(extra)],
+      writable: [...(burns && splits ? ['mint'] : []), ...on.writable],
     },
   );
 }
@@ -2130,10 +2141,13 @@ export function holdIx({ player, project, collection, asset, tokenMetadata: tm, 
  * The project's owner or authority (`signer`) puts an NFT it holds into stash `id`, or (`out`: a wallet) takes one the
  * stash holds out to that wallet. The NFT is any kind, as `piece` takes it: `collection` a Core asset's own,
  * `tokenMetadata`, or `compressed` after a `proveLeafIx` in the same transaction. The signer pays what the stash grows
- * by, and gets back the rent it no longer needs. Taken out with `out` the project's own address, the entry is only dropped
- * from the stash and the NFT stays where it is. `out` is never another account of the program (`ToTheProject`).
+ * by, and gets back the rent it no longer needs. `drop`: the NFT leaves the stash and stays where it is, owed to the
+ * treasury in its hold (`["hold", nft, 0]`, the signer paying its rent until anyone `release`s it to the treasury, one
+ * NFT a call). `out` is never the project's own address nor another account of the program (`ToTheProject`).
  */
-export function stashIx({ signer, project, id, lottery = null, lotteryState = null, asset, out = null, weight = 1, collection, tokenMetadata: tm, compressed, more = [] }) {
+export function stashIx({ signer, project, id, lottery = null, lotteryState = null, asset, out = null, drop = false, weight = 1, collection, tokenMetadata: tm, compressed, more = [] }) {
+  if (drop && more.length) throw new Error('A stash drops one NFT a call.');
+  if (drop) out = pda.hold(compressed?.id ?? asset, 0);
   const to = out ?? signer;
   // A lottery's own stash (`lottery`: the lottery's id): an NFT its place names leaves only as that prize, or once the
   // lottery has ended; taking one out passes the lottery.
@@ -2142,12 +2156,12 @@ export function stashIx({ signer, project, id, lottery = null, lotteryState = nu
   // Out to a wallet or the project's own address, never another account of the program (a record, a stash, a fee
   // box), where no record names the NFT and nothing could move it again (ToTheProject): the ones this call names are
   // refused before sending, and the program refuses any other (js/play only takes one out to the signer's wallet).
-  if (out && out !== project && [stash, own, pda.fees(project), pda.platform()].includes(out))
-    throw new Error('An NFT taken out of a stash can’t go to an account of the program: name a wallet, or the project’s own address to only drop it from the stash.');
+  if (out && !drop && [project, stash, own, pda.fees(project), pda.platform()].includes(out))
+    throw new Error('An NFT taken out of a stash can’t go to the project or an account of the program: name a wallet, or drop it (`drop`: it stays, owed to the treasury).');
   // Several NFTs (`more`: each { asset, weight, collection, tokenMetadata, compressed }) go in or out in one call, one
   // fee, in ascending order of their addresses; put in, each weighs its `weight` in the stash's draws.
   const [first, ...rest] = ascending([{ asset, weight, collection, tokenMetadata: tm, compressed }, ...more].map((n) => ({
-    n, p: piece({ project, asset: n.asset, wallet: to, collection: n.collection, tokenMetadata: n.tokenMetadata, compressed: n.compressed, ...ONLY_MOVES }),
+    n, p: piece({ project, asset: n.asset, wallet: drop ? project : to, collection: n.collection, tokenMetadata: n.tokenMetadata, compressed: n.compressed, ...ONLY_MOVES }),
   })), (x) => x.p.accounts.asset);
   const p = withPrograms(first.p, rest.map((x) => x.p));
   const weights = out ? [] : [first, ...rest].map((x) => x.n.weight ?? 1);

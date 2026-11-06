@@ -468,8 +468,9 @@ export function escrowUnits(b, m) {
 
 export const boxRolls = (b, m) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
 
-/** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll, and rolls on no NFT. */
-export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn;
+/** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll, rolls on no NFT and draws once a sale
+ * (a pack of several draws goes through `open_box`: `Rolls`). */
+export const boxBuys = (b, m) => !boxRolls(b, m) && !b.rollsOn && drawsOf(b) === 1;
 
 /** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
 export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 } : { percent: p, prize: null, times: 1 });

@@ -458,9 +458,14 @@ must carry Bubblegum's plugin: a settle into one without it fails, and a rolled 
 (`Order::space_for`, `orderBytes`), holding a collectible's rent for every card it may mint, so anyone settles it, in
 as many parts as the chain needs: each `settle` carries out the prizes from where the last part stopped
 (`Order.settled`) up to `upto`, and writes its receipt (`OrderPartSettled`) before it mints, so a log Solana cuts at
-10 KB keeps it; the last part (`upto` 0, or past the end: `OrderSettled`) takes the payment, the shares, the NFT rolled
-on and the fee, gives whatever prizes are left (maybe none) and closes the order. A part before it (`upto` at most the
-end) gives prizes only, with no share accounts and a stand-in piece. A transaction's instruction trace (64 calls) binds
+10 KB keeps it. The first call splits the payment, its shares' accounts and their hook tail with it (`upto` =
+`SETTLE_SPLIT`, u32::MAX, splits and gives no prize, accepted only before the split: sent first when a prize can't land
+yet, a winner's account its issuer froze, so the shares are paid); the last part (`upto` 0, or past the end:
+`OrderSettled`) carries out the NFT rolled on, pays the undrawn draws' share back, gives whatever prizes are left
+(maybe none) and closes the order. A part before it (`upto` at most the end) gives prizes with a stand-in piece.
+`OrderPartSettled` carries `amount` and `treasury_remainder` when it split; in a settle of several parts the last's
+`OrderSettled` has them 0. A compressed prize's item account is written; one of an item whose collection lacks
+Bubblegum's plugin mints nothing, so the next one's Sheet is at the tree's count one less (`wonAccounts`' `unminted`). A transaction's instruction trace (64 calls) binds
 first: measured on 0.22, one settle mints about 14 Core cards, 10 compressed or 8 fresh compressed (`settlePartEnd`,
 `settleParts`); then 64 accounts and 1,232 bytes: js/play's `openBox` sends prizes in parts, each shrunk until it fits,
 then the last part, all from the throwaway key. Rows of committed tables a fresh unit drew are proven in the data

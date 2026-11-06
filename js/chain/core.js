@@ -150,14 +150,26 @@ export function parseCoreAsset(data) {
   return asset;
 }
 
-/** Decode the start of a Core CollectionV1: { updateAuthority, name, uri, numMinted, currentSize }. */
+/** Decode the start of a Core CollectionV1: { updateAuthority, name, uri, numMinted, currentSize, bubblegum (whether it
+ * carries Bubblegum's plugin, BubblegumV2: compressed NFTs can be minted into it) }. */
 export function parseCoreCollection(data) {
   if (data[0] !== COLLECTION_V1) throw new Error('Not a Core collection');
   const r = reader(data, 1);
   const updateAuthority = r.address();
   const name = r.text();
   const uri = r.text();
-  return { updateAuthority, name, uri, numMinted: r.u32(), currentSize: r.u32() };
+  const out = { updateAuthority, name, uri, numMinted: r.u32(), currentSize: r.u32(), bubblegum: false };
+  if (r.at >= data.length || data[r.at] !== PLUGIN_HEADER) return out;
+  r.skip(1);
+  const registry = reader(data, Number(r.u64()) + 1);
+  const plugins = registry.u32();
+  for (let i = 0; i < plugins; i++) {
+    const type = registry.byte();
+    if (registry.byte() === 3) registry.skip(32);
+    registry.u64();
+    if (type === PLUGIN.BubblegumV2) out.bubblegum = true;
+  }
+  return out;
 }
 
 /** getProgramAccounts filters for Core assets owned by `owner` in `collection` (no indexer needed). */

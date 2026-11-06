@@ -219,3 +219,41 @@ test('a box whose open’s order would pass 10,240 bytes is refused (BadEntries)
   assert.ok(r.refusals.some((x) => x.where === `economy.boxes.${box.key}.slots` && /order would be/.test(x.message)), r.refusals.map((x) => x.message).join('\n'));
   assert.equal(loot.MAX_ORDER_BYTES, 10_240);
 });
+
+test('a compressed prize of a collection without Bubblegum’s plugin mints nothing: the next one’s Sheet takes its place', () => {
+  const [plain, plugged] = [pda.platform(), pda.identity()];
+  const tree = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+  const order = { project: WALLET, player: WALLET, won: [{ Compressed: { item: 1, serial: 1, drawn: 0 } }, { Compressed: { item: 2, serial: 1, drawn: 0 } }] };
+  const items = { 1: { collection: plain, traits: [] }, 2: { collection: plugged, traits: [] } };
+  const sheets = (unminted) => loot.wonAccounts({ orderAddress: WALLET, order, items, tree, treeMinted: 5n, unminted }).filter((m) => m.isWritable).map((m) => m.pubkey);
+  assert.ok(sheets([]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))), 'both minted: the second is the tree’s 7th');
+  assert.ok(sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 5n))), 'the first skipped: the second is the 6th');
+  assert.ok(!sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))));
+});
+
+test('a box of one outcome that is opened, minting a token with confidential transfers, is refused (PrizeNotCovered)', () => {
+  const arena = example('coin-flip-arena');
+  const spec = structuredClone(arena);
+  spec.tokens.push({ key: 'veil', source: 'game', symbol: 'VEIL', decimals: 0, powers: { confidentialTransfers: true } });
+  spec.boxes.push({ key: 'veiled', name: 'Veiled pack', price: 0.01, slots: [{ count: 2 }], outcomes: [{ gives: 'tokens', currency: 'veil', amount: 1 }] });
+  const r = check(spec, { now: NOW });
+  assert.ok(r.refusals.some((x) => x.where === 'economy.boxes.veiled.outcomes[0]' && /PrizeNotCovered/.test(x.message)), r.refusals.map((x) => `${x.where} ${x.message}`).join('\n'));
+  // Sold with one draw, it is bought, not opened: no such refusal.
+  spec.boxes.at(-1).slots = undefined;
+  assert.ok(!check(spec, { now: NOW }).refusals.some((x) => /PrizeNotCovered/.test(x.message) && x.where === 'economy.boxes.veiled.outcomes[0]'));
+});
+
+test('a settle’s first call splits the payment with its shares; SETTLE_SPLIT does only that; later calls carry no shares', () => {
+  const k = (n) => pda.stash(WALLET, n);
+  const shares = [{ to: { Wallet: [k(1)] }, bps: 500 }, { to: { Wallet: [k(2)] }, bps: 500 }];
+  const order = { project: WALLET, player: WALLET, mint: k(3), won: [{ Tokens: { mint: k(4), amount: 1n } }], burns: false, shares, subject: null, held: false, fate: null, settled: 0, drew: 1, undrawn: 0 };
+  const build = (o, upto) => loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
+  const has = (ix, a) => ix.keys.some((m) => m.pubkey === a);
+  assert.equal(loot.SETTLE_SPLIT, 4_294_967_295);
+  const split = build(order, loot.SETTLE_SPLIT);
+  assert.ok(has(split, k(1)) && has(split, k(2)), 'the split carries the shares');
+  assert.ok(!has(split, k(4)), 'and no prize');
+  assert.deepEqual([...split.data.subarray(8, 12)], [255, 255, 255, 255]);
+  const after = build({ ...order, drew: 0 }, 0);
+  assert.ok(!has(after, k(1)) && has(after, k(4)), 'split made: the last part carries the prize, no shares');
+});

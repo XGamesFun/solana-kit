@@ -4635,7 +4635,7 @@
         {
           "name": "signer",
           "docs": [
-            "Anyone. Pays the record's rent the first time."
+            "Anyone. Pays the record's rent the first time, and what a larger leaf lacks after."
           ],
           "writable": true,
           "signer": true
@@ -7128,7 +7128,11 @@
           ]
         },
         {
-          "name": "to"
+          "name": "to",
+          "docs": [
+            "`[\"hold\", nft, 0]`, made for the treasury. Unread going in."
+          ],
+          "writable": true
         },
         {
           "name": "fee",
@@ -14307,7 +14311,8 @@
           {
             "name": "paid",
             "docs": [
-              "What the player paid, held in the project's vault until settle or refund."
+              "What the player paid, held in the project's vault until settle or refund. Once the first",
+              "settle call split it, only the share the last part gives back (`undrawn`'s)."
             ],
             "type": "u64"
           },
@@ -14357,7 +14362,7 @@
           {
             "name": "drew",
             "docs": [
-              "The draws its roll made."
+              "The draws its roll made; 0 once the first settle call split the payment."
             ],
             "type": "u32"
           },
@@ -14475,8 +14480,9 @@
       "docs": [
         "A part of an order's prizes carried out (`settle` with an `upto` short of its last): its",
         "`from..upto` of `won`. What each became follows from it: a collectible at `[\"asset\", item, serial]`,",
-        "the NFT itself, a roll's order at `roll_nonce`. The order stays until its last part, which takes",
-        "the payment (`OrderSettled`)."
+        "the NFT itself, a roll's order at `roll_nonce`. The order stays until its last part",
+        "(`OrderSettled`). The first part splits the payment, alone when it gives no prize (`SETTLE_SPLIT`,",
+        "`from == upto`)."
       ],
       "type": {
         "kind": "struct",
@@ -14496,6 +14502,17 @@
           {
             "name": "upto",
             "type": "u32"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "What this part split or burned of the payment, as `OrderSettled`'s: the first part's; 0 for the others."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "treasury_remainder",
+            "type": "u64"
           }
         ]
       }
@@ -14617,7 +14634,7 @@
     {
       "name": "OrderSettled",
       "docs": [
-        "An order was delivered and its payment split."
+        "An order was delivered, its payment split, and it closed."
       ],
       "type": {
         "kind": "struct",
@@ -14666,7 +14683,9 @@
           {
             "name": "amount",
             "docs": [
-              "What the player paid."
+              "What this call split or burned of the payment: what the player paid, less the share of the",
+              "draws the roll didn't make (which goes back to the player). 0 when an earlier part, the first,",
+              "made the split (`OrderPartSettled`)."
             ],
             "type": "u64"
           },
@@ -14686,7 +14705,8 @@
           {
             "name": "treasury_remainder",
             "docs": [
-              "Gross remainder routed to the treasury, excluding explicit shares and before transfer fees."
+              "Gross remainder routed to the treasury, excluding explicit shares and before transfer fees,",
+              "by this call's split."
             ],
             "type": "u64"
           }
@@ -17636,6 +17656,15 @@
       "name": "SEAT_SEED",
       "type": "bytes",
       "value": "[115, 101, 97, 116]"
+    },
+    {
+      "name": "SETTLE_SPLIT",
+      "docs": [
+        "`settle`'s `upto` for a first call that gives no prize and only splits the payment, so a winner's",
+        "account that can't take a prize holds up no share of the price."
+      ],
+      "type": "u32",
+      "value": "4294967295"
     },
     {
       "name": "SHEET_SEED",

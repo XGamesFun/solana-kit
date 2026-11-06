@@ -20,7 +20,7 @@
 // `spec` is the live xsolana.json (its `live` section names the project). `wallet` is { address, signTransaction(wire) →
 // signed wire }: `walletStandardSigner` makes one from a Wallet Standard wallet (Phantom, Solflare, Backpack).
 import { decodeBase58, encodeBase58 } from '../chain/base58.js';
-import { ownedAssetFilters, parseCoreAsset } from '../chain/core.js';
+import { ownedAssetFilters, parseCoreAsset, parseCoreCollection } from '../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, associatedTokenAddress, COMPUTE_BUDGET_PROGRAM, NATIVE_MINT, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { closeTokenAccount, computeUnitLimit, createAssociatedTokenAccountIdempotent, requestHeapFrame, syncNative, transferLamports, withSolWrap } from '../chain/programs.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
@@ -680,7 +680,13 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const box = await read('LootBox', order.loot_box);
       const tree = box.entries.flatMap((e) => e.prizes).find((p) => p.Compressed)?.Compressed.tree;
       const config = (await client.account(loot.pda.treeConfig(tree)))?.data;
-      return { tree, treeMinted: config ? config.subarray(80, 88).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n) : 0n };
+      // An item's collection without Bubblegum's plugin mints nothing: the prizes after it take its place in the tree.
+      const unminted = [];
+      for (const c of new Set(order.won.filter((w) => w.Compressed).map((w) => items[w.Compressed.item]?.collection).filter(Boolean))) {
+        const data = (await client.account(c))?.data;
+        if (!data || !parseCoreCollection(data).bubblegum) unminted.push(c);
+      }
+      return { tree, unminted, treeMinted: config ? config.subarray(80, 88).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n) : 0n };
     };
     const holders = await holdersOf(order.shares);
     // Given by its fate to a wallet that is an account of the loot program, the NFT goes back to the player.
@@ -691,7 +697,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const settleBy = async (signer, upto = 0) => {
       const nfts = {};
       const proving = [];
-      const end = upto || order.won.length;
+      const end = upto === loot.SETTLE_SPLIT ? Number(order.settled ?? 0) : upto || order.won.length;
       for (const won of order.won.slice(Number(order.settled ?? 0), end)) {
         if (won.Nft && !putBack.includes(won.Nft.nft)) {
           // A Token Metadata NFT's settle is the wallet's to send (it pays rent: `paysRent`), so the wallet opens any fresh account.
@@ -706,21 +712,22 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       return { ix, nfts, before: [...subjectProof, ...proving].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM) };
     };
     // An order whose settle doesn't fit one transaction (the instruction trace, 64 accounts, 1,232 bytes) settles in
-    // parts, each its own transaction, from where the last stopped: parts that only hand prizes over (`upto` where each
-    // stops: no NFT rolled on, no shares), as many as the trace holds (`settlePartEnd`) and fewer until they fit, then a
-    // last part (`upto` 0) with the payment, the shares and the NFT rolled on. The burner sends each; the player's
-    // wallet, a part it can't.
+    // parts, each its own transaction, from where the last stopped. The first splits the payment, its shares' accounts
+    // with it (alone, `SETTLE_SPLIT`, when not even one prize fits beside them); parts that hand prizes over (`upto`
+    // where each stops), as many as the trace holds (`settlePartEnd`) and fewer until they fit; then a last part
+    // (`upto` 0) with the NFT rolled on. The burner sends each; the player's wallet, a part it can't.
     const signatures = [];
     const by = burner && !putBack.length ? burner.address : wallet.address;
     const fits = async (instructions) => Boolean(compileFitting({ payer: by, blockhash: NOBODY, instructions, tables: await standing() })) && transactionLocks(by, instructions) <= 64;
     const part = async (end) => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(by, end)).ix];
+    const sendPart = async (end) => signatures.push(by === wallet.address ? await send(await part(end)) : await sendAs(burner, await part(end)));
     for (;;) {
       const from = Number(order.settled ?? 0);
       if (from >= order.won.length) break;
       let end = loot.settlePartEnd(order, from, items);
       if (end >= order.won.length && (await fits(await part(0)))) break;
       while (end > from + 1 && !(await fits(await part(end)))) end--;
-      signatures.push(by === wallet.address ? await send(await part(end)) : await sendAs(burner, await part(end)));
+      await sendPart(Number(order.drew ?? 0) > 0 && !(await fits(await part(end))) ? loot.SETTLE_SPLIT : end);
       order = await current();
       if (!order) return { order: orderAddress, settled: 'elsewhere', says: 'The order was settled already.' };
     }
@@ -2288,6 +2295,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         if (hold.debt?.paid) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: 'Your collectible back: your loan is repaid.' });
         else if (!hold.debt && time >= BigInt(hold.free_at)) out.push({ kind: 'release', asset: hold.asset, hold: pubkey, says: 'Your collectible back: its hold is over.' });
       }
+      // A seat whose upkeep ran out since it was last credited: refreshing it (free, anyone) stops it at its
+      // `upkeep_until`, so it earns no more than its fuel paid for and a pool's sharers are not short meanwhile.
+      for (const f of (spec.farms ?? []).filter((x) => x.upkeepAttribute)) {
+        for (const { account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Seat'), at(1, loot.pda.farm(project, f.id)), at(33, me)])) {
+          const seat = loot.decode('Seat', account.data);
+          const until = BigInt(seat.upkeep_until);
+          if (until > 0n && time >= until && BigInt(seat.credited_at) < until) out.push({ kind: 'refresh-seat', key: f.key, by: seat.asset === NOBODY ? me : seat.asset, says: 'A staked collectible ran out of fuel: refresh its seat so it stops earning there (free).' });
+        }
+      }
       const auctions = spec.auctions ?? [];
       const found = await client.accounts(auctions.map((a) => auctionAt(a)));
       auctions.forEach((a, i) => {
@@ -2419,6 +2435,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (c.kind === 'withdraw') return this.withdraw(c.key);
       if (c.kind === 'vest') return this.runSchedule(c.key);
       if (c.kind === 'unlist') return this.unlist(c.asset);
+      if (c.kind === 'refresh-seat') return this.refresh(c.key, c.by);
       if (c.kind === 'lookup-table') {
         const table = readTable(await client.account(c.table));
         const step = table && tableStep(table, await slotNow(), await recentSlots());

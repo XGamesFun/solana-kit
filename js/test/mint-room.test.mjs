@@ -57,14 +57,16 @@ test('stashIx refuses taking an NFT out to an account of the program it names', 
   const asset = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
   const collection = 'Stake11111111111111111111111111111111111111';
   const own = pda.lottery(project, 3);
-  for (const [out, args] of [[pda.stash(project, 1), { id: 1 }], [pda.lotteryStash(own), { lottery: 3 }], [own, { lottery: 3 }], [pda.fees(project), { id: 1 }], [pda.platform(), { id: 1 }]])
-    assert.throws(() => loot.stashIx({ signer, project, asset, out, collection, ...args }), /can’t go to an account of the program/);
-  // A wallet, and the project's own address (only dropped from the stash), are built.
+  for (const [out, args] of [[project, { id: 1 }], [pda.stash(project, 1), { id: 1 }], [pda.lotteryStash(own), { lottery: 3 }], [own, { lottery: 3 }], [pda.fees(project), { id: 1 }], [pda.platform(), { id: 1 }]])
+    assert.throws(() => loot.stashIx({ signer, project, asset, out, collection, ...args }), /can’t go to the project or an account of the program/);
+  // A wallet, and a drop (to the NFT's hold, one a call), are built.
   assert.ok(loot.stashIx({ signer, project, id: 1, asset, out: signer, collection }));
-  assert.ok(loot.stashIx({ signer, project, id: 1, asset, out: project, collection }));
+  const dropped = loot.stashIx({ signer, project, id: 1, asset, drop: true, collection });
+  assert.ok(dropped.keys.some((k) => k.pubkey === pda.hold(asset, 0) && k.isWritable));
+  assert.throws(() => loot.stashIx({ signer, project, id: 1, asset, drop: true, collection, more: [{ asset: signer }] }), /one NFT a call/);
 });
 
-test('the program refuses a stash take-out to any of its accounts (ToTheProject); the project’s address only drops it', { skip: cannotRun() ?? false }, () => {
+test('the program refuses a stash take-out to any of its accounts (ToTheProject); a drop leaves the NFT owed to the treasury', { skip: cannotRun() ?? false }, () => {
   const w = world({ seed: 'mint-room-stash' });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const nfts = [0, 1].map(() => w.make(1, w.authority));
@@ -75,10 +77,16 @@ test('the program refuses a stash take-out to any of its accounts (ToTheProject)
   fails(() => w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: nfts[0], out: record, collection: w.collection })]), 'ToTheProject');
   assert.deepEqual(stashOf(w, 1), nfts, 'still in the stash');
   assert.equal(ownerOf(w, nfts[0]), w.project);
-  // To the project's own address, it only leaves the stash's list.
-  w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: nfts[0], out: w.project, collection: w.collection })]);
+  // The project's own address is refused too (ToTheProject); a drop leaves the stash's list and the NFT where it is,
+  // owed to the treasury in its hold, which anyone releases to it.
+  assert.throws(() => loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: nfts[0], out: w.project, collection: w.collection }), /drop it/);
+  w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: nfts[0], drop: true, collection: w.collection })]);
   assert.deepEqual(stashOf(w, 1), [nfts[1]]);
   assert.equal(ownerOf(w, nfts[0]), w.project);
+  const hold = w.read('Hold', pda.hold(nfts[0], 0));
+  assert.equal(hold.player, w.treasury, 'owed to the treasury');
+  w.chain.send(w.cranker, [loot.releaseIx({ signer: w.cranker, project: w.project, asset: nfts[0], collection: w.collection, hold })]);
+  assert.equal(ownerOf(w, nfts[0]), w.treasury, 'released to the treasury');
   // To a wallet, it goes.
   const winner = w.who();
   w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: nfts[1], out: winner, collection: w.collection })]);

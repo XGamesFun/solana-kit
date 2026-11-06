@@ -138,4 +138,12 @@ test('the player module’s refuel refreshes the ship’s seat in the same trans
   const fuel = numberOf(w, ship, 'fuel');
   assert.equal(fuel, w.chain.now() + DAY, 'fuelled a day');
   assert.equal(Number(w.read('Seat', seatAt).upkeep_until), fuel, 'and the seat read it in the same transaction');
+  // Once the fuel runs out, claims() lists the seat's refresh (free, anyone), until it is refreshed.
+  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'refresh-seat'), []);
+  w.chain.warp(fuel + 60);
+  const [refresh] = (await app.claims()).filter((c) => c.kind === 'refresh-seat');
+  assert.deepEqual([refresh?.key, refresh?.by], ['mine', ship]);
+  await app.claim(refresh);
+  assert.ok(Number(w.read('Seat', seatAt).credited_at) >= fuel, 'credited past its fuel');
+  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'refresh-seat'), [], 'refreshed: nothing left to do');
 });

@@ -1025,6 +1025,14 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       }
     })();
     if (orderSize > MAX_ORDER_BYTES) refuse('E-ODDS', `${where}.slots`, `${label(b)}’s order would be ${orderSize.toLocaleString('en-US')} bytes, more than the ${MAX_ORDER_BYTES.toLocaleString('en-US')} an order can be (BadEntries).`, 'Fewer draws an open, or fewer prizes in its largest outcome.');
+    // A box of one outcome opened (a pack, a roll on an NFT) sets its prize aside at the open: a minted prize in a mint
+    // that allows confidential transfers can't be (PrizeNotCovered); only a sale (`buy`, one draw, no NFT) gives it.
+    if (outs.length === 1 && !boxBuys(b, m)) {
+      for (const part of outcomeParts(outs[0])) {
+        const t = part.gives === 'mint' || (part.gives === 'tokens' && !prizePool(part)) ? m.tokens.get(part.currency ?? m.currencyKey) : null;
+        if (t?.powers?.confidentialTransfers) refuse('E-ODDS', `${where}.outcomes[0]`, `${label(b)} mints ${t.symbol}, whose mint allows confidential transfers, and is opened rather than bought: its open can’t set that prize aside (PrizeNotCovered).`, 'Sell it with one draw and no NFT rolled on (a shop sale), or give another prize.');
+      }
+    }
     const tok = token(b.currency, `${where}.currency`);
     const price = units(b.price, tok, `${where}.price`, `${label(b)}’s price`);
     prices(b, tok, where);
