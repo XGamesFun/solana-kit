@@ -1,7 +1,7 @@
 # The program's optimization batches in the client: progress
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted, and so the next batches know what is
-left. Batches A to E are done; the keeper's list is under "Left". Delete it once the branch merges.
+left. Batches A to E and the final fixes are done; the keeper's list is under "Left". Delete it once the branch merges.
 
 Program: `gamesfun-loot` worktree `opt-orders` (batches A and B, from 339a281; `docs/opt-a-progress.md`,
 `docs/opt-b-progress.md` there). Built against `XSOLANA_PROGRAM_DIR=/home/potatoe/Documents/gamesfun-loot-worktrees/opt-orders`
@@ -121,6 +121,62 @@ pins stay on 0.22, so only `release-manifest --check` fails.
 Tests: 493 pass (was 491; new: a booster seat's top-up and compound refresh first, a shown NFT frozen on a seat;
 assertions added to the contest, offer, listing, NFT-bid auction, lottery-ask and empty-box tests).
 
+## Final fixes and the flow review (done)
+
+Program: the snapshot `build-8938ee0` (commit 8938ee0 on `loot-0.23`, the gamesfun-loot session's scratchpad;
+`docs/final-fixes-progress.md` there lists every client-visible change since e3831c3; `loot.so` 1,673,928 bytes). The
+kit-side fixes come from the flow review (`opt/flows.md` in that scratchpad, "Most valuable fixes", "Biggest
+violations"). Built against `XSOLANA_PROGRAM_DIR=<that snapshot>`; the pins stay on 0.22, so only
+`release-manifest --check` fails.
+
+- [x] client wire (d86dc73): IDL (`PackTooLarge` appended, `MAX_RUN_PLACES`); a round's header reads `lent` (after
+      `opener`); `orderBytes(box, shares, opens, items)` is `Order::sized` (a draw at its dearest entry's prizes as the
+      `Won` they become, rows only for its fresh items' tables now: `entryRows`), without `items` `Order::space_for`
+      (rolls made in another call, the write's check); `drawsFit` mirrors `order::draws_fit` (its `COST_*`);
+      `opensAnOrder(box)` replaces `CARDS_AN_ORDER` (one answer's draws, an order's rent and fee within 0.01 SOL at
+      5,080 lamports a byte); `rollAskable` waits a slot after the last ask (`SameSlot`); js/play pulls a part owed to
+      a pot or pool made again in another mint to the treasury
+- [x] economy tools (04c4e6a, e019958, 7f87a80; a fork's): the checker refuses an undrawn outcome (BadEntries), a pack
+      one answer can't draw (PackTooLarge) and a run of over 4,096 places (BadLottery); `MAX_COLLECTIONS` text fixed
+      (about 25, the setup transaction's); an open's order sized with the spec's items (`boxOrderBytes(.., { opened })`);
+      `roundRent` on by default (`roundRentOf`: rounds × (header + its token accounts + entries × entry width), from
+      `expect: { rounds, entries }`: 2 rounds repeating, 1 drawing once; entries from the scenario, else 100; the
+      spec's `roundRent` wins, 0 off), the cost and simulation count it and no entry rent for buyers; going live
+      always makes the standing lookup table, refused without one when a part needs it (`E-NO-TABLE`, `wideParts`)
+- [x] js/play farms (d22371f): a booster in a farm whose growth writes the profile refreshes the seat first
+      (`boosterRefreshFirst`, `farm.rs` RefreshFirst); a locked seat's tier move follows FF-2 (`ExitWhileLocked`)
+- [x] js/play lotteries (4b06e5a): a draw that cancels a round (short, or past the timeout) pulls the sender's own
+      refund in the same transaction (`cancelPulls`; the close too when that is all it owes): a refund is 2
+      transactions; a purchase in a round whose draw is due sends the draw first and buys into the next round
+- [x] js/play claims (f70985f): a lender's overdue loan (released to them), a seller's ended auction, proof records
+      left open (`close-leaf`); `runSchedule` sets a 1.4M compute limit
+- [x] js/play keys (c3f3264): one settle key an order, named by it (`js/play/keys.js`). **Derived**: a wallet with
+      `signMessage` signs a fixed text naming the project and the wallet once a session; seed = sha256("loot settle
+      key" | signature | name). A fingerprint of the signature (sha256²) is stored, so a wallet that signs it
+      differently next session (an MPC wallet) is caught and falls back. **Stored** (fallback): a random key kept in
+      `localStorage`, AES-GCM-encrypted with a non-extractable device key in IndexedDB (`browserStore()`, the
+      `keyStore` option); **memory** with neither. `recover()` makes the keys again for the wallet's open orders, its
+      holds and the spec's auctions (and any stored), settles what rolled, keeps what still rolls, sweeps the rest;
+      a claim's settle or refund uses a key it can make without a prompt. `walletStandardSigner` exposes `signMessage`.
+      A loan's pNFT or compressed release, and the releases after an auction end too big for one transaction, go by
+      a throwaway key the wallet's transaction funds (`SETTLE_RENT_UNIT` each for what they open); `sendAs` sends a
+      proof first when it must go alone
+- [x] docs: program.md, the skill (apps, after-launch), AGENTS.md key rule, CHANGELOG
+
+Tests: 506 pass (was 493; new: `play-recover` (3), `play-lottery-steps` (3), `play-claims`, a booster refresh in
+`play-farms`, `final-fixes-economy` and the fork's checker tests; rewritten: the biggest packs (`drawsFit`, 28 and 61
+draws), order sizes with items, the several-orders pack (13 boosters: 12 + 1)).
+
+Not done, or only in part:
+- The first session of a wallet whose message signature is randomized is not caught until its next session: keys of
+  that first session can't be made again (later sessions store theirs). Asking for two signatures once would catch it.
+- The derived keys' text can be asked for by any page; one that gets the signature can make the keys and take what
+  they hold in flight (a few settles' rent). The text names the project and the wallet, and says it moves nothing.
+- A pNFT's or compressed NFT's release by key, and the auction-end releases by key, have no end-to-end test (no pNFT
+  or compressed play fixture); their non-key paths are as before when the key's dry run fails.
+- Contest picks a claim, `claimWins` in one voucher and a rental's last end (the flow review's fix 6) are not done;
+  nor a player helper for opening an auction or offers.
+
 ## Left
 
 - **Structural batch**: nothing started.
@@ -163,8 +219,20 @@ assertions added to the contest, offer, listing, NFT-bid auction, lottery-ask an
      rounds })`); the claim vectors' grant JSON has `limits.all` and `counted` (A); a grant's claims and rounds are lists
      in shards (`readLimit`), not receipts (`readReceiptAccount` goes).
   9. Every send that used a compressed NFT appends `close_leaf` (`withLeafCloses`), its payer signing.
+  10. Final fixes (8938ee0): the IDL again (`PackTooLarge` = 6140 appended, so no code moved; `MAX_RUN_PLACES`), and
+      `LotteryRound` has `lent` (u64) after `opener`: decode rounds from the vendored client (`decodeRound`); the
+      memcmp filters (tag 16 at 0, project at 1, lottery at 33) still hold. `ask-roll`: an order once asked takes its
+      next ask only in a later slot than the last (`SameSlot`): the stale re-ask (after `STALE_SLOTS`) is fine; a
+      free roll back in `Waiting` is asked again only a slot later (`rollAskable`). The timeout cancel
+      (`drawLotteryIx({ round, roundAddress })`) and pulls may share a transaction; a part owed to a pot (or pool)
+      made again in another mint goes to the treasury: pass the treasury's wallet and account after it
+      (`pullIx({ toTreasury: true })` when the account's mint differs, as js/play does). A run's percentage pool prize
+      moves nothing for an unwon place (`sent` 0 in the round's prize record). Orders are smaller
+      (`orderBytes(box, shares, opens, items)`); `settleRent` is unchanged. If it ever sends `pay`, no share into the
+      project's own vault for the mint (`BadMove`).
 - `SETTLE_RENT_UNIT` is an estimate per prize (a Core asset with plugins about 0.004 SOL); a measured per-kind figure
   would lend the key less. The cost table and simulation still treat a fixed pack too big to buy as bought.
-- `roundRent` has no estimate in the checker (a round's header grows with its places and shares); the guide says
-  about 0.004 SOL and up a round.
+- `roundRent`'s default can be large for a busy lottery (the `sacrifice-raffle` example: about 1.44 SOL for 2 rounds
+  of 3,500 purchases); it all comes back, but the owner puts it in at setup. A round that outgrows it falls back to
+  buyers paying their entry, and the first buyer fronting the header.
 - The program's IDL metadata version is still 0.22.0 (as is the package's).

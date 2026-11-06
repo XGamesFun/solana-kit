@@ -66,10 +66,18 @@ await app.balances();                     // what they hold of each of the econo
   Tell the person the one command that starts it, and that it serves on devnet.
 - **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
   waits for it. Show the player that it is rolling.
+- **A page that closes before the settle**: the SOL its settle key holds is not lost. Build the wallet with
+  `walletStandardSigner(wallet, account)`: with a wallet that signs messages, the page asks once a session for a
+  signature over a fixed text ("loot: the keys that settle your orders…"; it moves nothing), and every settle key comes
+  from it, so a reload makes it again. With one that signs no messages, the key is kept in the page's storage,
+  encrypted. Call `app.recover()` when the page opens (after the wallet connects): it settles what rolled, sends back
+  what a key holds for an order that is gone, and leaves one still rolling for later. Say so to the player in a line
+  ("Finishing an earlier purchase…").
 - **Packs**: `app.openBox(key, { listing, count: 10 })` opens ten packs in one purchase: one wallet prompt, one oracle
   answer, `maxPrice` a pack's. It returns `won` (every card) and `assets`; a pack too big for one transaction is
   settled in parts, each its own transaction (`parts`: their signatures), sent by the throwaway key the purchase funds (`oneSignature`, the default),
-  so the player signs once. A pack of fixed cards (one outcome, nothing random) is bought in one step: its cards come
+  so the player signs once. More packs than one oracle answer draws (or than keep an order's rent and fee within 0.01
+  SOL: `loot.opensAnOrder(box)`) are several orders in that one purchase (`orders`). A pack of fixed cards (one outcome, nothing random) is bought in one step: its cards come
   in the purchase, no oracle and no settle (one too big for a transaction is opened instead).
 - **A roll a route makes** (a craft, a bundle bought, a grant claimed, an auction won): the page asks for it in the
   route's own transaction and settles it after with a throwaway key, so the player signs once. When the rolled box has
@@ -123,7 +131,10 @@ await app.balances();                     // what they hold of each of the econo
   A forfeit exit skips reward-mint reads and reward ATA creation; principal transfers still need their own mint.
 - **Lottery steps**: `claims()` lists a due draw (`reveal`), what this player is owed (`pull`), paying everyone else
   and the shares owed in common (`payout`), and for a draw the oracle never answered, asking again or, after its
-  timeout, the cancel-and-refund (`cancel-draw`; `after-launch.md` says how the money moves). Show each as a button
+  timeout, the cancel-and-refund (`cancel-draw`; `after-launch.md` says how the money moves). A draw that cancels the
+  round (that one, or a `reveal` of a round short of its least sale) pulls the sender's own refund in the same
+  transaction. A ticket bought when the round's draw is due sends the draw first, in the same prompt, and buys into
+  the next round (the buyer pays the oracle's 0.0005 SOL for it). Show each as a button
   and read the list again after each one. The parts are pulled in any order: nobody waits on anyone else.
 - **Gates**: a gated buy, ticket, stake, entry, bid or claim finds the player's collectible that passes the gate by
   itself ("You need a Guild Pass to buy this" when there is none). Use `collectibles()` and its `item` key to show
@@ -141,8 +152,8 @@ await app.balances();                     // what they hold of each of the econo
   the round.
 - **Repaying a loan** (the player's own, or a friend's): `app.loan(asset, due)` reads it; show its `repay` (base units
   of its `mint`), then `app.repay(asset, due, { repay })` pays exactly that, in the payer's one prompt (a loan whose
-  debt changed since is refused); a throwaway key that transaction funds sends the NFT home to its borrower (a pNFT's
-  or a compressed NFT's release the wallet sends: a second prompt).
+  debt changed since is refused); a throwaway key that transaction funds sends the NFT home to its borrower, a pNFT's
+  or a compressed NFT's too (one prompt). A lender sees an overdue unpaid loan in `claims()` (`release`, to them).
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

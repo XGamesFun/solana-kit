@@ -70,6 +70,18 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   seat with a booster on refreshes it first (`stakeRefreshFirst`). A shown NFT frozen on a seat passes its seat and
   farm when a raise lowers a number on it (`craftIx`'s `farm`). A contest's side is named only once entries close, by
   the authority too; `BelowMinPot` is gone (codes after it moved). End marks on a 15-minute × 4^k grid.
+- **The final fixes** (8938ee0): an order is sized by what it holds (`orderBytes(box, shares, opens, items)`, the
+  program's `Order::sized`: a draw at its dearest entry's prizes as the `Won` they become, an item 14 bytes, tokens or
+  an NFT 41, and rows only for its fresh items' tables now; a roll made in another call keeps the whole table budget,
+  `orderBytes` without `items`). A pack's draws must fit one oracle answer (`drawsFit`; `PackTooLarge` at a box's
+  upsert, and at `open_box` for several opens); a box whose slots leave an entry undrawn is refused (`BadEntries`);
+  `open_box` is refused when its first slot's entries are all out of stock (`SoldOut`). An ask comes a slot after the
+  last (`SameSlot`, `rollAskable`). A run of places given one by one holds at most `MAX_RUN_PLACES` (4,096). A round's
+  header has `lent`: in a round the lottery opened, its spare SOL pays each entry's bytes, back to it at the close.
+  `pay` refuses a share into the project's own vault (`BadMove`). A part owed to a pot made again in another mint goes
+  to the treasury. A locked seat moves only to a tier with no early exit or one at least as dear (`ExitWhileLocked`).
+  A percentage pool prize moves nothing for an unwon place. A lapsed seat of a halving farm is paid by what the rate
+  paid.
 
 ### The tools
 
@@ -94,6 +106,21 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   the settle mints (`settleRent`); the key's last settle sends back the rest in the same transaction. `repay(asset, due)` repays alone and a key
   sends the NFT home. `claimAll()` signs independent claims in one prompt with a wallet that signs several
   (`signTransactions`).
+- Final fixes, the tools: a box's order is cut into orders of `opensAnOrder(box)` opens (what one answer draws, an
+  order's rent and fee within 0.01 SOL; `CARDS_AN_ORDER` is gone), each funded with its own settle key. The checker
+  refuses an undrawn outcome, a pack one answer can't draw (about 28 draws of tokens from a pool, 61 of items) and a run
+  of over 4,096 places. A lottery's `roundRent` is on by default, sized from `expect: { rounds, entries }` (2 rounds of
+  a repeating lottery, 1 of one that draws once; entries from the scenario, else 100) and covering entries too, so
+  buyers pay no program rent for a ticket; a spec's `roundRent` wins, 0 turns it off. Going live always makes the
+  standing lookup table, and is refused (`E-NO-TABLE`) without one when a part needs it.
+- js/play, final fixes: settle keys a closed page can find again (`recover()`): made from one wallet signature a
+  session over a fixed text (`walletStandardSigner`'s `signMessage`), or, for a wallet that signs no messages, kept in
+  the page's storage encrypted with a non-extractable device key (`keyStore`, `browserStore()`). A draw that cancels a
+  round pulls the sender's own refund in the same transaction (a refund is two transactions); a purchase in a round
+  whose draw is due sends the draw first. A loan's pNFT or compressed release, and the releases after an auction end
+  too big for one transaction, go by a throwaway key. A booster in a farm whose growth writes the profile refreshes the
+  seat first (`boosterRefreshFirst`). `claims()` lists a lender's overdue loan, a seller's ended auction and proof
+  records left open (`close-leaf`). `runSchedule` sets a compute limit.
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).

@@ -31,11 +31,14 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 
 - **Nothing here signs with a person's key, and no tool asks for one.** Going live is always the owner approving in
   their own wallet. A step after the wallet's prompt (a settle, an ask for a roll, a release) may be sent by a
-  throwaway key `js/play` makes in memory for that one job: the wallet's own transaction funds it with what the step
-  pays (its fees, an ask's oracle fee, the rent of what a settle opens or mints: `loot.settleRent`), the rent minimum
-  and one spare fee; its step is simulated first and, if it would fail, the wallet sends it instead; then the key
-  empties itself back to the wallet. A key pays for an account only with lamports the wallet gave it for that, and
-  never holds anything after its job. Tests may make throwaway keys too; nothing else holds a secret.
+  throwaway key `js/play` makes for that one job: the wallet's own transaction funds it with what the step pays (its
+  fees, an ask's oracle fee, the rent of what a settle opens or mints: `loot.settleRent`; what a release opens), the
+  rent minimum and one spare fee; its step is simulated first and, if it would fail, the wallet sends it instead; then
+  the key empties itself back to the wallet. A key pays for an account only with lamports the wallet gave it for that,
+  and never holds anything after its job. So a page that closes mid-job can finish it (`recover`), a key is named by
+  its job's account and made from the wallet's own signature of a fixed text (`js/play/keys.js`), or, for a wallet that
+  signs no messages, kept in the page's storage encrypted with a device key the page can't read out, and dropped once
+  empty. Tests may make throwaway keys too; nothing else holds a secret.
 - **Devnet only.** Never pass a mainnet URL for anything that sends; mainnet waits for an audit. Reading public
   mainnet to fetch test fixtures is the one exception.
 - Plain ES modules, Node 22 or later, no build step: the code runs as written. The TypeScript declarations are
