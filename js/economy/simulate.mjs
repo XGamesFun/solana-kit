@@ -7,7 +7,7 @@
 // pool are worked out continuously, so a pool that pays a share of itself settles at a level instead of emptying.
 // It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
-import { boxOrderBytes } from './plan.mjs';
+import { boxOrderBytes, roundRentOf } from './plan.mjs';
 import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
 
 const DAY = 86_400;
@@ -526,7 +526,9 @@ export function simulate(economy, { now = 0 } = {}) {
       carryOut(split, potToken, tickets * price, `lottery:${l.key}`, `lottery:${l.key}`);
     }
     playerAction(tickets);
-    players.rent += tickets * ticketLine(l);
+    // A lottery that holds SOL for its rounds (`roundRent`, on by default) pays each entry's bytes: the buyer pays none.
+    const entryRent = roundRentOf(l, m) > 0n ? 0 : ticketLine(l);
+    players.rent += tickets * entryRent;
     const placed = (l.places ?? [100]).map(placeOf);
     const places = placed.map((p) => Number(p.percent));
     creator.network += (1 + places.length) * NETWORK_FEE * drawsPerDay; // the draw and each place's payment
@@ -543,8 +545,8 @@ export function simulate(economy, { now = 0 } = {}) {
     const prized = placed.filter((p) => prizeLine(p.prize)).map((p) => worthOf(prizeLine(p.prize)));
     // One ticket bought on its own: the fee and the record are per purchase, so a bundle of tickets shares them. The
     // record's rent comes back once the round is done with it, and a no-loss ticket's price after the draw: both held.
-    const realCost = realCostOf({ price, token: ticketToken, isSol: Boolean(m.tokens.get(ticketToken)?.wsol), rent: ticketLine(l), rentIs: 'the purchase’s entry in the round', ...(l.noLoss ? { heldIs: 'the ticket’s price' } : {}), priceBack: Boolean(l.noLoss) });
-    return { key: l.key, name: l.name, price, token: ticketToken, potToken, ...(l.minSold ? { minSold: l.minSold } : {}), ticketsPerDay: round(tickets, 6), ticketsPerRound: round(perRound, 4), roundDays: round(every / DAY, 4), places, placePrizes: placed.map((p) => (p.prize ? prizeWords(p.prize, m) : null)), prizeWorthPerRound: round(prized.reduce((n, w) => n + (w ?? 0), 0)), ...(prized.includes(null) ? { unpricedPrizes: true } : {}), cutPercent: num(l.cutPercent), splitPercent: round(cut * 100, 4), drawsOnce: once, ...(l.ticketNft ? { ticketNft: true } : {}), ...(l.noLoss ? { noLoss: true } : {}), realCost };
+    const realCost = realCostOf({ price, token: ticketToken, isSol: Boolean(m.tokens.get(ticketToken)?.wsol), rent: entryRent, rentIs: 'the purchase’s entry in the round', ...(l.noLoss ? { heldIs: 'the ticket’s price' } : {}), priceBack: Boolean(l.noLoss) });
+    return { key: l.key, name: l.name, price, token: ticketToken, potToken, ...(l.minSold ? { minSold: l.minSold } : {}), ticketsPerDay: round(tickets, 6), ticketsPerRound: round(perRound, 4), roundDays: round(every / DAY, 4), places, placePrizes: placed.map((p) => (p.prize ? prizeWords(p.prize, m) : null)), prizeWorthPerRound: round(prized.reduce((n, w) => n + (w ?? 0), 0)), ...(prized.includes(null) ? { unpricedPrizes: true } : {}), cutPercent: num(l.cutPercent), splitPercent: round(cut * 100, 4), drawsOnce: once, roundRentSol: round(Number(roundRentOf(l, m)) / 1e9), ...(l.ticketNft ? { ticketNft: true } : {}), ...(l.noLoss ? { noLoss: true } : {}), realCost };
   });
 
   // ---- decisions with a known rate

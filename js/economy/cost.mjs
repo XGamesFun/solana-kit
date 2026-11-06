@@ -3,7 +3,7 @@
 //
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
-import { boxOrderBytes, plan as compile, contestBytes } from './plan.mjs';
+import { boxOrderBytes, plan as compile, contestBytes, roundRentOf } from './plan.mjs';
 import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxBuys, COLLECTIBLE_RENT, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
@@ -43,13 +43,13 @@ export function setupCost(plan, economy) {
   for (const l of m.lotteries) putIn(l.currency, l.seed, `seed:lottery:${l.key}`);
   for (const f of m.farms) putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`);
   // SOL a lottery holds for its rounds' rent: lent to each round, back at its close.
-  for (const l of m.lotteries) if (Number(l.roundRent ?? 0) > 0 && steps.has(`rent:lottery:${l.key}`)) seedLamports += toUnits(l.roundRent, 9);
+  for (const l of m.lotteries) if (steps.has(`rent:lottery:${l.key}`)) seedLamports += roundRentOf(l, m);
   for (const sc of m.schedules) if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet') putIn(sc.currency, sc.fund, `fund:${sc.key}`);
   const total = rentLamports + feeLamports + networkLamports + seedLamports;
   const notes = [];
   if (accounts.some((a) => a.approx)) notes.push('Accounts marked “about” are sized roughly (a Core collection or an external token account).');
   if (Object.entries(seeds).some(([symbol]) => [...m.tokens.values()].some((t) => t.wsol && t.symbol === symbol))) notes.push('The total includes the SOL you put in: pools’, lotteries’ and farms’ seeds, and sealed schedules’ funds.');
-  if (m.lotteries.some((l) => Number(l.roundRent ?? 0) > 0 && steps.has(`rent:lottery:${l.key}`))) notes.push('The total includes the SOL lotteries hold for their rounds’ rent (`roundRent`): each round borrows it and gives it back when it closes; it comes back to you when the lottery closes.');
+  if (m.lotteries.some((l) => steps.has(`rent:lottery:${l.key}`))) notes.push('The total includes the SOL lotteries hold for their rounds’ rent and their tickets’ entries (`roundRent`, sized by default for the rounds and purchases expected at once): each round borrows it and gives it back when it closes; it comes back to you when the lottery closes.');
   if (funded.length) notes.push('The total includes the SOL put in grants’ funds, which pays their claims; what is left goes back to you when a grant closes.');
   notes.push('The network fee is 5,000 lamports a signature; a wallet may add a priority fee of its own.');
   return {
@@ -101,11 +101,15 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     row(`recipe:${r.key}`, `craft “${r.name}”`, 'player', FEES.player, made ? [back(`${made} new collectible${made > 1 ? 's' : ''}`, COLLECTIBLE_RENT * BigInt(made), `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`)] : []);
   }
   for (const l of m.lotteries) {
-    // A purchase adds its entry's bytes to the round (not refunded); the round's first buyer fronts its header unless the
-    // lottery holds SOL for it (`roundRent`). A share the buyer chooses makes each entry keep what arrived.
+    // A purchase adds its entry's bytes to the round. In a round the lottery opened, the SOL it holds for its rounds
+    // (`roundRent`, on by default) pays them, back to it at the close: the buyer pays only the fee and the price. Without
+    // it, or once it runs short, the buyer pays them (to the treasury at the close), and a round's first buyer fronts its
+    // header. A share the buyer chooses makes each entry keep what arrived.
     const chosen = lotterySplit(l).some((s) => String(s.to).startsWith('chosen'));
     const entry = BigInt(entryWidth(chosen, Boolean(l.ticketNft))) * RENT_PER_BYTE;
-    row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], Number(l.roundRent ?? 0) > 0 ? `A round’s record and its token accounts are paid from the SOL the lottery holds for them (${l.roundRent} SOL), back to it when the round closes; when that is short, the round’s first buyer fronts them, back to them at the close.` : 'A round’s first buyer also fronts its record’s header and token accounts (about 0.003 SOL and up, more with many places), back to them when the round closes, once every part is pulled; `roundRent` has the lottery pay them instead.');
+    const held = roundRentOf(l, m);
+    const funded = held > 0n;
+    row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, funded ? [] : [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], funded ? `A round’s record, its token accounts and each purchase’s entry are paid from the SOL the lottery holds for them (${sol(held)} SOL), back to it when the round closes: a buyer pays no program rent. When that runs short, a buyer pays their entry’s bytes (about ${sol(entry)} SOL, to the treasury at the close) and a round’s first buyer fronts its header, back to them at the close.` : 'A round’s first buyer also fronts its record’s header and token accounts (about 0.003 SOL and up, more with many places), back to them when the round closes, once every part is pulled; `roundRent` (on by default) has the lottery pay them, and each entry too.');
   }
   for (const f of m.farms) {
     row(`farm:${f.key}`, `stake in “${f.name}”`, 'player', FEES.player, [back('the seat', rent(ACCOUNT_BYTES.Seat), 'when they take everything out')]);

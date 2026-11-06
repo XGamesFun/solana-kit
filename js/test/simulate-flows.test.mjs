@@ -58,15 +58,19 @@ test('a schedule that pays a lottery fills its pot, by a fixed amount or by a sh
 });
 
 test('a ticket’s “in all” counts its entry’s bytes, which never come back, and leaves out a no-loss ticket’s price', () => {
-  const plain = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }] })).lotteries[0].realCost;
+  // A lottery that holds SOL for its rounds (`roundRent`, on by default) pays each entry: the buyer pays none.
+  const funded = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }] })).lotteries[0];
+  assert.equal(funded.realCost.rentSol, 0);
+  assert.ok(funded.roundRentSol > 0);
+  const plain = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d', roundRent: 0 }] })).lotteries[0].realCost;
   // An entry of 40 bytes in the round (its buyer and its tickets' end), at 5,080 lamports a byte.
   assert.equal(plain.rentSol, 0.0002032);
   assert.equal(plain.totalSol, 0.0122082, 'the price, the player fee, the network and the entry');
-  const noLoss = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1 }] })).lotteries[0].realCost;
+  const noLoss = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] })).lotteries[0].realCost;
   assert.equal(noLoss.priceBack, true);
   assert.equal(noLoss.totalSol, 0.0022082, 'only the player fee, the network and the entry leave for good');
   assert.ok(noLoss.holdSol > 0.5);
-  const text = explain(sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1 }] })), solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1 }] }));
+  const text = explain(sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] })), solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] }));
   assert.match(text, /about 0\.002208 SOL in all \(the player fee, the network, the purchase’s entry in the round, which never comes back\); the wallet needs about [\d.]+ SOL when it signs, and the rest comes back/);
 });
 

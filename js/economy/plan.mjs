@@ -7,6 +7,8 @@
 // which signs the step that creates it. `placeholderContext` fills every address with a stand-in, so a plan can be
 // sized and shown before anyone connects a wallet.
 import { encodeBase58 } from '../chain/base58.js';
+import { encodeBorsh } from '../chain/borsh.js';
+import IDL from '../client/idl/loot.js';
 import { createCollectionInstruction } from '../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, NATIVE_MINT, SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
@@ -18,7 +20,7 @@ import { sha256 } from '../chain/sha256.js';
 import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
 import { check } from './check.mjs';
-import { ACCOUNT_OVERHEAD, boxBuys, boxRolls, compressedTree, destination, effectOf, gateOf, listOf, lotterySplit, model, MOST_RENT_PER_BYTE, outcomeParts, perWalletOf, placeOf, lifeLines, prizeLine, prizePool, prizeRolls, prizeToken, rarityNumber, ruleOf, sharesOf, spendOf, stashNfts, toBy, toEnum, toSeconds, toTime, toUnits, weights, wholeCount, windowOf } from './model.mjs';
+import { ACCOUNT_OVERHEAD, boxBuys, rent, RENT_PER_BYTE, boxRolls, compressedTree, destination, effectOf, gateOf, listOf, lotterySplit, model, MOST_RENT_PER_BYTE, outcomeParts, perWalletOf, placeOf, lifeLines, prizeLine, prizePool, prizeRolls, prizeToken, rarityNumber, ruleOf, sharesOf, spendOf, stashNfts, toBy, toEnum, toSeconds, toTime, toUnits, weights, wholeCount, windowOf } from './model.mjs';
 import { BUDGET } from './txsize.mjs';
 
 const owner = 'owner';
@@ -253,6 +255,59 @@ export function lotteryArgs(l, m) {
     gate: gateOf(l.gate, m),
     per_wallet: l.perWallet ?? 0,
   };
+}
+
+/**
+ * A lottery round's header as its first purchase sizes it (`LotteryRound::new`: its `head`), and the token accounts a
+ * round may open (`accounts`: the payment mint's, the pot's, one for each run whose prize comes from a pool). The
+ * header holds a copy of the terms, a total for each share, two bits a place, a record for each run of tokens and an
+ * NFT slot for each place of the lottery's own stash.
+ */
+export function roundSize(l, m) {
+  const { terms } = placeholders(lotteryArgs(l, m));
+  const places = terms.places.reduce((n, p) => n + Number(p.times ?? 1), 0);
+  const tokens = terms.places.filter((p) => p.prize?.Tokens).length;
+  const pools = terms.places.filter((p) => p.prize?.Tokens?.from.Pool).length;
+  const own = terms.places.filter((p) => p.prize?.Held || p.prize === 'Raffled' || p.prize?.Raffled !== undefined).reduce((n, p) => n + Number(p.times ?? 1), 0);
+  const termsBytes = encodeBorsh(IDL, { defined: { name: 'LotteryTerms' } }, terms).length;
+  // The tag; project, lottery, id, incarnation, round, bump, opener, lent, head, status, revision; the terms; fee, sold,
+  // to_pot; common; owns, owed, the draw's slots, answer and first ticket, the pot's four numbers; paid; prizes (59
+  // bytes each); accounts (64 each); nfts; assigned.
+  const head = 1 + 130 + termsBytes + 17 + (4 + 8 * terms.shares.length) + 96 + (4 + Math.ceil((2 * places) / 8)) + (4 + 59 * tokens) + (4 + 64 * (2 + pools)) + (4 + 32 * own) + 4;
+  const payment = l.ticketCurrency ?? l.currency ?? m.currencyKey;
+  const accounts = (l.ticketNft ? 1 : payment === (l.currency ?? m.currencyKey) ? 1 : 2) + pools;
+  return { head, accounts };
+}
+
+/** How many rounds of a lottery are open or still paying out at once, and how many purchases a round takes, as the
+ * spec expects them (`expect`): by default two rounds of a lottery that draws again (one selling, one paying out) and
+ * one of a lottery that draws once; a round's purchases from the scenario's purchases a day over a round, else 100. */
+export function roundsExpected(l, m) {
+  const every = toSeconds(l.every ?? 0);
+  const perDay = Number(m.scenario?.perDay?.[`lottery:${l.key}`] ?? 0);
+  const days = every > 0 ? every / 86_400 : l.firstDraw ? Math.max(1, (toTime(l.firstDraw, m.now) - m.now) / 86_400) : 1;
+  const rounds = l.expect?.rounds ?? (every > 0 ? 2 : 1);
+  const entries = l.expect?.entries ?? (perDay > 0 ? Math.ceil(perDay * days) : 100);
+  return { rounds, entries };
+}
+
+/**
+ * The SOL, in lamports, a lottery holds for its rounds' rent: the spec's `roundRent` (0 turns it off), or by default
+ * what its expected rounds take at once (`roundsExpected`), each its header, its token accounts and its expected
+ * entries' bytes (`LotteryRound.lent`: in a round the lottery opened, its spare SOL pays each entry while it covers
+ * them, so buyers pay no program rent for a ticket), at devnet's and mainnet's rent, rounded up to 0.001 SOL. Short
+ * of it (a busier round, a cluster that charges more), the first buyer fronts the header and later buyers pay their
+ * own entries. Each round gives back what it took when it closes; the lottery gives the rest back to the owner when it closes.
+ */
+export function roundRentOf(l, m) {
+  if (l.roundRent !== undefined) return toUnits(l.roundRent, 9);
+  const { head, accounts } = roundSize(l, m);
+  const { rounds, entries } = roundsExpected(l, m);
+  const width = loot.entryWidth(lotterySplit(l).some((s) => String(s.to).startsWith('chosen')), Boolean(l.ticketNft));
+  // The header and its entries' list head (6 bytes), each token account, each entry's bytes.
+  const one = rent(head + 6) + BigInt(accounts) * rent(165) + BigInt(entries * width) * RENT_PER_BYTE;
+  const all = BigInt(rounds) * one;
+  return ((all + 999_999n) / 1_000_000n) * 1_000_000n;
 }
 
 /**
@@ -823,11 +878,15 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       },
     });
   }
-  // SOL a lottery holds for its rounds' rent: each round borrows it at its first purchase (or its ask), back at its close.
+  // SOL a lottery holds for its rounds' rent (`roundRentOf`: the spec's `roundRent`, or by default what its expected
+  // rounds and their entries take): each round borrows it at its first purchase (its header and payment account), each
+  // purchase's entry, and its ask (the pot's and pools' accounts), back at its close. A lottery live already keeps what
+  // it holds unless the spec names a `roundRent` to add.
   for (const l of m.lotteries) {
-    if (!(Number(l.roundRent ?? 0) > 0)) continue;
-    const lamports = toUnits(l.roundRent, 9);
-    add({ id: `rent:lottery:${l.key}`, part: `lottery:${l.key}`, says: `Put ${l.roundRent} SOL in “${l.name}” for its rounds’ rent (each round gives it back when it closes)`, build: (ctx) => [transferLamports(ctx.owner, loot.pda.lottery(project(ctx), l.id), lamports)] });
+    const lamports = roundRentOf(l, m);
+    if (lamports <= 0n || (l.roundRent === undefined && (live?.published?.lotteries ?? []).some((x) => x.key === l.key))) continue;
+    const sol = Number(lamports) / 1e9;
+    add({ id: `rent:lottery:${l.key}`, part: `lottery:${l.key}`, says: `Put ${sol} SOL in “${l.name}” for its rounds’ rent and its tickets’ entries${l.roundRent === undefined ? ` (sized for ${roundsExpected(l, m).rounds} round${roundsExpected(l, m).rounds === 1 ? '' : 's'} of ${roundsExpected(l, m).entries} purchases at once)` : ''}, so no buyer pays program rent; each round gives it back when it closes`, build: (ctx) => [transferLamports(ctx.owner, loot.pda.lottery(project(ctx), l.id), lamports)] });
   }
   for (const g of m.grants) {
     if (!(Number(g.fund ?? 0) > 0) || live?.funded?.includes(g.key)) continue;

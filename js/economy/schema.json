@@ -1586,7 +1586,24 @@
         },
         "roundRent": {
           "$ref": "#/$defs/amount",
-          "description": "SOL the owner puts in the lottery at go-live to pay each round's record and token accounts (lent to the round, back to the lottery when it closes): about 0.004 SOL and up a round, more with many places or token prizes, times the rounds still paying out at once. Without it, or when it is short, a round's first buyer fronts them, back to them at the close."
+          "description": "SOL the owner puts in the lottery at go-live to pay each round's record, its token accounts and every purchase's entry (lent to the round, back to the lottery when it closes): buyers then pay no program rent for a ticket. On by default, sized from `expect` (its rounds open or paying out at once, and a round's purchases); give an amount to set it, 0 to turn it off. When it runs short, a round's first buyer fronts its record, back to them at the close, and each buyer pays their own entry's bytes."
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the default `roundRent` is sized for: `rounds`, the rounds open or still paying out at once (default 2 for a lottery that draws again, 1 for one that draws once), and `entries`, the purchases a round takes (default: the scenario's purchases a day over a round, else 100).",
+          "properties": {
+            "rounds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "entries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 262000
+            }
+          }
         },
         "split": {
           "$ref": "#/$defs/split",

@@ -310,14 +310,28 @@ test('a compressed NFT’s record closes in the transaction that proves it, its 
 
 test('a lottery holds SOL for its rounds’ rent (`roundRent`): one step sends it to the lottery, and the cost counts it', async () => {
   const { cost } = await import('../economy/cost.mjs');
+  const { roundRentOf } = await import('../economy/plan.mjs');
   const raffle = example('nft-raffle');
+  const off = structuredClone(raffle);
+  off.lotteries[0].roundRent = 0;
+  assert.ok(!plan(off, { now: NOW }).steps.some((s) => s.id === 'rent:lottery:art'), '0 turns it off');
   const spec = structuredClone(raffle);
   spec.lotteries[0].roundRent = 0.05;
   assert.ok(codes(spec).ok);
   const p = plan(spec, { now: NOW });
   const step = p.steps.find((s) => s.id === 'rent:lottery:art');
   assert.ok(step, p.steps.map((s) => s.id).join());
-  const [before, after] = [cost(raffle, { now: NOW }), cost(spec, { now: NOW })];
+  const [before, after] = [cost(off, { now: NOW }), cost(spec, { now: NOW })];
   assert.ok(Math.abs(Number(after.setup.totalSol) - Number(before.setup.totalSol) - 0.05) < 1e-6, `${before.setup.totalSol} → ${after.setup.totalSol}`);
+  // On by default: sized for the rounds at once and a round's purchases (`expect`), counted in the setup's SOL.
+  const m = model(raffle, { now: NOW });
+  const byDefault = roundRentOf(m.lotteries[0], m);
+  assert.ok(byDefault > 0n && plan(raffle, { now: NOW }).steps.some((s) => s.id === 'rent:lottery:art'));
+  assert.ok(Math.abs(Number(cost(raffle, { now: NOW }).setup.totalSol) - Number(before.setup.totalSol) - Number(byDefault) / 1e9) < 1e-6);
+  const busier = structuredClone(raffle);
+  busier.lotteries[0].expect = { rounds: 1, entries: 1000 };
+  const mb = model(busier, { now: NOW });
+  assert.ok(roundRentOf(mb.lotteries[0], mb) > byDefault, 'more purchases a round, more SOL');
+  assert.ok(edit(raffle, (s) => (s.lotteries[0].expect = { rounds: 0 })).refused.some((r) => r.startsWith('E-SCHEMA')));
   assert.ok(edit(raffle, (s) => (s.lotteries[0].roundRent = '0.0000000001')).refused.includes('E-AMOUNT economy.lotteries.art.roundRent'));
 });
