@@ -1188,12 +1188,15 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // The player's purchase must be sendable, with the compute budget their wallet adds: js/play sends one
     // too big for a legacy transaction as v0 with a lookup table, which locks the table and its program too.
     if (b.active !== false && !refusals.some((x) => x.where.startsWith(where))) {
-      const { bytes, locks } = boxBuys(b, m) ? buySize(b, m, { detail: true }) : openBoxSize(b, m, { detail: true });
-      const verb = boxBuys(b, m) ? 'buy' : 'open';
+      // A fixed pack too big to buy in one legacy transaction is opened instead (js/play): the oracle answers it.
+      const bought = boxBuys(b, m) ? buySize(b, m, { detail: true }) : null;
+      const buys = Boolean(bought) && (drawsOf(b) === 1 || (bought.bytes <= MAX_TRANSACTION_BYTES && bought.locks <= ACCOUNT_LOCKS));
+      const { bytes, locks } = buys ? bought : openBoxSize(b, m, { detail: true });
+      const verb = buys ? 'buy' : 'open';
       if (bytes > MAX_TRANSACTION_BYTES && locks + TABLE_LOCKS > ACCOUNT_LOCKS)
-        refuse('E-TX-SIZE', where, `${boxBuys(b, m) ? 'Buying' : 'Opening'} ${label(b)} would take about ${bytes} bytes and ${locks} accounts, ${locks + TABLE_LOCKS} as a v0 transaction with a lookup table: more than the ${ACCOUNT_LOCKS} a transaction can lock, so no player could ${verb} it.`, 'Give it fewer outcomes that name an item or a pool, pay its prizes (and those of a box it rolls) from fewer pools, or drop its per-wallet limit.');
+        refuse('E-TX-SIZE', where, `${buys ? 'Buying' : 'Opening'} ${label(b)} would take about ${bytes} bytes and ${locks} accounts, ${locks + TABLE_LOCKS} as a v0 transaction with a lookup table: more than the ${ACCOUNT_LOCKS} a transaction can lock, so no player could ${verb} it.`, 'Give it fewer outcomes that name an item or a pool, pay its prizes (and those of a box it rolls) from fewer pools, or drop its per-wallet limit.');
       else if (bytes > MAX_TRANSACTION_BYTES)
-        warn('W-TX-V0', where, `${boxBuys(b, m) ? 'Buying' : 'Opening'} ${label(b)} takes about ${bytes} bytes with the compute budget a wallet adds, more than the ${MAX_TRANSACTION_BYTES} a legacy transaction holds: js/play sends it as a v0 transaction with a lookup table the player’s wallet makes first (one to three more approvals, and the table’s rent until it is closed, which claims() offers about two minutes later). A wallet or app that sends only legacy transactions can’t ${verb} it.`, 'To keep it a legacy transaction, give it fewer outcomes that name an item or a pool, or pay its prizes from fewer pools.');
+        warn('W-TX-V0', where, `${buys ? 'Buying' : 'Opening'} ${label(b)} takes about ${bytes} bytes with the compute budget a wallet adds, more than the ${MAX_TRANSACTION_BYTES} a legacy transaction holds: js/play sends it as a v0 transaction with a lookup table the player’s wallet makes first (one to three more approvals, and the table’s rent until it is closed, which claims() offers about two minutes later). A wallet or app that sends only legacy transactions can’t ${verb} it.`, 'To keep it a legacy transaction, give it fewer outcomes that name an item or a pool, or pay its prizes from fewer pools.');
     }
     for (const [i, o] of (b.odds ?? []).entries()) {
       const at = `${where}.odds[${i}]`;
