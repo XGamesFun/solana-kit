@@ -61,6 +61,15 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   `Rate { per_day, mints, shared, halve_every }`, `Sink::Rewards`, a 184-byte seat (its player at offset 1), end marks,
   `TokenSource::Farm` for what a farm holds free; an early exit keeps its rewards; no refresh at a seat's end. Sealed
   schedules pay a wallet, the treasury or a burn.
+- **Batch E**: a take or a bid signs the hash of the record's bytes as read, but what a take changes
+  (`auctionTerms(auction)`, `offerTerms(offer)`, `listingTerms(listing)`, each the decoded record or its bytes;
+  `auctionArgsOf` is gone); an auction's bid and an offer's `left` sit last. An auction of NFT bids is made with room
+  for 3 NFTs (the seller's rent): bidders pay none. The order's player's own ask on an empty box ends the roll there,
+  with no oracle; a free roll whose answer finds nothing at all in stock waits again. `draw_lottery` takes the lottery
+  for its current round only. `move_tokens` credits a farm it takes from (`farm` writable). A top-up or compound of a
+  seat with a booster on refreshes it first (`stakeRefreshFirst`). A shown NFT frozen on a seat passes its seat and
+  farm when a raise lowers a number on it (`craftIx`'s `farm`). A contest's side is named only once entries close, by
+  the authority too; `BelowMinPot` is gone (codes after it moved). End marks on a 15-minute × 4^k grid.
 
 ### The tools
 

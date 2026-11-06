@@ -382,7 +382,7 @@ the first winning claim.
 of `sha256("prize" | n as u64 LE)`, `n` the route's `nonce` argument plus the place or index where the route says so
 (a `buy`'s `k`th roll given at `nonce + k`, `buyGives`). The sender pays the order's rent (a grant's funds, for a
 grant); the winner gets it back at settle. Anyone asks it (on a box with nothing in stock, only its player, in a later
-slot) and anyone settles it, paying what the settle opens or mints.
+slot, which ends it with nothing) and anyone settles it, paying what the settle opens or mints.
 
 ## Boxes and the shop
 
@@ -562,9 +562,11 @@ A box whose every entry burns, gives or stashes the NFT takes it as its price.
 **Rolls that wait.** Missions, recipes and prizes make a `Waiting` order (the player's rent, or a prize maker's, back
 at settle). Anyone asks (`ask_roll`, paying the oracle) while its box has an entry in stock; on a box with nothing in
 stock only the order's player asks, in a later slot than its `requested_slot` (`SoldOut` otherwise), so nobody else
-can land a winner's roll on an empty box. Anyone settles. A waiting or asked roll is never refunded; one unanswered
-within `STALE_SLOTS` is asked again by anyone, and the first answer to any request rolls it. One whose box can give
-nothing when the answer comes is rolled with nothing (settle sends an NFT it holds home as it was). It fails at its
+can land a winner's roll on an empty box; the player's own ask there ends the roll at once, with no oracle: rolled
+with nothing (settle sends an NFT it holds home as it was), or failed for its refund when its winner paid for it (an
+auction's roll lot). Anyone settles. A waiting or asked roll is never refunded; one unanswered within `STALE_SLOTS` is
+asked again by anyone, and the first answer to any request rolls it. A free roll whose answer finds nothing at all in
+stock goes back to `Waiting` (not rolled): anyone asks it again after a restock, or its player ends it so. It fails at its
 ask, giving back only what it holds, if its box was edited since or its answer can't carry the box's own accounts. A
 box only missions, recipes or prizes roll is left switched off; such orders ignore the switch and window.
 
@@ -641,8 +643,9 @@ round's money** before anyone knows who won: what its places take of the pot mov
 what the round's ticket money leaves over is owed to the pot, `pot_owed`), each run of pool prizes moves in (a minted
 run is minted at its pull), and the lottery moves on, its next round selling at once (`drawLotteryIx` passes the pot,
 its mint and the round's account of it, then each token run's mint, and for a pool the pool and the round's account;
-a source that is frozen, paused, closed, or with `skip_hooked` hooked gives this round nothing). An unanswered draw is
-asked again after `STALE_SLOTS`, naming the waiting round by its address (`roundAddress`); the next ask after **7 days
+a source that is frozen, paused, closed, or with `skip_hooked` hooked gives this round nothing). The lottery's own
+account goes with its current round only. An unanswered draw is asked again after `STALE_SLOTS`, naming the waiting
+round by its address (`roundAddress`) and no lottery (so a lottery closed since never strands it); the next ask after **7 days
 from its first ask** cancels it (`lotteryCancellable`), every entry refunded and what the ask moved in owed back. A
 short round (`min_sold`) is cancelled at its first ask.
 
@@ -701,7 +704,9 @@ collectible). `needs` (`Need { place, key, test }`: the attribute under `key` on
 player's profile, passes `test`, a rule's `Test` ([below](#rules-gates-odds-and-boosts)); `NeedNotMet`), `keeps`
 (attributes passed to a new collectible), `raises` (`Raise { place, shift: Shift { key, by, most, from_now } }`: up to
 `most`, `MaxedOut` when there; `by` below 0 lowers it, never below 0; with `from_now` a time, fuel for a day more). A
-raise on a `Staked` collectible must move its farm's lock key (`BadRecipe`).
+raise on a `Staked` collectible must move its farm's lock key (`BadRecipe`). A `Show`n NFT the project locks in the
+player's wallet on a seat of a farm that freezes (not a soulbound Core asset), with a raise lowering a number on it,
+passes its seat and farm after its accounts (`craftIx`'s `farm` on it), and the raise may not lower what that farm reads.
 
 An item's **life** is lines of the recipes that take it (the economy tools write them into each such recipe), read
 and written on the collectible (`made` is written at its mint; `used`, `next_use` and the like are the project's own
@@ -740,12 +745,12 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 
 - **One list of entries** (`["entries", contest, incarnation, 0]`, `decodeEntries`): a record a player, one side a
   wallet (`OtherSide`), its bytes the player's (not refunded). With `stake`, every entry exactly that, once (`BadStake`):
-  a wager. With `min_pot`, no side wins below it (`BelowMinPot`) and a contest short of it when entries close is off: a
-  crowdfund.
+  a wager. With `min_pot`, a contest short of it when entries close is off (`ResultOverdue` for a side named then):
+  a crowdfund.
 - **Verdicts**: a decider signs `"loot-verdict-v4" | sha256(program | contest | incarnation (u64 LE) | side (u16 LE,
   65,535 is off) | expires (i64 LE))`, the body ending `| recipient` for a contest with a chosen share (`verdictBytes`),
-  checked by the Ed25519 precompile right before `decide`. A side is taken only once entries close (`EntriesOpen`); a
-  call-off any time.
+  checked by the Ed25519 precompile right before `decide`. A side is taken only once entries close (`EntriesOpen`),
+  from the authority too; a call-off any time.
 - **Payout**: `decide` takes the shares; winners split the rest by stake, the last claim taking the remainder. A loser
   of a contest of tokens sends nothing. The one chosen share pays the `recipient` `decide` names.
 - **A prize per winning entry** (`prize`), given with its first claim (a roll at the claim's `nonce`); the player may
@@ -782,13 +787,15 @@ At `["auction", project, seller, id]`, so an id is its seller's own; the seller 
   `AuctionOpened.pin`) keeps an item lot's serial or a roll lot's box version; `Asset(address)`
   (an NFT handed to the project until the end; a player's must be a Core NFT of one of the project's collections, the
   project's keys may put up any).
-- **Bids** sign `terms` (`auctionTerms`: sha256 of the mint and Borsh `AuctionArgs`). At least the reserve and 1, and
+- **Bids** sign `terms` (`auctionTerms`: sha256 of the auction's bytes as read, all but the bid: `high_bidder`,
+  `high`, `last_bid_at` and `held`, which sit last, with the room after them). At least the reserve and 1, and
   above the high bid by `min_raise_bps` rounded up (at least 1), counted on what arrived. The topped bid goes back in
   the same instruction; there is no record per bidder. A bid in the last `extend` seconds pushes the end to `extend`
   after it. `ends_at` within 5 years, `extend` at most that (`BadAuction`).
 - **Bids of NFTs** (`nft_bids`, a rule): 1 to 3 NFTs a bid (`MAX_BID_NFTS`, not in the IDL: more is `BidTooLow`, and a
-  high bid of 3 can't be topped), not compressed (`CompressedBid`); reserve (1 to 3, `BadAuction`) and raise count NFTs; the topped bundle goes back at once. The record grows 32 bytes per
-  NFT of the high bid at the bidder's cost (162,560 lamports each), which goes to the seller at the end. No shares.
+  high bid of 3 can't be topped), not compressed (`CompressedBid`); reserve (1 to 3, `BadAuction`) and raise count NFTs; the topped bundle goes back at once. The record is made
+  with room for 3 NFTs (96 bytes, 487,680 lamports, the seller's, back at the close): a bid writes its NFTs in place,
+  and no bidder pays rent. No shares.
 - **The end**: anyone, once it is over. Shares take their parts, the rest to the lot's owner (the seller, or the
   treasury for an item), the lot to the winner. A roll lot sold splits nothing at the end (no shares' accounts): the
   winning bid stays in the vault as the payment of the winner's order (`paid` the high bid, the auction's `shares`, its
@@ -802,7 +809,8 @@ At `["auction", project, seller, id]`, so an id is its seller's own; the seller 
 
 Any wallet opens one at `["offer", project, maker, id]`, alone: a rule, a deal, how many NFTs (`left`), and for a bid
 its shares. All its money goes into the project's vault at open and must arrive whole (`BadOffer`). It is never
-edited; every take signs `terms` (`offerTerms`). The rule is read as the NFT comes in. The last take closes it.
+edited; every take signs `terms` (`offerTerms`: sha256 of its bytes as read, all but `left`, its last 2). The rule is
+read as the NFT comes in. The last take closes it.
 
 - **Bid** (`Buy { price }`): `sell_to_offer` sends the NFT straight to the maker and the price through the shares to
   the seller.
@@ -822,7 +830,7 @@ edited; every take signs `terms` (`offerTerms`). The rule is read as the NFT com
 Any wallet lists an NFT of any kind at `["listing", project, asset]`, alone; the project holds it meanwhile, so an NFT
 is in one listing of a project at most, and a game finds its renter with one read (`renterOf`; `user` and `until` sit
 at offsets 129 and 161). It names a mint, a deal and its shares (no `Chosen`), is never edited, and every take
-signs `terms` (`listingTerms`).
+signs `terms` (`listingTerms`: sha256 of its bytes as read, all but `user`, `until` and `stopped`, bytes 129 to 170).
 
 - **Sale** (`Sell { price }`): `take_listing` pays from the taker through the shares to the maker and hands the NFT
   over; the listing closes.
@@ -862,7 +870,8 @@ long past. Its seed and discriminator are its own, never a Sheet's (`WrongProfil
   `unstake_tokens` and `refresh_seat`. A seat's boost is its NFT's and its profile's together; a token seat with no
   booster has its profile's. Growth on the profile adds up across a player's seats; a token seat grows it only while it
   stakes `at_least`, and a top-up, a tier change or a booster put on needs the seat refreshed first in the same
-  transaction (`RefreshFirst`). No streak on a profile (`BadFarm`).
+  transaction (`RefreshFirst`); so does any top-up or compound of a seat with a booster on, whose boost is read again
+  there (`stakeRefreshFirst`). No streak on a profile (`BadFarm`).
 
 ## Rules, gates, odds and boosts
 
@@ -917,7 +926,8 @@ mission is a new id. Its rewards (`rewards_mint`) land in a vault of its own, `[
 split's or a schedule's `To::Account(vault)`, or a plain transfer, funds it. The farm keeps what it owes its seats as a
 number (`Farm.owed`, ×10¹²); what the vault holds beyond it is free (`vault − owed / 10¹²`), and only what is free is
 released, paid at a rate, or taken back by the authority (`move_tokens` from `TokenSource::Farm(id)`, a fixed amount,
-the vault as `pool` and the farm as `farm`). No tokens move to credit a seat: only a payout moves them.
+the vault as `pool`, the farm as `farm`, writable: it is credited first, and `mint` its rewards mint, `WrongMint`
+otherwise). No tokens move to credit a seat: only a payout moves them.
 
 **Tiers** (1 to 256, a byte names one; `{ lock, bps, prize, roll, exit_bps, earns_for }`): a lock in seconds, a
 multiplier above ×0 up to ×11 (a seat's weight stays inside 128 bits), and a term (`earns_for`, below). A
@@ -973,18 +983,21 @@ of two:
 
 - **Its tier's term** (`Tier.earns_for`, seconds after its lock started, `Seat.since`; 0 for no end). Every stake, and
   a booster put on, starts it again with the lock, so a token seat renews its term with `stake_tokens` of nothing at
-  its tier (with a growth, `refresh_seat` first in the same transaction, `RefreshFirst`); a compound starts neither.
+  its tier (with a growth, or a booster on, `refresh_seat` first in the same transaction, `RefreshFirst`); a compound
+  starts neither.
   One term on every tier is a farm-wide end of earning for each seat; tiers of different terms are terms or missions
   of different lengths.
 - **Its NFT's fuel** (`upkeep_key`, NFT farms): a time until which the NFT earns (fuel, food, a license), bought with
   a recipe raise `from_now`. Read at stake and refresh, so send `refresh_seat` with the refuel. A recipe never lowers
   a number the farm reads on an NFT on a seat (its upkeep, a key its boosts or gates read; `BadRecipe`), and an NFT on
-  a Freeze or Escrow seat passes its seat and farm after it in every craft line (`craftIx`'s `{ asset, farm }`).
+  a Freeze or Escrow seat passes its seat and farm after it in every craft line (`craftIx`'s `{ asset, farm }`; a
+  `Show` line's only when a raise lowers a number on it).
 
 Once `earns_until` passes, the seat is credited up to then however late it is next touched, and no refresh is needed
 at its end: a rate for each unit of weight splits what the seat was credited since `Seat.credited_at` by time, exactly;
-a sharing farm or a shared rate keeps **end marks** (`Farm.marks`, 112 values, only in such a farm with a term or an
-upkeep) and reads `reward_per_weight` at the seat's end between the marks around it. Growth counts only up to it. A mission's prize needs the fuel to last the tier's lock or its term, whichever is shorter: a lapse before then
+a sharing farm or a shared rate keeps **end marks** (`Farm.marks`, 112 values on a grid of 15 minutes × 4^k, 8
+levels of 14, only in such a farm with a term or an upkeep) and reads `reward_per_weight` at the mark at or before the
+seat's end: never more than its share, and what it earned between that mark and its end goes back to the farm. Growth counts only up to it. A mission's prize needs the fuel to last the tier's lock or its term, whichever is shorter: a lapse before then
 marks the seat `dry` for that stay. A tier whose term is shorter than its lock still gives its prize once the lock has
 run.
 

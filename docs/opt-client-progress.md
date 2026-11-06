@@ -1,7 +1,7 @@
 # The program's optimization batches in the client: progress
 
-Working note for the `loot-0.23` branch, so the work can resume if interrupted, and so the next batches (lottery,
-farm, structural) know what is left. Delete it once the branch merges.
+Working note for the `loot-0.23` branch, so the work can resume if interrupted, and so the next batches know what is
+left. Batches A to E are done; the keeper's list is under "Left". Delete it once the branch merges.
 
 Program: `gamesfun-loot` worktree `opt-orders` (batches A and B, from 339a281; `docs/opt-a-progress.md`,
 `docs/opt-b-progress.md` there). Built against `XSOLANA_PROGRAM_DIR=/home/potatoe/Documents/gamesfun-loot-worktrees/opt-orders`
@@ -87,20 +87,82 @@ Found in the program while doing this (not changed here; the program is read-onl
   that amount, so the last refunds fail. Batch C's notes say the pot's excess must stay in the round until the
   answer. The client pulls it only once the round is Drawn or Cancelled (`commonOwed`).
 
-## Left for the next batches
+## Batch E (done)
 
-- **Batch E (program, coming)**: auction layout changes (the client's `Auction` decode, `auctionArgsOf`,
-  `auctionTerms`, `leastBid`, `endAuctionIx` / `bidIx` accounts, the plan's auction size, js/play's auction reads);
-  a fix to `ask_roll` on empty boxes (the `SoldOut` rule `askRollIx` and `sendRolling` follow, the asks js/play adds
-  to a pull or a claim, and the eligible-asker wording in the skill). Re-sync the IDL, follow `docs/opt-e-progress.md`
-  there, and run the suite against its build.
+Program: the snapshot `final-e3831c3` (commit e3831c3 on `loot-0.23`, the gamesfun-loot session's scratchpad;
+`docs/opt-e-progress.md` there; `loot.so` 1,660,648 bytes). Built against `XSOLANA_PROGRAM_DIR=<that snapshot>`; the
+pins stay on 0.22, so only `release-manifest --check` fails.
+
+- [x] IDL synced: `Auction` (the bid last: `high_bidder`, `high`, `last_bid_at`, `held`) and `Offer` (`left` last)
+      decode from it; `DrawLottery.lottery` optional; `MoveTokens.farm` writable; `BelowMinPot` gone (codes after it
+      come from the IDL, as before)
+- [x] terms: `auctionTerms(auction)`, `offerTerms(offer)`, `listingTerms(listing)` hash the record's bytes as the
+      program does (`rail::terms`): each takes the decoded record (written back with `encodeAccount`) or the account's
+      bytes; `auctionArgsOf` and the `(mint, args)` form are gone. Tests: bytes and decoded agree, a bid or a rental
+      never changes them
+- [x] NFT-bid auctions: the plan sizes the auction with its room (`+ 32 × MAX_BID_NFTS`); test: the record is made
+      that size, a bid keeps its size and lamports
+- [x] `drawLotteryIx` passes the lottery for the current round only (an Open or unrecorded one); a waiting round's
+      re-ask or timeout cancel takes none (`lottery` may be null with `roundAddress`); js/play asks a waiting round
+      with the lottery read as maybe-closed
+- [x] `stakeRefreshFirst(farm, seat, { tier, now, compound })` mirrors the program's `RefreshFirst` for a stake or a
+      compound (a booster on, or a growth the stake changes); js/play's `stake` and `harvest({ compound })` put the
+      refresh first (`refreshOf`); chain test of both
+- [x] `craftIx`: a `Show` NFT with `farm` (`{ asset, farm }` for the project's own) passes its seat and farm after its
+      accounts when a raise lowers a number on it; js/play finds the farm (`lockedIn`: a seat in a farm that freezes,
+      not a soulbound Core asset), and now also for a `Use` line frozen on a seat (it passed only escrowed ones); chain
+      test: the seat comes, a lowered number the farm reads is refused (`BadRecipe`), another is lowered
+- [x] `ask_roll`: the player's own ask on an empty box ends the roll with no oracle (test asserts no answer); js/play's
+      `collect` says so in words when a roll's answer found nothing and it waits again; `askRollIx`, the MCP text and
+      the skill say who may ask and what ends it
+- [x] contest: test of the authority's side refused before entries close (`EntriesOpen`), a call-off any time; docs
+- [x] docs/program.md, the skill (after-launch), the MCP text, CHANGELOG
+
+Tests: 493 pass (was 491; new: a booster seat's top-up and compound refresh first, a shown NFT frozen on a seat;
+assertions added to the contest, offer, listing, NFT-bid auction, lottery-ask and empty-box tests).
+
+## Left
+
 - **Structural batch**: nothing started.
-- **Keeper (games.fun `launchpad/loot`)**, at its re-pin: match tags by the IDL's length (`codec.mjs`, events stay 8
-  bytes; dense 0–54 now); settle `upto` (0 split, `u32::MAX` last); its sweep pays what each settle opens or mints
-  itself (no order loan); the claim vectors' grant JSON has `limits.all` and `counted`. From C and D: no
-  `settle_round` / `cancel_lottery` (ask with the pot and token runs' accounts, re-ask and timeout-cancel a waiting
-  round by its address; pull every part, `Common` included; the close on the last pull), no seat refresh at a seat's
-  end, seats found by player at offset 1, `close_leaf` after a compressed NFT is used.
+- **Keeper** (games.fun `creator-studio/lib/loot`, the sweep in `sweep/`; it pins loot 0.20.1 through
+  `vendor/loot-0.20.1` and `lib/loot/release.json`, so the 0.22 move comes first; the vendored client and IDL do the
+  rest). What it must change for 0.23, from every batch, re-pinned at release:
+  1. Re-vendor the 0.23 client and IDL (`vendor/loot-0.23.0`) and re-point every import: tags are 1 byte, dense 0–54
+     (the oracle's callbacks and events keep 8; `instructionOf`), errors are named by the IDL (`lootError`; codes
+     moved twice: `OverDay` gone in A, `BelowMinPot` in E), and the `Auction` (bid last) and `Offer` (`left` last)
+     layouts decode from it. The sweep's own memcmp filters (tag at 0, project at 1) still hold.
+  2. `settle`: send `upto` (`loot.SETTLE_LAST` for all, 0 the split alone; no `rows`); drop the `won.Roll` branch
+     (`Won::Roll` and `Won::Fresh` are gone: `Won::Item { drawn }`) and `order.burns` (a box burns by a `Burn` share,
+     split like any); keep `settleHeapFrame`. No order reserve: the sweep's payer pays what each settle opens or mints
+     (budget `loot.settleRent(box, opens, items)` a settle, about 0.006 SOL a prize).
+  3. `ask-roll`: `askRollIx({ items })` (a fresh item's tables, `tableBudget`). On a box with nothing in stock the
+     sweep's ask is refused (`SoldOut`: only the order's player ends such a roll): treat it as not due and back off,
+     never retry each sweep; a free roll whose answer found nothing goes back to `Waiting` (`rollAskable` true again),
+     so the same rule keeps the sweep from paying the oracle for it until the box is restocked.
+  4. Lotteries: no `LotteryContribution`, `finish_lottery_contribution`, `settle_round` or `cancel_lottery`
+     (`move-round`, `cancel-round`, `lottery-prize`, `finish-contribution`, `refund-contribution`, `pay-winner` go).
+     Find rounds (`LotteryRound`, tag 16, project at offset 1, lottery at 33; `decodeRound`);
+     `draw`/`cancel-short`/`move-round`: `drawLotteryIx({ lottery, round, poolMints })` (the first ask carries the pot, its mint and the round's account,
+     then each token run's accounts); `redraw` and the timeout cancel: `drawLotteryIx({ round, roundAddress })` with no
+     lottery account (E: a lottery closed since never strands its round). Then pull every part: `pullIx` for each of
+     `partsOwed(round, entry)` and `commonOwed(round)` (the pot's part only once Drawn or Cancelled: E refuses it while
+     Drawing, `NothingOwed`), a place's roll asked in the pull's own transaction when the dry run passes
+     (`pullRolls`), the close on the last pull (`roundCloseMetas`); an ended draw-once lottery's `idleRound`.
+  5. Contests: no `Entry` accounts: one list (`decodeEntries(contestEntries(...))`); `claimIx` by entry, the contest
+     closed by its last claim; `decideIx` names no opener or entries. A side is named only once entries close, by the
+     authority too (E): the results server serves verdicts naming a side only after `closes_at`; the `call-off` job
+     (side null) stays any time.
+  6. Auctions: `endAuctionIx` takes `hold` (true or a list) for NFTs that can't move, and a roll lot's order at
+     `prizeRollNonce(prizeNonce(auction, last_bid_at))`, paid by the sender; the winner no longer gets an NFT bid's
+     rent (E). Holds: a repaid loan is a plain hold with no debt and `free_at` 0 (`debt.paid` is gone: the `release`
+     job's and `build.mjs`'s `debt?.paid` checks go), released by `releaseIx({ address })`.
+  7. Farms (if it reads seats): a 184-byte seat, its player at offset 1; no refresh at a seat's end; no
+     unbond/toll/rewards pool. It sends no `stake_tokens`, `harvest` or `move_tokens`, so E's `RefreshFirst` and
+     writable farm need nothing.
+  8. Grants (`vouchers.mjs`): vouchers sign `"loot-grant-v5" | sha256(body)` with several rounds (`voucherBytes({
+     rounds })`); the claim vectors' grant JSON has `limits.all` and `counted` (A); a grant's claims and rounds are lists
+     in shards (`readLimit`), not receipts (`readReceiptAccount` goes).
+  9. Every send that used a compressed NFT appends `close_leaf` (`withLeafCloses`), its payer signing.
 - `SETTLE_RENT_UNIT` is an estimate per prize (a Core asset with plugins about 0.004 SOL); a measured per-kind figure
   would lend the key less. The cost table and simulation still treat a fixed pack too big to buy as bought.
 - `roundRent` has no estimate in the checker (a round's header grows with its places and shares); the guide says
