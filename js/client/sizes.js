@@ -125,38 +125,62 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     won: [],
     paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
-    opens: 0, settled: 0, undrawn: 0, drew: 0, answer: new Uint8Array(32), drawn: [],
+    opens: 0, settled: 0, undrawn: 0, back: 0n, drew: 0, answer: new Uint8Array(32), drawn: [],
     requested_slot: 0n, asked_first: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
   };
   return encodeAccount(IDL, 'Order', empty).length + drawn * (aDraw + rows * 4);
 }
 
-// What one oracle answer's roll spends, counted at no less than each part costs (`order.rs`'s `COST_*`, measured by
-// the program's `tests/roll_costs.rs`), against the compute the oracle gives its answer, less a margin.
+// What one oracle answer's roll spends, counted at no less than each part costs (`order.rs`'s `RollCost`, measured by
+// the program's `tests/roll_costs.rs`), against the compute and the heap the oracle gives its answer, less a margin.
 const ROLL_BUDGET = 270_000n;
-const COST = { fixed: 20_000n, entry: 3_500n, weigh: 1_000n, weighEntry: 40n, pair: 150n, item: 1_500n, tokens: 6_000n, draw: 6_000n, group: 250n, reread: 1_000n, finish: 15_000n, won: 150n, drawn: 50n };
+const ROLL_HEAP = 32n * 1024n - 512n;
+const COST = { fixed: 20_000n, entry: 3_500n, blank: 1_400n, weigh: 1_000n, weighEntry: 40n, pair: 150n, item: 1_500n, tokens: 6_000n, draw: 6_000n, group: 250n, reread: 1_000n, finish: 15_000n, won: 150n, drawn: 50n };
+const BYTES = { start: 2_500n, prizeRead: 380n, entryRead: 80n, minted: 760n, pooled: 1_000n, prize: 200n, draw: 40n, finish: 2_000n, won: 120n };
+
+/** The account a prize reads, as a string, when it reads one the box can name: entries naming the same share it. */
+const accountOf = (p) => {
+  if (p.Item != null) return `item ${p.Item[0] ?? p.Item}`;
+  if (p.Compressed) return `item ${p.Compressed.item}`;
+  if (p.Tokens?.from?.Pool) return `pool ${p.Tokens.from.Pool[0] ?? p.Tokens.from.Pool}`;
+  if (p.Stash != null) return `stash ${p.Stash[0] ?? p.Stash}`;
+  if (p.Nft) return `stash ${p.Nft.stash}`;
+  return null;
+};
 
 /**
- * Whether `draws` draws among `entries` (a pack's: each open's draws times the opens bought together) fit one oracle
- * answer (`order::draws_fit`): each at the least it could cost (no table rows, a stash of one group), with the pairs
- * of entries a roll of several draws compares first. The program refuses a box whose one open doesn't fit at its
- * upsert, and a purchase of several opens that don't at `open_box` (`PackTooLarge`).
+ * Whether all of `opens` opens of `entries` by `slots` fit one oracle answer (`order::draws_fit`), each draw at the
+ * dearest its slot could make, with what is known from the box alone (no table rows, a stash of one group). `slots`
+ * may be a number: that many draws among every entry. The program refuses a box whose one open doesn't fit at its
+ * upsert, and a purchase that doesn't at `open_box`, where it also reads what the accounts hold (`PackTooLarge`).
  */
-export function drawsFit(entries, draws) {
-  const d = BigInt(draws);
-  if (d <= 1n) return true;
+export function drawsFit(entries, slots, opens = 1) {
+  const list = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
+  const draws = list.reduce((n, s) => n + BigInt(s.count), 0n) * BigInt(opens);
+  if (draws <= 1n) return true;
   const n = BigInt(entries.length);
-  const most = BigInt(Math.max(1, ...entries.map((e) => Math.max(1, e.prizes.length))));
-  const least = (e) => e.prizes.reduce((c, p) => {
-    if (p.Item || p.Compressed || p.Nft) return c + COST.item + COST.reread;
-    if (p.Tokens) return c + COST.tokens + (p.Tokens.from.Pool ? COST.reread : 0n);
-    if (p.Stash) return c + COST.draw + COST.group + COST.reread;
-    return c + COST.item;
-  }, 0n);
-  const [draw, won] = entries.length ? entries.map((e) => [least(e), BigInt(e.prizes.length)]).reduce((a, b) => (b[0] < a[0] || (b[0] === a[0] && b[1] < a[1]) ? b : a)) : [0n, 0n];
   const weigh = COST.weigh + COST.weighEntry * n;
-  const fixed = COST.fixed + COST.entry * n + COST.pair * n * n * most * most;
-  return fixed + d * (weigh + draw + COST.won * won + COST.drawn) + COST.finish <= ROLL_BUDGET;
+  const reads = entries.map((e) => e.prizes.map(accountOf));
+  const cost = entries.map((e) => e.prizes.reduce((c, p) => {
+    if (p.Item != null || p.Compressed || p.Nft) return { set: c.set + COST.item, again: c.again + COST.reread, bytes: c.bytes + BYTES.prize };
+    if (p.Tokens) return { set: c.set + COST.tokens, again: c.again + (p.Tokens.from.Pool ? COST.reread : 0n), bytes: c.bytes + (p.Tokens.from.Pool ? BYTES.pooled : BYTES.minted) };
+    if (p.Stash != null) return { set: c.set + COST.draw + COST.group, again: c.again + COST.reread, bytes: c.bytes + BYTES.prize };
+    return { set: c.set + COST.item, again: c.again, bytes: c.bytes + BYTES.prize };
+  }, { set: 0n, again: 0n, bytes: BYTES.draw }));
+  const next = entries.map((_, i) => weigh + cost[i].set + cost.reduce((sum, c, j) => (j === i || reads[i].some((a) => a && reads[j].includes(a)) ? sum + c.again : sum), 0n));
+  const most = BigInt(Math.max(1, ...entries.map((e) => e.prizes.length)));
+  let spent = COST.fixed + COST.pair * n * n * most * most + entries.reduce((c, e) => c + (e.prizes.length ? COST.entry : COST.blank), 0n);
+  let used = BYTES.start + BYTES.entryRead * n + BYTES.prizeRead * BigInt(entries.reduce((c, e) => c + e.prizes.length, 0));
+  let won = 0n;
+  for (const s of list) {
+    const count = BigInt(s.count) * BigInt(opens);
+    const among = entries.map((_, i) => i).filter((i) => !(s.only ?? []).length || (s.only ?? []).includes(i));
+    const dearest = (f) => among.reduce((m, i) => (f(i) > m ? f(i) : m), 0n);
+    spent += count * dearest((i) => next[i]);
+    used += count * dearest((i) => cost[i].bytes);
+    won += count * dearest((i) => BigInt(entries[i].prizes.length));
+  }
+  return spent + COST.finish + COST.won * won + COST.drawn * draws <= ROLL_BUDGET && used + BYTES.finish + BYTES.won * won + draws <= ROLL_HEAP;
 }
 
 /** The most program rent and fee one order takes from its player, in lamports (0.01 SOL): a client cap (`opensAnOrder`). */
@@ -173,7 +197,7 @@ const PLAYER_FEE = 2_000_000n;
  * orders, each its own answer.
  */
 export function opensAnOrder(lootBox, { shares = (lootBox.shares ?? []).length, items = {}, rentPerByte = RENT_PER_BYTE } = {}) {
-  const fits = (n) => drawsFit(lootBox.entries, draws(lootBox) * n) && (BigInt(orderBytes(lootBox, shares, n, items)) + 128n) * rentPerByte + PLAYER_FEE <= ORDER_COST_CAP;
+  const fits = (n) => drawsFit(lootBox.entries, lootBox.slots?.length ? lootBox.slots : 1, n) && (BigInt(orderBytes(lootBox, shares, n, items)) + 128n) * rentPerByte + PLAYER_FEE <= ORDER_COST_CAP;
   let n = 1;
   while (n < 4096 && fits(n + 1)) n += 1;
   return n;

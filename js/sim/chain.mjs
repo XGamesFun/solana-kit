@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import { decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { readUintLE } from '../chain/bytes.js';
 import { SYSVAR_SLOT_HASHES, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { computeUnitLimit } from '../chain/programs.js';
 import { compileMessage, readMessage, readTransaction, signersOf } from '../chain/tx.js';
 import { programError } from '../chain/rpc.js';
 import { decode, lootError, receipts } from '../client/accounts.js';
@@ -62,6 +63,9 @@ const NAMES = new Map(
     return [def.name, names];
   }),
 );
+/** The least compute loot was seen to have left inside the oracle's callback on devnet. */
+const ORACLE_UNITS = 264_577;
+
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
 export const lootName = (ix) => {
   const def = ix.programId === LOOT_PROGRAM ? instructionOf(ix.data) : null;
@@ -271,7 +275,8 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
           if (held?.data?.length) items[id] = decode('Item', held.data);
         }
         restoreQueue();
-        answers.push(sendRaw(oracle, [callbackRollIx({ order, orderState, box, randomness, poolMints, items })], { label: `${label} (oracle)`, role: 'oracle' }));
+        // The compute the real oracle's answer has left when loot is called (read from its devnet callbacks), and no more heap.
+        answers.push(sendRaw(oracle, [computeUnitLimit(ORACLE_UNITS), callbackRollIx({ order, orderState, box, randomness, poolMints, items })], { label: `${label} (oracle)`, role: 'oracle' }));
       } else if (known.name === 'draw_lottery') {
         // The round's record is the request's only account: one nobody bought into asks nothing.
         const round = account('round');

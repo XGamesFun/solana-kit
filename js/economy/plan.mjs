@@ -109,7 +109,7 @@ export function boxArgs(b, m) {
     shares: shares(b.split, m),
     // What one open draws: each slot so many draws among the outcomes it names (all, when none), no outcome twice
     // when distinct. None is one draw among every outcome.
-    slots: (b.slots ?? []).map((s) => ({ count: s.count, only: s.from ?? [], distinct: Boolean(s.distinct) })),
+    slots: (b.slots ?? []).map((s) => ({ count: s.count, only: s.from ?? [], distinct: Boolean(s.distinct), share: Math.round((s.share ?? 0) * 100) })),
     // An entry gives its prizes (a bundle of any number), and may burn the payment in place of the split.
     entries: (b.outcomes ?? []).map((o, i) => ({ prizes: outcomeParts(o).map((part) => partPrize(part, m)), weight: w[i] })),
     gate: gateOf(b.gate, m),
@@ -968,7 +968,7 @@ export const farmBytes = (f, m) => encodedSize('Farm', {
   marks: Array(farmMarks(f)).fill(0n),
 });
 /** Exact initial contest record size for its configured shares, gate, sides and deciders. */
-export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, owed: 0n, unclaimed: 0n, sides: Array(contest.sides).fill(0n), share: 0, extras: 0, picks: 0 });
+export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, decided_at: 0n, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, owed: 0n, unclaimed: 0n, sides: Array(contest.sides).fill(0n), share: 0, extras: 0, picks: 0 });
 /** Args with "@mint:" names standing in as addresses, for sizing. */
 const placeholders = (args) => resolve(args, { project: placeholderKey('project'), collection: placeholderKey('new:collection'), tree: placeholderKey('new:tree'), treasury: placeholderKey('treasury'), mints: new Proxy({}, { get: (_, k) => placeholderKey(`mint/${String(k)}`) }) });
 /** The token program of each Token-2022 mint a context names (the program's account lists name it). */

@@ -48,7 +48,7 @@ const SPEC = {
     { key: 'hero', name: '{color} Hero', uri: 'https://example.invalid/hero/{color}/{power}.json', drawn: [{ attribute: 'color', table: 'colors' }, { attribute: 'power', min: 1, max: 100 }] },
   ],
   boxes: [
-    { key: 'booster', name: 'Booster', price: 0.01, slots: [{ count: 4 }, { count: 1, from: [1] }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
+    { key: 'booster', name: 'Booster', price: 0.01, slots: [{ count: 4, share: 50 }, { count: 1, from: [1], share: 50 }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
     { key: 'heroes', name: 'Heroes', price: 0.01, slots: [{ count: 3 }], outcomes: [{ gives: 'item', item: 'hero', weight: 1 }] },
   ],
 };

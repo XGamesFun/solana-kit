@@ -28,9 +28,9 @@ test('the checker refuses an outcome no slot draws (BadEntries) and a pack one a
   const items = [{ key: 'common', name: 'Common' }, { key: 'rare', name: 'Rare' }, { key: 'epic', name: 'Epic' }];
   const outcomes = [{ gives: 'item', item: 'common', weight: 8 }, { gives: 'item', item: 'rare', weight: 2 }, { gives: 'item', item: 'epic', weight: 1 }];
   const pack = (slots) => solSpec({ items, boxes: [{ key: 'pack', name: 'Pack', price: 0.01, slots, outcomes }] });
-  assert.deepEqual(refused(pack([{ count: 4, from: [0] }, { count: 1, from: [1] }])), ['E-ODDS economy.boxes.pack.slots'], 'the epic is drawn by no slot');
-  assert.deepEqual(refused(pack([{ count: 4, from: [0] }, { count: 1 }])), [], 'a slot that names none draws among all');
-  assert.deepEqual(refused(pack([{ count: 4, from: [0] }, { count: 1, from: [1, 2] }])), []);
+  assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1], share: 50 }])), ['E-ODDS economy.boxes.pack.slots'], 'the epic is drawn by no slot');
+  assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, share: 50 }])), [], 'a slot that names none draws among all');
+  assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1, 2], share: 50 }])), []);
   // Three entries of an item: one answer draws 58 (the program's `draws_fit`, `loot.drawsFit`).
   const m = model(pack([{ count: 57 }]), { now: NOW });
   assert.ok(loot.drawsFit(boxArgs(m.boxes[0], m).entries, 58) && !loot.drawsFit(boxArgs(m.boxes[0], m).entries, 59));
@@ -38,6 +38,19 @@ test('the checker refuses an outcome no slot draws (BadEntries) and a pack one a
   const big = check(pack([{ count: 59 }]), { now: NOW }).refusals;
   assert.deepEqual(big.map((r) => `${r.code} ${r.where}`), ['E-ODDS economy.boxes.pack.slots']);
   assert.match(big[0].message, /about 58 here.*PackTooLarge/);
+});
+
+test('the checker asks what a slot that names outcomes is worth, and a pack sharing a pool counts its rereads', () => {
+  const items = [{ key: 'common', name: 'Common' }, { key: 'rare', name: 'Rare' }];
+  const outcomes = [{ gives: 'item', item: 'common', weight: 8 }, { gives: 'item', item: 'rare', weight: 2 }];
+  const pack = (slots) => solSpec({ items, boxes: [{ key: 'pack', name: 'Pack', price: 0.01, slots, outcomes }] });
+  assert.deepEqual(refused(pack([{ count: 4, from: [0] }, { count: 1, from: [1] }])), ['E-ODDS economy.boxes.pack.slots'], 'no shares');
+  assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 20 }, { count: 1, from: [1], share: 70 }])), ['E-ODDS economy.boxes.pack.slots'], 'not the whole price');
+  assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 20 }, { count: 1, from: [1], share: 80 }])), []);
+  assert.deepEqual(refused(pack([{ count: 3, share: 100 }])), ['E-ODDS economy.boxes.pack.slots'], 'draws among all are alike');
+  const shared = Array.from({ length: 13 }, (_, i) => ({ prizes: [{ Tokens: { from: { Pool: [3] }, amount: { Fixed: [BigInt(i + 1)] } } }] }));
+  assert.ok(loot.drawsFit(shared, 7) && !loot.drawsFit(shared, 8), 'as the program counts it');
+  assert.ok(loot.drawsFit(shared, [{ count: 3, only: [] }], 2) && !loot.drawsFit(shared, [{ count: 4, only: [] }], 2), 'by the opens');
 });
 
 test('the checker refuses a run of places given one by one past MAX_RUN_PLACES (BadLottery); a run of tokens has no cap', () => {

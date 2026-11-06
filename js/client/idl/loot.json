@@ -10067,6 +10067,13 @@
             "type": "u16"
           },
           {
+            "name": "decided_at",
+            "docs": [
+              "Unix time a side was named: a winner has `CLAIM_GRACE_SECONDS` from it to itself."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "owed",
             "docs": [
               "What it still owes; at 0 it closes. Before a result, and once off, its entries not yet",
@@ -13569,7 +13576,7 @@
             "name": "paid",
             "docs": [
               "What the player paid, held in the project's vault until settle or refund. Once the first",
-              "settle call split it, only the share the last part gives back (`undrawn`'s)."
+              "settle call split it, only what the last part gives back (`back`)."
             ],
             "type": "u64"
           },
@@ -13611,10 +13618,16 @@
             "name": "undrawn",
             "docs": [
               "The draws its roll did not make, of its opens' (`LootBox::draws` each): a slot that found nothing",
-              "in stock, or what the oracle's compute had no room for. The last settle part gives back their",
-              "share of what was paid."
+              "in stock, or what the oracle's answer had no room for."
             ],
             "type": "u32"
+          },
+          {
+            "name": "back",
+            "docs": [
+              "What the last settle part gives back for them: their worth (`Slot::worth`) in what was paid."
+            ],
+            "type": "u64"
           },
           {
             "name": "drew",
@@ -15630,7 +15643,10 @@
       "name": "Slot",
       "docs": [
         "A slot of a box's open (`LootBox::slots`): `count` draws among the entries `only` names (every entry",
-        "when it names none), and with `distinct`, no entry twice in it."
+        "when it names none), and with `distinct`, no entry twice in it. `share`: what its draws are worth,",
+        "in basis points of an open's price. A box whose slots name entries gives each its share, 10,000",
+        "together (its slots draw different things, so only the owner knows what each is worth); a box",
+        "whose slots draw among every entry gives none, and each draw is worth the same."
       ],
       "type": {
         "kind": "struct",
@@ -15648,6 +15664,10 @@
           {
             "name": "distinct",
             "type": "bool"
+          },
+          {
+            "name": "share",
+            "type": "u16"
           }
         ]
       }
@@ -16487,6 +16507,16 @@
       ],
       "type": "bytes",
       "value": "[99, 108, 97, 105, 109, 115]"
+    },
+    {
+      "name": "CLAIM_GRACE_SECONDS",
+      "docs": [
+        "How long after a contest's decision a winner alone picks its share of the losers' NFTs and alone",
+        "may go without a prize that can't be given. After it, anyone may do both, so no winner can hold",
+        "up the rest of the contest, on purpose or by losing its key."
+      ],
+      "type": "i64",
+      "value": "2592000"
     },
     {
       "name": "CONTEST_SEED",

@@ -625,7 +625,7 @@ export function withDefaults(def) {
     stored(args.shares);
     if (!args.currency) throw new Error('A box names the mint its price is in (`currency`).');
     // What one open draws (`LootBox::slots`): none is one draw among every entry.
-    args.slots = (args.slots ?? []).map((s) => ({ only: [], distinct: false, ...s }));
+    args.slots = (args.slots ?? []).map((s) => ({ only: [], distinct: false, share: 0, ...s }));
     // An entry: its prizes (`prizeMetas`) and its weight. A box burns its price with a share to `Burn`.
     if (!Array.isArray(args.entries)) throw new Error('A box needs its entries (`entries`): what its roll can give, each with its weight.');
     args.entries = args.entries.map((e) => ({ prizes: [], ...e }));

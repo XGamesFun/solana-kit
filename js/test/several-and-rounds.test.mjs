@@ -252,16 +252,16 @@ t('an auction ended with hold leaves its NFT lot in a hold for the winner, which
 
 t('the biggest packs one oracle answer draws are opened and rolled with the default heap; one draw more is refused', () => {
   const w = world({ seed: 'big-open' });
-  // A pack's draws must all fit one answer (`drawsFit`, the program's `draws_fit`): 28 draws of tokens from a pool,
-  // 61 of an item. One more is refused at the upsert (`PackTooLarge`), and so is a purchase of several opens past it.
+  // A pack's draws must all fit one answer (`drawsFit`, the program's `draws_fit`): 23 draws of tokens from a pool (the
+  // answer's heap binds first), 61 of an item. One more is refused at the upsert (`PackTooLarge`), and so is a purchase of several opens past it.
   w.pool(1, w.mint, 10_000n);
   w.upsert({ Item: { id: 1, args: collectible('Card') } });
   const tokens = [drop([fromPool(1, 1n)])];
   const item = [drop([{ Item: [1] }])];
-  assert.deepEqual([loot.drawsFit(tokens, 28), loot.drawsFit(tokens, 29), loot.drawsFit(item, 61), loot.drawsFit(item, 62)], [true, false, true, false]);
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, tokens, { slots: [{ count: 28, only: [], distinct: false }] }) } });
+  assert.deepEqual([loot.drawsFit(tokens, 23), loot.drawsFit(tokens, 24), loot.drawsFit(item, 61), loot.drawsFit(item, 62)], [true, false, true, false]);
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, tokens, { slots: [{ count: 23, only: [], distinct: false }] }) } });
   w.upsert({ Box: { id: 2, args: boxArgs(PRICE, item, { slots: [{ count: 61, only: [], distinct: false }] }) } });
-  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, tokens, { slots: [{ count: 29, only: [], distinct: false }] }) } }), /PackTooLarge/);
+  assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, tokens, { slots: [{ count: 24, only: [], distinct: false }] }) } }), /PackTooLarge/);
   assert.throws(() => w.upsert({ Box: { id: 3, args: boxArgs(PRICE, item, { slots: [{ count: 62, only: [], distinct: false }] }) } }), /PackTooLarge/);
   const items = { 1: w.read('Item', pda.item(w.project, 1)) };
   for (const id of [1, 2]) {
@@ -271,7 +271,7 @@ t('the biggest packs one oracle answer draws are opened and rolled with the defa
     assert.equal(r.answers.length, 1);
     const order = w.read('Order', pda.order(w.project, w.player, BigInt(id)));
     assert.equal(order.status, 'Rolled');
-    assert.equal(order.won.length, id === 1 ? 28 : 61, 'every draw made');
+    assert.equal(order.won.length, id === 1 ? 23 : 61, 'every draw made');
     assert.equal(w.chain.get(pda.order(w.project, w.player, BigInt(id))).data.length, loot.orderBytes(box, 0, 1, items), 'sized as the client sizes it');
   }
   // Two opens of a 20-draw box are 40 draws of tokens: refused at the purchase.

@@ -1079,6 +1079,12 @@
               },
               "distinct": {
                 "type": "boolean"
+              },
+              "share": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "What this slot's draws are worth, as a percent of an open's price. Needed on every slot of a box whose slots name outcomes (`from`), 100 together: a draw that can't be made (its slot sold out) gives this share back, so a guaranteed rare keeps its value when the commons run out. Leave it out when every slot draws among all the outcomes."
               }
             }
           }
