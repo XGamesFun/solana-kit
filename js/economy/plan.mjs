@@ -54,7 +54,11 @@ export function itemArgs(it, m) {
 }
 
 /** The bytes of an order of box `b` (`orderBytes`), its spec's names standing in as addresses. */
-export const boxOrderBytes = (b, m, opens = 1) => loot.orderBytes(placeholders(boxArgs(b, m)), (b.split ?? []).length, opens);
+export const boxOrderBytes = (b, m, opens = 1) => {
+  // Sized as the program sizes it (`space_for(box, shares, opens)`): with the shares its split stores.
+  const args = boxArgs(b, m);
+  return loot.orderBytes(placeholders(args), (args.shares ?? []).length, opens);
+};
 
 /** The most bytes of rows one table write carries: what a 1,232-byte transaction leaves after the upsert's accounts,
  * its signature and its own bytes. */

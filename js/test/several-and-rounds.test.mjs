@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import { encodeBase58 } from '../chain/base58.js';
 import { concat } from '../chain/bytes.js';
 import { parseCoreAsset } from '../chain/core.js';
-import { computeUnitLimit } from '../chain/programs.js';
+import { computeUnitLimit, requestHeapFrame } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { cannotRun, collectible, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
@@ -248,4 +248,27 @@ t('an auction ended with hold leaves its NFT lot in a hold for the winner, which
   assert.equal(ownerOf(w, art), w.player, 'released to the winner');
   assert.equal(w.chain.get(at), null);
   assert.equal(w.chain.get(ender).lamports, before + rent, 'the hold’s rent came back to the ender');
+});
+
+t('a box of one entry and 150 draws an open asks for the larger heap: without it the open fails, with it the order is made', () => {
+  const w = world({ seed: 'big-open' });
+  w.upsert({ Item: { id: 1, args: { ...collectible('Card'), kind: 'Normal' } } });
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }])], { slots: [{ count: 150, only: [], distinct: false }] }) } });
+  const box = w.read('LootBox', pda.box(w.project, 1));
+  assert.equal(loot.boxHeapFrame(box), loot.LARGE_SETTLE_HEAP);
+  assert.equal(loot.boxHeapFrame({ ...box, slots: [{ count: 100 }] }), 0, '100 draws fit');
+  const items = { 1: w.read('Item', pda.item(w.project, 1)) };
+  const open = (nonce) => loot.openBoxIx({ player: w.player, project: w.project, box, nonce, maxPrice: PRICE, items });
+  assert.throws(() => w.chain.send(w.player, [computeUnitLimit(1_400_000), open(1n)]));
+  w.chain.send(w.player, [computeUnitLimit(1_400_000), requestHeapFrame(loot.boxHeapFrame(box)), open(2n)]);
+  assert.ok(w.chain.get(pda.order(w.project, w.player, 2n)), 'the order is made');
+});
+
+test('settle_round gives at most `runs` token runs a call: the rest wait for the next call from the cursor', () => {
+  const MINT = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
+  const tokens = (n) => ({ bps: 0, prize: { Tokens: { from: { Pool: [n] }, amount: { Fixed: [10n] } } }, times: 1 });
+  const r = { status: 'Drawn', lottery: MINT, terms: { mint: MINT, places: [tokens(1), tokens(2), tokens(3)], shares: [], ticket_mint: NOBODY }, sold: 9n, first: 0n, cursor: 0, answer: new Uint8Array(32), entries: [], accounts: [], paid: new Uint8Array(2), prizes: [] };
+  const keys = (runs) => loot.settleRoundIx({ payer: MINT, project: MINT, roundAddress: MINT, round: r, projectState: { treasury: MINT }, poolMints: { 1: MINT, 2: MINT, 3: MINT }, runs }).keys.length;
+  assert.equal(keys(2) - keys(1), 3, 'one more run: its pool’s mint, the pool, the round’s account of it');
+  assert.ok(keys(3) > keys(2), 'all three, and the sweep after them');
 });

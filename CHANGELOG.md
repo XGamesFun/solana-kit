@@ -51,6 +51,9 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - The checker warns that a fresh item (traits drawn per unit) as a lottery, contest or mission prize is never given,
   and refuses it as an auction lot (`LotRefused`). A contest claim that closes the contest needs `projectState` (its
   treasury).
+- An open of a box of one entry and more than 100 draws, and a call giving a roll of one, asks for a 256 KiB heap
+  (`boxHeapFrame`; js/play adds it). `settleRoundIx` takes `runs`, the most token runs a call; js/play fits them to 64
+  accounts and asks for the larger heap. A box's order size counts its stored shares.
 - `end_auction` takes `hold`: an NFT lot and a bid's winning NFTs become holds released after (`endAuctionIx({ hold })`;
   js/play's `endAuction` does so when the end doesn't fit). A claim of a split pool prize names its pool (`prize_pool`).
   A settle part before the last gives prizes only (no shares, a stand-in piece); js/play splits a settle that passes

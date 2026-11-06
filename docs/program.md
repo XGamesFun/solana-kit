@@ -466,7 +466,9 @@ first: measured on 0.22, one settle mints about 14 Core cards, 10 compressed or 
 then the last part, all from the throwaway key. Rows of committed tables a fresh unit drew are proven in the data
 (`52 + 32 × depth` bytes a row, `MAX_PROVEN_BYTES` 800 a unit: an item past it is out of stock); the tables the economy
 tools write are never committed. An open's order is at most 10,240 bytes (`MAX_ORDER_BYTES`, about 243 one-prize
-draws): a box past it is refused at its upsert (`BadEntries`).
+draws, its stored shares counted): a box past it is refused at its upsert (`BadEntries`). An open of a box of one entry
+and more than 100 draws (and a call giving a roll of one as a prize) asks for a 256 KiB heap (`boxHeapFrame`): 120
+draws fit the 32 KiB a transaction has, 150 don't.
 
 **Prices** are in the box's `currency`. `rise { step, growth_bps }` lifts the price after each sale (rounded down: a
 10% rise on a price of 9 base units adds nothing). `fall { step, every, floor, since, shared }` lowers it with time
@@ -591,7 +593,9 @@ evenly spaced tickets with rejection sampling. A round nobody bought into has no
 date, one that draws once ends. An unanswered draw is asked again after `STALE_SLOTS`; only a draw unanswered **7 days
 after its first ask** lets anyone cancel the round. A short round (`min_sold`) is cancelled at its draw.
 
-**A drawn round moves on in a few steps** (`settle_round`, anyone): a cursor gives the places' prizes in place order,
+**A drawn round moves on in a few steps** (`settle_round`, anyone): a cursor gives the places' prizes in place order
+(a call stops at the first token run whose accounts it doesn't carry, and succeeds: `settleRoundIx`'s `runs` keeps a
+call of hooked runs under 64 accounts, the next call going on from the cursor, and such a call asks for a 256 KiB heap),
 an NFT or a collectible to its winner, a run of token prizes in one step into the round's account (minted ones at the
 pull); its last part **sweeps**: the common shares paid, the pot and the places' parts of it netted into one transfer,
 and the lottery moves to its next round. A stuck NFT prize holds the cursor until anyone turns it into a hold for its
@@ -683,7 +687,8 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 - **A prize per winning entry** (`prize`), given with its first claim (a roll at the claim's `nonce`); the player may
   `forgo` it.
 - **A prize split by stake** (`prize_split`, tokens only): its vault `["prize", contest]` opens with the contest;
-  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake. From a
+  `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake. A hooked
+  prize mint's leftover is burned at the close, not moved back (no hook accounts for it). From a
   pool, a claim that may close the contest (and a `decide` that calls off one nobody entered) names that pool
   (`prize_pool`), where what the vault still holds goes back (`WrongPool` without it; `claimIx` and `decideIx` pass it).
 - **A contest of NFTs** (`nft`, a rule): each entry stakes one NFT (not compressed); sides count NFTs and the NFTs are

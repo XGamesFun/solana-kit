@@ -2,9 +2,9 @@
 
 Working note for the `loot-0.23` branch, so the work can resume if interrupted. Delete it once the branch merges.
 
-Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 5 build (program commit
-a35d91b, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r5-build`,
-`loot.so` sha256 a390dbbf…); before it, the review 4 (603f3a80…), review 3 (74b2415a…), review 2 (e6d170b9…), review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
+Program: `gamesfun-loot` `loot-0.23`, plan `docs/plan-0.23.md`. Built against the review 6 build (program commit
+64ee220, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-loot/a14430d7-cb8c-462d-a7fb-816dd602a6fa/scratchpad/loot-r6-build`,
+`loot.so` sha256 d99463f9…); before it, the review 5 (a390dbbf…), review 4 (603f3a80…), review 3 (74b2415a…), review 2 (e6d170b9…), review 1 (0032534c…), clean-up (3f530f80…) and phase 6 (032b0666…) builds. The pins (`js/test/fixtures/pinned.txt`, `release.json`) stay on devnet's 0.22 until the
 0.23 upgrade.
 
 ## Wire changes (phases 1–6)
@@ -38,6 +38,9 @@ a35d91b, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-
 - [x] review 5 build: settle parts of prizes only (stand-in piece, no shares) and js/play splitting by 64 accounts /
       1,232 bytes; end_auction `hold` (and js/play's fallback to holds and releases); claim/decide `prize_pool`; the
       checker's order-size refusal; `MAX_PROVEN_BYTES` (no checker warning: the tools never commit tables)
+- [x] review 6 build: `boxHeapFrame` (opens and roll prizes of a one-entry box past 100 draws), settle_round `runs`
+      (play fits them to 64 accounts, heap frame), order size with stored shares; contest hooked leftover and farm
+      forfeit need no client change
 
 ## Client-only items (plan "The client, with no program change")
 
@@ -57,6 +60,6 @@ a35d91b, `XSOLANA_PROGRAM_DIR=/tmp/claude-1000/-home-potatoe-Documents-gamesfun-
 - program: a lottery's per-wallet count keeps a u32 total of every round's tickets; 2^32 in all refuses that wallet's next purchase (Overflow). The 0.22 receipt kept no total.
 - program (fixed in review 1): a grant's tag was a profile's (24); now 27.
 
-- check: `npm run check` with the review 1 build: fixtures, skills, lint and 472 tests pass; `release-manifest --check`
+- check: `npm run check` with the review 1 build: fixtures, skills, lint and 474 tests pass; `release-manifest --check`
   fails only because release.json pins devnet's 0.22 IDL and client (left as is until the 0.23 upgrade).
 - program: the IDL's metadata version is still 0.22.0 (the package's too).

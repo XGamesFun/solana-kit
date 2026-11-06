@@ -269,6 +269,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (rolled !== undefined && !(rolled in out.boxes)) {
         const box = (out.boxes[rolled] = await readMaybe('LootBox', loot.pda.box(project, rolled)));
         if (box) Object.assign(out.rollPools, await poolMintsOf(box));
+        // A roll of a box of one entry and many draws: the call that makes its order asks for the larger heap.
+        if (loot.boxHeapFrame(box)) out.heap = true;
       }
       const pool = prize.Tokens?.from.Pool?.[0];
       if (pool !== undefined && !(pool in out.poolMints)) {
@@ -288,6 +290,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     }
     return out;
   }
+  /** The heap frame a call giving `given`'s prizes asks for (`loot.boxHeapFrame`), or none. */
+  const heapOf = (given) => (given?.heap ? [requestHeapFrame(loot.LARGE_SETTLE_HEAP)] : []);
   /** The Sheet the project keeps of an NFT it has no authority over: { key: value } of what the project wrote. */
   const sheetOf = async (nft) => {
     const found = await client.account(loot.pda.sheet(project, nft));
@@ -845,7 +849,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (prize.Roll) return loot.pda.order(project, wallet.address, loot.prizeRollNonce(nonce + BigInt(k)));
       return null;
     });
-    const signature = await send(withSolWrap(wallet.address, mint, box.price, [computeUnitLimit(600_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix]));
+    const signature = await send(withSolWrap(wallet.address, mint, box.price, [computeUnitLimit(600_000), ...heapOf(given), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix]));
     return { signature, assets, ...(assets.find(Boolean) ? { asset: assets.find(Boolean) } : {}) };
   }
 
@@ -892,7 +896,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const n = Math.min(each, left);
       orders.push({ nonce: nonce + k, n, ix: loot.openBoxIx({ player: wallet.address, project, box, nonce: nonce + k, maxPrice: (bound / BigInt(count)) * BigInt(n), count: n, items, shown, listProof, subject, chosenRecipient, chosen, poolMints, programs }) });
     }
-    const before = [...proving, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint))];
+    // A box of one entry and more than 100 draws an order asks for the larger heap (`boxHeapFrame`).
+    const heap = Math.max(0, ...orders.map((o) => loot.boxHeapFrame(box, o.n)));
+    const before = [...(heap ? [requestHeapFrame(heap)] : []), ...proving, createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint))];
     // (A compressed NFT's proof brings its own compute limit, the transaction's only one.)
     let burner = null;
     let solPrize = false;
@@ -1038,8 +1044,19 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       given.before.push(...before);
     }
     const shares = r.terms.shares.filter((x) => !x.to.Holder && !x.to.Chosen);
-    const ix = loot.settleRoundIx({ payer: signer, project, roundAddress: key, round: r, projectState: await projectNow(), holders: await holdersOf(shares), programs, poolMints: given.poolMints, projectMint: mintOf(), items: given.items, nfts: given.nfts, collection: given.collection, stash });
-    return [computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+    const holders = await holdersOf(shares);
+    const projectState = await projectNow();
+    // Token runs a call, as many as fit 64 accounts and one transaction (the program stops at the first run a call
+    // doesn't carry; `claims()` lists the round again while the cursor hasn't reached the sweep). A call that gives
+    // token runs asks for the larger heap: several hooked runs with a long tail outgrow 32 KiB.
+    const built = (runs) => {
+      const ix = loot.settleRoundIx({ payer: signer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints: given.poolMints, projectMint: mintOf(), items: given.items, nfts: given.nfts, collection: given.collection, stash, runs });
+      const tokenRuns = r.terms.places.some((p) => p.prize?.Tokens) && Number(r.cursor) < loot.roundWinners(r);
+      return [computeUnitLimit(800_000), ...(tokenRuns || given.heap ? [requestHeapFrame(loot.LARGE_SETTLE_HEAP)] : []), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), ix];
+    };
+    let runs = r.terms.places.length;
+    while (runs > 1 && transactionLocks(signer, built(runs)) > 64) runs--;
+    return built(runs);
   }
 
   /** The pulls of `parts` of entry `i` of a round (`partsOwed`), signed by `signer`. */
@@ -1387,7 +1404,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
       const boxes = roll != null ? { [roll]: await read('LootBox', loot.pda.box(project, roll)) } : {};
       const ix = loot.unstakeNftIx({ player: wallet.address, project, id: f.id, farm, asset, ...nft, forfeit, roll, nonce, tier: seat.tier, projectCollection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, boxes, ...token });
-      const { signature, rolls } = await sendRolling([...before, ...given.before, ...token.before, ix]);
+      const { signature, rolls } = await sendRolling([...heapOf(given), ...before, ...given.before, ...token.before, ix]);
       const rolled = rolls.length ? { rolled: rolls[0] } : {};
       if (roll != null) return { signature, roll: loot.pda.order(project, wallet.address, loot.namedRollNonce(boxes[roll], asset, nonce)), ...rolled };
       return prize?.Roll && !forfeit ? { signature, roll: loot.pda.order(project, wallet.address, loot.prizeRollNonce(nonce + 1n)), ...rolled } : signature;
@@ -1606,7 +1623,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         return [loot.pda.itemAsset(loot.pda.item(project, id), Number(items[id].issued) + counts[id])];
       });
       const before = [...proving, ...given.before].filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM);
-      let instructions = [computeUnitLimit(1_000_000), ...before, loot.craftIx({ player: wallet.address, project, collection: collections[0], id: r.id, recipe, assets: handed, times, nonce, holders, programs, treasury, poolMints: given.poolMints, items, nfts: given.nfts, boxes: given.boxes, rollPools: given.rollPools, extra })];
+      let instructions = [computeUnitLimit(1_000_000), ...heapOf(given), ...before, loot.craftIx({ player: wallet.address, project, collection: collections[0], id: r.id, recipe, assets: handed, times, nonce, holders, programs, treasury, poolMints: given.poolMints, items, nfts: given.nfts, boxes: given.boxes, rollPools: given.rollPools, extra })];
       // Fuel bought for a staked collectible counts once its seat is refreshed: in the same transaction.
       for (const raise of recipe.raises ?? []) {
         const asset = assets[raise.place];
@@ -2080,7 +2097,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (amount > 0n && (most === undefined || amount > BigInt(most))) throw new Error(`This claim names ${amount} tokens, more than this grant gives${most === undefined ? ' (it gives no fixed amount of tokens)' : ` (${most})`}.`);
       instructions.push(loot.claimGrantIx({ project, id: gspec.id, grant, wallet: wallet.address, signer: wallet.address, count, rounds: voucher?.rounds, round: voucher?.round ?? listRound, expires: voucher?.expires, personHash: voucher?.personHash ?? listPerson, amount, proof, paidRounds, poolMint, item, nft: prized.nft, boxes: prized.boxes, rollPools: prized.rollPools, shown, listProof: gateProof, programs, voucherKey: voucher?.publicKey }));
       // A claim's records and prizes can pass the 200,000 compute units a transaction has by default.
-      const all = [computeUnitLimit(loot.CLAIM_COMPUTE_UNITS), ...instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)];
+      const all = [computeUnitLimit(loot.CLAIM_COMPUTE_UNITS), ...heapOf(prized), ...instructions.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM)];
       if (!grant.gives.Roll) return send(all);
       // A roll's orders are asked for in the claim's own transaction and settled by a key after: one prompt.
       const { signature, rolls } = await sendRolling(all);
@@ -2351,7 +2368,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
             await kindOf(e.nft, me);
           }
         }
-        const claimed = [computeUnitLimit(800_000), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, projectState: g, id: c.id, contest, entries, player: me, nfts: contest.nft ? nfts : undefined, kinds, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, programs })];
+        const claimed = [computeUnitLimit(800_000), ...heapOf(given), ...given.before.filter((x) => x.programId !== COMPUTE_BUDGET_PROGRAM), loot.claimIx({ payer: me, project, projectState: g, id: c.id, contest, entries, player: me, nfts: contest.nft ? nfts : undefined, kinds, collection: given.collection, poolMints: given.poolMints, items: given.items, nft: given.nft, programs })];
         // A prize that rolls: asked for in the claim's own transaction and settled by a key after (one prompt).
         return contest.prize?.Roll && !build ? (await sendRolling(claimed)).signature : send(claimed);
       }

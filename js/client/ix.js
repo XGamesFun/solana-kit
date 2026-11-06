@@ -914,6 +914,13 @@ export function settleParts(box, opens = 1) {
 /** The heap a settle that moves three or more NFTs asks for (`settleHeapFrame`): all a transaction may have, 256 KiB. */
 export const LARGE_SETTLE_HEAP = 256 * 1024;
 
+/**
+ * The heap an open of `box` (`opens` opens in one order) asks for: a box of one entry that makes more than 100 draws an
+ * order outgrows the 32 KiB a transaction has (120 fit, 150 don't), so it asks for 256 KiB (`LARGE_SETTLE_HEAP`); 0 for
+ * none. The same holds for a call that gives a roll of such a box as a prize.
+ */
+export const boxHeapFrame = (box, opens = 1) => (box && box.entries.length === 1 && boxDraws(box) * Math.max(1, opens) > 100 ? LARGE_SETTLE_HEAP : 0);
+
 /** Whether an order rolled on an NFT: its `subject` names one (null for none). */
 const rolledOn = (order) => Boolean(order.subject) && order.subject !== NO_ADDRESS;
 
@@ -1372,12 +1379,13 @@ export const raffledNft = (stash, answer, place) => stash?.nfts[weighted(stream(
  * `projectState` (the treasury) and `holders`. With `hold`, the next NFT prize becomes a hold for its winner (anyone),
  * or the project's authority marks a pool's run, or the sweep's pot, that can't move. In a payment mint with a transfer
  * hook the sweep is a step a call (each common share, then the pot), with these same accounts: send it again while the
- * round is Drawn. A finished round that owes nothing closes.
+ * round is Drawn. `runs`: the most token runs this call gives (a call stops at the first run it carries no accounts
+ * for; check the cursor and send again). A finished round that owes nothing closes.
  */
-export function settleRoundIx({ payer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints = {}, projectMint, items, nfts = {}, collection, stash, places = 1, nonce = 0n, hold = false, extra = [] }) {
+export function settleRoundIx({ payer, project, roundAddress: key, round: r, projectState, holders, programs, poolMints = {}, projectMint, items, nfts = {}, collection, stash, places = 1, runs = Infinity, nonce = 0n, hold = false, extra = [] }) {
   const rest = [];
   const entries = [];
-  let [sweeps, took] = [false, 0];
+  let [sweeps, took, paid] = [false, 0, 0];
   const own = pda.lotteryStash(r.lottery);
   const poolMint = (index) => poolMints[index] ?? projectMint ?? r.terms.mint;
   if (r.status === 'Drawn') {
@@ -1398,6 +1406,10 @@ export function settleRoundIx({ payer, project, roundAddress: key, round: r, pro
         break;
       }
       if (from) {
+        // At most `runs` token runs a call: the program stops at the first run whose accounts it doesn't carry, and the
+        // next call goes on from the cursor (many hooked runs don't fit 64 accounts in one).
+        if (paid >= runs) break;
+        paid += 1;
         if (from.Pool) rest.push(meta(poolMint(from.Pool[0]), false, false), meta(pda.pool(project, from.Pool[0]), false, true), meta(pda.roundTokens(key, poolMint(from.Pool[0])), false, true));
         else rest.push(meta(from.Mint?.[0] ?? from.Vest[0], false, true));
         place = end;
