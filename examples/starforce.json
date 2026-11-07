@@ -2,7 +2,7 @@
   "version": 2,
   "network": "devnet",
   "name": "Starforce",
-  "prompt": "Each try burns the sword and pays a fee; the roll goes up a level, stays (the same sword, minted again) or destroys it, with a tiny lucky chance at a tenth of the jackpot the fees fill.",
+  "prompt": "Each try burns the sword and pays a fee; the roll goes up a level, stays (the same sword, minted again) or destroys it, with a tiny lucky chance at a fixed prize from the pool the fees fill.",
   "currency": "sol",
   "tokens": [
     {
@@ -39,7 +39,7 @@
       "key": "jackpot",
       "currency": "sol",
       "seed": 2,
-      "about": "Every try's fee; the lucky roll takes a tenth."
+      "about": "Every try's fee; the lucky roll takes 0.2 SOL."
     }
   ],
   "recipes": [
@@ -97,10 +97,10 @@
           "chance": 14.5
         },
         {
-          "gives": "share",
+          "gives": "pay",
           "pool": "jackpot",
-          "percent": 10,
-          "chance": 0.5
+          "chance": 0.5,
+          "amount": 0.2
         }
       ]
     }

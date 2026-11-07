@@ -1,4 +1,4 @@
-// Reading the loot program's accounts and receipts. Every account starts with a one-byte tag (1 to 26); the IDL
+// Reading the loot program's accounts and receipts. Every account starts with a one-byte tag (1 to 29); the IDL
 // describes most of them, and the ones it doesn't (a list of records, a lottery round, a sheet, a stash, …) are read
 // here by hand. Values come back in the
 // IDL's shapes (chain/borsh.js).
@@ -9,6 +9,11 @@ import { sha256 } from '../chain/sha256.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { LOOT_PROGRAM, pda } from './pda.js';
 import IDL from './idl/loot.js';
+
+/** The bytes of one time in a farm's record of ends (`decodeEnds`): rent its writer pays, not refunded when a seat leaves. */
+export const END_BYTES = 44;
+/** The bytes of a farm's record of ends with no time in it, its owner's rent at `open_farm`. */
+export const ENDS_HEAD_BYTES = 7;
 
 /** Account tags: each account's first byte, as the program writes it; every list of records (`decodeList`) is 26. */
 export const TAGS = Object.freeze({
@@ -37,6 +42,8 @@ export const TAGS = Object.freeze({
   Table: 25,
   // A list of records: a wallet's counts, a grant's claims or rounds, a contest's entries.
   List: 26,
+  // A farm's record of when its seats stop earning (`decodeEnds`).
+  Ends: 29,
 });
 
 const BY_TAG = Object.fromEntries(Object.entries(TAGS).map(([name, tag]) => [tag, name]));
@@ -66,7 +73,7 @@ const RECORDS = [
         // their own, and the parts owed now.
         ['sold', 'u64'], ['to_pot', 'u64'], ['common', { vec: 'u64' }], ['owns', 'u32'], ['owed', 'u32'],
         // The draw, and the money the ask fixed: the pot's (what the round owes the pot back: `pot_owed`).
-        ['asked_first', 'u64'], ['asked_slot', 'u64'], ['answer', { array: ['u8', 32] }], ['first', 'u64'],
+        ['asked_first', 'u64'], ['asked_slot', 'u64'], ['first_asked_at', 'i64'], ['asked_at', 'i64'], ['answer', { array: ['u8', 32] }], ['first', 'u64'],
         ['pot_total', 'u64'], ['pot_sent', 'u64'], ['pot_arrived', 'u64'], ['pot_owed', 'u64'], ['paid', 'bytes'],
         ['prizes', { vec: { defined: { name: 'TokenPrize' } } }], ['accounts', { vec: { defined: { name: 'Opened' } } }],
         // The NFT of the lottery's own stash each place that holds or draws one got, in place order, and how many.
@@ -87,6 +94,7 @@ export function decodeAny(data) {
   if (!kind) return null;
   if (kind === 'Profile') return { kind, value: decodeProfile(data) };
   if (kind === 'List') return { kind, value: decodeList(data) };
+  if (kind === 'Ends') return { kind, value: decodeEnds(data) };
   if (kind === 'LotteryRound') return { kind, value: decodeRound(data) };
   if (kind === 'Sheet') return { kind, value: decodeSheet(data) };
   if (kind === 'Table') return data[37] === PAYLOAD.Nft ? { kind: 'Stash', value: decodeStash(data) } : { kind, value: decodeTable(data) };
@@ -108,6 +116,24 @@ export function decodeList(data) {
   const count = Number(readUintLE(data, 3, 4));
   if (!width || data.length !== 7 + width * count) throw new Error('List account does not match its records');
   return { width, records: Array.from({ length: count }, (_, i) => data.subarray(7 + width * i, 7 + width * (i + 1))) };
+}
+
+/**
+ * A farm's record of when its seats stop earning (`["ends", farm]`, tag 29; `Farm.keeps_ends`): its times in order, each
+ * `{ at, rewardPerWeight, weight, seats }`: the time (Unix seconds), `reward_per_weight` there once the farm has walked past
+ * it, the weight that stops earning then, and the seats that still need the record.
+ */
+export function decodeEnds(data) {
+  if (!(data instanceof Uint8Array) || data[0] !== TAGS.Ends || data.length < 7) throw new Error('Not a record of ends');
+  const width = Number(readUintLE(data, 1, 2));
+  const count = Number(readUintLE(data, 3, 4));
+  if (width !== END_BYTES || data.length !== 7 + width * count) throw new Error('The record of ends does not match its records');
+  return Array.from({ length: count }, (_, i) => {
+    const at = 7 + width * i;
+    let time = 0n;
+    for (let b = 0; b < 8; b++) time = (time << 8n) | BigInt(data[at + b]);
+    return { at: time, rewardPerWeight: readUintLE(data, at + 8, 16), weight: readUintLE(data, at + 24, 16), seats: Number(readUintLE(data, at + 40, 4)) };
+  });
 }
 
 /** The first 16 bytes of the sha256 of `parts` (addresses, bytes or u64s): a record's key in a list. */
@@ -575,10 +601,14 @@ export function renterOf(listing, now) {
   return BigInt(now) < BigInt(listing.until) && listing.user !== SYSTEM_PROGRAM ? listing.user : null;
 }
 
+/** Whether a schedule pays every run due when it is sent late (`schedule::catches_up`): only a sealed fixed amount. */
+export const scheduleCatchesUp = (schedule) => Boolean(schedule.action?.from?.Vest && schedule.action?.amount?.Fixed);
+
 /**
- * How many runs of a schedule are due at `now` (Unix seconds, the chain's clock, never the computer's). One
- * `run_schedule` makes them all (up to its `upto`, the runs made after it: `schedule.runs` plus these), and a long
- * backlog takes a few calls. A sealed schedule past its last run is due once whenever its vault holds something
+ * How many runs of a schedule are due at `now` (Unix seconds, the chain's clock, never the computer's). One `run_schedule`
+ * makes them all. A sealed schedule's fixed amount pays each of them (`scheduleCatchesUp`; up to its `upto`, the runs made
+ * after it: `schedule.runs` plus these, and a long backlog takes a few calls). Any other run pays once, for the latest
+ * run due, and those before it lapse. A sealed schedule past its last run is due once whenever its vault holds something
  * (`vaultBalance`), which goes where it always went.
  */
 export function runsDue(schedule, now, vaultBalance = 0n) {

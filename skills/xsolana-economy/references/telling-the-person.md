@@ -57,10 +57,12 @@ money; it holds no files and serves nothing.
   card it may mint, in the purchase's one prompt, and the key sends back what it didn't spend. A plain compressed card
   costs none. A pack of fixed cards (nothing random) is bought in one step, its cards minted in the purchase; a pack
   too big for one transaction settles in parts (about 14 Core cards a part), which the page sends.
-- **A prize the program can't give right now is out of stock, not an error.** A prize in a token with a transfer hook
-  (or confidential transfers) is never moved by a roll, a fixed prize its pool can't cover waits until the pool holds
-  it, an item sold out or a stash emptied is skipped: that outcome never comes up, and a box with nothing in stock is
-  refused (SoldOut). `xsolana_check` warns of each (W-OUT-OF-STOCK, W-PRIZE-SEED).
+- **A prize the program can't give right now is out of stock, not an error, and the odds stay as written.** A prize in a
+  token with a transfer hook (or confidential transfers) is never moved by a roll; a fixed prize its pool can't cover in
+  full, an item sold out or a stash emptied can't be given: a draw that lands on it is not made, no other outcome takes
+  its place, and that draw's worth of the price goes back at the settle. With no draw made a paid open is refunded and a
+  free roll waits to be asked again, and a box with nothing in stock is refused (SoldOut). `xsolana_check` warns of each
+  (W-OUT-OF-STOCK, W-PRIZE-SEED). Say so when they ask what happens when a prize pool runs out.
 - **The oracle's answer reads at most 21 accounts**, so a box's distinct prize accounts (its items, pools, stashes,
   the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
   `xsolana_check` counts them.
@@ -100,9 +102,10 @@ Don'ts:
   or a schedule that pays or mints into `"farm:<key>"` (`W-FARM-DRY` when nothing does). Whoever stakes first is
   credited all that is released while they are alone, so say early stakers share the first rewards among few. A farm
   that `runs` takes no stake at its end, and what it has not released by then stays in its vault (the authority may
-  take back what is free there), as does what a seat gives back after it: say to fund it at least its release span
-  before the end. A seat past its term (`earnsFor`) or its fuel earns nothing more however late it is touched: no
-  refresh is needed at its end. A sharing farm of a token with a
+  take back what is free there), as does what a seat forfeits after it: say to fund it at least its release span
+  before the end. What a seat earned by its term (`earnsFor`) or its fuel is exact however late it is next touched, and
+  nobody has to act at that time. Such a farm keeps a record of those times: each new one costs whoever writes it 44 bytes
+  of rent (about 0.00022 SOL), not refunded on leaving. A sharing farm of a token with a
   great many base units (a memecoin) that pays a reward of few units rounds each seat's share to nothing
   (`W-FARM-ROUNDING`). A farm with
   a fixed `rate` pays the same to each NFT instead; minted, it grows the token's supply every day it runs, which
@@ -111,7 +114,7 @@ Don'ts:
   (`W-FARM-MINT-ROOM`, for a rate that could get there).
 - **Levels written by staking are attributes on the NFT** (or in the project's Sheet of it, for an NFT the project
   has no authority over): marketplaces show them, anyone can read them, and the person's other mechanics can use
-  them. They grow only when a seat is refreshed or the NFT leaves: the page refreshes (`app.refresh`).
+  them. They grow only when a seat is refreshed or the NFT leaves: the page refreshes (`app.refresh`). A boost that reads a level the farm's own growth writes counts each level from when it is written, so a seat refreshed often earns more than one refreshed rarely: have the page or a keeper refresh seats (anyone may, for free).
 - **Grants pay their claims' rent from their own funds** (`fund`, in SOL, held in the grant): the player pays the
   0.002 SOL player fee and the network fee to claim, once, even when the prize is a roll. A first claim of a token
   prize also opens the winner's account from the funds:

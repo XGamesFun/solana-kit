@@ -45,7 +45,11 @@ export const WSOL = 'So11111111111111111111111111111111111111112';
 /** The limits a spec meets: the chain's (the oracle's answer carries 21 accounts; a farm names a tier and a recipe a
  * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32) and the two
  * caps that keep a farm's numbers from overflowing. Since loot 0.22 the program caps no count or size of its own. */
-export const LIMITS = Object.freeze({ callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000 });
+export const LIMITS = Object.freeze({
+  callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000,
+  // The program's caps on a record's lists (constants.rs, not in the IDL): a spec over one is refused before anything is signed.
+  boxEntries: 128, boxSlots: 32, boxOdds: 32, boxFates: 64, entryPrizes: 14, recipeLines: 48, farmRules: 32, growthSteps: 128, contestSides: 1024, deciders: 32, collections: 32, lotteryRuns: 64, farmEnds: 100_000,
+});
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
  * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
 export const RESERVED_ATTRIBUTES = Object.freeze(['made', 'used', 'next_use', 'item_id', 'rarity', 'serial', 'origin']);
@@ -128,14 +132,29 @@ export function releaseWords(f) {
 }
 
 /**
+ * What a run sent late does, in words (schedule.rs `catches_up`): a sealed schedule's fixed amount pays every run due;
+ * any other run pays once, for the latest run due, and the runs before it lapse.
+ */
+export const lateRunWords = (s) => (s.sealed && s.percent === undefined ? 'a run sent late pays every run due since' : 'a run missed is missed: one sent late pays once, for the latest run due, and the runs before it lapse');
+
+/**
+ * Whether a farm's boost reads a number its own growth writes (`refresh_seat` writes it): each level counts from when it is
+ * written, so a page or a keeper should refresh seats.
+ */
+export const boostReadsGrowth = (f) => (f.boosts ?? []).some((b) => b.when?.attribute && listOf(f.growth).some((g) => b.when.attribute === (g.attribute ?? 'xp') || ((g.levels ?? []).length > 0 && b.when.attribute === (g.level ?? 'level'))));
+
+/** A box's roll against what is in stock, in words (order.rs): the odds stay as written, whatever is left. */
+export const STOCK_WORDS = 'The odds stay as written whatever is in stock: a draw that lands on an outcome that can’t be given then (its pool short of the whole amount, its item or stash gone) is not made, no other outcome takes its place, and that draw’s worth of the price goes back at the settle; with no draw made at all, a paid open fails and is refunded, and a free roll goes back to waiting';
+
+/**
  * What the end of a sharing farm that `runs` means, in words, or null (no end, or a fixed rate): its release keeps its
  * pace, so what it has not let go by the end stays in its vault, free for the authority to take back, and so does what
- * a seat gives back after the end.
+ * a seat forfeits after the end.
  */
 export function farmEndWords(f) {
   if (!f.runs || f.rate) return null;
   const span = releaseWords(f);
-  return `what is not released by its end stays in its vault, credited to nobody (the authority may take back what is free there), and so does what a seat gives back after the end: fund it at least ${span} before its end (what lands later is released only in part, and what lands at or after the end not at all)`;
+  return `what is not released by its end stays in its vault, credited to nobody (the authority may take back what is free there), and so does what a seat forfeits after the end: fund it at least ${span} before its end (what lands later is released only in part, and what lands at or after the end not at all)`;
 }
 
 /**
@@ -331,7 +350,7 @@ export function stashNfts(s) {
 
 /**
  * A prize as the spec writes it (`$defs/prize`), read the one way: a line { gives, … } as a recipe's `out` lines are:
- * "item" (`item`), "tokens" (`amount`, `from` "mint" with `currency`, or "pool:<key>"), "share" (`percent` of `pool`),
+ * "item" (`item`), "tokens" (`amount`, `from` "mint" with `currency`, or "pool:<key>"),
  * "nft" (`nft`, an address the stash `stash` lists) or "roll" (a roll of `box`; in a recipe, on the collectible kept
  * at `on`). A grant's older `gives` ({ item }, { pool, amount }, { roll }) reads as its line. Null for none.
  */
@@ -344,8 +363,8 @@ export function prizeLine(p) {
   return null;
 }
 
-/** The pool a prize line pays from: a share's, or tokens' "pool:<key>". */
-export const prizePool = (p) => (p?.gives === 'share' ? p.pool : p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
+/** The pool a prize line pays from: tokens' "pool:<key>". */
+export const prizePool = (p) => (p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
 
 /** The token a prize line pays in: its pool's, or the one it mints. */
 export const prizeToken = (p, m) => (prizePool(p) ? m.poolToken(prizePool(p)) : p?.gives === 'tokens' ? m.tokens.get(p.currency ?? m.currencyKey) : null);
@@ -417,13 +436,12 @@ export function rollsOf(m) {
   return rolls;
 }
 
-/** A prize line in words: "one Badge", "100 GOLD from “rewards”", "100 GOLD, minted", "10% of “jackpot”", "the NFT ab12…cd34 of “vault”", "a roll of “Chest”". */
+/** A prize line in words: "one Badge", "100 GOLD from “rewards”", "100 GOLD, minted", "the NFT ab12…cd34 of “vault”", "a roll of “Chest”". */
 export function prizeWords(p, m) {
   const line = prizeLine(p);
   if (!line) return 'nothing';
   const sym = (key) => m.tokens.get(key)?.symbol ?? key;
   if (line.gives === 'item') return `one ${m.item.get(line.item)?.name ?? line.item}${line.compressed ? ' (compressed)' : ''}`;
-  if (line.gives === 'share') return `${line.percent}% of “${line.pool}”`;
   if (line.gives === 'raffled') return 'an NFT drawn at random from the lottery’s own stash';
   if (line.gives === 'nft' && line.held) return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} (held in the lottery’s own stash until it is won)`;
   if (line.gives === 'nft') return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} of “${m.stash.get(line.stash)?.name ?? line.stash}”`;
@@ -434,8 +452,8 @@ export function prizeWords(p, m) {
 }
 
 /**
- * What one box outcome gives (catalog.rs, at most three prizes an entry), each in the box's own words: "item",
- * "pay" (a fixed amount from a pool), "share" (a percent of a pool), "stash" (an NFT of a stash at random), "mint"
+ * What one box outcome gives (catalog.rs), each in the box's own words: "item", "pay" (a fixed amount from a pool),
+ * "stash" (an NFT of a stash at random), "mint"
  * (tokens minted), "nft" (one NFT a stash lists) or "roll" (a roll of another box). A bundle gives its `prizes`; "burn"
  * and "nothing" give none.
  */
@@ -465,7 +483,7 @@ export function settleUnits(b, m) {
   const opens = (p) => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
   const parts = (b.outcomes ?? []).map((o) => outcomeParts(o));
   const most = Math.max(0, ...parts.map((ps) => ps.filter(opens).length));
-  const sources = new Set(parts.flat().filter((p) => ['tokens', 'pay', 'share', 'mint'].includes(p.gives)).map((p) => prizePool(p) ?? `mint:${p.currency ?? ''}`));
+  const sources = new Set(parts.flat().filter((p) => ['tokens', 'pay', 'mint'].includes(p.gives)).map((p) => prizePool(p) ?? `mint:${p.currency ?? ''}`));
   return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
 }
 
@@ -609,8 +627,8 @@ export function weights(box) {
 export function poolTakers(m) {
   const takers = [];
   const add = (pool, by, how) => pool && takers.push({ pool, by, how });
-  for (const b of m.allBoxes) for (const o of (b.outcomes ?? []).flatMap(outcomeParts)) if (o.gives === 'pay' || o.gives === 'share') add(o.pool, `box:${b.key}`, o.gives === 'pay' ? 'pays prizes' : 'pays a share as a prize');
-  for (const p of prizes(m)) add(prizePool(p.prize), p.by, p.prize.gives === 'share' ? `pays a share as a prize (${p.route})` : `pays prizes (${p.route})`);
+  for (const b of m.allBoxes) for (const o of (b.outcomes ?? []).flatMap(outcomeParts)) if (o.gives === 'pay') add(o.pool, `box:${b.key}`, 'pays prizes');
+  for (const p of prizes(m)) add(prizePool(p.prize), p.by, `pays prizes (${p.route})`);
   for (const s of m.schedules) {
     if (s.does === 'burn') add(s.pool, `schedule:${s.key}`, 'burns a share');
     if (s.does === 'move') add(s.from, `schedule:${s.key}`, 'moves a share out');

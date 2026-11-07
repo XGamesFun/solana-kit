@@ -174,7 +174,7 @@ function prizeWords(gives, m) {
   const item = (id) => `the item “${named(m.items, id)?.name ?? named(m.items, id)?.key ?? id}”`;
   if (kind === 'Tokens') {
     const from = v.from.Pool ? `from the pool “${m.pools.find((p) => p.index === v.from.Pool[0])?.key ?? v.from.Pool[0]}”` : v.from.Mint ? `minted from ${v.from.Mint[0]}` : `from the vault ${v.from.Vest[0]}`;
-    const amount = v.amount.Fixed ? tokens(v.amount.Fixed[0], prizeToken(gives, m)) : `${Number(v.amount.Bps[0]) / 100}% of what it holds`;
+    const amount = tokens(v.amount, prizeToken(gives, m));
     return `${amount} ${from}`;
   }
   if (kind === 'Item') return item(v[0]);
@@ -203,7 +203,7 @@ function grantTerms(args, names) {
     BigInt(l.window?.closes_at ?? 0) ? `closes ${when(l.window.closes_at)}` : null,
   ].filter(Boolean);
   // A voucher or a list entry may name an amount of its own, up to the grant's fixed amount (0 is the prize as it is).
-  const upTo = !args.open && args.gives?.Tokens?.amount?.Fixed ? 'up to ' : '';
+  const upTo = !args.open && args.gives?.Tokens ? 'up to ' : '';
   return [`Each claim gets: ${upTo}${prizeWords(args.gives, names.m)}`, `Limits: ${limits.length ? limits.join(', ') : 'none'}`];
 }
 

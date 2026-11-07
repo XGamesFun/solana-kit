@@ -11,7 +11,7 @@
     {
       "name": "ask_roll",
       "docs": [
-        "Anyone asks the oracle for a roll a mission's return or a recipe made (`Waiting`): it lands",
+        "Its player or the project's keys ask the oracle for a roll a mission's return or a recipe made (`Waiting`): it lands",
         "in `callback_roll`, as a box's does."
       ],
       "discriminator": [
@@ -2371,6 +2371,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -2760,6 +2782,11 @@
             "For `TokenSource::Farm`, the farm, credited first so what it holds free is current; its",
             "rewards vault is the `pool`, and its rewards mint the `mint`."
           ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "farm_ends",
           "writable": true,
           "optional": true
         }
@@ -3574,6 +3601,28 @@
         {
           "name": "exit_pool",
           "optional": true
+        },
+        {
+          "name": "ends",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  100,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "farm"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -4665,6 +4714,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -5361,7 +5432,7 @@
     {
       "name": "run_schedule",
       "docs": [
-        "Anyone runs a schedule that is due: every run due, up to `upto` runs made (0: no bound)."
+        "The project's keys or who it pays run a schedule that is due (anyone, a sealed one that burns). A run pays once, and the runs missed before it lapse; a sealed fixed amount pays every run due, up to `upto` runs made (0: no bound)."
       ],
       "discriminator": [
         17
@@ -5782,7 +5853,7 @@
       "name": "settle",
       "docs": [
         "Carry out a rolled order: hand over what its roll set aside (items, tokens, NFTs) and",
-        "split its payment. Anyone sends it, for whatever order is at the address."
+        "split its payment. Its player, the key they named, or the project's keys send it."
       ],
       "discriminator": [
         4
@@ -6075,6 +6146,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -6352,6 +6445,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -7012,6 +7127,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -7294,6 +7431,28 @@
               "docs": [
                 "account here only makes the call fail."
               ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
             }
           ]
         },
@@ -7548,6 +7707,98 @@
               }
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "walk_farm",
+      "docs": [
+        "Credits a farm up to at most `most` of the times its seats stopped earning, for one that has",
+        "passed more of them than one transaction can walk. Anyone; every move walks them anyway."
+      ],
+      "discriminator": [
+        55
+      ],
+      "accounts": [
+        {
+          "name": "side",
+          "accounts": [
+            {
+              "name": "project"
+            },
+            {
+              "name": "farm",
+              "writable": true
+            },
+            {
+              "name": "rewards_vault",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      114,
+                      101,
+                      119,
+                      97,
+                      114,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "rewards_mint",
+              "docs": [
+                "a farm that mints pays a seat."
+              ]
+            },
+            {
+              "name": "token_program",
+              "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            {
+              "name": "token_2022_program",
+              "docs": [
+                "account here only makes the call fail."
+              ]
+            },
+            {
+              "name": "ends",
+              "writable": true,
+              "optional": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      101,
+                      110,
+                      100,
+                      115
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "farm"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "most",
+          "type": "u32"
         }
       ]
     }
@@ -9059,6 +9310,16 @@
       "code": 6140,
       "name": "PackTooLarge",
       "msg": "A pack's draws (each open's, times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
+    },
+    {
+      "code": 6141,
+      "name": "WrongEnds",
+      "msg": "A farm whose seats can stop earning takes its record of ends, and no other farm does"
+    },
+    {
+      "code": 6142,
+      "name": "TooManyEnds",
+      "msg": "This farm is waiting on as many different end times as it can keep"
     }
   ],
   "types": [
@@ -9303,6 +9564,14 @@
           {
             "name": "last_bid_at",
             "type": "i64"
+          },
+          {
+            "name": "proceeds_owed",
+            "docs": [
+              "Once the lot was delivered: what is still owed its seller, whose account couldn't take it then.",
+              "The next `end_auction` pays it, and closes the auction."
+            ],
+            "type": "u64"
           },
           {
             "name": "held",
@@ -11065,15 +11334,11 @@
             "type": "u64"
           },
           {
-            "name": "marks",
+            "name": "keeps_ends",
             "docs": [
-              "In a farm whose seats can stop earning (a tier's term, an upkeep), sharing what lands or paying",
-              "a shared rate: `reward_per_weight` at the grid's past times (`mark`), so a seat past its end is",
-              "credited up to it however late it is touched (`accrue`). Empty in any other farm."
+              "Its seats can stop earning and it pays something: it keeps the record of when, `[\"ends\", farm]`."
             ],
-            "type": {
-              "vec": "u128"
-            }
+            "type": "bool"
           }
         ]
       }
@@ -13698,6 +13963,17 @@
             "type": "u64"
           },
           {
+            "name": "asked_at",
+            "docs": [
+              "When it was last asked, and first asked: a late answer's deadlines count in time, from these."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "first_asked_at",
+            "type": "i64"
+          },
+          {
             "name": "counted",
             "docs": [
               "It counts against its player's limit on its box (`counter.rs`), in this window. A refund",
@@ -14342,11 +14618,7 @@
               },
               {
                 "name": "amount",
-                "type": {
-                  "defined": {
-                    "name": "Amount"
-                  }
-                }
+                "type": "u64"
               }
             ]
           },
@@ -15500,13 +15772,8 @@
             "docs": [
               "Until when it earns and grows (`i64::MAX`: no end): the sooner of its tier's term",
               "(`Tier::earns_for` after `since`) and its fuel as its collectible said when last read",
-              "(staked, refreshed). And when it was last credited: in a farm with a rate for each unit of",
-              "weight, what it earned up to its end is the time split of what it was credited since (`accrue`)."
+              "(staked, refreshed). A seat with weight and an end is on the farm's record of ends."
             ],
-            "type": "i64"
-          },
-          {
-            "name": "credited_at",
             "type": "i64"
           },
           {
@@ -16570,6 +16837,11 @@
       "value": "86400"
     },
     {
+      "name": "ENDS_SEED",
+      "type": "bytes",
+      "value": "[101, 110, 100, 115]"
+    },
+    {
       "name": "ENTRIES_SEED",
       "type": "bytes",
       "value": "[101, 110, 116, 114, 105, 101, 115]"
@@ -16649,13 +16921,13 @@
       "value": "[108, 111, 116, 116, 101, 114, 121, 95, 115, 116, 97, 115, 104]"
     },
     {
-      "name": "LOTTERY_TIMEOUT_SLOTS",
+      "name": "LOTTERY_TIMEOUT_SECONDS",
       "docs": [
-        "A lottery draw the oracle has not answered this many slots after it was first asked for (7 days",
-        "at 400 ms a slot) is cancelled by the next ask (`draw_lottery`): the round is refunded."
+        "A lottery draw the oracle has not answered this long after it was first asked for is cancelled by",
+        "the next ask (`draw_lottery`): the round is refunded."
       ],
-      "type": "u64",
-      "value": "1512000"
+      "type": "i64",
+      "value": "604800"
     },
     {
       "name": "MAX_CONTEST_SECONDS",
@@ -16676,10 +16948,6 @@
     },
     {
       "name": "MAX_RUN_PLACES",
-      "docs": [
-        "The most places one run of a lottery's places holds when they are given one by one (an NFT, a",
-        "compressed NFT, a raffled one): a pull walks the run from its first place, and so fits."
-      ],
       "type": "u32",
       "value": "4096"
     },
@@ -16830,12 +17098,12 @@
       "value": "[115, 116, 97, 107, 101, 100]"
     },
     {
-      "name": "STALE_SLOTS",
+      "name": "STALE_SECONDS",
       "docs": [
-        "A box still waiting for its roll after this many slots (about 10 minutes) can be refunded."
+        "A box still waiting for its roll this long after it was asked for can be refunded."
       ],
-      "type": "u64",
-      "value": "1500"
+      "type": "i64",
+      "value": "600"
     },
     {
       "name": "STASH_SEED",

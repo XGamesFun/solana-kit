@@ -126,7 +126,7 @@ export const boxArgs = (price, entries, more = {}) => ({
 export const drop = (prizes, weight = 1) => ({ prizes, weight });
 export const itemDrop = (id, weight = 1) => drop([{ Item: [id] }], weight);
 /** `amount` tokens from pool `pool`. */
-export const fromPool = (pool, amount) => ({ Tokens: { from: { Pool: [pool] }, amount: { Fixed: [BigInt(amount)] } } });
+export const fromPool = (pool, amount) => ({ Tokens: { from: { Pool: [pool] }, amount: BigInt(amount) } });
 
 /** Why the compressed NFT tests can't run here (Bubblegum as on mainnet, `npm run fixtures`), or null. */
 export function cannotRunCompressed() {

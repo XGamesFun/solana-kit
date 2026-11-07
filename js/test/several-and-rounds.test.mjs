@@ -88,7 +88,7 @@ t('a voucher of several rounds pays each once, in one claim; a grant keeps its r
   w.pool(1, w.mint, 100n);
   const signer = keyFromSeed(new Uint8Array(32).fill(3));
   const limits = { wallet: { total: 0, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
-  w.upsert({ Grant: { id: 1, args: { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [signer.publicKey, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, shard_bits: 2 } } });
+  w.upsert({ Grant: { id: 1, args: { gives: { Tokens: { from: { Pool: [1] }, amount: 5n } }, vouchers: [signer.publicKey, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, shard_bits: 2 } } });
   const address = pda.grant(w.project, 1);
   w.chain.airdrop(address, 1_000_000_000n);
   const grant = w.read('Grant', address);
@@ -284,7 +284,7 @@ t('the biggest packs one oracle answer draws are opened and rolled with the defa
 
 test('a round’s first ask carries its pot and each run of token prizes; a round asked before carries none', () => {
   const MINT = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-  const places = [{ bps: 5000, prize: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [10n] } } }, times: 1 }, { bps: 0, prize: { Tokens: { from: { Mint: [MINT] }, amount: { Fixed: [10n] } } }, times: 2 }];
+  const places = [{ bps: 5000, prize: { Tokens: { from: { Pool: [1] }, amount: 10n } }, times: 1 }, { bps: 0, prize: { Tokens: { from: { Mint: [MINT] }, amount: 10n } }, times: 2 }];
   const terms = { mint: MINT, places, shares: [], ticket_mint: NOBODY };
   const lottery = { incarnation: 0n, round: 0, terms };
   const keys = (status) => loot.drawLotteryIx({ payer: MINT, project: MINT, id: 1, lottery, round: { status, terms }, poolMints: { 1: MINT } }).keys;

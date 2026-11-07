@@ -13,7 +13,7 @@ const skip = cannotRun() ?? false;
 const { pda } = loot;
 
 test('buy gives a fixed pack’s prizes once for each draw of each sale, and its tokens once with all of them', () => {
-  const box = { box_id: 1, version: 0, price: 10n, currency: pda.project('11111111111111111111111111111111', 0), slots: [{ count: 3 }], entries: [{ prizes: [{ Item: [1] }, { Tokens: { from: { Mint: ['So11111111111111111111111111111111111111112'] }, amount: { Fixed: [5n] } } }] }] };
+  const box = { box_id: 1, version: 0, price: 10n, currency: pda.project('11111111111111111111111111111111', 0), slots: [{ count: 3 }], entries: [{ prizes: [{ Item: [1] }, { Tokens: { from: { Mint: ['So11111111111111111111111111111111111111112'] }, amount: 5n } }] }] };
   const gives = loot.buyGives(box, 2);
   assert.deepEqual(gives.map((g) => [Object.keys(g.prize)[0], g.k, g.times]), [['Item', 0, 1], ['Item', 1, 1], ['Item', 2, 1], ['Item', 3, 1], ['Item', 4, 1], ['Item', 5, 1], ['Tokens', 6, 6]]);
 });
@@ -23,7 +23,7 @@ test('on chain: two packs of three cards and a coin bundle, in one instruction, 
   const coin = w.newMint(w.creator);
   w.chain.send(w.creator, [setAuthorityIx({ account: coin, current: w.creator, newAuthority: w.project })]);
   w.upsert({ Item: { id: 1, args: collectible('Card') } });
-  const minted = { Tokens: { from: { Mint: [coin] }, amount: { Fixed: [7n] } } };
+  const minted = { Tokens: { from: { Mint: [coin] }, amount: 7n } };
   w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted])], { slots: [{ count: 3, only: [], distinct: false }], per_wallet: { total: 2, per_window: 0, window: 0 } }) } });
   const box = w.read('LootBox', pda.box(w.project, 1));
   const items = { 1: w.read('Item', pda.item(w.project, 1)) };

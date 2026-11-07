@@ -4,6 +4,51 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased: the rules are strict (the program is not on devnet yet)
+
+For the program's unreleased "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account
+of 0.23 carries over. `js/test/fixtures/pinned.txt` still pins the deployed build until a devnet deployment, so
+`npm run fixtures -- --check` says the manifest and the pin part: run the tests with `XSOLANA_PROGRAM_DIR` set to the build.
+
+- **A seat past its end is paid exactly.** `Farm.marks`, `Seat.credited_at` and the time split are gone. A farm whose seats
+  can stop earning and that pays keeps `["ends", farm]` (`pda.ends`, `decodeEnds`, `farmKeepsEnds`, `Farm.keeps_ends`): every
+  builder of a farm's moves names it when the decoded farm says so, `openFarmIx` when its args do, and `moveTokensIx` takes
+  `farm` for `farm_ends`. New: `walkFarmIx`, `endsToWalk`, `farmNeedsWalk`, `walkFarmParts`; in `js/play`, `app.farmWalk`,
+  `app.walkFarm`, a `walk` claim, and moves that ask for all a transaction's compute when they have ends to walk and refuse
+  in words (`FarmNeedsWalk`) past what they can. `cost` and `explain` say a new end time costs its writer 44 bytes of rent,
+  spare rent first, not refunded on leaving; the record's first bytes are the owner's at setup. Nothing says to refresh at
+  the end of a term any more.
+- **A prize is a fixed amount.** `Prize::Tokens.amount` is a plain number on every route (`Amount` stays for `move_tokens`
+  and schedules). The share prize is gone from the schema, the plan, the checker, the simulation, the explainer, the
+  guide, the skill, `examples/starforce.json` and `examples/merge-2048.json`. A spec that asks for one is refused in words
+  (`E-SHARE-PRIZE`), with a fixed amount or a lottery's pot as the way; the keyword `jackpot` finds lotteries, and the guide
+  names the limit. A share still fills a schedule, a decision and a split.
+- **Written odds.** A draw is on the box's written weights: an entry drawn that can't be given makes no draw and gives back
+  its slot's worth; with no draw made a paid order fails and a free one waits. `simulate`, `explain`, the warnings
+  (`W-OUT-OF-STOCK`, `W-PRIZE-SEED`) and the skill say so (`STOCK_WORDS`). An outcome that names a pool twice, a stash's random
+  NFT beside anything else of that stash, or one NFT twice is refused before writing, as the program would (`BadEntries`);
+  two of an item more than its supply is warned of.
+- **Edits.** An edit fails only an order holding a payment; other rolls waiting roll on the box as edited. `W-LIVE-ROLLS`,
+  `explain` and the skill no longer say a roll won elsewhere is lost.
+- **Time, not slots.** `STALE_SECONDS` and `LOTTERY_TIMEOUT_SECONDS` replace the slots' constants, from `asked_at` and
+  `first_asked_at`. `orderRefundSlot` gives way to `orderRefundAt` and `orderRefundable(order, slot, now)`, which knows an `Asked`
+  order holding a payment or an NFT refunds after 7 days; `rollAskable(order, slot, now)`, `lotteryDrawStuck(round, now)`,
+  `lotteryCancellable(round, now)`.
+- **A run missed is missed.** Only a sealed fixed amount pays every run due (`scheduleCatchesUp`); any other pays once and
+  `upto` has no effect on it. The explainers, the guide, `after-launch.md` and `app.runSchedule` say so.
+- **An owed seller.** An auction of a player's NFT whose seller's account can't take the money delivers the lot and stays
+  open with `proceeds_owed`: `endAuctionIx` then names no lot or share, `app.auctions()` says `delivered` and `proceedsOwed`,
+  `app.endAuction` pays and closes it, and `claims()` offers it to the seller, not the winner.
+- **Lotteries.** At most 64 runs (`E-LOTTERY`). A `payout` claim leaves out a named stash NFT that is gone, which a stranger's
+  pull can't pass over.
+- **Smaller.** A tier with a prize needs a lock (`E-FARM`). `W-ROLL-CUSTODY` covers a number-moving roll on an NFT a recipe
+  shows (`NeedsCustody`). A raise with no `upTo` has no cap and works: the warning is gone, and the plan writes `most: 0`.
+- **Caps.** `LIMITS` holds the program's caps (`constants.rs`, not in the IDL), and `check` refuses a spec over one in words;
+  a contest's sides and side names go to 1,024.
+- A farm whose boost reads what its own growth writes gets a note in `explain` and the guide: a page or a keeper should
+  refresh seats, since a level counts from when it is written.
+- Tests: `js/test/farm-ends.test.mjs`, `js/test/strict-rules.test.mjs`.
+
 ## 0.23.0 (not released on npm; the program is on devnet)
 
 For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no account of 0.22.0 carries over.

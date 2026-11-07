@@ -837,7 +837,7 @@ export function buyGives(box, count = 1) {
   const draws = boxDraws(box) * count;
   const out = [];
   for (const prize of box.entries[0]?.prizes ?? []) {
-    const once = Boolean(prize.Tokens?.amount?.Fixed);
+    const once = Boolean(prize.Tokens);
     for (let i = 0; i < (once ? 1 : draws); i++) out.push({ prize, k: out.length, times: once ? draws : 1 });
   }
   return out;
@@ -1055,8 +1055,8 @@ export function settleIx({ signer, orderAddress, order, projectState, items, nft
       treasury_token: ata(projectState.treasury, order.mint, tokenProgram),
       ...on.accounts,
       receiver,
-      // The last part of an order whose roll didn't make every draw gives their share of the payment back here.
-      player_token: Number(order.undrawn ?? 0) > 0 && last ? ata(order.player, order.mint, tokenProgram) : null,
+      // The last part of an order whose roll left a draw unmade or part given gives its share of the payment back here.
+      player_token: BigInt(order.back ?? 0) > 0n && last ? ata(order.player, order.mint, tokenProgram) : null,
     },
     {
       remaining: [...on.proof, ...prizes, ...(splits ? shareAccounts(project, order.shares, order.mint, { holders, programs, treasury: projectState.treasury }) : []), ...tailOf(extra)],
@@ -1107,7 +1107,7 @@ export const INCINERATOR = '1nc1nerator11111111111111111111111111111111';
 /**
  * Gives an order's payment back to its player, into their account of the mint (`signer`, anyone, opens it when it is
  * not there): an order whose roll failed or never came. A rolled order is settled, never refunded
- * (`orderRefundSlot`). A purchase counted against a box's limit for each
+ * (`orderRefundable`). A purchase counted against a box's limit for each
  * wallet is given back. `extra`: a hook's or a memo's accounts.
  */
 export function refundIx({ signer, orderAddress, order, subject, programs, extra = [] }) {
@@ -1161,18 +1161,18 @@ export function askRollIx({ payer, orderAddress, order, box, settler = NOBODY_KE
 
 /**
  * The authority moves the project's tokens: `from` { Pool: [i] }, { Mint: [mint] } (newly minted) or { Farm: [id] } (what
- * that farm's rewards vault holds free, beyond what it owes its seats: a fixed amount), `to` a pool, a wallet, an
- * account, the treasury (`treasury`, the project's wallet), a collectible's holder or 'Burn', `amount` { Fixed: [n] } or
- * { Bps: [bps] } of a pool. The authority opens the account it pays into when it is not there; a
- * collectible nobody holds gets nothing.
+ * that farm's rewards vault holds free, beyond what it owes its seats: a fixed amount; `farm`: the farm decoded, so its
+ * record of ends comes when it keeps one), `to` a pool, a wallet, an account, the treasury (`treasury`, the project's
+ * wallet), a collectible's holder or 'Burn', `amount` { Fixed: [n] } or { Bps: [bps] } of a pool. The authority opens the
+ * account it pays into when it is not there; a collectible nobody holds gets nothing.
  */
-export function moveTokensIx({ authority, project, mint, from, to, amount, reference: ref, holders, programs, treasury, extra = [] }) {
+export function moveTokensIx({ authority, project, mint, from, to, amount, reference: ref, holders, programs, treasury, farm = null, extra = [] }) {
   const writes = Boolean(from.Mint) || to === 'Burn';
   return lootIx(
     'move_tokens',
     { from, to, amount, reference: reference(ref) },
     // What a farm holds free comes out of its rewards vault, passed as the pool, with the farm.
-    { authority, project, mint, pool: from.Pool ? pda.pool(project, from.Pool[0]) : from.Farm ? pda.rewards(pda.farm(project, from.Farm[0])) : null, farm: from.Farm ? pda.farm(project, from.Farm[0]) : null },
+    { authority, project, mint, pool: from.Pool ? pda.pool(project, from.Pool[0]) : from.Farm ? pda.rewards(pda.farm(project, from.Farm[0])) : null, farm: from.Farm ? pda.farm(project, from.Farm[0]) : null, farm_ends: from.Farm && farm?.keeps_ends ? pda.ends(pda.farm(project, from.Farm[0])) : null },
     { remaining: [...destinationAccounts(project, to, mint, { holders, programs, treasury }), ...tailOf(extra)], writable: writes ? ['mint'] : [] },
   );
 }
@@ -1346,8 +1346,9 @@ export const callbackRandomIx = ({ project, reference: ref, randomness }) => ({
 // ---------------------------------------------------------------- schedules and lotteries
 
 /**
- * Anyone (`payer`) runs a schedule that is due, every run due in one call, and opens the account it pays into when that
- * is not there.
+ * The project's keys or who it pays (`payer`; a sealed burn: anyone) run a schedule that is due, and open the account it
+ * pays into when that is not there. A run missed is missed: it pays once, for the latest run due, and the runs before it
+ * lapse; only a sealed schedule's fixed amount pays every run due, up to `upto` runs made (`scheduleCatchesUp`).
  * `poolMint`: the mint of the pool it moves from (when it moves from one). `extra`: a hook's or a memo's accounts.
  */
 export function runScheduleIx({ payer, project, id, schedule, poolMint, holders, programs, treasury, upto = 0, extra = [] }) {
@@ -1357,7 +1358,7 @@ export function runScheduleIx({ payer, project, id, schedule, poolMint, holders,
   const mint = from.Mint?.[0] ?? from.Vest?.[0] ?? poolMint;
   const writes = Boolean(from.Mint) || to === 'Burn';
   const pool = from.Pool ? pda.pool(project, from.Pool[0]) : from.Vest ? pda.vest(address) : null;
-  // Every run due, in one call: up to `upto` runs made (the runs it has plus those due, `runsDue`; 0: no bound).
+  // `upto` (the runs it has plus those due, `runsDue`; 0: no bound) has an effect only on what pays every run due.
   return lootIx(
     'run_schedule',
     { upto },
@@ -1413,7 +1414,7 @@ export function buyTicketsIx({ player, project, id, lottery, round = null, mint,
  * Anyone asks for the draw of a lottery's round once it is due (`lottery` decoded). `round`: the decoded record of the
  * round asked for (null when nobody bought into the current one: it moves on, or a lottery that draws once ends, with
  * no ask), and `roundAddress` its address when it is not the current round's (an older round still waiting for its
- * answer: asked again after `STALE_SLOTS`, or after the timeout cancelled, with no lottery account, so `lottery` may be
+ * answer: asked again after `STALE_SECONDS`, or after the timeout cancelled, with no lottery account, so `lottery` may be
  * null then; without `round`, the current round's, with the lottery's terms). A round's first ask fixes its money: it takes
  * the lottery's pot, its mint and the round's account of it, then each run of token prizes in place order, its mint and
  * for a pool, the pool and the round's account of the mint (`poolMints`: a pool's index to its mint). With `skipHooked`
@@ -1629,7 +1630,8 @@ export function pullRolls({ project, round: r, entry, part, nonce = 0n }) {
  * (0: never). For a farm of collectibles, `args.lock_key`: the attribute a staked NFT's lock is written under, as the
  * time it ends, so recipes and rolls can move it; `args.upkeep_key`: the attribute that says until when it earns and
  * grows (fuel). Empty: none. `args.exit_to`: where early-exit fees go, 'Burn', { Pool: [index] } or 'Rewards' (the
- * farm's own vault: a farm whose staked token is its rewards').
+ * farm's own vault: a farm whose staked token is its rewards'). A farm whose seats can stop earning and that pays keeps a
+ * record of when (`farmKeepsEnds`, `pda.ends`), made here at the owner's rent; each new time costs its writer `END_BYTES`.
  */
 export const openFarmIx = ({ owner, project, id, args, rewardsMint, stakedMint = null }) => {
   if (!Array.isArray(args?.tiers)) throw new Error('A farm needs its lock tiers (`args.tiers`: [{ lock, bps }, …]).');
@@ -1643,11 +1645,20 @@ export const openFarmIx = ({ owner, project, id, args, rewardsMint, stakedMint =
     owner, project, rewards_mint: rewardsMint, staked_mint: stakedMint,
     staked_vault: stakedMint ? pda.staked(pda.farm(project, id)) : null,
     exit_pool: sinkPool(project, full.exit_to),
+    ends: farmKeepsEnds(full) ? pda.ends(pda.farm(project, id)) : null,
   }, {
     // Each box its tiers name to roll, tier by tier (its roll, then a prize that is a roll), once.
     remaining: boxesAccounts(project, full.tiers.flatMap((t) => [t.roll, t.prize?.Roll?.[0]].filter((x) => x != null))),
   });
 };
+
+/**
+ * Whether a farm with these args keeps a record of when its seats stop earning (`Farm::keeps_ends`): a tier has a term
+ * (`earns_for`) or the farm reads an upkeep (`upkeep_key`), and it pays something (no rate, or a rate above 0). The farm
+ * and every move of it then pass the record (`WrongEnds` otherwise).
+ */
+export const farmKeepsEnds = (args) =>
+  ((args.tiers ?? []).some((t) => BigInt(t.earns_for ?? 0) > 0n) || Boolean(args.upkeep_key)) && (!args.rate || BigInt(args.rate.per_day ?? 0) > 0n);
 
 /** Where a farm's fee goes (`Sink`): the pool's address for `{ Pool: [index] }`, null for a burn, its own vault or none. */
 const sinkPool = (project, sink) => (sink?.Pool ? pda.pool(project, sink.Pool[0]) : null);
@@ -1656,7 +1667,55 @@ const farmSide = (project, id, farm) => ({
   project,
   farm: pda.farm(project, id),
   rewards_mint: farm.rewards_mint,
+  ends: farm.keeps_ends ? pda.ends(pda.farm(project, id)) : null,
 });
+
+/**
+ * What a farm has to walk (`Farm::walk`): the times of its record of ends (`ends`, from `decodeEnds`; an empty list for none)
+ * past its clock, up to `now` (Unix seconds, the chain's clock) or the farm's end. Every move walks all of them first, each a
+ * little compute, so a farm idle past many ends may leave a move no room: `farmNeedsWalk`.
+ */
+export function endsToWalk(farm, ends, now) {
+  const clock = BigInt(farm.clock ?? 0);
+  const over = BigInt(farm.ends_at ?? 0);
+  const stop = over > 0n && over < BigInt(now) ? over : BigInt(now);
+  return ends.filter((e) => e.at > clock && e.at <= stop).length;
+}
+
+/** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes at most some 2,300 units, with a
+ * halving rate (`js/test/farm-ends.test.mjs` measures it). */
+export const WALK_PER_TX = 500;
+/** The compute units a transaction that walks ends asks for: `walk_farm`, or a move with ends to walk first. */
+export const WALK_COMPUTE_UNITS = 1_400_000;
+/** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work: past this, the farm is walked
+ * first (`farmNeedsWalk`). */
+export const MOVE_WALK_ROOM = 400;
+
+/**
+ * Whether a farm has passed more ends than a move can walk in its own transaction (`endsToWalk`, `MOVE_WALK_ROOM`): such
+ * a move fails on compute until `walk_farm` has caught the farm up. Nothing is lost by waiting: what a seat earned by
+ * its end is written when the farm walks past it, however late.
+ */
+export const farmNeedsWalk = (farm, ends, now) => endsToWalk(farm, ends, now) > MOVE_WALK_ROOM;
+
+/**
+ * The transactions that walk a farm up to now, oldest ends first: one `walkFarmIx` each, `perTx` ends at most, `[]` when
+ * it has nothing to walk. Anyone may send them, in order; each is free but for its network fee.
+ */
+export function walkFarmParts({ project, id, farm, ends, now, perTx = WALK_PER_TX }) {
+  const left = endsToWalk(farm, ends, now);
+  const parts = [];
+  for (let done = 0; done < left; done += perTx) parts.push(walkFarmIx({ project, id, farm, most: Math.min(perTx, left - done) }));
+  return parts;
+}
+
+/**
+ * Credits a farm up to at most `most` of the times its seats stopped earning. Anyone may send it, signing nothing but its
+ * network fee: it decides nothing, every move walks the same times the same way. For a farm that has passed more of them
+ * than a move's transaction can walk (`farmNeedsWalk`, `walkFarmParts`).
+ */
+export const walkFarmIx = ({ project, id, farm, most = WALK_PER_TX }) =>
+  lootIx('walk_farm', { most }, farmSide(project, id, farm));
 /** Whether a farm reads or writes its seats' players' profiles (`Farm::uses_profile`): a gate or a boost on a profile,
  * or a growth written on one. Its moves then pass the player's profile. */
 const usesProfile = (farm) => [...(farm.gates ?? []), ...(farm.boosts ?? []).map((b) => b.rule)].some((r) => r?.of === 'Profile') || (farm.growth ?? []).some((g) => g.profile);
@@ -2452,16 +2511,16 @@ function recordTerms(name, record, span) {
 
 /**
  * What a bid signs: the auction's bytes but the bid, which sits last (`high_bidder`, `high`, `last_bid_at`, `held`:
- * 52 bytes, and an auction of NFT bids' room for `MAX_BID_NFTS` after them). `auction`: the decoded Auction, or its
+ * 60 bytes, and an auction of NFT bids' room for `MAX_BID_NFTS` after them). `auction`: the decoded Auction, or its
  * account's bytes.
  */
 export function auctionTerms(auction) {
   if (auction instanceof Uint8Array) {
     const room = decode('Auction', auction).nft_bids ? 32 * MAX_BID_NFTS : 0;
-    return recordTerms('Auction', auction, (data) => [data.length - 52 - room, data.length]);
+    return recordTerms('Auction', auction, (data) => [data.length - 60 - room, data.length]);
   }
-  // Written back with no bid's NFTs, its bytes end at the bid's 52.
-  return recordTerms('Auction', { ...auction, gate: auction.gate ?? null, nft_bids: auction.nft_bids ?? null, held: [] }, (data) => [data.length - 52, data.length]);
+  // Written back with no bid's NFTs, its bytes end at the bid's 60.
+  return recordTerms('Auction', { ...auction, gate: auction.gate ?? null, nft_bids: auction.nft_bids ?? null, held: [] }, (data) => [data.length - 60, data.length]);
 }
 
 /** When bids close, as the program reckons it: `ends_at`, or `extend` seconds after the last bid when that is later. */
@@ -2563,22 +2622,27 @@ export function bidIx({ bidder, project, id, auction, amount, shown, listProof, 
  * then delivers each with `releaseIx`, and the end's sender gets the rent back then.
  */
 export function endAuctionIx({ signer, project, projectState, id, auction, item = null, collection, tokenMetadata: tm, compressed, held = [], hold = false, reference: ref, nonce, holders, programs, extra = [] }) {
-  const lotHeld = Boolean(auction.lot.Asset) && holds(hold, auction.lot.Asset[0]);
+  // The lot went at an earlier end, and its seller's account couldn't take the money then (`proceeds_owed`): this end pays
+  // it and closes the auction, naming no lot, share or winning NFT.
+  const owed = BigInt(auction.proceeds_owed ?? 0) > 0n;
+  const lotHeld = !owed && Boolean(auction.lot.Asset) && holds(hold, auction.lot.Asset[0]);
   const tokenProgram = tokenProgramOf(programs, auction.mint);
   const sold = BigInt(auction.high) > 0n;
-  const itemId = auction.lot.Item?.[0];
-  const made = sold && item?.kind === 'Collectible' ? pda.itemAsset(pda.item(project, itemId), auction.pin) : null;
-  const asset = auction.lot.Asset?.[0] ?? made;
+  const itemId = owed ? undefined : auction.lot.Item?.[0];
+  const made = !owed && sold && item?.kind === 'Collectible' ? pda.itemAsset(pda.item(project, itemId), auction.pin) : null;
+  const asset = owed ? null : auction.lot.Asset?.[0] ?? made;
   const proceeds = auction.lot.Asset ? auction.seller : projectState.treasury;
   const address = pda.auction(project, auction.seller, id);
   const receiver = sold ? auction.high_bidder : auction.seller;
   // A roll lot sold: its box, and the order the winner's roll is made in. The winning bid stays in the vault as that
   // order's payment, split by the auction's shares when it settles (no shares' accounts here).
-  const roll = sold ? auction.lot.Roll?.[0] : undefined;
+  const roll = sold && !owed ? auction.lot.Roll?.[0] : undefined;
   nonce = toBigInt(nonce ?? prizeNonce(address, BigInt(auction.last_bid_at)));
   // An NFT lot is sent on; a collectible sold is minted into its item's collection, which Core writes.
   // With `hold`, an NFT lot is its address alone (no proof), and becomes a hold for whoever it goes to.
-  const p = lotHeld
+  const p = owed
+    ? standIn(address)
+    : lotHeld
     ? standIn(asset)
     : auction.lot.Asset
     ? piece({ project, asset, wallet: receiver, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES })
@@ -2586,7 +2650,7 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
       ? { ...piece({ project, asset, collection: item.collection, moves: false, locks: false, reads: false }), writable: ['collection'] }
       : standIn(address);
   // A winning bid of NFTs: each to where the rest of a bid in tokens would go (`held`, their kinds in order).
-  const winning = sold && auction.nft_bids
+  const winning = !owed && sold && auction.nft_bids
     ? (auction.held ?? []).flatMap((nft, i) => {
       if (holds(hold, nft)) return [meta(pda.hold(nft, 0), false, true)];
       const q = piece({ project, asset: nft, wallet: proceeds, ...held[i], ...ONLY_MOVES });
@@ -2612,8 +2676,8 @@ export function endAuctionIx({ signer, project, projectState, id, auction, item 
       order: roll !== undefined ? pda.order(project, auction.high_bidder, prizeRollNonce(nonce)) : lotHeld ? pda.hold(asset, 0) : null,
     },
     {
-      remaining: [...p.proof, ...(sold && roll === undefined ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury }) : []), ...winning, ...tailOf(extra)],
-      writable: [...(sold && sharesBurn(auction.shares) ? ['mint'] : []), ...(sold && !auction.nft_bids ? ['vault'] : []), ...p.writable],
+      remaining: [...p.proof, ...(!owed && sold && roll === undefined ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury }) : []), ...winning, ...tailOf(extra)],
+      writable: [...(!owed && sold && sharesBurn(auction.shares) ? ['mint'] : []), ...(sold && !auction.nft_bids ? ['vault'] : []), ...p.writable],
     },
   );
 }

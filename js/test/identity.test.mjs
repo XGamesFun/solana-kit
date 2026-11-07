@@ -66,7 +66,7 @@ test('a list of records is read with every length checked; a paid round and a co
 
 test('fixed allocations, and the records sized to what they hold, share one size source', () => {
   // A hold names its player, who made it and who paid its NFT's account: a loan's has room for its debt.
-  assert.deepEqual(ACCOUNT_BYTES, { Seat: 184, Loan: 242, Hold: 170 });
+  assert.deepEqual(ACCOUNT_BYTES, { Seat: 176, Loan: 242, Hold: 170 });
   assert.deepEqual([projectBytes(0), projectBytes(8)], [153, 409], 'a project grows with its collections');
   // A lottery entry: its buyer and word, what arrived (a fee mint, or a share the buyer chooses), its NFT ticket.
   assert.deepEqual([entryWidth(false, false), entryWidth(true, true)], [40, 40 + 8 + 32]);

@@ -126,7 +126,7 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     paid: 0n, fee: 0n,
     shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
     opens: 0, settled: 0, undrawn: 0, back: 0n, settler: ZERO, drew: 0, answer: new Uint8Array(32), drawn: [],
-    requested_slot: 0n, asked_first: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
+    requested_slot: 0n, asked_first: 0n, asked_at: 0n, first_asked_at: 0n, counted: 0, subject: lootBox.subject ? ZERO : null, held: false, fate,
   };
   return encodeAccount(IDL, 'Order', empty).length + drawn * (aDraw + rows * 4);
 }

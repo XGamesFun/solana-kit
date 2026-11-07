@@ -72,8 +72,9 @@ test('a draw asked again after the oracle went stale keeps its first ask, and an
   w.chain.warp(w.chain.now() + 61);
   w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // the oracle never answers
   const first = w.round(id).round;
-  w.chain.nextSlot(Number(loot.STALE_SLOTS) + 1);
-  assert.ok(loot.lotteryDrawStuck(first, w.chain.slot()));
+  w.chain.warp(w.chain.now() + Number(loot.STALE_SECONDS) + 1);
+  w.chain.nextSlot();
+  assert.ok(loot.lotteryDrawStuck(first, w.chain.now()));
   // The first ask moved the lottery past the round: the round asked again is named by its address.
   w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery, round: first, roundAddress: w.round(id).address })]); // asked again, no answer yet
   const asked = w.round(id);

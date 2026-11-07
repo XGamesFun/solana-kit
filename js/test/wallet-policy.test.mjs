@@ -35,7 +35,7 @@ test('refuses SOL sent to a stranger, a delegate approval, a foreign program, an
 
 test('signs a bid, and an auction of a collectible of their own, as a player or an owner', () => {
   const project = loot.pda.project(mint);
-  const auction = { project, id: 1, mint, seller: me, lot: { Item: [1] }, ours: false, pin: 0, reserve: 1n, min_raise_bps: 500, starts_at: 0n, ends_at: 10n, extend: 0, shares: [], gate: null, nft_bids: null, high_bidder: me, high: 0n, last_bid_at: 0n, held: [] };
+  const auction = { project, id: 1, mint, seller: me, lot: { Item: [1] }, ours: false, pin: 0, reserve: 1n, min_raise_bps: 500, starts_at: 0n, ends_at: 10n, extend: 0, shares: [], gate: null, nft_bids: null, high_bidder: me, high: 0n, last_bid_at: 0n, proceeds_owed: 0n, held: [] };
   assert.equal(verdict([loot.bidIx({ bidder: me, project, id: 1, auction, amount: 1n })]).ok, true);
   const open = loot.openAuctionIx({ seller: me, project, collection: mint, id: 1, mint, args: { ...auction, lot: { Asset: [thief] } } });
   assert.equal(verdict([open], 'player').ok, true);

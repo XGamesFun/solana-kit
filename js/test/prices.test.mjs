@@ -81,7 +81,7 @@ t('a rolled bundle: the roll sets each prize aside, and whoever settles pays wha
   w.chain.send(w.creator, [setAuthorityIx({ account: coin, current: w.creator, newAuthority: w.project })]);
   w.upsert({ Item: { id: 1, args: collectible('Gem') } });
   w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
-  const minted = { Tokens: { from: { Mint: [coin] }, amount: { Fixed: [40n] } } };
+  const minted = { Tokens: { from: { Mint: [coin] }, amount: 40n } };
   // A roll is given only by a box that doesn't roll (BadEntries).
   fails(() => w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }, { Roll: [9] }]), drop([])]) } }), 'BadEntries');
   // The bundle all but always: a weight of 1,000,000 against 1.

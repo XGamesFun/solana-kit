@@ -104,7 +104,8 @@ test('a draw the oracle never answered: the cancel after the timeout pulls the s
   const round = roundAt(0);
   w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: round.project, id: round.id, lottery: lottery(), round })]); // never answered
   assert.equal(roundAt(0).status, 'Drawing');
-  w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
+  w.chain.warp(w.chain.now() + Number(loot.LOTTERY_TIMEOUT_SECONDS) + 1);
+    w.chain.nextSlot();
   const claims = await app.claims();
   const cancel = claims.find((c) => c.kind === 'cancel-draw');
   assert.ok(cancel, JSON.stringify(claims.map((c) => c.kind)));

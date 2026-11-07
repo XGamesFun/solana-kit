@@ -28,7 +28,7 @@ test('one builder for every instruction', () => {
     stake_nft: 'stakeNftIx', stake_tokens: 'stakeTokensIx', unstake_nft: 'unstakeNftIx',
     unstake_tokens: 'unstakeTokensIx', update_project: 'updateProjectIx', upsert: 'upsertIx',
     open_tree: 'openTreeIx', open_offer: 'openOfferIx', close_offer: 'closeOfferIx', sell_to_offer: 'sellToOfferIx', borrow: 'borrowIx', repay: 'repayIx',
-    open_listing: 'openListingIx', take_listing: 'takeListingIx', close_listing: 'closeListingIx',
+    open_listing: 'openListingIx', take_listing: 'takeListingIx', close_listing: 'closeListingIx', walk_farm: 'walkFarmIx',
   };
   assert.deepEqual(Object.keys(builders).sort(), loot.IDL.instructions.map((i) => i.name).sort());
   for (const fn of Object.values(builders)) assert.equal(typeof loot[fn], 'function', fn);

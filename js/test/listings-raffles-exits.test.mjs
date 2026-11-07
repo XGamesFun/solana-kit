@@ -111,7 +111,7 @@ t('a raffle: the NFT is locked in the lottery’s own stash, pulled by its winne
 t('a contest’s token prize is set aside at the decision and split by what each winner put in', () => {
   const w = world({ seed: 'exits-split' });
   w.pool(2, w.mint, 600n);
-  const prize = { Tokens: { from: { Pool: [2] }, amount: { Fixed: [600n] } } };
+  const prize = { Tokens: { from: { Pool: [2] }, amount: 600n } };
   const now = w.chain.now();
   const args = { sides: 1, closes_at: BigInt(now + 100), result_by: BigInt(now + 1000), shares: [{ to: 'Treasury', bps: 10_000 }], gate: null, prize, prize_split: true };
   w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args, prizeMint: w.mint })]);

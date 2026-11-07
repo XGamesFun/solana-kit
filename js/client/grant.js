@@ -273,7 +273,7 @@ export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, ro
     return true;
   });
   const prizes = owed.flatMap((r, made) => prizeMetas({
-    project, prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: { Fixed: [r.amount] } } } : gives, winner: wallet, nonce: BigInt.asUintN(64, nonce + BigInt(r.i)), programs,
+    project, prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: r.amount } } : gives, winner: wallet, nonce: BigInt.asUintN(64, nonce + BigInt(r.i)), programs,
     poolMints: pool !== undefined ? { [pool]: poolMint } : {}, items: itemId !== undefined ? { [itemId]: item } : {}, nft, made,
   }));
   proofs ??= listed && !voucherKey ? [proof] : proof.length ? [proof] : [];

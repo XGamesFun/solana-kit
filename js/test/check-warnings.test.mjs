@@ -162,10 +162,9 @@ test('every claim is signed by its winning wallet, whatever proves it; anyone ma
   const project = pda.platform();
   const other = pda.identity();
   const limits = { per_person: 0, per_key: 0 };
-  const share = { incarnation: 1n, limits, open: false, gate: null, gives: { Tokens: { from: { Pool: [0] }, amount: { Bps: [100] } } } };
-  const fixed = { ...share, gives: { Tokens: { from: { Pool: [0] }, amount: { Fixed: [5n] } } } };
+  const fixed = { incarnation: 1n, limits, open: false, gate: null, gives: { Tokens: { from: { Pool: [0] }, amount: 5n } } };
   const open = { ...fixed, open: true };
-  for (const grant of [share, fixed, open]) {
+  for (const grant of [fixed, open]) {
     const ix = loot.claimGrantIx({ project, id: 1, wallet: WALLET, expires: grant.open ? 0n : 9_999_999_999n, poolMint: other, grant, signer: other });
     assert.ok(ix.keys.some((k) => k.pubkey === WALLET && k.isSigner), 'the wallet signs');
     assert.ok(ix.keys.some((k) => k.pubkey === other && k.isSigner), 'the payer signs and pays');
@@ -275,6 +274,16 @@ test('a settle’s first call splits the payment with its shares; upto 0 does on
   assert.deepEqual(upto(after), [255, 255, 255, 255], 'the last part is past the end (SETTLE_LAST)');
   const part = build({ ...order, drew: 0 }, 1);
   assert.ok(has(part, k(4)) && upto(part)[0] === 1, 'a part up to the end gives the prizes only');
+});
+
+test('a settle’s last part names the player’s account whenever part of the payment comes back', () => {
+  const k = (n) => pda.stash(WALLET, n);
+  const order = { project: WALLET, player: k(7), mint: k(3), won: [], shares: [], subject: null, held: false, fate: null, settled: 0, drew: 0, undrawn: 0 };
+  const build = (o, upto) => loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
+  const names = (ix) => ix.keys.some((m) => m.pubkey === loot.ata(k(7), k(3)));
+  assert.ok(names(build({ ...order, back: 100n })), 'a draw left part given: every draw made, the price back');
+  assert.ok(!names(build({ ...order, back: 0n })), 'nothing back');
+  assert.ok(!names(build({ ...order, back: 100n }, 0)), 'only the last part gives it back');
 });
 
 test('go-live writes a box before a box that names it to roll, which passes that box alone', () => {

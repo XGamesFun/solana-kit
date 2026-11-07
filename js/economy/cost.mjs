@@ -3,8 +3,8 @@
 //
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
-import { boxOrderBytes, plan as compile, contestBytes, roundRentOf } from './plan.mjs';
-import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
+import { boxOrderBytes, plan as compile, contestBytes, farmEnds, roundRentOf } from './plan.mjs';
+import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, END_BYTES, entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxBuys, COLLECTIBLE_RENT, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, model, lotterySplit, prizeLine, prizeRolls, prizes, prizeWords, rent, toUnits } from './model.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
 
@@ -68,7 +68,7 @@ export function setupCost(plan, economy) {
 /**
  * What each action costs whoever signs it while the economy runs: games.fun's fee, the network's, and for anything
  * that asks MagicBlock's oracle for a random number (a box's open, a lottery's draw, the authority's `roll`) the
- * oracle's own 0.0005 SOL (`oracleSol`, model.mjs ORACLE_FEE).
+ * oracle's own fee (`oracleSol`, model.mjs ORACLE_FEE).
  */
 export function actionCosts(economy, { now } = NO_OPTIONS) {
   const m = model(economy);
@@ -112,7 +112,9 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     row(`lottery:${l.key}`, `buy tickets for “${l.name}”`, 'player', FEES.player, funded ? [] : [back('the purchase’s entry in the round (its bytes)', entry, 'never: it goes to the treasury when the round closes')], funded ? `A round’s record, its token accounts and each purchase’s entry are paid from the SOL the lottery holds for them (${sol(held)} SOL), back to it when the round closes: a buyer pays no program rent. When that runs short, a buyer pays their entry’s bytes (about ${sol(entry)} SOL, to the treasury at the close) and a round’s first buyer fronts its header, back to them at the close.` : 'A round’s first buyer also fronts its record’s header and token accounts (about 0.003 SOL and up, more with many places), back to them when the round closes, once every part is pulled; `roundRent` (on by default) has the lottery pay them, and each entry too.');
   }
   for (const f of m.farms) {
-    row(`farm:${f.key}`, `stake in “${f.name}”`, 'player', FEES.player, [back('the seat', rent(ACCOUNT_BYTES.Seat), 'when they take everything out')]);
+    // A seat that can stop earning writes its end in the farm's record: a new time costs whoever writes it, spare rent first.
+    const endRent = BigInt(END_BYTES) * RENT_PER_BYTE;
+    row(`farm:${f.key}`, `stake in “${f.name}”`, 'player', FEES.player, [back('the seat', rent(ACCOUNT_BYTES.Seat), 'when they take everything out'), ...(farmEnds(f) ? [back(`a new end time in the farm’s record of ends (${END_BYTES} bytes; none when another seat ends at that second, or spare rent in the record covers it)`, endRent, 'never: it stays with the record for the next time written')] : [])], farmEnds(f) ? 'Whatever writes a new end time (a stake, a booster put on, a refresh that reads new upkeep) pays its bytes, its sender’s.' : undefined);
     row(`farm:${f.key}`, `unstake or harvest from “${f.name}”`, 'player', FEES.player, [], [
       (f.tiers ?? []).some((t) => t.exitFee) && 'Leaving a tier before its lock leaves its exit fee of what is taken out, and keeps the rewards the seat was credited.',
     ].filter(Boolean).join(' ') || undefined);
@@ -146,7 +148,7 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   }
   for (const d of m.decisions) row(`decision:${d.key}`, d.when, 'authority', FEES.project, [], d.does === 'roll' ? 'The roll asks MagicBlock’s oracle, which takes its own fee from the authority.' : undefined, d.does === 'roll' ? ORACLE_FEE : 0n);
   if (m.allBoxes.some((b) => !boxBuys(b, m))) row('orders', 'settle an order', 'the player, a key they named, or the project’s keys', 0n, [], 'The sender pays what the settle opens or mints (a collectible’s rent, a token account the player lacks); the order’s rent goes back to the player. js/play’s throwaway key sends it with what the open lent it.');
-  if (m.schedules.length) row('schedules', 'run a schedule when it is due', 'the project’s keys, or who it pays (a sealed one’s recipient, from their page)', 0n, [], m.schedules.some((sc) => sc.sealed) ? 'Several runs that fell behind go in one transaction; a sealed schedule pays from its own vault.' : undefined);
+  if (m.schedules.length) row('schedules', 'run a schedule when it is due', 'the project’s keys, or who it pays (a sealed one’s recipient, from their page)', 0n, [], `A run missed is missed: one sent late pays once, for the latest run due, and the runs before it lapse.${m.schedules.some((sc) => sc.sealed) ? ' A sealed schedule pays from its own vault, and its fixed amount pays every run due, in one transaction.' : ''}`);
   if (m.lotteries.length) {
     row('lotteries', 'ask for a draw', 'anyone (a keeper, or a player)', 0n, [], 'The draw asks MagicBlock’s oracle for the winning numbers, and fixes the round’s money first (the next round sells at once); the oracle takes its fee from whoever sends the draw. An oracle that never answers within about a week: the next ask cancels the round, and every ticket is refunded.', ORACLE_FEE);
     row('lotteries', 'pull a part: a refund, a place’s part of the pot or its prize, a share owed in common', 'anyone (the winner’s page, a keeper)', 0n, [], 'Each part is pulled by itself, in any order, and the pull that leaves nothing owed closes the round; whoever pulls opens the payee’s token account when it is missing.');

@@ -78,6 +78,8 @@ export const pda = {
   listing: (project, asset) => at(seed('listing'), key(project), key(asset)),
   staked: (farm) => at(seed('staked'), key(farm)),
   rewards: (farm) => at(seed('rewards'), key(farm)),
+  /** A farm's record of when its seats stop earning, for a farm that keeps one (`Farm.keeps_ends`). */
+  ends: (farm) => at(seed('ends'), key(farm)),
   /** A seat: a player's in a farm of tokens, a collectible's (its asset) in a farm of collectibles. */
   seat: (farm, by) => at(seed('seat'), key(farm), key(by)),
   /** What the project writes about an NFT it has no authority over (its Sheet): `nft` is a Core asset, a Token Metadata mint or a compressed NFT's asset id. */

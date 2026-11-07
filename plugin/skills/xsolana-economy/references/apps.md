@@ -49,7 +49,9 @@ const loan = await app.loanOffer(lender, 1); // a lender's offer: { amount, repa
 await app.borrow(lender, 1, asset, { acceptRisks: true }); // only once the player saw the risks (refused without it)
 for (const c of await app.claims()) await app.claim(c);   // what this player can finish: a roll to collect, a refund,
                                           // a contest payout, a due draw, an auction to end
-await app.runSchedule('drip');            // a schedule that is due (the project's keys or who it pays); null when not yet
+await app.runSchedule('drip');            // a schedule that is due (the project's keys or who it pays); null when not yet. A run missed is missed: only a sealed fixed amount pays every run due
+await app.farmWalk('guild');              // { ends, needsWalk, parts }: end times the farm has passed; a move refuses (FarmNeedsWalk) past what it can walk
+await app.walkFarm('guild');              // walks it in parts (anyone, free); claims() lists it when it is needed
 await app.collectibles();                 // what the player owns: [{ asset, item, name, uri, attributes }] (`item`: its key)
 await app.balances();                     // what they hold of each of the economy's tokens
 ```
@@ -88,7 +90,9 @@ await app.balances();                     // what they hold of each of the econo
   already, nothing to claim: in SOL it waits in their wrapped-SOL account (`waiting`), so say "You were outbid:
   0.5 SOL is back in your wallet" and offer `unwrap()` to turn it into plain SOL (any later purchase does it too).
   When `over` is true, show an "End the auction" button to everyone (the winner usually presses it; it mints or
-  hands over the lot). There is no deadline: however late it is ended, the lot goes to the highest bidder.
+  hands over the lot). There is no deadline: however late it is ended, the lot goes to the highest bidder. An auction with
+  `delivered` has given its lot, and still owes its seller, whose account couldn't take the money (`proceedsOwed`): keep it
+  on the seller's page until an end (`app.endAuction`, anyone's) pays and closes it. Don't treat it as closed at its end.
 - **NFTs the project has no authority over**: a gate or odds that name a collection find the player's Core NFTs of it
   themselves; for a Token Metadata NFT pass `shown: { mint, owner }`, for a compressed one `shown: { compressed:
   assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeNft`, `app.unstakeNft`, `app.refresh`,

@@ -717,13 +717,12 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "One way a box can land: an item, tokens from a pool (`pay`, `share`) or minted (`tokens`), an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle. A box burns its price with a \"burn\" share in its `split`, whatever the roll gives.",
+      "description": "One way a box can land: an item, a fixed amount of tokens from a pool (`pay`) or minted (`tokens`), all of it or none, an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle. A box burns its price with a \"burn\" share in its `split`, whatever the roll gives.",
       "properties": {
         "gives": {
           "enum": [
             "item",
             "pay",
-            "share",
             "stash",
             "tokens",
             "nft",
@@ -750,9 +749,6 @@
         },
         "amount": {
           "$ref": "#/$defs/amount"
-        },
-        "percent": {
-          "$ref": "#/$defs/percent"
         },
         "shifts": {
           "type": "array",
@@ -797,7 +793,7 @@
                     "$ref": "#/$defs/duration"
                   }
                 ],
-                "description": "The most it reaches when raising. With `fromNow`, how far past now."
+                "description": "The most it reaches when raising; left out, no cap. With `fromNow`, how far past now."
               },
               "fromNow": {
                 "type": "boolean",
@@ -884,9 +880,6 @@
               "amount": {
                 "$ref": "#/$defs/amount"
               },
-              "percent": {
-                "$ref": "#/$defs/percent"
-              },
               "stash": {
                 "$ref": "#/$defs/key",
                 "description": "For stash: the stash one NFT of which this outcome gives, picked at random when the box is rolled (a box of one such outcome is still rolled by the oracle). For nft: the stash that lists `nft`."
@@ -912,7 +905,6 @@
                 "enum": [
                   "item",
                   "pay",
-                  "share",
                   "stash",
                   "tokens",
                   "nft",
@@ -1186,7 +1178,6 @@
           "enum": [
             "item",
             "tokens",
-            "share",
             "nft",
             "roll"
           ]
@@ -1208,12 +1199,6 @@
         "from": {
           "type": "string",
           "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$"
-        },
-        "pool": {
-          "$ref": "#/$defs/key"
-        },
-        "percent": {
-          "$ref": "#/$defs/percent"
         },
         "box": {
           "$ref": "#/$defs/key",
@@ -1380,7 +1365,7 @@
                     "$ref": "#/$defs/duration"
                   }
                 ],
-                "description": "The most it reaches; needed when raising. With `fromNow`, how far past now: \"3d\". On a farm's `lockAttribute` or `upkeepAttribute` moved without `fromNow` (by a duration, from the time as written: a bound set's \"20000d\"), left out: no cap."
+                "description": "The most it reaches; left out, no cap. With `fromNow`, how far past now: \"3d\"."
               },
               "fromNow": {
                 "type": "boolean",
@@ -1564,7 +1549,7 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 40960,
-                    "description": "How many places in a row are alike (a run): \"places 2 to 201 each take 1%\" is one { \"percent\": 1, \"times\": 200 }. Not for a named NFT, a roll or a share of a pool, which one place gives. Default 1."
+                    "description": "How many places in a row are alike (a run): \"places 2 to 201 each take 1%\" is one { \"percent\": 1, \"times\": 200 }. Not for a named NFT or a roll, which one place gives. Default 1."
                   }
                 }
               }
@@ -1712,11 +1697,11 @@
         "sides": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 255
+          "maximum": 1024
         },
         "sideNames": {
           "type": "array",
-          "maxItems": 255,
+          "maxItems": 1024,
           "items": {
             "type": "string",
             "maxLength": 40
@@ -2921,7 +2906,6 @@
           "enum": [
             "item",
             "tokens",
-            "share",
             "nft",
             "roll",
             "raffled"
@@ -2944,12 +2928,6 @@
         "from": {
           "type": "string",
           "pattern": "^(mint|pool:[a-z][a-z0-9-]{0,31})$"
-        },
-        "pool": {
-          "$ref": "#/$defs/key"
-        },
-        "percent": {
-          "$ref": "#/$defs/percent"
         },
         "stash": {
           "$ref": "#/$defs/key",

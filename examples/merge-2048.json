@@ -2,7 +2,7 @@
   "version": 2,
   "network": "devnet",
   "name": "2048 Collection",
-  "prompt": "Two of tier N merge into one of tier N+1. The single top piece also claims a huge pool prize, so the whole collection races to merge. Priced in a coin launched on pump.fun.",
+  "prompt": "Two of tier N merge into one of tier N+1. The single top piece also claims a fixed prize from a pool every sale fills, so the whole collection races to merge. Priced in a coin launched on pump.fun.",
   "currency": "tile",
   "tokens": [
     {
@@ -55,7 +55,7 @@
     {
       "key": "grand",
       "currency": "tile",
-      "about": "20% of every tile sold; half of it goes to whoever makes the top tile."
+      "about": "20% of every tile sold; whoever makes the top tile takes 8, half of what its eight tiles paid in."
     }
   ],
   "recipes": [
@@ -109,9 +109,9 @@
           "item": "tier-4"
         },
         {
-          "gives": "share",
-          "pool": "grand",
-          "percent": 50
+          "gives": "tokens",
+          "from": "pool:grand",
+          "amount": 8
         }
       ]
     }

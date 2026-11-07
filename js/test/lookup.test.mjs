@@ -87,7 +87,7 @@ const asWallet = (kp, signed) => ({
   },
 });
 
-/** A box that gives three NFTs of a stash and pays four holders' shares, and a player's app. */
+/** A box that rolls, all but always on three NFTs a stash holds, each named, and pays four holders' shares, and a player's app. */
 function bigBox(seed, { standing = null } = {}) {
   const w = world({ seed });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
@@ -99,7 +99,7 @@ function bigBox(seed, { standing = null } = {}) {
     return { owner, asset: w.make(1, owner) };
   });
   const shares = holders.map((h) => ({ to: { Holder: [h.asset] }, bps: 500 }));
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Stash: [4] }, { Stash: [4] }, { Stash: [4] }])], { shares }) } });
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop(relics.map((nft) => ({ Nft: { stash: 4, nft } })), 1_000_000_000), drop([{ Nft: { stash: 4, nft: relics[0] } }])], { shares }) } });
   w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Stash: [5] }])]) } });
   const kp = freshKeypair();
   w.chain.airdrop(kp.address, 10_000_000_000n);

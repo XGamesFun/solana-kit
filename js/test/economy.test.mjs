@@ -487,9 +487,9 @@ describe('stashes and prizes in a spec', () => {
     const rare = base.stashes[2].nfts[0].asset;
     assert.deepEqual(lotteryArgs(m.lotteries[0], m).terms.places, [{ bps: 0, prize: { Nft: { stash: m.stash.get('rare').id, nft: rare } }, times: 1 }, { bps: 9000, prize: null, times: 1 }]);
     assert.deepEqual(farmArgs(m.farms[0], m).tiers[0].prize, { Roll: [box('daily-chest')] });
-    assert.deepEqual(prizeArgs({ gives: 'tokens', amount: 2, from: 'mint', currency: 'shards' }, m), { Tokens: { from: { Mint: ['@mint:shards'] }, amount: { Fixed: [2_000_000n] } } });
+    assert.deepEqual(prizeArgs({ gives: 'tokens', amount: 2, from: 'mint', currency: 'shards' }, m), { Tokens: { from: { Mint: ['@mint:shards'] }, amount: 2_000_000n } });
     const pooled = model({ ...base, pools: [{ key: 'shard-pool', currency: 'shards' }] }, { now: NOW });
-    assert.deepEqual(prizeArgs({ gives: 'share', pool: 'shard-pool', percent: 10 }, pooled), { Tokens: { from: { Pool: [pooled.pool.get('shard-pool').index] }, amount: { Bps: [1000] } } });
+    assert.deepEqual(prizeArgs({ gives: 'tokens', from: 'pool:shard-pool', amount: 3 }, pooled), { Tokens: { from: { Pool: [pooled.pool.get('shard-pool').index] }, amount: 3_000_000n } });
     assert.deepEqual(prizeArgs({ item: 'trinket' }, m), { Item: [m.item.get('trinket').id] }, 'a grant’s older form');
     assert.deepEqual(boxArgs(m.boxes[0], m).entries[0].prizes, [{ Stash: [m.stash.get('vault').id] }]);
     // Live, a stash publishes only what it does not hold yet.

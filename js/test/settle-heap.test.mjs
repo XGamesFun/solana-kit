@@ -26,15 +26,15 @@ const NFT = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
 const warned = (spec) => check(spec, { now: NOW }).warnings.map((w) => `${w.code} ${w.where}`);
 const refused = (spec) => check(spec, { now: NOW }).refusals.map((r) => `${r.code} ${r.where}`);
 
-/** A box of `picks` NFTs of one stash an outcome, giving the NFT it rolls on away (`subject`), with `holders` holders' and `wallets` wallets' shares. */
+/** A box of `picks` NFTs of as many stashes an outcome, giving the NFT it rolls on away (`subject`), with `holders` holders' and `wallets` wallets' shares. */
 const heavyBox = ({ hooked = true, picks = 3, holders = 3, wallets = 0, subject = true } = {}) => ({
   version: 2, network: 'devnet', name: 'Heavy', currency: 'gem',
   tokens: [{ key: 'gem', source: 'existing', mint: NFT, decimals: 6, program: 'token-2022', ...(hooked ? { powers: { transferHook: true } } : {}) }],
   collection: { name: 'Heavy' },
-  stashes: [{ key: 'chest', name: 'Chest', nfts: [] }],
+  stashes: Array.from({ length: Math.max(picks, 1) }, (_, i) => ({ key: `chest-${i}`, name: `Chest ${i}`, nfts: [] })),
   boxes: [{ key: 'triple', name: 'Triple', price: 1, ...(subject ? { rollsOn: { collection: WALLET }, then: { giveTo: WALLET } } : {}),
     split: [...Array.from({ length: holders }, () => ({ to: `holder:${WALLET}`, percent: 1 })), ...Array.from({ length: wallets }, () => ({ to: `wallet:${WALLET}`, percent: 1 }))],
-    outcomes: [{ gives: 'bundle', prizes: Array.from({ length: picks }, () => ({ gives: 'stash', stash: 'chest' })), chance: 50 }, { gives: 'nothing', chance: 50 }] }],
+    outcomes: [{ gives: 'bundle', prizes: Array.from({ length: picks }, (_, i) => ({ gives: 'stash', stash: `chest-${i}` })), chance: 50 }, { gives: 'nothing', chance: 50 }] }],
 });
 
 test('W-BOX-HEAP for the shapes measured not to fit once a payee turns on memos, and not for those that fit', () => {
@@ -62,8 +62,8 @@ test('js/play settles a roll that won three NFTs with the 256 KiB heap frame, on
   const w = world({ seed: 'settle-heap' });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
-  for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  w.upsert({ Box: { id: 5, args: { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }, { Stash: [1] }, { Stash: [1] }], weight: 1 }], odds: [] } } });
+  for (const [i, asset] of nfts.entries()) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1 + i, asset, collection: w.collection })]);
+  w.upsert({ Box: { id: 5, args: { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }, { Stash: [2] }, { Stash: [3] }], weight: 1 }], odds: [] } } });
   const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
   w.upsert({ Grant: { id: 1, args: { gives: { Roll: [5] }, vouchers: [SYSTEM_PROGRAM, SYSTEM_PROGRAM, SYSTEM_PROGRAM], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
   const player = freshKeypair();

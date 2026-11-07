@@ -31,7 +31,7 @@ export const ideas = () => IDEAS;
 const SYNONYMS = {
   gacha: ['box', 'boxes', 'pull'], loot: ['box', 'boxes'], mystery: ['box', 'boxes'], pack: ['box', 'boxes'], packs: ['box', 'boxes'], roll: ['box', 'boxes'], chest: ['box', 'boxes'],
   staking: ['farm', 'farms', 'stake'], stake: ['farm', 'farms'], yield: ['farm', 'farms'], earn: ['farm', 'farms'], boost: ['farm', 'farms', 'odds'],
-  raffle: ['lottery', 'lotteries'], lottery: ['lottery', 'lotteries'], draw: ['lottery', 'lotteries'], jackpot: ['share', 'pool'],
+  raffle: ['lottery', 'lotteries'], lottery: ['lottery', 'lotteries'], draw: ['lottery', 'lotteries'], jackpot: ['lottery', 'lotteries', 'pot'],
   craft: ['recipe', 'recipes'], crafting: ['recipe', 'recipes'], merge: ['recipe', 'recipes'], upgrade: ['recipe', 'recipes'], breed: ['recipe', 'recipes', 'life'], breeding: ['recipe', 'recipes', 'life'],
   season: ['schedule', 'schedules'], seasons: ['schedule', 'schedules'], halving: ['schedule', 'schedules'], emission: ['schedule', 'schedules'], emissions: ['schedule', 'schedules'], vesting: ['schedule', 'schedules'],
   bet: ['contest', 'contests'], betting: ['contest', 'contests'], duel: ['contest', 'contests'], wager: ['contest', 'contests'], prediction: ['contest', 'contests'], fantasy: ['contest', 'contests'],
@@ -52,7 +52,7 @@ const STOP = new Set(['a', 'an', 'the', 'and', 'or', 'of', 'to', 'in', 'for', 'w
 export function partsUsed(spec) {
   const out = ['items', 'pools', 'boxes', 'payments', 'recipes', 'schedules', 'lotteries', 'farms', 'contests', 'auctions', 'holds', 'grants', 'decisions'].filter((k) => Array.isArray(spec?.[k]) && spec[k].length);
   const all = JSON.stringify(spec ?? {}).replace(/\s/g, '');
-  for (const [f, re] of [['rise', /"rise"/], ['fall', /"fall"/], ['life', /"life"/], ['holder', /holder:/], ['burn', /"burn"/], ['gate', /"gate"/], ['odds', /"odds"/], ['token-2022', /token-2022/], ['share', /"gives":"share"/], ['staked', /"staked":\{/], ['no-loss', /"noLoss":true/], ['chosen', /"to":"chosen/], ['minpot', /"minPot":/], ['shared-clock', /"clock":"shared"/]]) if (re.test(all)) out.push(f);
+  for (const [f, re] of [['rise', /"rise"/], ['fall', /"fall"/], ['life', /"life"/], ['holder', /holder:/], ['burn', /"burn"/], ['gate', /"gate"/], ['odds', /"odds"/], ['token-2022', /token-2022/], ['staked', /"staked":\{/], ['no-loss', /"noLoss":true/], ['chosen', /"to":"chosen/], ['minpot', /"minPot":/], ['shared-clock', /"clock":"shared"/]]) if (re.test(all)) out.push(f);
   return out;
 }
 

@@ -535,8 +535,9 @@ describe('mechanics that run by themselves', () => {
     assert.equal(asked.status, 'Drawing');
     const again = () => loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery, round: w.round(2).round, roundAddress: key });
     fails(() => w.chain.sendRaw(w.cranker, [again()]), 'NotDue');
-    w.chain.nextSlot(Number(loot.LOTTERY_TIMEOUT_SLOTS) + 1);
-    assert.ok(loot.lotteryCancellable(w.round(2).round, w.chain.slot()));
+    w.chain.warp(w.chain.now() + Number(loot.LOTTERY_TIMEOUT_SECONDS) + 1);
+    w.chain.nextSlot();
+    assert.ok(loot.lotteryCancellable(w.round(2).round, w.chain.now()));
     w.chain.sendRaw(w.cranker, [again()]);
     const r = w.round(2).round;
     assert.equal(r.status, 'Cancelled');
@@ -626,7 +627,7 @@ describe('mechanics that run by themselves', () => {
     w.pool(7, dust);
     w.upsert({ Item: { id: 1, args: collectible('Hero') } });
     const args = {
-      custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000 }, { lock: 3 * 86_400, bps: 15_000, prize: { Tokens: { from: { Mint: [ticket] }, amount: { Fixed: [2n] } } } }],
+      custody: 'Escrow', tiers: [{ lock: 60, bps: 10_000 }, { lock: 3 * 86_400, bps: 15_000, prize: { Tokens: { from: { Mint: [ticket] }, amount: 2n } } }],
       boosts: [], max_boost_bps: 0, gates: [{ of: { Item: [1] }, key: '', test: 'Any' }],
       rate: { per_day: 1_000n, mints: true }, growth: [{ key: 'xp', per_day: 100, level: 'level', steps: [100, 300], streak: false }],
     };
@@ -695,7 +696,7 @@ describe('mechanics that run by themselves', () => {
     const args = {
       active: true,
       inputs: [{ Burn: { item: 1, count: 2 } }, { Pay: { mint: w.mint, amount: 100n, to: 'Burn' } }],
-      outputs: [{ Prize: [{ Item: [2] }] }, { Prize: [{ Tokens: { from: { Pool: [0] }, amount: { Fixed: [50n] } } }] }],
+      outputs: [{ Prize: [{ Item: [2] }] }, { Prize: [{ Tokens: { from: { Pool: [0] }, amount: 50n } }] }],
       needs: [],
       keeps: [],
     };
@@ -745,7 +746,7 @@ describe('grants', () => {
     w.pool(2, w.mint, 10n * PRICE);
     const wallets = [w.who(), w.who(), w.who()];
     const leaves = wallets.map((x) => loot.listLeaf(x, null));
-    w.upsert({ Grant: { id: 2, args: { gives: { Tokens: { from: { Pool: [2] }, amount: { Fixed: [3n] } } }, vouchers: [nobody, nobody, nobody], list_root: loot.merkleRoot(leaves), limits, active: true, gate: null } } });
+    w.upsert({ Grant: { id: 2, args: { gives: { Tokens: { from: { Pool: [2] }, amount: 3n } }, vouchers: [nobody, nobody, nobody], list_root: loot.merkleRoot(leaves), limits, active: true, gate: null } } });
     const g2 = pda.grant(w.project, 2);
     w.chain.airdrop(g2, 1_000_000_000n);
     // A list's claim is its wallet's own to send (WalletMustSign).
@@ -759,7 +760,7 @@ describe('grants', () => {
     w.pool(1, w.mint, 100n);
     const signer = keyFromSeed(new Uint8Array(32).fill(7));
     const nobody = '11111111111111111111111111111111';
-    const args = { gives: { Tokens: { from: { Pool: [1] }, amount: { Fixed: [5n] } } }, vouchers: [signer.publicKey, nobody, nobody], list_root: new Uint8Array(32), key_root: new Uint8Array(32), limits: { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } }, active: true, gate: null };
+    const args = { gives: { Tokens: { from: { Pool: [1] }, amount: 5n } }, vouchers: [signer.publicKey, nobody, nobody], list_root: new Uint8Array(32), key_root: new Uint8Array(32), limits: { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } }, active: true, gate: null };
     w.upsert({ Grant: { id: 3, args } });
     const address = pda.grant(w.project, 3), wallet = w.who();
     const first = w.read('Grant', address);

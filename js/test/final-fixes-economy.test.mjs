@@ -48,7 +48,7 @@ test('the checker asks what a slot that names outcomes is worth, and a pack shar
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 20 }, { count: 1, from: [1], share: 70 }])), ['E-ODDS economy.boxes.pack.slots'], 'not the whole price');
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 20 }, { count: 1, from: [1], share: 80 }])), []);
   assert.deepEqual(refused(pack([{ count: 3, share: 100 }])), ['E-ODDS economy.boxes.pack.slots'], 'draws among all are alike');
-  const shared = Array.from({ length: 13 }, (_, i) => ({ prizes: [{ Tokens: { from: { Pool: [3] }, amount: { Fixed: [BigInt(i + 1)] } } }] }));
+  const shared = Array.from({ length: 13 }, (_, i) => ({ prizes: [{ Tokens: { from: { Pool: [3] }, amount: BigInt(i + 1) } }] }));
   assert.ok(loot.drawsFit(shared, 9) && !loot.drawsFit(shared, 10), 'as the program counts it');
   assert.ok(loot.drawsFit(shared, [{ count: 4, only: [] }], 2) && !loot.drawsFit(shared, [{ count: 5, only: [] }], 2), 'by the opens');
 });

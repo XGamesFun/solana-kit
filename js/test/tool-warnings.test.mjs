@@ -1,5 +1,5 @@
-// Warnings the tools give for a live economy: a live box's roll rewritten while rolls of it may wait (a roll won on
-// another route then refunds 0), and a price on a set's only way out (the platform's suspend then keeps the pieces
+// Warnings the tools give for a live economy: a live box's roll rewritten while rolls of it may wait (a purchase then
+// fails for its refund, and a roll won on another route rolls on), and a price on a set's only way out (the platform's suspend then keeps the pieces
 // locked).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ const live = (spec) => {
   return { ...spec, live: { program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ', project: 'So11111111111111111111111111111111111111112', published } };
 };
 
-test('changing a live box\'s roll warns that its waiting rolls fail, and that one won elsewhere refunds 0', () => {
+test('changing a live box\'s roll warns that a purchase waiting fails for its refund, and that one won elsewhere rolls on', () => {
   const spec = live(example('expedition-guild'));
   assert.ok(!codes(spec).includes('W-LIVE-ROLLS'), 'nothing changed');
   const price = structuredClone(spec);
@@ -26,14 +26,14 @@ test('changing a live box\'s roll warns that its waiting rolls fail, and that on
   const bought = check(odds).warnings.find((x) => x.code === 'W-LIVE-ROLLS');
   assert.ok(bought, 'its outcomes changed');
   assert.match(bought.message, /payment back/);
-  // A box a grant and a mission give as a roll: those rolls paid nothing in.
+  // A box a grant and a mission give as a roll: those rolls hold no payment, and aren't lost.
   const vault = live(example('partner-vault'));
   const chest = vault.boxes.find((b) => b.key === 'daily-chest');
   chest.outcomes[0].chance += 1;
   chest.outcomes[1].chance -= 1;
   const won = check(vault).warnings.find((x) => x.code === 'W-LIVE-ROLLS' && x.where === 'economy.boxes.daily-chest');
   assert.ok(won);
-  assert.match(won.message, /grant:daily, farm:expedition\) paid nothing in, so it refunds 0/);
+  assert.match(won.message, /grant:daily, farm:expedition\) holds no payment and rolls on the box as it is then/);
 });
 
 test('a price on a set\'s only way out warns that a suspend keeps the pieces locked', () => {

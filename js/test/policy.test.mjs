@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { concat, uintLE } from '../chain/bytes.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { LOOT_PROGRAM, readListAccount, orderRefundSlot, STALE_SLOTS, auctionEnds, leastBid } from '../client/index.js';
+import { LOOT_PROGRAM, readListAccount, orderRefundAt, orderRefundable, rollAskable, lotteryDrawStuck, lotteryCancellable, STALE_SECONDS, LOTTERY_TIMEOUT_SECONDS, auctionEnds, leastBid } from '../client/index.js';
 
 test('a list account agrees with the program opening a prefunded address, and foreign or malformed ones are refused', () => {
   assert.equal(readListAccount(null), null);
@@ -19,15 +19,40 @@ test('a list account agrees with the program opening a prefunded address, and fo
   ]) assert.throws(() => readListAccount(account));
 });
 
-test('refund discovery: a failed or stale roll, and never a rolled order', () => {
-  const base = { project: 'project', requested_slot: 100n, outcome: 'Nothing' };
-  assert.equal(orderRefundSlot({ ...base, status: 'Failed' }), 101n);
-  assert.equal(orderRefundSlot({ ...base, status: 'Pending' }), 101n + STALE_SLOTS);
-  for (const outcome of ['Nothing', 'Burn', { Pay: { pool: 0, amount: 1n } }, { Item: [3] }]) {
-    assert.equal(orderRefundSlot({ ...base, status: 'Rolled', outcome }), null, 'settled, never refunded');
+test('refund discovery: a failed roll from the next slot, a stale one by the clock, and never a rolled order', () => {
+  const base = { project: 'project', requested_slot: 100n, asked_at: 5_000n, first_asked_at: 4_000n, paid: 0n, held: false };
+  assert.deepEqual([STALE_SECONDS, LOTTERY_TIMEOUT_SECONDS], [600n, 604_800n]);
+  const failed = { ...base, status: 'Failed' };
+  assert.deepEqual(orderRefundAt(failed), { slot: 100n, at: null });
+  assert.equal(orderRefundable(failed, 100n, 0n), false, 'not in its own slot');
+  assert.equal(orderRefundable(failed, 101n, 0n), true);
+  const pending = { ...base, status: 'Pending' };
+  assert.equal(orderRefundable(pending, 101n, 5_600n), false, 'the clock, to the second');
+  assert.equal(orderRefundable(pending, 101n, 5_601n), true);
+  assert.equal(orderRefundable(pending, 100n, 5_601n), false, 'and a later slot');
+  for (const status of ['Rolled', 'Waiting', 'Asked']) assert.equal(orderRefundAt({ ...base, status }), null, `${status}: nothing to give back`);
+  // An asked roll holding a payment or an NFT may leave after a week of silence, from its first ask.
+  for (const holds of [{ paid: 1n }, { held: true }]) {
+    const asked = { ...base, ...holds, status: 'Asked' };
+    assert.equal(orderRefundable(asked, 101n, 4_000n + 604_800n), false);
+    assert.equal(orderRefundable(asked, 101n, 4_001n + 604_800n), true);
   }
-  const max = (1n << 64n) - 1n;
-  assert.equal(orderRefundSlot({ ...base, status: 'Pending', requested_slot: max - 1n }), max + 1n);
+  assert.throws(() => orderRefundAt({ ...base, status: 'Gone' }), /Unknown order status/);
+});
+
+test('a stale roll or draw is judged by the clock, not by slots', () => {
+  const asked = { status: 'Asked', requested_slot: 100n, asked_first: 90n, asked_at: 5_000n };
+  assert.equal(rollAskable(asked, 1_000_000n, 5_600n), false, 'many slots later, the clock has not moved');
+  assert.equal(rollAskable(asked, 101n, 5_601n), true);
+  const waiting = { status: 'Waiting', requested_slot: 100n, asked_first: 90n };
+  assert.equal(rollAskable(waiting, 100n, 0n), false, 'never the same seed twice');
+  assert.equal(rollAskable(waiting, 101n, 0n), true);
+  const round = { status: 'Drawing', asked_at: 5_000n, first_asked_at: 4_000n };
+  assert.equal(lotteryDrawStuck(round, 5_600n), false);
+  assert.equal(lotteryDrawStuck(round, 5_601n), true);
+  assert.equal(lotteryCancellable(round, 4_000n + 604_800n), false);
+  assert.equal(lotteryCancellable(round, 4_001n + 604_800n), true);
+  assert.equal(lotteryCancellable({ ...round, status: 'Open' }, 1n << 40n), false);
 });
 
 test('auction client preserves the initial end and represents an untoppable bid', () => {

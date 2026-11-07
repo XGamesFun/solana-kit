@@ -31,7 +31,7 @@
           "the winner takes the pot",
           "the price rises with attempts"
         ],
-        "compose": "Each message a one-outcome box bought in one step (gives nothing) with `rise` (price goes up each sale) and a split of 70% to a pool; the winner claims via a voucher grant whose prize is a share of the pool, signed by the game's server/judge. (A plain payment has a fixed amount, so the rising price comes from a box with `rise`.)",
+        "compose": "Each message a one-outcome box bought in one step (gives nothing) with `rise` (price goes up each sale) and a split of 70% to a pool; the winner claims via a voucher grant of tokens from the pool, each voucher naming its own amount (what the pool holds then, up to the grant's), signed by the game's server/judge. (A plain payment has a fixed amount, so the rising price comes from a box with `rise`.)",
         "truly": "judging whether the AI broke its rule is off chain (the server signs)."
       }
     },
@@ -389,7 +389,7 @@
           "one winner per round takes the emission",
           "capped supply, yearly halving"
         ],
-        "compose": "A lottery `every: 1m` priced in SOL whose place wins a prize `{ percent: 0, prize: { gives: share, pool: emission, percent: p } }`, an `issue` schedule minting into the `emission` pool with `halveEvery`, capped by `maxRuns`; ticket SOL split out to the treasury (or it piles up in the pot).",
+        "compose": "A lottery `every: 1m` priced in SOL whose place wins a prize `{ percent: 0, prize: { gives: tokens, from: pool:emission, amount: n } }`, an `issue` schedule minting into the `emission` pool with `halveEvery`, capped by `maxRuns`; ticket SOL split out to the treasury (or it piles up in the pot).",
         "truly": "proof-of-work: winners are drawn by ticket weight, not by hashing."
       }
     },

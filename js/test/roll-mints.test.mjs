@@ -90,7 +90,7 @@ t('rollAccounts: each entry’s prize accounts, a fresh item’s tables while th
   const project = pda.project(NOBODY, 0);
   const minted = 'So11111111111111111111111111111111111111112';
   const coin = 'Mint222222222222222222222222222222222222222';
-  const box = { box_id: 4, entries: [{ prizes: [fromPool(2, 1), { Item: [1] }] }, { prizes: [{ Tokens: { from: { Mint: [minted] }, amount: { Fixed: [1n] } } }, fromPool(8, 1)] }] };
+  const box = { box_id: 4, entries: [{ prizes: [fromPool(2, 1), { Item: [1] }] }, { prizes: [{ Tokens: { from: { Mint: [minted] }, amount: 1n } }, fromPool(8, 1)] }] };
   const fresh = { kind: 'Collectible', traits: [{ key: 'hue', from: { Table: [3] } }] };
   const keys = loot.rollAccounts(project, box, { items: { 1: fresh }, poolMints: { 2: coin, 8: null } }).map((m) => m.pubkey);
   assert.deepEqual(keys, [pda.pool(project, 2), pda.item(project, 1), pda.table(project, 3), pda.pool(project, 8), coin, loot.vault(project, coin), minted, loot.vault(project, minted)]);

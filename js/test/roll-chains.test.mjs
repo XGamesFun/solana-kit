@@ -110,14 +110,14 @@ test('W-ROLL-PRIZE and W-STASH-SHARED count a box’s own outcome’s roll', () 
   assert.match(shared([crate([{ gives: 'roll', box: 'loot', chance: 100 }])])?.message ?? '', /given by box:crate, grant:gift|given by grant:gift, box:crate/);
 });
 
-test('W-LIVE-ROLLS names a box whose outcome won the rolls that now fail', () => {
+test('W-LIVE-ROLLS names a box whose outcome won the rolls that now roll on it as edited', () => {
   const s = spec({ boxes: [{ ...vault, outcomes: [{ gives: 'item', item: 'rock', chance: 50 }, { gives: 'item', item: 'gem', chance: 50 }] }, ...shapes.buy.boxes.slice(1)] }, {});
   const { live: _, ...published } = structuredClone(s);
   const changed = { ...structuredClone(s), live: { program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ', project: 'So11111111111111111111111111111111111111112', published } };
   changed.boxes[0].outcomes[0].chance = 40;
   changed.boxes[0].outcomes[1].chance = 60;
   const w = check(changed, { now: NOW }).warnings.find((x) => x.code === 'W-LIVE-ROLLS' && x.where === 'economy.boxes.vault');
-  assert.match(w?.message ?? '', /another route \(box:crate\) paid nothing in/);
+  assert.match(w?.message ?? '', /another route \(box:crate\) holds no payment and rolls on the box as it is then/);
 });
 
 test('the explainer says which box rolls a box that is never sold', () => {

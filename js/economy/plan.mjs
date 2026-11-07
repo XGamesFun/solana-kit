@@ -90,9 +90,8 @@ export function partPrize(o, m) {
   if (o.gives === 'item' && o.compressed) return { Compressed: { item: m.item.get(o.item)?.id ?? 0, tree: '@tree' } };
   if (o.gives === 'item') return { Item: [m.item.get(o.item)?.id ?? 0] };
   if (o.gives === 'stash') return { Stash: [m.stash.get(o.stash)?.id ?? 0] };
-  if (o.gives === 'pay') return { Tokens: { from: { Pool: [m.pool.get(o.pool)?.index ?? 0] }, amount: { Fixed: [amount(o.amount, m.poolToken(o.pool))] } } };
-  if (o.gives === 'share') return { Tokens: { from: { Pool: [m.pool.get(o.pool)?.index ?? 0] }, amount: { Bps: [Math.round((o.percent ?? 0) * 100)] } } };
-  if (o.gives === 'mint') return { Tokens: { from: { Mint: [`@mint:${o.currency ?? m.currencyKey}`] }, amount: { Fixed: [amount(o.amount, m.tokens.get(o.currency ?? m.currencyKey))] } } };
+  if (o.gives === 'pay') return { Tokens: { from: { Pool: [m.pool.get(o.pool)?.index ?? 0] }, amount: amount(o.amount, m.poolToken(o.pool)) } };
+  if (o.gives === 'mint') return { Tokens: { from: { Mint: [`@mint:${o.currency ?? m.currencyKey}`] }, amount: amount(o.amount, m.tokens.get(o.currency ?? m.currencyKey)) } };
   return prizeArgs(o, m);
 }
 
@@ -135,11 +134,6 @@ export const thenOf = (then, m) => {
   return { Give: [then === 'treasury' ? '@treasury' : then.giveTo] };
 };
 
-/** The most a raise names (a u32): a farm’s time moved as written, with no cap of its own until 2106. */
-const NO_CAP = 4_294_967_295;
-/** Whether `key` is a time a farm of the spec keeps on what it stakes (its lock, its upkeep). */
-const farmTime = (key, m) => m.farms.some((f) => f.lockAttribute === key || f.upkeepAttribute === key);
-
 export function recipeArgs(r, m) {
   const tok = (key) => m.tokens.get(key ?? m.currencyKey);
   const inputs = (r.in ?? []).map((l) => {
@@ -164,7 +158,7 @@ export function recipeArgs(r, m) {
     // The recipe's own needs and raises, then what the life of each collectible it takes adds (`lifeLines`).
     needs: [...(r.needs ?? []).map((n) => ({ place: n.place, key: n.key, test: { AtLeast: [n.atLeast ?? 0] } })), ...life.needs],
     keeps: (r.keeps ?? []).map((k) => ({ key: k.key, from: k.from, to: k.to })),
-    raises: [...(r.raises ?? []).map((x) => ({ place: x.place, shift: { key: x.key, by: toBy(x.by), most: x.upTo === undefined && farmTime(x.key, m) && !x.fromNow ? NO_CAP : toSeconds(x.upTo ?? 0), from_now: Boolean(x.fromNow) } })), ...life.raises],
+    raises: [...(r.raises ?? []).map((x) => ({ place: x.place, shift: { key: x.key, by: toBy(x.by), most: toSeconds(x.upTo ?? 0), from_now: Boolean(x.fromNow) } })), ...life.raises],
     window: windowOf(r, m.now),
     per_wallet: perWalletOf(r),
   };
@@ -210,8 +204,7 @@ export function prizeArgs(p, m) {
   if (line.gives === 'roll') return { Roll: [m.box.get(line.box)?.id ?? 0] };
   const pool = prizePool(line);
   const from = pool ? { Pool: [m.pool.get(pool)?.index ?? 0] } : { Mint: [`@mint:${line.currency ?? m.currencyKey}`] };
-  if (line.gives === 'share') return { Tokens: { from, amount: { Bps: [Math.round((line.percent ?? 0) * 100)] } } };
-  return { Tokens: { from, amount: { Fixed: [amount(line.amount, prizeToken(line, m))] } } };
+  return { Tokens: { from, amount: amount(line.amount, prizeToken(line, m)) } };
 }
 
 /**
@@ -271,9 +264,9 @@ export function roundSize(l, m) {
   const own = terms.places.filter((p) => p.prize?.Held || p.prize === 'Raffled' || p.prize?.Raffled !== undefined).reduce((n, p) => n + Number(p.times ?? 1), 0);
   const termsBytes = encodeBorsh(IDL, { defined: { name: 'LotteryTerms' } }, terms).length;
   // The tag; project, lottery, id, incarnation, round, bump, opener, lent, head, status, revision; the terms; fee, sold,
-  // to_pot; common; owns, owed, the draw's slots, answer and first ticket, the pot's four numbers; paid; prizes (59
+  // to_pot; common; owns, owed, the draw's slots and times, answer and first ticket, the pot's four numbers; paid; prizes (59
   // bytes each); accounts (64 each); nfts; assigned.
-  const head = 1 + 130 + termsBytes + 17 + (4 + 8 * terms.shares.length) + 96 + (4 + Math.ceil((2 * places) / 8)) + (4 + 59 * tokens) + (4 + 64 * (2 + pools)) + (4 + 32 * own) + 4;
+  const head = 1 + 130 + termsBytes + 17 + (4 + 8 * terms.shares.length) + 112 + (4 + Math.ceil((2 * places) / 8)) + (4 + 59 * tokens) + (4 + 64 * (2 + pools)) + (4 + 32 * own) + 4;
   const payment = l.ticketCurrency ?? l.currency ?? m.currencyKey;
   const accounts = (l.ticketNft ? 1 : payment === (l.currency ?? m.currencyKey) ? 1 : 2) + pools;
   return { head, accounts };
@@ -384,9 +377,9 @@ export function farmArgs(f, m) {
 /** A fee's sink (`Sink`): "burn", "rewards" (the farm's own vault), or "pool:<key>", one of the project's pools. */
 export const sinkOf = (to, m) => (to === 'burn' ? 'Burn' : to === 'rewards' ? 'Rewards' : { Pool: [m.pool.get(String(to).replace(/^pool:/, ''))?.index ?? 0] });
 
-/** The end marks a farm keeps (`Farm::marks`, 7 levels of 16): a farm whose seats can stop earning (a tier's term, an
- * upkeep) and whose seats' shares hang on the total weight (it shares what lands, or a shared rate). */
-export const farmMarks = (f) => ((f.tiers ?? []).some((t) => t.earnsFor) || f.upkeepAttribute) && (!f.rate || f.rate.shared) ? 112 : 0;
+/** Whether a spec's farm keeps a record of when its seats stop earning (`loot.farmKeepsEnds`): a tier's term or an upkeep,
+ * and it pays something. Each different time waiting costs whoever writes it `loot.END_BYTES` of rent. */
+export const farmEnds = (f) => ((f.tiers ?? []).some((t) => t.earnsFor) || Boolean(f.upkeepAttribute)) && (!f.rate || Number(f.rate.perDay) > 0);
 
 /** An auction's args: its lot, reserve, least raise, times and split. "start" is when it goes live unless it says. */
 export function auctionArgs(a, m) {
@@ -735,7 +728,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       id: `farm:${f.key}`,
       part: `farm:${f.key}`,
       says: `Open the farm “${f.name}”: stake ${f.stakes === 'collectibles' ? 'collectibles' : m.tokens.get(f.stakes)?.symbol}, earn ${rewards?.symbol}${f.rate?.minted ? ', minted' : ' from its own rewards vault'}`,
-      creates: [{ what: `the farm “${f.name}”`, bytes: farmBytes(f, m) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }])],
+      creates: [{ what: `the farm “${f.name}”`, bytes: farmBytes(f, m) }, { what: 'its rewards vault', bytes: 165 }, ...(f.stakes === 'collectibles' ? [] : [{ what: 'its stake vault', bytes: 165 }]), ...(farmEnds(f) ? [{ what: 'its record of when seats stop earning', bytes: loot.ENDS_HEAD_BYTES }] : [])],
       build: (ctx) => [loot.openFarmIx({ owner: ctx.owner, project: project(ctx), id: f.id, args: resolve(farmArgs(f, m), ctx), rewardsMint: ctx.mints[rewards.key], stakedMint: f.stakes === 'collectibles' ? null : ctx.mints[f.stakes] })],
     });
   }
@@ -808,7 +801,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
           ? `Open the auction “${a.name}” of a roll of the box “${m.box.get(a.lot.roll)?.name ?? a.lot.roll}”, made for its winner at the end (${terms})`
           : `Open the auction “${a.name}” of one new “${m.item.get(a.lot?.item)?.name ?? a.lot?.item}” (${terms})`,
       // An auction of NFT bids is made with room for the most a bid holds (`MAX_BID_NFTS`), its seller's rent.
-      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, pin: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, held: [] }) + (args.nft_bids ? 32 * loot.MAX_BID_NFTS : 0) }],
+      creates: [{ what: `the auction “${a.name}” (back when it ends)`, bytes: encodedSize('Auction', { project: NOBODY, id: 0, seller: NOBODY, mint: NOBODY, lot: args.lot, ours: false, pin: 0, reserve: 0n, min_raise_bps: 0, starts_at: 0n, ends_at: 0n, extend: 0, shares: args.shares, gate: args.gate, nft_bids: placeholders(args).nft_bids, high_bidder: NOBODY, high: 0n, last_bid_at: 0n, proceeds_owed: 0n, held: [] }) + (args.nft_bids ? 32 * loot.MAX_BID_NFTS : 0) }],
       build: (ctx) => {
         const seller = auctionSeller(a, ctx);
         return [loot.openAuctionIx({ seller, project: project(ctx), collection: a.lot?.collection ?? ctx.collection, id: a.id, mint: ctx.mints[t.key], args: resolve(args, ctx) })];
@@ -961,11 +954,11 @@ export const recordBytesOf = (kind, body) => {
   }[kind];
   return encodedSize(kind, base());
 };
-/** A farm's bytes as `open_farm` writes it: its args, its numbers, and its end marks when it keeps them (`farmMarks`). */
+/** A farm's bytes as `open_farm` writes it: its args and its numbers. */
 export const farmBytes = (f, m) => encodedSize('Farm', {
   project: NOBODY, id: 0, farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } }, ...placeholders(farmArgs(f, m)), rewards_mint: NOBODY,
   rate_carry: 0n, opened_at: 0n, total_weight: 0n, reward_per_weight: 0n, reward_remainder: 0n, owed: 0n, clock: 0n, unreleased: 0n, release_ends: 0n, release_from: 0n, release_base: 0n,
-  marks: Array(farmMarks(f)).fill(0n),
+  keeps_ends: farmEnds(f),
 });
 /** Exact initial contest record size for its configured shares, gate, sides and deciders. */
 export const contestBytes = (contest, m) => encodedSize('Contest', { project: NOBODY, id: 0, incarnation: 0n, opener: NOBODY, mint: NOBODY, decided_at: 0n, ...placeholders(contestArgs(contest, m)), verdict: 'Open', winner: 0, owed: 0n, unclaimed: 0n, sides: Array(contest.sides).fill(0n), share: 0, extras: 0, picks: 0 });
@@ -1140,6 +1133,7 @@ export function playSteps(economy) {
     else add(`farm:${f.key}`, 'stake_tokens', 'player', 'stake'), add(`farm:${f.key}`, 'unstake_tokens', 'player', 'unstake or collect'), add(`farm:${f.key}`, 'stake_nft', 'player', 'put a collectible on as a booster');
     add(`farm:${f.key}`, 'harvest', 'player', 'collect rewards');
     add(`farm:${f.key}`, 'refresh_seat', 'anyone', 'read a seat’s boosts again');
+    if (farmEnds(f)) add(`farm:${f.key}`, 'walk_farm', 'anyone', 'catch the farm up, in parts, when it has passed more end times than a move can walk');
   }
   for (const c of m.contests) {
     add(`contest:${c.key}`, 'open_contest', 'authority', `open “${c.name}”`);

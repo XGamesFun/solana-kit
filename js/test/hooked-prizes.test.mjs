@@ -14,7 +14,7 @@ import { runTool } from '../mcp/server.mjs';
 const NOW = 1_800_000_000;
 
 // A roll carries none of the accounts a transfer hook asks for, so a prize in a hooked mint is out of stock in every
-// roll of a box (order.rs): its outcome never comes up, and a box with nothing else in stock refuses its open or ask
+// roll of a box (order.rs): a draw that lands on it isn't made, and a box with nothing else in stock refuses its open or ask
 // (SoldOut), so a recipe's inputs, a mission's return or a grant's round are kept.
 const MINT = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const hooked = (powers = { transferHook: true }) => ({
@@ -36,7 +36,8 @@ test('a box that rolls a prize in a token with a transfer hook is warned of: tha
   assert.equal(more.length, 0);
   assert.equal(r.where, 'economy.boxes.crate.outcomes[0]');
   assert.match(r.message, /transfer hook/);
-  assert.match(r.message, /never comes up/);
+  assert.match(r.message, /odds stay as written/);
+  assert.match(r.message, /gives back that draw’s worth/);
   assert.doesNotMatch(r.message, /SoldOut/, 'its other outcome is in stock');
 });
 
