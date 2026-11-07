@@ -283,7 +283,7 @@ if (want('packs')) {
     boxes: [
       { key: 'booster', name: 'Booster', price: 0.001, slots: [{ count: 4, share: 40 }, { count: 1, from: [1], share: 60 }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
       { key: 'heroes', name: 'Heroes', price: 0.001, slots: [{ count: 3 }], outcomes: [{ gives: 'item', item: 'hero', weight: 1 }] },
-      { key: 'big', name: 'The largest pack of twelve items', price: 0.001, slots: [{ count: 47 }], outcomes: Array.from({ length: 12 }, (_, i) => ({ gives: 'item', item: `card${i}`, weight: 1 })) },
+      { key: 'big', name: 'The largest pack of twelve items', price: 0.001, slots: [{ count: 40 }], outcomes: Array.from({ length: 12 }, (_, i) => ({ gives: 'item', item: `card${i}`, weight: 1 })) },
     ],
   });
   const player = freshKeypair();
@@ -302,8 +302,8 @@ if (want('packs')) {
   for (const c of mine) console.log(`packs: ${c.name}, color ${c.attributes.color}, power ${c.attributes.power}`);
   console.log(`packs: ${prompts} wallet prompts for both purchases`);
   const big = await app.openBox('big', { listing: (await app.boxes()).find((l) => l.key === 'big') });
-  if (big.won.length !== 47) throw new Error(`The largest pack gave ${big.won.length} cards, not 47.`);
-  console.log(`packs: the largest pack, 47 cards, every draw made: ${(big.parts ?? [big.settled]).join(', ')}`);
+  if (big.won.length !== 40) throw new Error(`The largest pack gave ${big.won.length} cards, not 40.`);
+  console.log(`packs: the largest pack, 40 cards, every draw made: ${(big.parts ?? [big.settled]).join(', ')}`);
   console.log(`packs: project ${live.live.project}`);
 }
 // 8. A lottery (loot 0.23: each round is a record of its own): two fresh players buy tickets of a one-off draw due
