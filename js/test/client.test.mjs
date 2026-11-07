@@ -337,8 +337,8 @@ describe('holds and contests', () => {
     const had = w.balance(w.player);
     contest = w.read('Contest', pda.contest(w.project, 1));
     // The winner's claim pays its part and, the last owed, closes the contest and its list; the loser sends nothing.
-    fails(() => w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]), 'WinnerPicks');
-    w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]);
+    // It gives only its part of the pot, which is fixed: anyone may send it.
+    w.chain.send(w.cranker, [loot.claimIx({ payer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, contest, entries: list(), player: w.player })]);
     assert.equal(w.balance(w.player) - had, (2n * PRICE * 95n) / 100n);
     assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'closed');
 

@@ -39,7 +39,7 @@ test('a box rolls on the NFT a player brings: held until settled, then a level u
   else assert.deepEqual([parseCoreAsset(w.chain.get(asset).data).owner, levelOf(w, asset)], [w.player, '4']);
 });
 
-test('a mission rolls on the NFT leaving it: the roll waits for anyone to ask, then settles', { skip }, () => {
+test('a mission rolls on the NFT leaving it: the roll waits for its player or the project’s keys to ask, then settles', { skip }, () => {
   const w = world({ seed: 'rolls-mission' });
   w.upsert({ Item: { id: 1, args: collectible('Hero') } });
   w.upsert({ Box: { id: 6, args: box(false) } });
@@ -64,7 +64,7 @@ test('a mission rolls on the NFT leaving it: the roll waits for anyone to ask, t
   assert.deepEqual([order.status, order.held], ['Waiting', true]);
   assert.equal(parseCoreAsset(w.chain.get(asset).data).owner, w.project);
   const lb = w.read('LootBox', pda.box(w.project, 6));
-  w.chain.send(w.cranker, loot.askRollIx({ payer: w.cranker, orderAddress, order, box: lb }));
+  w.chain.send(w.authority, loot.askRollIx({ payer: w.authority, orderAddress, order, box: lb }));
   order = w.read('Order', orderAddress);
   assert.equal(order.status, 'Rolled', 'the oracle answered');
   w.chain.nextSlot();

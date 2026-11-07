@@ -1129,7 +1129,7 @@ export function playSteps(economy) {
   add('payments', 'pay_nft', 'player', 'pay with an NFT (burned, or given to a wallet): the receipt is the record');
   for (const s of m.stashes) add(`stash:${s.key}`, 'stash', 'the owner or the authority', `put an NFT it holds in “${s.name}”, or take one out to any wallet`);
   for (const r of prizeRolls(m).filter((r) => !['mission', 'recipe'].includes(r.route))) {
-    add(r.by, 'ask_roll', 'anyone, who pays the oracle', `ask for the roll of “${m.box.get(r.box)?.name ?? r.box}” a winner got (${r.route})`);
+    add(r.by, 'ask_roll', 'the winner or the project’s keys, who pay the oracle', `ask for the roll of “${m.box.get(r.box)?.name ?? r.box}” a winner got (${r.route})`);
     add(r.by, 'settle', 'the winner, a key they named, or the project’s keys', 'carry out what it rolled');
   }
   for (const r of m.recipes) add(`recipe:${r.key}`, 'craft', 'player', `craft “${r.name}”`);
@@ -1145,7 +1145,7 @@ export function playSteps(economy) {
     add(`contest:${c.key}`, 'open_contest', 'authority', `open “${c.name}”`);
     add(`contest:${c.key}`, 'enter', 'player', 'back a side');
     add(`contest:${c.key}`, 'decide', 'authority (or anyone sending a decider’s verdict)', 'name the side that won, or call it off before its result is due');
-    add(`contest:${c.key}`, 'claim', 'anyone', 'pay an entry');
+    add(`contest:${c.key}`, 'claim', c.stakeNft || c.prize ? 'the winner or the project’s keys' : 'anyone', 'pay an entry');
   }
   for (const a of m.auctions) {
     add(`auction:${a.key}`, 'open_auction', a.lot?.asset ? 'the owner, alone (a collectible of theirs)' : 'the authority, alone (a new unit of an item)', `put the lot up (at go-live)`);

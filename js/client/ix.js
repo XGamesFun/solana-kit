@@ -1136,7 +1136,7 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
 }
 
 /**
- * Anyone (`payer`, who pays the oracle) asks for the roll a mission's return, a recipe or a prize made (`order.status`
+ * Its player or the project's keys (`payer`, who pays the oracle) ask for the roll a mission's return, a recipe or a prize made (`order.status`
  * Waiting): the box's roll accounts, as `openBoxIx` passes them (`items` maps an item a prize names to its decoded
  * Item, for a fresh one's tables). It lands in `callback_roll`. Returns a list of instructions: first `payer` opens the
  * project's vault for each prize mint when it is not there (idempotent; the program refuses the ask without them,
@@ -2105,7 +2105,7 @@ export const stakeNftIx = ({ player, project, id, farm, asset, collection, hasAu
  * `player` takes an NFT out once its lock has run: it grows on its way out (a farm with growth writes on it, or on its
  * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. Leaving a tier
  * that rolls (`roll`: its box id, `boxes` its decoded box by id), the NFT is rolled on that box, in an order named by
- * `nonce` (`namedRollNonce`: the NFT's own on a box that holds it; anyone then asks the oracle,
+ * `nonce` (`namedRollNonce`: the NFT's own on a box that holds it; its player or the project's keys then ask the oracle,
  * `askRollIx`, and settles); a box that can burn it or give it away keeps it in the project's hands until then. `more`
  * NFTs of the player's in the farm (each { asset, collection, hasAuthority, tokenMetadata, compressed, tier, roll }) leave
  * in the same call, one fee, one transfer of rewards: by their seats' addresses, the `i`th's roll at `nonce + 2i` and its
@@ -2204,7 +2204,7 @@ export const refreshSeatIx = ({ signer, project, id, farm, by, seat, collection,
  * burns a collectible. A recipe's `raises` write on the kept ones, in their Sheet when the project has no
  * authority over them. The player opens any account a line pays into that is not there. A roll it makes (a
  * `Prize::Roll` or a `RollOn`) passes its box and its order, nothing more; a `RollOn`'s order is where `namedRollNonce`
- * says, which reads the rolled box (`boxes`: a box's id to its decoded LootBox). Anyone then asks for the roll
+ * says, which reads the rolled box (`boxes`: a box's id to its decoded LootBox). Its player or the project's keys then ask for the roll
  * (`askRollIx`, in the same transaction when it fits).
  * A craft makes several Core calls: raise the compute limit. `extra`: a token's hook accounts.
  */

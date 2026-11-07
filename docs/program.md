@@ -212,7 +212,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `callback_roll` | the oracle | — | draws every card of every open from one answer, sets aside what it won (at most 21 accounts; a fresh item's tables only while they fit the box's table budget) |
 | | `settle` (`settleIx`) | its player, the project's keys or the key its player named; pays what it opens or mints | free | a part: delivers what was won from where the last part stopped up to `upto` (`settlePartEnd`; past the end, `SETTLE_LAST`, is the last part; 0 only splits the payment), `prize_accounts` of its accounts the prizes'. The last part pays the split, does the NFT's fate and closes the order |
 | | `refund` (`refundIx`) | anyone | free | a failed order at once, a pending one after 1,500 slots (`orderRefundSlot`); never a rolled or waiting one |
-| | `ask_roll` (`askRollIx`) | anyone, paying the oracle | free | asks for a waiting roll; again after `STALE_SLOTS` (`rollAskable`). On a box with no entry in stock only the order's player asks, in a later slot than the order's `requested_slot` (`SoldOut` otherwise) |
+| | `ask_roll` (`askRollIx`) | its player or the project's keys, paying the oracle | free | asks for a waiting roll; again after `STALE_SLOTS` (`rollAskable`). On a box with no entry in stock only the order's player asks, in a later slot than the order's `requested_slot` (`SoldOut` otherwise) |
 | Project moves | `move_tokens` (`moveTokensIx`) | authority | J | from a pool or minted, to any `To`, fixed or a share of a pool |
 | | `collectible` (`collectibleIx`, `makeIx`) | authority | J | `Make { item, tree, attributes }` for several owners at the item's next serials (or compressed into `tree`), `Set` (or a Sheet), `Burn` (rent to its holder), `Profile` (a wallet's profile) |
 | | `roll` / `callback_random` (`rollIx`, `callbackRandomIx`) | authority / oracle | J / — | a random number for the project's own use |
@@ -231,7 +231,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | Contests | `open_contest` (`openContestIx`) | authority | J | terms fixed for good |
 | | `enter` (`enterIx`) | player | P | a record in the contest's list, one side a wallet (`OtherSide`) |
 | | `decide` (`decideIx`) | authority, or anyone with a verdict; anyone for an overdue contest | J; free when overdue | names a side, or `None` calls it off |
-| | `claim` (`claimIx`) | anyone (only the winner picks losers' NFTs, `WinnerPicks`) | free | an entry's part of the pot, prize and the NFTs it names |
+| | `claim` (`claimIx`) | the winner or the project's keys when it gives a prize or picks, otherwise anyone (only the winner picks losers' NFTs for 30 days, then the project's keys may too, `WinnerPicks`) | free | an entry's part of the pot, prize and the NFTs it names |
 | Auctions | `open_auction` (`openAuctionIx`) | seller alone | P for a player's NFT, J for the project's lot | an auction |
 | | `bid` (`bidIx`) | player | P | tops the high bid; the topped one goes back at once |
 | | `end_auction` (`endAuctionIx`) | anyone once over; seller to call off one with no bid | free (J for the project calling off its own) | pays out, hands the lot over, closes (a roll lot sold pays out nothing: the bid stays in the vault as its order's payment); with `hold` (anyone), an NFT lot (its address alone, no proof) and a bid's winning NFTs become holds for whoever they go to, released after by anyone, the rent back to the ender |
@@ -391,7 +391,7 @@ the first winning claim.
 **Where a roll prize waits**: at `["order", project, winner, prizeRollNonce(n)]`, the first 8 bytes (little endian)
 of `sha256("prize" | n as u64 LE)`, `n` the route's `nonce` argument plus the place or index where the route says so
 (a `buy`'s `k`th roll given at `nonce + k`, `buyGives`). The sender pays the order's rent (a grant's funds, for a
-grant); the winner gets it back at settle. Anyone asks it (on a box with nothing in stock, only its player, in a later
+grant); the winner gets it back at settle. Its player or the project's keys ask it (on a box with nothing in stock, only its player, in a later
 slot, which ends it with nothing) and its player, the project's keys or the key its player named settle it, paying what the settle opens or mints.
 
 ## Boxes and the shop
@@ -575,7 +575,7 @@ A box whose every entry burns, gives or stashes the NFT takes it as its price.
   An NFT frozen on a farm seat is refused. A craft's `RollOn` and a mission's roll name a nonce and are made at
   `namedRollNonce`: the NFT's own on a box that holds it, whatever was named; otherwise `prizeRollNonce` of the named
   one (a mission of several names seat `i`'s roll `nonce + 2i`, its prize's `nonce + 2i + 1`). A roll already at that
-  address makes `unstake_nft` fail (the System program's "already in use"), so the last one is asked (anyone, while its
+  address makes `unstake_nft` fail (the System program's "already in use"), so the last one is asked (its player or the project's keys, while its
   box has something in stock; its player always, in a later slot), answered and settled first, in transactions of
   their own (js/play's `unstakeNft` says so; `claims()` lists the step).
 - **What was rolled stays rolled**: the fate is copied into the order at the roll.
@@ -583,13 +583,13 @@ A box whose every entry burns, gives or stashes the NFT takes it as its price.
   checks find what they read.
 
 **Rolls that wait.** Missions, recipes and prizes make a `Waiting` order (the player's rent, or a prize maker's, back
-at settle). Anyone asks (`ask_roll`, paying the oracle) while its box has an entry in stock; on a box with nothing in
+at settle). Its player or the project's keys ask (`ask_roll`, paying the oracle) while its box has an entry in stock; on a box with nothing in
 stock only the order's player asks, in a later slot than its `requested_slot` (`SoldOut` otherwise), so nobody else
 can land a winner's roll on an empty box; the player's own ask there ends the roll at once, with no oracle: rolled
 with nothing (settle sends an NFT it holds home as it was), or failed for its refund when its winner paid for it (an
 auction's roll lot). Its player, the key the player named (`settler`) or the project's keys settle. A waiting or asked roll is never refunded; one unanswered within `STALE_SLOTS` is
-asked again by anyone, and the first answer to any request rolls it. A free roll whose answer finds nothing at all in
-stock goes back to `Waiting` (not rolled): anyone asks it again after a restock, or its player ends it so. It fails at its
+asked again by them, and the first answer to any request rolls it. A free roll whose answer finds nothing at all in
+stock goes back to `Waiting` (not rolled): they ask it again after a restock, or its player ends it so. It fails at its
 ask, giving back only what it holds, if its box was edited since or its answer can't carry the box's own accounts. A
 box only missions, recipes or prizes roll is left switched off; such orders ignore the switch and window.
 

@@ -134,7 +134,7 @@ await app.balances();                     // what they hold of each of the econo
   timeout, the cancel-and-refund (`cancel-draw`; `after-launch.md` says how the money moves). A draw that cancels the
   round (that one, or a `reveal` of a round short of its least sale) pulls the sender's own refund in the same
   transaction. A ticket bought when the round's draw is due sends the draw first, in the same prompt, and buys into
-  the next round (the buyer pays the oracle's 0.0005 SOL for it). Show each as a button
+  the next round (the buyer pays the oracle's 0.0008 SOL for it). Show each as a button
   and read the list again after each one. The parts are pulled in any order: nobody waits on anyone else.
 - **Gates**: a gated buy, ticket, stake, entry, bid or claim finds the player's collectible that passes the gate by
   itself ("You need a Guild Pass to buy this" when there is none). Use `collectibles()` and its `item` key to show

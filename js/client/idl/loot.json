@@ -21,7 +21,7 @@
         {
           "name": "payer",
           "docs": [
-            "Pays the oracle: anyone, on a roll nobody paid for."
+            "Pays the oracle: its player or the project's keys."
           ],
           "writable": true,
           "signer": true
@@ -809,8 +809,8 @@
         {
           "name": "payer",
           "docs": [
-            "Anyone, but for a winner's first claim within `CLAIM_GRACE_SECONDS` of the decision: the winner or",
-            "the project's keys. Opens the player's account of the mint when it is not there."
+            "Anyone, but for a winner's first claim that gives a prize or picks: the winner or the project's keys.",
+            "Opens the player's account of the mint when it is not there."
           ],
           "writable": true,
           "signer": true
@@ -16536,8 +16536,8 @@
       "name": "CLAIM_GRACE_SECONDS",
       "docs": [
         "How long after a contest's decision a winner alone picks its share of the losers' NFTs and alone",
-        "may go without a prize that can't be given. After it, anyone may do both, so no winner can hold",
-        "up the rest of the contest, on purpose or by losing its key (a frozen account waits for its issuer)."
+        "may go without a prize that can't be given. After it, the project's keys may do both, so a winner",
+        "doesn't hold up the rest of the contest for as long as they look after it."
       ],
       "type": "i64",
       "value": "2592000"

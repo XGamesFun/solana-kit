@@ -689,7 +689,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       order = await current();
     }
     // A roll a mission or a recipe made waits to be asked for (or asked again, the oracle never having answered):
-    // anyone asks, here the player.
+    // its player or the project's keys ask, here the player.
     if (order && loot.rollAskable(order, await slotNow())) {
       await askRoll(orderAddress);
       order = await current();
@@ -1634,7 +1634,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
       const boxes = roll != null ? { [roll]: await read('LootBox', loot.pda.box(project, roll)) } : {};
       // A roll still at the NFT's order address blocks the leave, unless it was asked and came back with nothing to give
-      // (Waiting, asked once): that one stands in for this. Any other is asked (anyone may), answered and settled first.
+      // (Waiting, asked once): that one stands in for this. Any other is asked (its player or the project's keys), answered and settled first.
       if (roll != null) {
         const at = loot.pda.order(project, wallet.address, loot.namedRollNonce(boxes[roll], asset, nonce));
         const there = await readMaybe('Order', at);
@@ -2148,7 +2148,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         await emptyKey(key);
         return { signature, releases, ...(sold ? { winner: auction.high_bidder } : {}) };
       }
-      // A roll lot sold: the winner's roll, made at the default nonce, waits for anyone to ask it (`collect`); the winner
+      // A roll lot sold: the winner's roll, made at the default nonce, waits for its winner or the project's keys to ask it (`collect`); the winner
       // ending it asks in the same transaction and a key settles it.
       const roll = sold && auction.lot.Roll ? loot.pda.order(project, auction.high_bidder, loot.prizeRollNonce(loot.prizeNonce(auctionAt(a), BigInt(auction.last_bid_at)))) : null;
       const { signature, rolls } = roll && auction.high_bidder === wallet.address ? await sendRolling(all) : { signature: await send(all), rolls: [] };
@@ -2478,7 +2478,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     /**
      * What this player can finish now, themselves: a box to settle or refund, a contest entry to claim, a held
      * collectible to take home, an auction they won (or one off by the clock: their bid back), a lottery place they
-     * won, a draw that is due (anyone may reveal it, or ask again when the oracle never answered; it takes 0.0005
+     * won, a draw that is due (anyone may reveal it, or ask again when the oracle never answered; it takes 0.0008
      * SOL), and a drawn lottery's unpaid places, which anyone may pay so the next round can open. [{ kind, says, … }];
      * pass one to `claim`.
      */

@@ -148,7 +148,7 @@ t('a roll made on a box with nothing in stock: a stranger’s ask is refused; it
   const order = pda.order(w.project, w.player, loot.namedRollNonce(w.read('LootBox', pda.box(w.project, ANVIL)), hero, nonce));
   assert.equal(w.read('Order', order).status, 'Waiting');
   w.chain.nextSlot();
-  assert.throws(() => w.chain.send(w.cranker, f.asks(w.cranker, order)), /SoldOut/, 'a stranger never lands a roll on an empty box');
+  assert.throws(() => w.chain.send(w.cranker, f.asks(w.cranker, order)), /NotAuthority/, 'a stranger never asks a roll');
   const asked = w.chain.send(w.player, f.asks(w.player, order));
   assert.equal(asked.answers.length, 0, 'no oracle asked');
   const rolled = w.read('Order', order);

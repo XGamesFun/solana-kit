@@ -106,10 +106,10 @@ test('a referral share reads as the buyer’s choice, and a list grant that repe
 test('each player action has one “in all” cost: the price, the fee, the oracle, the network and lasting rent', () => {
   const spec = example('coin-flip-arena').spec;
   const flip = cost(spec, { now: NOW }).actions.find((a) => a.part === 'box:flip');
-  // 0.1 SOL, the 0.002 player fee, 0.0005 to the oracle, two signatures (the open and the settle).
-  assert.equal(flip.inAllSol, 0.10251);
+  // 0.1 SOL, the 0.002 player fee, 0.0008 to the oracle, two signatures (the open and the settle).
+  assert.equal(flip.inAllSol, 0.10281);
   assert.ok(flip.holdSol > flip.inAllSol, 'the escrow is held while the order is open');
-  assert.match(flip.inAll, /about 0\.10251 SOL in all/);
+  assert.match(flip.inAll, /about 0\.10281 SOL in all/);
   // A shop collectible is bought in one signature (`buy`), and its rent never comes back: it is in the number.
   const shop = simulate({ version: 2, network: 'devnet', name: 'Shop', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], items: [{ key: 'hat', name: 'Hat', price: 0.003 }] }, { now: NOW }).items[0];
   assert.equal(shop.realCost.totalSol, 0.008105); // 0.003 + 0.002 fee + 0.000005 network + 0.0031 rent

@@ -107,7 +107,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       return kind === 'lottery' ? `${r.route} of the lottery “${part?.name ?? key}”` : `${named[r.route] ?? kind} “${part?.name ?? key}”`;
     }))];
     if (src.active === false && (src.rollsOn || by.length)) {
-      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} Anyone asks the oracle for a roll, and the winner or the project’s keys settle it (the oracle's fee is the asker's), and a roll is never refunded while it waits.`);
+      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} The winner or the project’s keys ask the oracle for a roll, and settle it (the oracle's fee is the asker's), and a roll is never refunded while it waits.`);
       continue;
     }
     const verb = boxBuys(src, m) ? 'Buy' : 'Open';
@@ -193,10 +193,10 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const direct = prizes(m).filter((p) => p.prize.gives === 'nft' && p.prize.stash === st.key).map((p) => `${p.by} (${prizeWords(p.prize, m)}, given at once)`);
     actions.push(`The stash “${st.name}” holds ${plural(nfts.length, 'NFT')} the game gives away${boxes.length ? ` through ${boxes.join(', ')}` : ''}${direct.length ? `${boxes.length ? ' and' : ' through'} ${direct.join(', ')}` : ''}, put in by your wallet when it goes live${st.takenInPerDay ? ` and by what players pay with an NFT (about ${num(st.takenInPerDay)} a day in the scenario)` : ''}: a roll that lands on it picks one at random and takes it out at once, so two winners never get the same one, and anyone then settles the roll to hand it over; a prize that names an NFT hands it over in the instruction that wins it. Empty, it can’t be won. Your wallet (or the authority) can put more in, or take one out, any time.${st.lastsDays !== undefined ? ` At the scenario’s rate it lasts about ${num(st.lastsDays)} days.` : ''}`);
   }
-  // Prizes that are a roll of a box: made for the winner, then asked of the oracle and settled by anyone.
+  // Prizes that are a roll of a box: made for the winner, then asked of the oracle and settled by the winner or the project’s keys.
   const prized = prizeRolls(m).filter((r) => !['mission', 'recipe'].includes(r.route));
   if (prized.length)
-    actions.push(`Prizes that are a roll of a box (${[...new Set(prized.map((r) => `${r.by} → “${m.box.get(r.box)?.name ?? r.box}”`))].join(', ')}): the winner gets an order of that box, made by whoever sends the claim, the place’s payment or the auction’s end (its rent, back to the winner when it is settled); anyone then asks the oracle for the roll (its fee is the asker’s) and settles it. A roll is never refunded while it waits.`);
+    actions.push(`Prizes that are a roll of a box (${[...new Set(prized.map((r) => `${r.by} → “${m.box.get(r.box)?.name ?? r.box}”`))].join(', ')}): the winner gets an order of that box, made by whoever sends the claim, the place’s payment or the auction’s end (its rent, back to the winner when it is settled); the winner or the project’s keys then ask the oracle for the roll (its fee is the asker’s) and settle it. A roll is never refunded while it waits.`);
   for (const l of m.lotteries) {
     const rolls = (l.places ?? []).map(placeOf).map((p, i) => (p.prize ? `${p.times > 1 ? `${p.times} places from place ${i + 1} each win` : `place ${i + 1} wins`} ${prizeWords(p.prize, m)}${p.percent ? ` and ${p.percent}% of the pot` : ''}` : null)).filter(Boolean);
     if (rolls.length) actions.push(`In “${l.name}”, ${rolls.join('; ')}.`);

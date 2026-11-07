@@ -133,10 +133,10 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
 
 // What one oracle answer's roll spends, counted at no less than each part costs (`order.rs`'s `RollCost`, measured by
 // the program's `tests/roll_costs.rs`), against the compute and the heap the oracle gives its answer, less a margin.
-const ROLL_BUDGET = 255_000n;
+const ROLL_BUDGET = 300_000n;
 const ROLL_HEAP = 32n * 1024n - 512n;
 const COST = { fixed: 20_000n, entry: 3_500n, blank: 1_400n, weigh: 1_000n, weighEntry: 40n, pair: 150n, item: 1_500n, tokens: 6_000n, draw: 9_000n, group: 250n, reread: 1_000n, finish: 15_000n, won: 150n, drawn: 50n, odds: 1_000n, share: 1_000n, slot: 500n, slotEntry: 350n, openSlot: 150n };
-const BYTES = { start: 2_500n, prizeRead: 500n, entryRead: 80n, minted: 760n, pooled: 1_000n, prize: 200n, draw: 40n, finish: 2_000n, won: 120n };
+const BYTES = { start: 2_500n, prizeRead: 500n, entryRead: 80n, minted: 1_000n, pooled: 1_000n, prize: 200n, draw: 40n, finish: 2_000n, won: 120n };
 
 /** The account a prize reads, as a string, when it reads one the box can name: entries naming the same share it. */
 const accountOf = (p) => {

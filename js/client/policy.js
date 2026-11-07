@@ -9,7 +9,7 @@ const U64_MAX = (1n << 64n) - 1n;
 
 /**
  * The earliest slot an order can be refunded in, or null when it never can be: a rolled order has an outcome to
- * carry out, and is settled, never refunded; a roll a mission or a recipe made waits for anyone to ask for it
+ * carry out, and is settled, never refunded; a roll a mission or a recipe made waits for its player or the project's keys to ask for it
  * (`Waiting`), and once asked (`Asked`) is asked again if the oracle never answers (`rollAskable`).
  */
 export function orderRefundSlot(order) {
@@ -24,7 +24,7 @@ export function orderRefundSlot(order) {
 }
 
 /**
- * Whether anyone may ask the oracle for a mission's or a recipe's roll at `slot`: never asked, or never answered. Once
+ * Whether its player or the project's keys may ask the oracle for a mission's or a recipe's roll at `slot`: never asked, or never answered. Once
  * asked, a later ask comes in a later slot than the last (`SameSlot`: never the same seed twice), so a roll that found
  * nothing in stock and waits again is asked from the next slot on.
  */
@@ -44,7 +44,7 @@ export function contestOff(contest, now) {
 }
 
 /** Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
- * `STALE_SLOTS`: anyone may ask again. */
+ * `STALE_SLOTS`: its player or the project's keys may ask again. */
 export const lotteryDrawStuck = (round, slot) => round?.status === 'Drawing' && BigInt(slot) > BigInt(round.asked_slot) + STALE_SLOTS;
 
 /**

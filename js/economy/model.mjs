@@ -16,7 +16,7 @@ export const FEES = Object.freeze({ player: 2_000_000n, project: 10_000n });
  * on `open_box` (order.rs), whoever sends `draw_lottery` (lottery.rs, its `payer`), the authority on `roll`
  * (roll.rs). Measured on devnet: 500,000 lamports per open.
  */
-export const ORACLE_FEE = 500_000n;
+export const ORACLE_FEE = 800_000n;
 /**
  * What js/play's throwaway settle key is funded with, in the purchase's own transaction, for each prize its settle may
  * open or mint (`loot.SETTLE_RENT_UNIT`): whoever settles pays that rent, the order lends nothing. What the settle

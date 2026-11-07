@@ -86,8 +86,8 @@ Don'ts:
   set (`traits`): say who proves them, and when.
 - **Rolls that can fail**: a box, a mission or a recipe that can burn or give away the NFT it rolls on holds it from
   the moment the roll is made until it is settled. Say the odds in plain numbers, which stats raise them, and what a
-  loss means (burned, or given to whom). Nobody can back out of a roll once it is made; anyone asks the oracle for it, and
-  the player, a key they named or the project's keys settle it.
+  loss means (burned, or given to whom). Nobody can back out of a roll once it is made; the player or the project's keys ask the oracle
+  for it, and the player, a key they named or the project's keys settle it.
 - **NFT custody** (a farm, a mission): Escrow is the default: the NFT moves to the project while it is staked.
   Freeze keeps it in the player's wallet, locked, with the project the only key that unlocks it; a soulbound
   collectible needs Freeze. Watch holds nothing: say plainly that a staked NFT can be sold, that its seller then

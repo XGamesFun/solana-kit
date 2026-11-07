@@ -1180,7 +1180,7 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; anyone asks the oracle, and the player or the project’s keys settle it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
+      "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; the player or the project’s keys ask the oracle and settle it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
       "properties": {
         "gives": {
           "enum": [
@@ -2328,7 +2328,7 @@
         },
         "roll": {
           "$ref": "#/$defs/key",
-          "description": "A mission's result: a box with `rollsOn` the collectible leaving after this tier's lock is rolled on (success, failure, a stat lost, the NFT lost; its odds read the NFT's stats). Growth stops at the lock's end. Anyone asks for the roll and settles it; it is never refunded while it waits. A chest it brings back is its `prize` instead. Only in a farm of collectibles, with a lock."
+          "description": "A mission's result: a box with `rollsOn` the collectible leaving after this tier's lock is rolled on (success, failure, a stat lost, the NFT lost; its odds read the NFT's stats). Growth stops at the lock's end. Its player or the project’s keys ask for the roll and settle it; it is never refunded while it waits. A chest it brings back is its `prize` instead. Only in a farm of collectibles, with a lock."
         },
         "exitFee": {
           "$ref": "#/$defs/percent",

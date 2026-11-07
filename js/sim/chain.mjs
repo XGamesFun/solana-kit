@@ -63,8 +63,8 @@ const NAMES = new Map(
     return [def.name, names];
   }),
 );
-/** What loot usually has left, at the low end, inside the oracle's callback on devnet (seen: 240,814 to 273,706). */
-const ORACLE_UNITS = 264_577;
+/** What loot has left at the least inside a high-priority answer: its limit of 400,000, less the most the oracle's own proof was seen to take. */
+const ORACLE_UNITS = 340_000;
 
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
 export const lootName = (ix) => {
