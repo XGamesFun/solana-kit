@@ -32,7 +32,11 @@ Keep these in step:
   `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file and the skill (`npm test` fails on a pin that
   isn't `package.json`'s version);
 - `release.json` (`node scripts/release-manifest.mjs`, after a program build and `node scripts/sync-idl.mjs`);
-- the skill's copies (`node scripts/sync-skills.mjs` after editing `skills/`).
+- the skill's copies (`node scripts/sync-skills.mjs` after editing `skills/`);
+- the hosted results server (games.fun's `creator-studio`), which refuses any program build but the one it is pinned to
+  and answers 503 `R-RELEASE` until it is re-pinned: with each program upgrade on devnet, run
+  `node scripts/sync-loot-release.mjs <this checkout> <the program build>` there, check it with
+  `node scripts/loot-release.mjs --deployed`, and deploy it the same day.
 
 `npm run check` runs the pin and version tests, `release.json`'s check, the fixtures' check and the skill copies' check.
 

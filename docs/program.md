@@ -4,7 +4,7 @@
 slot 519,723,738 (2026-11-07). Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
 accounts carry over from older versions: make fresh economies for this one.
 
-This page describes the build its IDL comes from, the unreleased rules after 0.23 (the program's CHANGELOG, "the rules are strict"): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seller who can't be paid is owed**, and every list has a **cap**. They are not on devnet yet.
+This page describes 0.24.0, the build its IDL comes from, whose rules are strict (the program's CHANGELOG): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seller who can't be paid is owed**, and every list has a **cap**.
 
 What 0.23 changed, in short: who claimed what is kept in **lists of records** (a wallet's counts, a grant's claims and
 rounds in shards), so one claim pays **several rounds**; a **lottery round is a record of its own**, its money fixed at
@@ -92,7 +92,8 @@ project they chose to play.
 | **Deciders** | a contest verdict (any number, named at open), sent by anyone | name a side before entries close |
 | **Offer or listing maker** | their own offer or listing, alone | — the project's keys have no say over it |
 | **Auction seller** | `open_auction`, and calling off one with no bid | stop it once a bid is in |
-| **Anyone** | refund, `ask_roll`, draw and finish a lottery, release an ended hold, claim a called-off contest's entry or a loser's NFT once no winner has picks left, end an auction, repay a loan, refresh a seat, run a sealed burn, prove a compressed NFT or traits | — |
+| **Anyone** | refund, draw and finish a lottery, release an ended hold, claim a called-off contest's entry or a loser's NFT once no winner has picks left, end an auction, repay a loan, refresh a seat, run a sealed burn, prove a compressed NFT or traits | — |
+| **Its player or the project's keys** | `ask_roll` (only its player, on a box with no entry in stock) | — |
 | **Its player, the project's keys or the key its player named** | settle (`settler`, named at `openBoxIx` or the player's own `askRollIx`) | — |
 | **The winner or the project's keys** | a winner's first contest claim, for 30 days from the decision (`CLAIM_GRACE_SECONDS`); then anyone | — |
 | **The project's keys or who it pays** | run a schedule | — |

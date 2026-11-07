@@ -6,9 +6,8 @@ tools see them.
 
 ## 0.24.0: the rules are strict (the program on devnet since 2026-11-07, slot 519,723,738)
 
-For the program's unreleased "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account
-of 0.23 carries over. `js/test/fixtures/pinned.txt` still pins the deployed build until a devnet deployment, so
-`npm run fixtures -- --check` says the manifest and the pin part: run the tests with `XSOLANA_PROGRAM_DIR` set to the build.
+For the program's 0.24.0, "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account
+of 0.23 carries over: make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin the build devnet runs.
 
 - **A seat past its end is paid exactly.** `Farm.marks`, `Seat.credited_at` and the time split are gone. A farm whose seats
   can stop earning and that pays keeps `["ends", farm]` (`pda.ends`, `decodeEnds`, `farmKeepsEnds`, `Farm.keeps_ends`): every

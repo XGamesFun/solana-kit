@@ -11,7 +11,7 @@ import { send } from './funds.mjs';
 
 /**
  * Moves each SOL pool of the run's game to the owner and unwraps it. → lamports reclaimed (a number), or null.
- * `keepLotteries`: leave lottery pots alone (a keeper round, where the sweep still has to draw and pay them; the
+ * `keepLotteries`: leave lottery pots alone (a keeper round, where the game's pages still draw and pay them; the
  * authority can move a pot's tokens even with tickets sold, so reclaiming it would rob the round).
  */
 export async function reclaim(rpc, owner, dir, { keepLotteries = false } = {}) {

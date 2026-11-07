@@ -57,8 +57,8 @@ XSOLANA_EVAL_RPC_URL=… node evals/live/run.mjs --harness codex  --parallel 2 -
 Options:
 - `--keeper`: a round with a results server beside it. The server is not part of this repository: name a
   folder holding its `scripts/loot-server.mjs` (with its npm packages installed) with `--server-dir <dir>` or
-  `XSOLANA_EVAL_SERVER_DIR`; the runner stops at once without one. One server runs at the cards' `{KEEPER}`, and its
-  sweep runs every 4 minutes (`--grace 120 --pay-rent`) over the round's games. Games use it through
+  `XSOLANA_EVAL_SERVER_DIR`; the runner stops at once without one. One server runs at the cards' `{KEEPER}`: it signs
+  vouchers and sends nothing on chain (the game's own pages and server send every step). Games use it through
   `@xgamesfun/solana/results` (this checkout, or `XSOLANA_EVAL_KIT_DIR`). Without `--keeper` (and without `--only`), cards
   with `"keeper": true` are left out, so a round runs without a results server.
 - `--harness claude|codex|both`

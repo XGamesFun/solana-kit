@@ -4,11 +4,16 @@
 
 | Piece | Version | Where | Review |
 | --- | --- | --- | --- |
-| The loot program | 0.20.1, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ` | devnet only | Internal reviews only. **Not independently audited** |
-| These tools (`@xgamesfun/solana`) | 0.20.1 | npm | Internal reviews only |
+| The loot program | 0.24.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ` | devnet only, since slot 519,723,738 (2026-11-07) | Internal reviews only. **Not independently audited** |
+| These tools (`@xgamesfun/solana`) | 0.24.0 | npm | Internal reviews only |
 
 `release.json` pins the exact program binary, IDL and client this package is built for. Nothing runs on mainnet.
 Mainnet waits for an independent audit of the exact code to be deployed.
+
+The program is upgradeable. Its upgrade authority only upgrades the program (and makes the first platform admin); the
+platform admin signs only the platform's fees and its suspend switch. On mainnet the upgrade authority is to be a
+multisig. On devnet an upgrade has so far meant a new account layout: no account carries over from an older version,
+so an economy made on one version is made again on the next.
 
 The program and these tools are provided as is, without warranty: see [DISCLAIMER.md](DISCLAIMER.md).
 
@@ -30,7 +35,8 @@ Promises a report should test against:
   end; an auction with a bid in runs to its end, and one nobody ends still sells to its high bidder whenever it is
   ended.
 - A voucher key can never give more than its grant's limits.
-- Anyone can finish what is already decided: refunds, settles, draws, timers and returns.
+- What is already decided can always be finished: anyone can send refunds, draws and returns; a settle is sent by its
+  player, the project's keys or the key its player named.
 
 ## Reporting a vulnerability
 

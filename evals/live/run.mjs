@@ -23,7 +23,7 @@
 // --keeper runs the round with a results server beside it. That server is not part of this repository: name a
 // folder holding its scripts/loot-server.mjs (with its npm packages installed) with --server-dir or
 // XSOLANA_EVAL_SERVER_DIR. One server runs for the round on a throwaway voucher key, at the address cards name as
-// {KEEPER}; its sweep runs every few minutes over the round's live games, paid by a throwaway fee payer. The client
+// {KEEPER}. It signs vouchers and sends nothing on chain: a game's own pages and server send every step. The client
 // games use with it is @xgamesfun/solana/results, in the @xgamesfun/solana the registry serves from this checkout.
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -78,7 +78,7 @@ const rpc = rpcClient(RPC);
 const funder = loadFunder();
 // Wallets are topped up as runs start and swept back as they end: what is spent is rent, fees and seeds.
 // With the pools reclaimed, a run keeps about 0.02–0.05 (rent, fees, oracle); what is out at once is the float.
-const need = Math.min(parallel, cards.length * harnesses.length) * (OWNER_SOL + PLAYER_SOL) + cards.length * harnesses.length * 0.05 + (keeperRound ? 0.15 : 0);
+const need = Math.min(parallel, cards.length * harnesses.length) * (OWNER_SOL + PLAYER_SOL) + cards.length * harnesses.length * 0.05 ;
 const have = Number(await rpc.balance(funder.address)) / 1e9;
 if (have < need) {
   console.error(`The eval funder ${funder.address} holds ${have} devnet SOL; this round needs about ${need.toFixed(2)} (most comes back).`);
@@ -97,8 +97,6 @@ const serverKeys = keeperRound ? mkdtempSync(path.join(os.tmpdir(), 'xsolana-eva
 const SERVER_BIN = keeperRound ? path.join(SERVER_DIR, 'scripts/loot-server.mjs') : null;
 const serverEnv = { ...parentEnv, XSOLANA_RPC_URL: RPC };
 let resultsServer = null;
-let sweeper = null;
-const liveGames = new Set();
 if (keeperRound) {
   execFileSync(process.execPath, [SERVER_BIN, 'new-key', path.join(serverKeys, 'voucher.key.json')], { env: serverEnv, stdio: 'ignore' });
   const port = 8700 + Math.floor(Math.random() * 200);
@@ -110,28 +108,6 @@ if (keeperRound) {
   if (!/Serving at/.test(out)) throw new Error(`The results server didn't start: ${scrub(out).slice(0, 500)}`);
   resultsServer = { url: `http://127.0.0.1:${port}`, child, log: () => out };
   say(`results server at ${resultsServer.url}`);
-  // The sweep: every 4 minutes, one pass over the round's live games, with a short grace.
-  const payer = throwaway(path.join(serverKeys, 'payer.key.json'));
-  await fund(rpc, funder, payer.address, 0.15);
-  let sweeping = false;
-  const pass = async () => {
-    if (sweeping || !liveGames.size) return;
-    sweeping = true;
-    try {
-      const games = [...liveGames].flatMap((g) => ['--game', g]);
-      const r = await new Promise((resolve) => {
-        const c = spawnGroup(process.execPath, [SERVER_BIN, 'sweep', '--payer', path.join(serverKeys, 'payer.key.json'), '--grace', '120', '--pay-rent', ...games], { env: serverEnv, stdio: ['ignore', 'pipe', 'pipe'] });
-        let o = '';
-        c.stdout.on('data', (d) => (o += d));
-        c.stderr.on('data', (d) => (o += d));
-        c.on('close', () => resolve(o));
-      });
-      writeFileSync(path.join(runDir, 'sweep.log'), `${existsSync(path.join(runDir, 'sweep.log')) ? readFileSync(path.join(runDir, 'sweep.log'), 'utf8') : ''}${scrub(r)}`);
-    } finally {
-      sweeping = false;
-    }
-  };
-  sweeper = { payer, pass, timer: setInterval(() => pass().catch(() => {}), 240_000) };
 }
 
 // ---------------------------------------------------------------- the app the person opens
@@ -231,15 +207,6 @@ async function one(harness, card0) {
   const conversation = [];
   try {
     const card = JSON.parse(JSON.stringify(card0).replaceAll('{PLAYER}', playerWallet.address).replaceAll('{KEEPER}', resultsServer?.url ?? '(no results server in this round)'));
-    const noteGame = () => {
-      try {
-        const live = JSON.parse(readFileSync(path.join(dir, 'xsolana.json'), 'utf8')).live;
-        const g = live?.project ?? live?.game;
-        if (g) liveGames.add(g);
-      } catch {
-        // No xsolana.json, or not one that went live.
-      }
-    };
     const b = builder(harness, { dir, env: baseEnv, model, effort });
     const turns = [];
     const approvals = [];
@@ -284,14 +251,12 @@ async function one(harness, card0) {
           walletLogs.push({ role: 'owner', findings: r.findings });
           conversation.push({ from: 'system', text: r.ok ? `You ran it and approved in your wallet. The page said:\n${r.said.slice(0, 1200)}` : `You ran it, but it didn't finish${r.requests ? ` (you approved ${r.requests === 1 ? 'a transaction' : `${r.requests} wallet requests`} on the page: your wallet signed what it showed you)` : ''}:\n${r.said.slice(0, 4000)}` });
           say(`${harness} ${card.id} approval ${r.ok ? 'landed' : 'failed'}`);
-          noteGame();
         } else if (card.checks.scripts && SCRIPT_COMMAND.test(command.replace(IN_FOLDER, '$2'))) {
           const inFolder = IN_FOLDER.exec(command);
           const folder = inFolder ? path.resolve(dir, inFolder[1].replace(/^.*\/project(\/|$)/, '')) : dir;
           const r = await runSetup((inFolder ? inFolder[2] : command).trim(), folder.startsWith(dir) && existsSync(folder) ? folder : dir, 120_000, home);
           conversation.push({ from: 'system', text: `You ran \`${command}\`. It ${r.code === 0 ? 'finished' : `failed (exit ${r.code})`}:\n${scrub(r.out).slice(-1200)}` });
           say(`${harness} ${card.id} ran a script (${r.code})`);
-          noteGame();
         } else if (SETUP_COMMAND.test(command)) {
           const r = await runSetup(command, dir, 300_000, home);
           conversation.push({ from: 'system', text: `You ran \`${command}\`. It ${r.code === 0 ? 'finished' : `failed (exit ${r.code})`}:\n${r.out.slice(-800)}` });
@@ -353,7 +318,6 @@ async function one(harness, card0) {
           record(path.join(where, `owner-page-${ownerPages.length}.jsonl`), p.raw);
           conversation.push({ from: 'system', text: `You opened ${app.url} with your own wallet and did what it asked. What happened:\n${p.text.slice(0, 2000)}` });
           say(`${harness} ${card.id} owner used a page`);
-          noteGame();
           continue;
         }
         players.push(p);
@@ -406,12 +370,6 @@ await Promise.all(
   }),
 );
 await registry.close();
-if (sweeper) {
-  clearInterval(sweeper.timer);
-  // One last pass for what came due as the last runs ended (a raffle drawn after its run).
-  await sweeper.pass().catch(() => {});
-  await sweep(rpc, sweeper.payer, funder.address).catch(() => {});
-}
 if (resultsServer) {
   record(path.join(runDir, 'results-server.log'), resultsServer.log());
   stopGroup(resultsServer.child);
