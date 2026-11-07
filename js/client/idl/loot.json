@@ -2,7 +2,7 @@
   "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
   "metadata": {
     "name": "loot",
-    "version": "0.23.0",
+    "version": "0.24.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"

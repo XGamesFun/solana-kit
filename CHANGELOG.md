@@ -4,7 +4,7 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased: the rules are strict (the program is not on devnet yet)
+## 0.24.0: the rules are strict (the program on devnet since 2026-11-07, slot 519,709,024)
 
 For the program's unreleased "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account
 of 0.23 carries over. `js/test/fixtures/pinned.txt` still pins the deployed build until a devnet deployment, so
@@ -77,7 +77,7 @@ of 0.23 carries over. `js/test/fixtures/pinned.txt` still pins the deployed buil
   forfeit writes no growth (`docs/program.md`); a table never written reads as out of stock.
 - Tests: `js/test/when-out.test.mjs`; `strict-rules.test.mjs` empties an entry by another route after the purchase.
 
-## 0.23.0 (not released on npm; the program is on devnet)
+## 0.23.0 (not released on npm)
 
 For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no account of 0.22.0 carries over.
 
