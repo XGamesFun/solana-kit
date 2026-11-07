@@ -1287,14 +1287,15 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       });
     },
 
-    /** The boxes: price now and each outcome's chance. */
+    /** The boxes: price now, each outcome's chance as written, and what the box does once an outcome runs out
+     * (`whenOut`: 'stopSales', it isn't sold until restocked; 'drawLeft', it draws among what is left). */
     async boxes() {
       const list = spec.boxes ?? [];
       const accounts = await client.accounts(list.map((b) => loot.pda.box(project, b.id)));
       return list.map((b, i) => {
         const box = accounts[i] && loot.decode('LootBox', accounts[i].data);
         const total = box ? box.entries.reduce((n, e) => n + e.weight, 0) : 0;
-        return { key: b.key, name: b.name, price: box ? show(box.price, decimalsOf(b.currency)) : null, priceUnits: box?.price ?? null, currency: tokens.get(b.currency ?? currencyKey)?.symbol, active: Boolean(box?.active), outcomes: (b.outcomes ?? []).map((o, j) => ({ ...o, chancePercent: box ? (100 * box.entries[j].weight) / total : o.chance })) };
+        return { key: b.key, name: b.name, price: box ? show(box.price, decimalsOf(b.currency)) : null, priceUnits: box?.price ?? null, currency: tokens.get(b.currency ?? currencyKey)?.symbol, active: Boolean(box?.active), whenOut: box?.when_out === 'DrawLeft' ? 'drawLeft' : 'stopSales', outcomes: (b.outcomes ?? []).map((o, j) => ({ ...o, chancePercent: box ? (100 * box.entries[j].weight) / total : o.chance })) };
       });
     },
 

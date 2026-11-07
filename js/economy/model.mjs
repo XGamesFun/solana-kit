@@ -48,7 +48,7 @@ export const WSOL = 'So11111111111111111111111111111111111111112';
 export const LIMITS = Object.freeze({
   callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000,
   // The program's caps on a record's lists (constants.rs, not in the IDL): a spec over one is refused before anything is signed.
-  boxEntries: 128, boxSlots: 32, boxOdds: 32, boxFates: 64, entryPrizes: 14, recipeLines: 48, farmRules: 32, growthSteps: 128, contestSides: 1024, deciders: 32, collections: 32, lotteryRuns: 64, farmEnds: 100_000,
+  boxEntries: 128, boxSlots: 32, boxOdds: 32, boxFates: 64, entryPrizes: 14, itemTraits: 64, traitKeyBytes: 64, recipeLines: 48, farmRules: 32, growthSteps: 128, contestSides: 1024, deciders: 32, collections: 32, lotteryRuns: 64, farmEnds: 100_000,
 });
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
  * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
@@ -145,6 +145,19 @@ export const boostReadsGrowth = (f) => (f.boosts ?? []).some((b) => b.when?.attr
 
 /** A box's roll against what is in stock, in words (order.rs): the odds stay as written, whatever is left. */
 export const STOCK_WORDS = 'The odds stay as written whatever is in stock: a draw that lands on an outcome that can’t be given then (its pool short of the whole amount, its item or stash gone) is not made, no other outcome takes its place, and that draw’s worth of the price goes back at the settle; with no draw made at all, a paid open fails and is refunded, and a free roll goes back to waiting';
+
+/**
+ * What a box that rolls does once an outcome can't be given (`whenOut`, order.rs `WhenOut`), in words. `sold`: it is
+ * sold (an open checks the stock); a box only other routes roll (a prize, a mission) never stops a sale.
+ */
+export function whenOutWords(b, { sold = b.active !== false } = {}) {
+  if (b.whenOut === 'drawLeft' && !sold)
+    return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), a roll draws among the outcomes still there by their written weights, so the others’ chances rise; with nothing left at all, a free roll waits to be asked again and a paid one is refunded';
+  if (b.whenOut === 'drawLeft')
+    return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), the box keeps selling while its first draw has anything left, and a roll draws among the outcomes still there by their written weights: the others’ chances rise as one runs out, so a player can empty a common outcome to make a rare one likelier (a box selling a rare prize should stop selling instead, the default)';
+  if (!sold) return STOCK_WORDS;
+  return 'When an outcome runs out, the box stops selling: it isn’t sold while any outcome couldn’t cover this purchase’s draws and those of purchases still waiting for the oracle (an item’s units left, a pool’s tokens, a stash’s NFTs), so every roll is on the odds as written and nobody can buy their way to a refund on every miss; it sells again once the project restocks or edits the box (an outcome whose odds shrink with stock needs no cover). An outcome emptied another way all the same (another route sharing its pool, item or stash) makes no draw, no other outcome taking its place, and gives back that draw’s worth of the price at the settle; with no draw made at all, the open is refunded';
+}
 
 /**
  * What the end of a sharing farm that `runs` means, in words, or null (no end, or a fixed rate): its release keeps its

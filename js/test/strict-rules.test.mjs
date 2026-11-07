@@ -70,33 +70,47 @@ test('a fixed prize is written as a plain number, as the program takes it', { sk
 
 // ---------------------------------------------------------------- written odds
 
-test('an entry drawn that can’t be given makes no draw: a paid order fails and refunds, whatever else is in stock', { skip }, () => {
+/** Burns all a pool holds, as the project's keys may at any time: another route emptying an entry after a purchase. */
+const drain = (w, pool) => w.chain.send(w.authority, [loot.moveTokensIx({ authority: w.authority, project: w.project, mint: w.mint, from: { Pool: [pool] }, to: 'Burn', amount: { Bps: [10_000] } })]);
+/** The oracle's answer to `orderAddress`, sent by hand (the purchase went with `sendRaw`, which leaves it unanswered). */
+const answer = (w, orderAddress, more = {}) => w.chain.sendRaw(w.chain.oracle, [computeUnitLimit(400_000), loot.callbackRollIx({ order: orderAddress, orderState: w.read('Order', orderAddress), box: w.read('LootBox', w.read('Order', orderAddress).loot_box), randomness: new Uint8Array(32).fill(5), ...more })]);
+
+test('an entry drawn that another route emptied after the purchase makes no draw: a paid order fails and refunds, whatever else is in stock', { skip }, () => {
   const w = world({ seed: 'strict-written-odds' });
   w.upsert({ Item: { id: 1, args: collectible('Crown') } });
-  w.pool(1, w.mint); // empty: the entry is out of stock
-  // All but always the empty pool's entry: re-weighing among what is in stock would give the crown every time.
+  w.pool(1, w.mint, 5n);
+  // All but always the pool's entry: re-weighing among what is in stock would give the crown every time.
   w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([fromPool(1, 5)], 1_000_000_000), itemDrop(1)]) } });
   const before = w.balance(w.player);
-  w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box: box(w, 1), nonce: 1n })]);
+  w.chain.sendRaw(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box: box(w, 1), nonce: 1n, poolMints: { 1: w.mint } })]);
   const address = pda.order(w.project, w.player, 1n);
+  drain(w, 1);
+  answer(w, address, { poolMints: { 1: w.mint } });
   const order = w.read('Order', address);
   assert.equal(order.status, 'Failed', 'no other entry took its place');
   assert.deepEqual(order.won, []);
+  assert.equal(order.reserved, 0n, 'the answer took its draws out of the box’s count');
+  assert.equal(box(w, 1).in_flight, 0n);
   w.chain.nextSlot();
   assert.equal(loot.orderRefundable(order, w.chain.slot(), w.chain.now()), true);
   w.chain.send(w.cranker, [loot.refundIx({ signer: w.cranker, orderAddress: address, order })]);
   assert.equal(w.balance(w.player), before, 'the price back');
 });
 
-test('a pack whose draws land on what can’t be given gives back those draws’ worth at the settle', { skip }, () => {
+test('a pack whose draws land on what another route emptied gives back those draws’ worth at the settle', { skip }, () => {
   const w = world({ seed: 'strict-pack-back' });
   w.upsert({ Item: { id: 1, args: collectible('Card') } });
-  w.pool(1, w.mint);
+  // A box that stops selling sells only while the pool covers every draw of the purchase: 8 × 5.
+  w.pool(1, w.mint, 40n);
   const price = 8_000n;
   w.upsert({ Box: { id: 1, args: boxArgs(price, [itemDrop(1), drop([fromPool(1, 5)])], { slots: [{ count: 8, only: [], distinct: false, share: 0 }] }) } });
   const before = w.balance(w.player);
-  w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.openBoxIx({ player: w.player, project: w.project, box: box(w, 1), nonce: 1n })]);
+  w.chain.sendRaw(w.player, [computeUnitLimit(1_400_000), loot.openBoxIx({ player: w.player, project: w.project, box: box(w, 1), nonce: 1n, poolMints: { 1: w.mint } })]);
   const address = pda.order(w.project, w.player, 1n);
+  assert.equal(w.read('Order', address).reserved, 8n);
+  drain(w, 1);
+  const items = { 1: w.read('Item', pda.item(w.project, 1)) };
+  answer(w, address, { poolMints: { 1: w.mint }, items });
   const order = w.read('Order', address);
   assert.equal(order.status, 'Rolled');
   const made = order.won.length;
@@ -104,7 +118,6 @@ test('a pack whose draws land on what can’t be given gives back those draws’
   assert.equal(order.undrawn, 8 - made);
   assert.ok(order.won.every((x) => x.Item), 'only the card is given, no other entry in the pool’s place');
   w.chain.nextSlot();
-  const items = { 1: w.read('Item', pda.item(w.project, 1)) };
   w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.settleIx({ signer: w.authority, orderAddress: address, order, projectState: w.projectState(), items })]);
   assert.equal(before - w.balance(w.player), (price * BigInt(made)) / 8n, 'what was not drawn came back');
 });
@@ -156,13 +169,14 @@ test('an outcome that names a pool twice, or a stash’s random NFT beside the s
   write([{ Item: [1] }, { Item: [1] }])();
 });
 
-test('the words describe written odds, not re-weighing', () => {
+test('the words describe written odds, not re-weighing, and what the box does once an outcome runs out', () => {
   const spec = base({ boxes: [{ key: 'b', name: 'Crate', price: 1, split: [{ to: 'pool:prizes', percent: 50 }], outcomes: [{ gives: 'pay', pool: 'prizes', amount: 5, chance: 10 }, { gives: 'item', item: 'relic', chance: 90 }] }] });
   const text = explainEconomy(spec, { now: NOW }).text;
   const sim = explain(simulate(spec, { now: NOW }), spec);
   for (const said of [text, sim]) {
-    assert.match(said, /odds stay as written/);
-    assert.match(said, /no other outcome takes its place/);
+    assert.match(said, /stops selling/);
+    assert.match(said, /odds as written/);
+    assert.match(said, /no other outcome taking its place/);
     assert.match(said, /refunded/);
     assert.doesNotMatch(said, /never comes up/);
   }

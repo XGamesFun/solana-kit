@@ -772,7 +772,11 @@
           "writable": true
         },
         {
-          "name": "loot_box"
+          "name": "loot_box",
+          "docs": [
+            "Written: the order's draws leave its `in_flight`."
+          ],
+          "writable": true
         },
         {
           "name": "ticket",
@@ -4941,6 +4945,14 @@
           "docs": [
             "account here only makes the call fail."
           ]
+        },
+        {
+          "name": "loot_box",
+          "docs": [
+            "The order's box, when the order counts draws in its `in_flight` (`Order::reserved`): they leave it."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "system_program",
@@ -9993,6 +10005,14 @@
             "type": "bool"
           },
           {
+            "name": "when_out",
+            "type": {
+              "defined": {
+                "name": "WhenOut"
+              }
+            }
+          },
+          {
             "name": "active",
             "type": "bool"
           },
@@ -12890,13 +12910,33 @@
             "type": "bool"
           },
           {
+            "name": "when_out",
+            "docs": [
+              "What it does once an entry it lists can't be given (`WhenOut`)."
+            ],
+            "type": {
+              "defined": {
+                "name": "WhenOut"
+              }
+            }
+          },
+          {
+            "name": "in_flight",
+            "docs": [
+              "The draws its purchases made that wait for their answer, under `WhenOut::StopSales`: a sale needs",
+              "every entry to cover these and its own. An edit of what a roll reads puts it back to 0 (the",
+              "orders it fails are refunded)."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "active",
             "type": "bool"
           },
           {
             "name": "version",
             "docs": [
-              "Counts the edits of what a roll reads (entries, odds, `stock_odds`, `subject`, `fates`); a",
+              "Counts the edits of what a roll reads (entries, odds, `stock_odds`, `when_out`, `subject`, `fates`); a",
               "price, rise, fall or currency edit leaves it. An order remembers",
               "the version it paid for, and is not rolled on any other: it fails and refunds. A box is never closed, so no version comes back at its",
               "address."
@@ -13945,6 +13985,13 @@
             "type": {
               "vec": "u32"
             }
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "The draws it counts in its box's `in_flight`, until its answer or its refund."
+            ],
+            "type": "u64"
           },
           {
             "name": "requested_slot",
@@ -16658,6 +16705,24 @@
           },
           {
             "name": "Off"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WhenOut",
+      "docs": [
+        "What a box does once an entry it lists can't be given (an item sold out, a pool short of its",
+        "amount, a stash's NFT gone): the project chooses, and players see which."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "StopSales"
+          },
+          {
+            "name": "DrawLeft"
           }
         ]
       }

@@ -31,13 +31,14 @@ test('the checker refuses an outcome no slot draws (BadEntries) and a pack one a
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1], share: 50 }])), ['E-ODDS economy.boxes.pack.slots'], 'the epic is drawn by no slot');
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, share: 50 }])), [], 'a slot that names none draws among all');
   assert.deepEqual(refused(pack([{ count: 4, from: [0], share: 50 }, { count: 1, from: [1, 2], share: 50 }])), []);
-  // Three entries of an item: one answer draws 65 (the program's `draws_fit`, `loot.drawsFit`).
-  const m = model(pack([{ count: 64 }]), { now: NOW });
-  assert.ok(loot.drawsFit(boxArgs(m.boxes[0], m).entries, 65) && !loot.drawsFit(boxArgs(m.boxes[0], m).entries, 66));
-  assert.deepEqual(refused(pack([{ count: 65 }])), []);
-  const big = check(pack([{ count: 66 }]), { now: NOW }).refusals;
+  // Three entries of an item: one answer draws 60, the box's own bytes counted (the program's `draws_fit`, `loot.drawsFit`).
+  const m = model(pack([{ count: 60 }]), { now: NOW });
+  const fit = (n) => loot.drawsFit(boxArgs(m.boxes[0], m).entries, n, 1, { bytes: loot.boxBytes({ slots: [{ count: n }] }) });
+  assert.ok(fit(60) && !fit(61));
+  assert.deepEqual(refused(pack([{ count: 60 }])), []);
+  const big = check(pack([{ count: 61 }]), { now: NOW }).refusals;
   assert.deepEqual(big.map((r) => `${r.code} ${r.where}`), ['E-ODDS economy.boxes.pack.slots']);
-  assert.match(big[0].message, /about 65 here.*PackTooLarge/);
+  assert.match(big[0].message, /about 60 here.*PackTooLarge/);
 });
 
 test('the checker asks what a slot that names outcomes is worth, and a pack sharing a pool counts its rereads', () => {

@@ -8,7 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { vault } from '../client/pda.js';
-import { drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
+import { boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
@@ -52,6 +52,7 @@ import {
   toUnits,
   utf8Bytes,
   wholeCount,
+  weights,
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
 import { boxArgs, boxOrderBytes, placeholderContext, recipeArgs, setupSteps, stepBytes } from './plan.mjs';
@@ -715,9 +716,17 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (!r?.collection || !r.attribute || m.collections.includes(r.collection)) return;
     warn('W-RULE-OUTSIDE', where, `${what} test “${r.attribute}” of NFTs of ${r.collection}, outside the project’s collections: there it reads a Core NFT’s own attributes, never what the project wrote in its Sheet, so the test fails for an NFT that doesn’t carry “${r.attribute}” itself (every Token Metadata or compressed NFT).`, 'Test only the collection, or use Core NFTs that carry the attribute themselves.');
   };
+  /** Whether the words on a Token Metadata print were said (once a spec). */
+  let printsSaid = false;
   /** A rule on what an NFT says (rules.rs): an item of the game's must be a collectible; or a collection is named. */
   const rule = (r, where, what) => {
     if (!r) return;
+    // A print of a Token Metadata master carries its master's collection, but its master's holder makes it without the
+    // collection's authority: the program reads it as in no collection (metadata.rs).
+    if (r.collection && isAddress(r.collection) && !m.collections.includes(r.collection) && !printsSaid) {
+      printsSaid = true;
+      warn('W-RULE-PRINTS', `${where}.collection`, `${what} names the collection ${r.collection}: if it is a Token Metadata collection, a print of one of its NFTs (an edition of a master) doesn’t count, since whoever holds the master makes prints without the collection’s authority; the program reads a print as in no collection. This holds for every rule on a collection in the spec.`, 'Nothing to change: tell holders of prints that only the original NFTs count.');
+    }
     // A gate may list wallets instead (rules.rs Gate::Wallets): a duel's two players, a tournament's entrants.
     // Or a list of any size (rules.rs Gate::List): its root on chain, each player's proof passed as accounts.
     if (r.list !== undefined) {
@@ -908,8 +917,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // most; given only by a box's roll (a shop sells alike units: PrizeNotCovered).
     const drawn = it.drawn ?? [];
     if (drawn.length && !isCollectible(it)) refuse('E-ITEM', `${where}.drawn`, `${label(it)} draws traits, but it is a normal item: only a collectible carries them.`, 'Make it a collectible, or leave "drawn" out.');
+    // Each trait is written as its unit is minted, which one transaction must hold (catalog.rs).
+    tooMany(drawn.length, LIMITS.itemTraits, 'E-ITEM', `${where}.drawn`, `${label(it)} draws ${drawn.length} traits`, 'BadItem', 'Draw fewer: put what goes together in one table’s labels.');
     drawn.forEach((d, i) => {
       const at = `${where}.drawn[${i}]`;
+      if (utf8Bytes(d.attribute ?? '') > LIMITS.traitKeyBytes) refuse('E-ITEM', `${at}.attribute`, `${label(it)}’s trait “${String(d.attribute).slice(0, 24)}…” has a name of ${utf8Bytes(d.attribute)} bytes; the program takes at most ${LIMITS.traitKeyBytes} (BadItem).`, 'Use a shorter name.');
       if (RESERVED_ATTRIBUTES.includes(d.attribute)) refuse('E-ITEM', `${at}.attribute`, `${label(it)} draws “${d.attribute}”, an attribute the program writes itself (BadItem).`, 'Name another attribute.');
       if (drawn.slice(0, i).some((e) => e.attribute === d.attribute)) refuse('E-ITEM', `${at}.attribute`, `${label(it)} draws “${d.attribute}” twice (BadItem).`, 'Draw each attribute once.');
       if (d.table !== undefined && (d.min !== undefined || d.max !== undefined)) refuse('E-ITEM', at, `${label(it)}’s trait “${d.attribute}” names a table and a range.`, 'Keep one.');
@@ -1000,7 +1012,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       const fits = Math.floor(1_200_000 / (52 * (most + 1)) / 100) * 100;
       warn('W-STASH-NAMED', where, `${[...namers.map(([b]) => label(b)), ...named.map((p) => p.by)].join(', ')} name${namers.length + named.length === 1 ? 's' : ''} NFTs of ${label(s)}, which ${[...new Set(intoStash.get(s.key))].join(', ')} put${intoStash.get(s.key).length === 1 ? 's' : ''} NFTs into, so it can grow without end. A named NFT is found by reading the stash’s list, about 52 compute units for each NFT ahead of it${most ? `: a roll of ${label(namers.find(([, n]) => n === most)[0])}, which names ${most}, stops fitting a transaction at about ${fits.toLocaleString('en-US')} NFTs in the stash (its order then waits for its refund)` : ''}${named.length ? `${most ? ', and' : ':'} a prize naming one stops at about 25,000` : ''}. Keep a stash that prizes name under about 1,000 NFTs.`, 'Send what players put in to a stash of its own, and name prizes from a stash only the owner fills; a random pick of a stash costs the same at any size.');
     }
-    if (!(s.nfts ?? []).length && !intoStash.has(s.key)) warn('W-STASH', `${where}.nfts`, `${label(s)} starts empty: until the owner or the authority puts NFTs in (\`loot.stashIx\`), a draw that lands on it is not made and gives back that draw’s worth, no other outcome taking its place, and a box of nothing else sells nothing.`);
+    if (!(s.nfts ?? []).length && !intoStash.has(s.key)) {
+      // A box that stops selling when an outcome runs out (the default) isn't sold at all while it is empty.
+      const stopped = users.filter((b) => b.active !== false && b.whenOut !== 'drawLeft' && !boxBuys(b, m));
+      warn('W-STASH', `${where}.nfts`, `${label(s)} starts empty: until the owner or the authority puts NFTs in (\`loot.stashIx\`), ${stopped.length ? `${stopped.map(label).join(', ')} ${stopped.length === 1 ? 'isn’t' : 'aren’t'} sold at all (it stops selling while an outcome is out, "whenOut": "stopSales"), and ` : ''}a draw that lands on it is not made and gives back that draw’s worth, no other outcome taking its place, and a box of nothing else sells nothing.`);
+    }
     if (!users.length && !named.length) warn('W-STASH', where, `No box and no prize gives an NFT of ${label(s)}: what it holds stays with the game.`, 'Add an outcome { "gives": "stash", "stash": key } to a box, or a prize { "gives": "nft", "stash": key, "nft": address }.');
     // Who takes from it: buyers and every route that rolls those boxes (one NFT a roll), and the prizes naming one.
     const takers = [...new Set([...users.flatMap((b) => [...(b.active !== false ? [b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`] : []), ...rolls.filter((r) => r.box === b.key).map((r) => r.by)]), ...named.map((p) => p.by)])];
@@ -1048,7 +1064,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       for (const key of new Set(given.filter((x) => x.gives === 'item').map((x) => x.item))) {
         const count = given.filter((x) => x.gives === 'item' && x.item === key).length;
         const supply = Number(m.item.get(key)?.supply ?? 0);
-        if (supply > 0 && count > supply) warn('W-OUT-OF-STOCK', `${where}.outcomes[${i}]`, `An outcome of ${label(b)} gives ${count} of ${label(m.item.get(key))}, which has a supply of ${supply}: it needs them all left, so it can never be given, and a draw that lands on it gives back that draw’s worth.`, 'Give fewer, or raise its supply.');
+        if (supply > 0 && count > supply) warn('W-OUT-OF-STOCK', `${where}.outcomes[${i}]`, `An outcome of ${label(b)} gives ${count} of ${label(m.item.get(key))}, which has a supply of ${supply}: it needs them all left, so it can never be given${b.whenOut !== 'drawLeft' && b.active !== false && boxRolls(b, m) ? ', and a box that stops selling while an outcome is out ("whenOut": "stopSales") is never sold' : ', and a draw that lands on it gives back that draw’s worth'}.`, 'Give fewer, or raise its supply.');
       }
     }
     // A fresh outcome's tables come with the answer while they fit what the box's own accounts leave, in outcome order
@@ -1096,7 +1112,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         refuse('E-ODDS', `${where}.slots`, `No slot of ${label(b)} draws its outcome${undrawn.length === 1 ? '' : 's'} ${undrawn.join(', ')}: an outcome no slot draws is never given, so the program refuses the box (BadEntries).`, 'Name each outcome in some slot’s "from", leave "from" out of a slot (it draws among all), or drop the outcome.');
     }
     // Every draw of one open fits one answer of the oracle's (PackTooLarge): a pack past it could only draw its first
-    // cards, so the program refuses the box.
+    // cards, so the program refuses the box. A box that doesn't roll sells by `buy`, the whole purchase in one
+    // transaction, or through the oracle when one `buy` can't carry it (`buyFits`): then the answer's heap counts, and it
+    // can't give a roll, which only `buy` gives (catalog.rs). The heap counts the box's own bytes too (`boxBytes`).
     if (cards > 1 && outs.length) {
       const args = (() => {
         try {
@@ -1106,11 +1124,16 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         }
       })();
       const entries = args?.entries;
-      const extras = { odds: (args?.odds ?? []).length, shares: (args?.shares ?? []).length };
-      if (entries && !drawsFit(entries, slots.map((s) => ({ count: s.count, only: s.from ?? [] })), 1, extras)) {
-        let most = cards - 1;
-        while (most > 1 && !drawsFit(entries, most, 1, extras)) most -= 1;
-        refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here), so the program refuses the box (PackTooLarge).`, 'Fewer cards an open (sell two packs instead of one), fewer outcomes, or fewer prizes in an outcome.');
+      if (entries) {
+        const byBuy = boxRolls(b, m) || Boolean(b.rollsOn) || buyFits(args, cards);
+        const extras = { odds: args.odds.length, shares: args.shares.length, fates: args.fates.length, bytes: boxBytes(args), oracle: !byBuy };
+        if (!byBuy && entries.some((e) => e.prizes.some((p) => p.Roll != null)))
+          refuse('E-ODDS', `${where}.slots`, `${label(b)} gives a roll, which only a sale in one step gives, but ${cards} of what it gives don’t fit one transaction (its accounts, its instructions or its compute), so the program refuses the box (PackTooLarge).`, 'Fewer cards an open, fewer prizes in its outcome, or fewer shares in its split.');
+        else if (!drawsFit(entries, slots.map((s) => ({ count: s.count, only: s.from ?? [] })), 1, extras)) {
+          let most = cards - 1;
+          while (most > 1 && !drawsFit(entries, most, 1, extras)) most -= 1;
+          refuse('E-ODDS', `${where}.slots`, `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here), so the program refuses the box (PackTooLarge).`, 'Fewer cards an open (sell two packs instead of one), fewer outcomes, fewer prizes in an outcome, or a smaller box (fewer odds, shares, slots or outcomes that act on the NFT).');
+        }
       }
     }
     if (cards > 1 && b.rollsOn)
@@ -1316,6 +1339,22 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     }
     if (b.stockOdds && !parts.some((o) => o.gives === 'item' && m.item.get(o.item)?.supply > 0))
       warn('W-ODDS', `${where}.stockOdds`, `${label(b)} has odds that shrink with stock, but none of its items has a limited supply, so nothing changes.`, 'Give its items a supply, or turn stockOdds off.');
+    // What it does once an outcome runs out (order.rs `WhenOut`): only an open of a box that rolls reads it.
+    if (b.whenOut !== undefined && boxBuys(b, m) && drawsOf(b) === 1)
+      warn('W-WHEN-OUT', `${where}.whenOut`, `${label(b)} sells in one step, all of it or nothing, so "whenOut" changes nothing.`, 'Leave "whenOut" out.');
+    if (b.whenOut === 'drawLeft' && boxRolls(b, m)) {
+      // The rarest outcome that gives something, against the likeliest outcome that can run out.
+      const w = weights(b);
+      const total = w.reduce((a, x) => a + x, 0) || 1;
+      const runsOut = (o) => outcomeParts(o).some((x) => x.gives === 'pay' || x.gives === 'stash' || x.gives === 'nft' || (x.gives === 'item' && Number(m.item.get(x.item)?.supply ?? 0) > 0));
+      const giving = outcomes.map((o, i) => i).filter((i) => outcomeParts(outcomes[i]).length);
+      const rare = giving.reduce((r, i) => (r === -1 || w[i] < w[r] ? i : r), -1);
+      const common = outcomes.map((o, i) => i).filter((i) => i !== rare && runsOut(outcomes[i]) && w[i] > w[rare]).reduce((c, i) => (c === -1 || w[i] > w[c] ? i : c), -1);
+      if (rare >= 0 && common >= 0) {
+        const pct = (x) => Math.round(x * 10_000) / 100;
+        warn('W-WHEN-OUT', `${where}.whenOut`, `${label(b)} draws among what is left once an outcome runs out ("whenOut": "drawLeft"): once outcome ${common} runs out, outcome ${rare}’s chance goes from ${pct(w[rare] / total)}% to ${pct(w[rare] / (total - w[common]))}%. Anyone who reads the stock can buy until outcome ${common} is gone and then open for outcome ${rare} at better odds.`, 'Keep "stopSales" (the default) when a rare outcome matters: the box stops selling instead, and every roll stays on the odds written.');
+      }
+    }
   }
   // A fixed prize a pool can't cover is out of stock (order.rs): a draw that lands on it is not made and gives back its
   // worth, a box with nothing else in stock is refused (SoldOut), and a sale in one step is refused (PrizeNotCovered).
@@ -1327,19 +1366,23 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (seed === null || seed >= most) continue;
     const amount = fromUnits(most, tok?.decimals ?? 0);
     const others = [...boxes].filter((x) => x !== box).map(label);
-    warn('W-PRIZE-SEED', `economy.pools.${p.key}.seed`, `“${p.key}” starts with ${fromUnits(seed, tok?.decimals ?? 0)} ${sym}, but a win in ${label(box)} pays ${amount} ${sym}. A fixed prize its pool can’t cover is out of stock: the odds stay as written, so a roll that lands on it before the pool holds ${amount} ${sym} makes no draw and gives back that draw’s worth, no other outcome taking its place (a box with nothing else in stock is refused, SoldOut), and so again whenever a run of wins takes the pool below that${others.length ? ` (${others.join(', ')} pay${others.length === 1 ? 's' : ''} fixed prizes from it too, each out of stock the same way below its own amount)` : ''}.`, `Seed “${p.key}” with at least ${amount} ${sym}; more rides out a run of wins (the simulation suggests how much). For a prize that grows with sales, use a share of the pool ("gives": "share") instead.`);
+    // A box that stops selling when an outcome is out (the default) needs the prize for this purchase's draws and every
+    // draw still waiting for the oracle before it sells at all.
+    const stopped = [...boxes].filter((x) => x.active !== false && x.whenOut !== 'drawLeft' && boxRolls(x, m));
+    const stops = stopped.length ? ` ${stopped.map(label).join(', ')} stop${stopped.length === 1 ? 's' : ''} selling while an outcome is out ("whenOut": "stopSales"): ${stopped.length === 1 ? 'it isn’t' : 'they aren’t'} sold at all while the pool holds less than the prize for that purchase’s draws and every draw still waiting for the oracle.` : '';
+    warn('W-PRIZE-SEED', `economy.pools.${p.key}.seed`, `“${p.key}” starts with ${fromUnits(seed, tok?.decimals ?? 0)} ${sym}, but a win in ${label(box)} pays ${amount} ${sym}. A fixed prize its pool can’t cover is out of stock: the odds stay as written, so a roll that lands on it before the pool holds ${amount} ${sym} makes no draw and gives back that draw’s worth, no other outcome taking its place (a box with nothing else in stock is refused, SoldOut), and so again whenever a run of wins takes the pool below that${others.length ? ` (${others.join(', ')} pay${others.length === 1 ? 's' : ''} fixed prizes from it too, each out of stock the same way below its own amount)` : ''}.${stops}`, `Seed “${p.key}” with at least ${amount} ${sym} for each purchase that may wait for its roll at once; more rides out a run of wins (the simulation suggests how much). For a prize that grows with sales, use a lottery’s pot instead.`);
   }
 
-  // ---- a live box's roll rewritten: an edit of the entries, odds, stock odds, the NFT it rolls on or the fates fails an
+  // ---- a live box's roll rewritten: an edit of the entries, odds, stock odds, `whenOut`, the NFT it rolls on or the fates fails an
   // order that holds a payment, which is refunded; any other roll waiting (a prize, a mission's chest, a recipe's) rolls on
   // the box as edited, so an edit never loses what was spent.
   const published = new Map((economy.live?.published?.boxes ?? []).map((b) => [b.key, b]));
-  const rollOf = (b) => JSON.stringify([b.outcomes ?? [], b.odds ?? [], Boolean(b.stockOdds), b.rollsOn ?? null, b.then ?? null]);
+  const rollOf = (b) => JSON.stringify([b.outcomes ?? [], b.odds ?? [], Boolean(b.stockOdds), b.whenOut ?? 'stopSales', b.rollsOn ?? null, b.then ?? null]);
   for (const b of economy.boxes ?? []) {
     const was = published.get(b.key);
     if (!was || rollOf(was) === rollOf(b)) continue;
     const routes = [...new Set(rolls.filter((x) => x.box === b.key).map(roller))];
-    warn('W-LIVE-ROLLS', `economy.boxes.${b.key}`, `${label(m.box.get(b.key) ?? b)} is live, and this changes its roll (its outcomes, odds, stock odds, the NFT it rolls on or what becomes of it). A purchase still waiting for its roll fails when the change lands, and gets its payment back${routes.length ? `; a roll won on another route (${routes.join(', ')}) holds no payment and rolls on the box as it is then` : '; a roll won on another route holds no payment and rolls on the box as it is then'}.`, 'Publish the change only once no roll of it waits (each settled or refunded), or open a new box with the new roll and point the routes at it.');
+    warn('W-LIVE-ROLLS', `economy.boxes.${b.key}`, `${label(m.box.get(b.key) ?? b)} is live, and this changes its roll (its outcomes, odds, stock odds, what it does when an outcome runs out, the NFT it rolls on or what becomes of it). A purchase still waiting for its roll fails when the change lands, and gets its payment back${routes.length ? `; a roll won on another route (${routes.join(', ')}) holds no payment and rolls on the box as it is then` : '; a roll won on another route holds no payment and rolls on the box as it is then'}.`, 'Publish the change only once no roll of it waits (each settled or refunded), or open a new box with the new roll and point the routes at it.');
   }
 
   // ---- payments

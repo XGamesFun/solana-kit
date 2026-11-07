@@ -5,12 +5,13 @@
 // It assumes the scenario's counts (`scenario.perDay`, default 100 of each player action a day) arrive evenly,
 // odds as written (stock odds start where the table starts), and one ticket per lottery purchase. Shares of a
 // pool (a schedule's, a decision's) are worked out continuously, so a pool that pays a share of itself settles at a level
-// instead of emptying. A prize is a fixed amount, all of it or none. A roll is on its written odds whatever is in stock:
-// a draw that can't be given then isn't made and gives back its worth, which this guide doesn't count (`STOCK_WORDS`).
-// It is a guide, not a promise: the full simulation (js/sim) runs the real program.
+// instead of emptying. A prize is a fixed amount, all of it or none. Money is counted per day while a box sells; when
+// its items, stashes or named NFTs run out (its own opens alone), a box that stops selling (`whenOut` "stopSales") says
+// the day it stops, and one that draws among what is left ("drawLeft") the day each outcome runs out and the odds of
+// the rest from then (`stockWalk`). It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxOrderBytes, roundRentOf } from './plan.mjs';
-import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, lateRunWords, prizeWords, releaseWords, STOCK_WORDS, sharesOf, toBps, toSeconds, toTime, weights } from './model.mjs';
+import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, lateRunWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights, whenOutWords } from './model.mjs';
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
@@ -243,6 +244,76 @@ export function simulate(economy, { now = 0 } = {}) {
     players.network += count * signatures * NETWORK_FEE;
   };
 
+  /**
+   * What box `b`'s items with a supply, stashes and named NFTs come to over the scenario, with `opens` opens a day and
+   * its own opens alone taking from them (pools are walked with their own rows): when an outcome runs out, a box that
+   * stops selling stops (`stopsSellingInDays`), and one that draws among what is left goes on with the rest's chances
+   * rising (`runsOut`: each outcome's day, and every chance from then), until nothing in it is left. An item whose odds
+   * follow its stock (`stockOdds`) never runs out here: its chance shrinks instead. Null when nothing it gives runs out.
+   */
+  const stockWalk = (b, opens) => {
+    const w = weights(b);
+    const draws = drawsOf(b);
+    // What each stock holds at the start, and what one draw of each outcome takes from it.
+    const left = new Map();
+    const stockOf = (x) => {
+      const supply = Number(m.item.get(x.item)?.supply ?? 0);
+      if (x.gives === 'item' && supply > 0 && !b.stockOdds) return [`item:${x.item}`, supply];
+      if (x.gives === 'stash' && m.stash.get(x.stash)) return [`stash:${x.stash}`, (m.stash.get(x.stash).nfts ?? []).length];
+      if (x.gives === 'nft') return [`nft:${x.nft}`, 1];
+      return null;
+    };
+    const needs = (b.outcomes ?? []).map((o) => {
+      const need = new Map();
+      for (const [key, holds] of outcomeParts(o).map(stockOf).filter(Boolean)) {
+        left.set(key, holds);
+        need.set(key, (need.get(key) ?? 0) + 1);
+      }
+      return need;
+    });
+    if (!left.size || !(opens > 0)) return null;
+    const stops = b.whenOut !== 'drawLeft';
+    const there = (i) => [...needs[i]].every(([k, n]) => left.get(k) >= n);
+    const chances = (alive) => {
+      const sum = alive.reduce((n, i) => n + w[i], 0);
+      return w.map((x, i) => (sum && alive.includes(i) ? round((x / sum) * 100, 6) : 0));
+    };
+    let alive = w.map((_, i) => i).filter(there);
+    let day = 0;
+    const runsOut = [];
+    const out = (i) => ({ outcome: i, gives: (b.outcomes[i].gives === 'bundle' ? (b.outcomes[i].prizes ?? []).map((x) => x.item ?? x.stash ?? x.gives) : [b.outcomes[i].item ?? b.outcomes[i].stash ?? b.outcomes[i].gives]).join(' + ') });
+    const gone = w.map((_, i) => i).filter((i) => !alive.includes(i));
+    if (gone.length) {
+      if (stops) return { whenOut: 'stopSales', stopsSellingInDays: 0, by: gone.map(out) };
+      runsOut.push({ inDays: 0, outcomes: gone.map(out), chancesAfter: chances(alive) });
+    }
+    while (alive.length) {
+      const sum = alive.reduce((n, i) => n + w[i], 0);
+      // Each stock's take a day, by the outcomes still there.
+      const rate = new Map();
+      for (const i of alive) for (const [k, n] of needs[i]) rate.set(k, (rate.get(k) ?? 0) + (opens * draws * w[i] * n) / sum);
+      const next = [...rate].map(([k, r]) => ({ k, t: left.get(k) / r })).sort((a, z) => a.t - z.t)[0];
+      if (!next || day + next.t > days) break;
+      day += next.t;
+      for (const [k, r] of rate) left.set(k, Math.max(0, left.get(k) - r * next.t));
+      left.set(next.k, 0);
+      const ended = alive.filter((i) => !there(i));
+      alive = alive.filter(there);
+      if (stops) return { whenOut: 'stopSales', stopsSellingInDays: round(day, 4), by: ended.map(out) };
+      runsOut.push({ inDays: round(day, 4), outcomes: ended.map(out), chancesAfter: chances(alive) });
+    }
+    if (stops) return null;
+    return runsOut.length ? { whenOut: 'drawLeft', runsOut, ...(alive.length ? {} : { stopsSellingInDays: runsOut.at(-1).inDays }) } : null;
+  };
+  /** The walk of a box's stock in words (`stockWalk`). */
+  const stockNote = (b, walk) => {
+    const named = (list) => list.map((x) => `outcome ${x.outcome} (${x.gives})`).join(', ');
+    if (walk.whenOut === 'stopSales')
+      return `“${b.name}” stops selling ${walk.stopsSellingInDays ? `in about ${walk.stopsSellingInDays} days` : 'from the start'}, when ${named(walk.by)} runs out (its own opens alone): it isn’t sold while any outcome couldn’t cover a purchase and those still waiting for the oracle ("whenOut": "stopSales"), so every roll is on the odds as written. Restock it, or edit the box, to sell again; "drawLeft" would keep selling, the rest’s chances rising.`;
+    const steps = walk.runsOut.map((r) => `${named(r.outcomes)} ${r.inDays ? `in about ${r.inDays} days` : 'from the start'}${r.chancesAfter.some((c) => c > 0) ? `, then ${r.chancesAfter.map((c, i) => (c > 0 ? `outcome ${i} ${round(c, 2)}%` : null)).filter(Boolean).join(', ')}` : ''}`);
+    return `“${b.name}” keeps selling as its outcomes run out ("whenOut": "drawLeft"; its own opens alone): ${steps.join('; ')}${walk.stopsSellingInDays !== undefined ? `; with nothing left, it stops selling` : ''}. Each roll draws among what is left by the written weights, so a player can empty a common outcome to make a rare one likelier; "stopSales" keeps the odds as written.`;
+  };
+
   // ---- boxes
   const boxes = m.boxes.map((b) => {
     const token = b.currency ?? game;
@@ -327,6 +398,9 @@ export function simulate(economy, { now = 0 } = {}) {
     const realCost = realCostOf({ price, token, isSol, oracle, signatures, rent: collectibles * COLLECTIBLE_RENT, rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent', held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleUnits(b, m) + orderRent(b, m, true) });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);
+    // What it gives that runs out, as the box says (`whenOut`): it stops selling, or draws among what is left.
+    const walk = !bought && b.active !== false ? stockWalk(b, opens) : null;
+    if (walk) notes.push(stockNote(b, walk));
     return {
       key: b.key,
       name: b.name,
@@ -343,8 +417,10 @@ export function simulate(economy, { now = 0 } = {}) {
       playerFee: PLAYER_FEE,
       oracleFee: oracle,
       realCost,
-      // What it gives can run out, which a roll doesn't re-weigh (`STOCK_WORDS`).
+      // What it gives can run out, and what the box does then (`whenOut`, `whenOutWords`).
       ...(!bought && outcomes.flatMap((o) => (o.gives === 'bundle' ? o.prizes : [o])).some((o) => o.gives === 'pay' || o.gives === 'stash' || o.gives === 'nft' || (o.gives === 'item' && Number(m.item.get(o.item)?.supply ?? 0) > 0)) ? { limitedStock: true } : {}),
+      ...(!bought ? { whenOut: b.whenOut === 'drawLeft' ? 'drawLeft' : 'stopSales' } : {}),
+      ...(walk ? { stock: walk } : {}),
       ...(isSol && known && price ? { returnOfRealCostPercent: round((value / (price + extrasSol)) * 100, 4) } : {}),
     };
   });
@@ -768,7 +844,7 @@ export function simulate(economy, { now = 0 } = {}) {
       row.swingPerDay = round(Math.sqrt(p.variance), 6);
       const weekly = Math.sqrt(p.variance * 7);
       if (row.lasts !== 'runs dry' && p.seed < 3 * weekly)
-        notes.push(`The pool “${p.key}” ${row.lasts === 'grows' ? 'takes in more than it pays on average' : row.lasts === 'settles' ? 'settles on average' : 'pays even on average'}, but luck moves it by about ±${round(row.swingPerDay, 4)} ${symbol(p.currency)} a day (±${round(weekly, 4)} a week), against a seed of ${p.seed}. While it can’t cover a fixed prize the box stops selling, and a prize rolled while it ran short pays only what it held, so a bad week stalls sales and shrinks wins until it refills. A seed of about ${round(3 * weekly, 2)} (three times a week’s swing) rides out almost any week.`);
+        notes.push(`The pool “${p.key}” ${row.lasts === 'grows' ? 'takes in more than it pays on average' : row.lasts === 'settles' ? 'settles on average' : 'pays even on average'}, but luck moves it by about ±${round(row.swingPerDay, 4)} ${symbol(p.currency)} a day (±${round(weekly, 4)} a week), against a seed of ${p.seed}. While it can’t cover a fixed prize, a box that stops selling when out (the default) sells nothing, and one that draws among what is left never lands on that prize, so a bad week stalls sales or takes the big wins away until it refills. A seed of about ${round(3 * weekly, 2)} (three times a week’s swing) rides out almost any week.`);
     }
     if (row.lasts === 'runs dry') notes.push(`The pool “${p.key}” pays out more than comes in: it lasts about ${row.lastsDays} days from its seed of ${p.seed} ${symbol(p.currency)}.`);
     return row;
@@ -898,7 +974,7 @@ export function explain(sim, economy) {
     const part = (o) => (o.gives === 'pay' ? `${n(o.amount)} ${sym(o.token)} from ${o.pool}` : o.gives === 'mint' ? `${n(o.amount)} ${sym(o.token)}, minted` : o.gives === 'stash' ? `an NFT of the stash “${o.stash}”, at random` : o.gives === 'nft' ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”` : o.gives === 'roll' ? `a roll of “${o.box}”` : o.gives === 'item' ? `${o.item}${o.worth !== null ? ` (worth ${n(o.worth)})` : ' (no value given)'}` : o.gives);
     for (const o of b.outcomes) lines.push(`  ${n(o.chance)}%: ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`);
     if (b.unpriced.length) lines.push(`  Give ${b.unpriced.join(', ')} a "value" to count them in the return.`);
-    if (b.limitedStock) lines.push(`  ${STOCK_WORDS}.`);
+    if (b.limitedStock) lines.push(`  ${whenOutWords(m.box.get(b.key))}.`);
   }
   for (const it of sim.items) lines.push(`Shop “${it.name}”: ${n(it.price)} ${sym(it.token)}; ${inAll(it.realCost)}.`);
   for (const p of sim.payments) lines.push(`Payment “${p.name}”: ${p.atLeast ? 'at least ' : ''}${n(p.amount)} ${sym(p.token)}; ${inAll(p.realCost)}.`);

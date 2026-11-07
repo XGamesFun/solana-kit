@@ -149,13 +149,13 @@ test('a purchase of more cards than one answer holds is several orders in one tr
   const wallet = counting(player);
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
   const listing = (await app.boxes()).find((l) => l.key === 'booster');
-  // One answer draws 67 cards of a two-entry box of items (`drawsFit`): thirteen boosters an order, each open's slots counted
-  // too (`opensAnOrder`).
+  // One answer draws some 60 cards of a two-entry box of items (`drawsFit`, the box's own bytes counted): twelve boosters an
+  // order, each open's slots counted too (`opensAnOrder`; the program refuses thirteen, PackTooLarge).
   const box = loot.decode('LootBox', (await w.chain.rpc.account(loot.pda.box(spec.live.project, spec.boxes.find((b) => b.key === 'booster').id))).data);
-  assert.equal(loot.opensAnOrder(box), 13);
+  assert.equal(loot.opensAnOrder(box), 12);
   const got = await app.openBox('booster', { listing, count: 14 });
   assert.equal(wallet.prompts, 1, 'one wallet prompt for fourteen packs');
-  assert.equal(got.orders.length, 2, 'seventy cards: an order of sixty-five, one of five');
+  assert.equal(got.orders.length, 2, 'seventy cards: an order of sixty, one of ten');
   assert.equal(got.won.length, 70);
   assert.equal((await app.collectibles()).length, 70);
 });

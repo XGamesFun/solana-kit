@@ -26,7 +26,7 @@ const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: w
 
 const shop = await app.shop();            // [{ key, name, price, priceUnits, currency, active, left }]
 await app.buy('badge', { listing: shop.find((l) => l.key === 'badge') });  // the price shown is the most it pays
-const boxes = await app.boxes();          // each box's price and outcome chances
+const boxes = await app.boxes();          // each box's price, outcome chances and whenOut (show it: stops selling, or draws among what is left)
 await app.openBox('chest', { listing: boxes.find((l) => l.key === 'chest') }); // pays, waits for the roll, settles
 await app.pay('entry');                   // a payment of the spec
 const lotteries = await app.lotteries(); // [{ key, name, price, currency, status, round, sold, drawsAt, nftTicket, … }]

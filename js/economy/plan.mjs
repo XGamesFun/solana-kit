@@ -104,6 +104,7 @@ export function boxArgs(b, m) {
     rise: rise(b.rise, t),
     fall: fall(b.fall, t, m.now),
     stock_odds: !!b.stockOdds,
+    when_out: b.whenOut === 'drawLeft' ? 'DrawLeft' : 'StopSales',
     active: b.active !== false,
     shares: shares(b.split, m),
     // What one open draws: each slot so many draws among the outcomes it names (all, when none), no outcome twice
@@ -945,7 +946,7 @@ export const recordBytesOf = (kind, body) => {
   const args = body.args;
   const base = {
     Item: () => ({ project: NOBODY, item_id: 0, ...placeholders(args), issued: 0, voided: 0, compressed: false }),
-    LootBox: () => ({ project: NOBODY, box_id: 0, ...placeholders(args), version: 0 }),
+    LootBox: () => ({ project: NOBODY, box_id: 0, ...placeholders(args), in_flight: 0n, version: 0 }),
     Recipe: () => ({ project: NOBODY, id: 0, version: 0, ...placeholders(args) }),
     Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),
     // Its terms and its round number: each round keeps the rest in a record of its own.

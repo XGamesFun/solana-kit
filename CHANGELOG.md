@@ -49,6 +49,34 @@ of 0.23 carries over. `js/test/fixtures/pinned.txt` still pins the deployed buil
   refresh seats, since a level counts from when it is written.
 - Tests: `js/test/farm-ends.test.mjs`, `js/test/strict-rules.test.mjs`.
 
+### After the fresh audit of c34abc4
+
+- **When an outcome runs out, the project chooses** (`when_out`, `WhenOut`; the spec's box `whenOut`). `"stopSales"`, the
+  default: a purchase is refused (`SoldOut`) unless every outcome covers its draws and those of purchases still waiting
+  for their answer (`LootBox.in_flight`, `Order.reserved`), so every roll is on the odds written. `"drawLeft"`: it keeps
+  selling and draws among what is left, so a player can empty a common outcome to make a rare one likelier. The schema,
+  the plan (`when_out`, `StopSales` when left out, also in `withDefaults`), the checker (`W-WHEN-OUT`: the rare's chance
+  before and after the likeliest outcome that runs out, or a box of one step it changes nothing for; `W-OUT-OF-STOCK`,
+  `W-STASH` and `W-PRIZE-SEED` say a box that stops selling isn't sold at all then; `W-LIVE-ROLLS` counts a change of it),
+  `explain` (`whenOutWords`, replacing `STOCK_WORDS` for a box that sells), the guide, the skill and `app.boxes()`
+  (`whenOut`) follow it. `simulate` walks each box's items with a supply, stashes and named NFTs (`stock`): the day a box
+  that stops selling stops, or the day each outcome of one that draws among what is left runs out and the chances after.
+- **The answer writes the box; a refund names it.** `callbackRollIx` marks the box writable. `refundIx` passes the box
+  (`loot_box`) while the order counts draws in it (`reserved` above 0, or not read), so `app.refund` and a `refund`
+  claim do too; the program refuses a refund without it (`ItemMismatch`).
+- **A compressed NFT's Sheet closes against its tree.** `closeSheetIx` takes `tree`: the record proven empty goes as
+  `tree` (`pda.leaf(nft)` by default) and the tree in the edition's place.
+- **Box capacity.** `drawsFit` counts the heap the program now measures (`tests/roll_heap.rs`) and the box's own bytes
+  (`boxBytes`: odds, gate, shares, subject, slots, fates) and its fates' compute. `buyFits` mirrors `catalog::buy_fits`:
+  a box that doesn't roll and that one `buy` can't carry sells through the oracle, its heap counted, and can't give a roll
+  (`PackTooLarge`, refused by `check` before signing). `opensAnOrder` counts the same: twelve 5-card opens of a two-entry
+  box an order, 20 draws of pool tokens through the oracle, 64 of one item (past 14, no `buy` carries them).
+- **Caps.** An item draws at most 64 traits, each name at most 64 bytes (`MAX_ITEM_TRAITS`, `MAX_TRAIT_KEY`,
+  `LIMITS.itemTraits`, `LIMITS.traitKeyBytes`): `check` refuses a spec over them and `upsertIx` a record (`BadItem`).
+- **Words.** A rule on a collection doesn't count a Token Metadata print (`W-RULE-PRINTS` once a spec, and `explain`); a
+  forfeit writes no growth (`docs/program.md`); a table never written reads as out of stock.
+- Tests: `js/test/when-out.test.mjs`; `strict-rules.test.mjs` empties an entry by another route after the purchase.
+
 ## 0.23.0 (not released on npm; the program is on devnet)
 
 For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no account of 0.22.0 carries over.

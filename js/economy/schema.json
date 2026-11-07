@@ -653,7 +653,7 @@
         },
         "drawn": {
           "type": "array",
-          "description": "A fresh collectible: traits drawn for each unit, in order, written on it. Each from a table (`\"table\": key`, a row by weight among those in stock, drawn atomically with the box's roll) or a range (`\"min\"`/`\"max\"`, every whole number as likely, drawn at the mint from the same answer). Its name and link may contain `{attribute}` for each, beside `{serial}`. A fresh item is given only by a box's roll.",
+          "description": "A fresh collectible: at most 64 traits drawn for each unit, in order, written on it, each attribute's name at most 64 bytes. Each from a table (`\"table\": key`, a row by weight among those in stock, drawn atomically with the box's roll) or a range (`\"min\"`/`\"max\"`, every whole number as likely, drawn at the mint from the same answer). Its name and link may contain `{attribute}` for each, beside `{serial}`. A fresh item is given only by a box's roll.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -964,6 +964,14 @@
           "type": "boolean",
           "default": false,
           "description": "Each item's chance shrinks with what is left of its supply."
+        },
+        "whenOut": {
+          "enum": [
+            "stopSales",
+            "drawLeft"
+          ],
+          "default": "stopSales",
+          "description": "What a box that rolls does once an outcome can't be given (an item sold out, a pool short of its prize, a stash empty). \"stopSales\" (the default): it isn't sold while any outcome couldn't cover this purchase's draws and those of purchases still waiting for their answer, so every roll is on the odds written, and the project restocks or edits the box to sell again. \"drawLeft\": it keeps selling, and a roll draws among the outcomes still there by their written weights, so the others' chances rise as one runs out: a player can empty a common outcome to make a rare one likelier. A box selling a rare prize keeps \"stopSales\"."
         },
         "active": {
           "type": "boolean",
@@ -2218,7 +2226,7 @@
         },
         "collection": {
           "$ref": "#/$defs/address",
-          "description": "Any NFT of this collection: a Metaplex Core collection, or the mint of a Token Metadata collection its NFTs are verified in. Leave it and `item` out for the game's own collection."
+          "description": "Any NFT of this collection: a Metaplex Core collection, or the mint of a Token Metadata collection its NFTs are verified in (a print of a master, which its holder makes without the collection's authority, counts as in no collection). Leave it and `item` out for the game's own collection."
         },
         "attribute": {
           "type": "string",

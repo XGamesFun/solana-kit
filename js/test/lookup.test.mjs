@@ -99,7 +99,8 @@ function bigBox(seed, { standing = null } = {}) {
     return { owner, asset: w.make(1, owner) };
   });
   const shares = holders.map((h) => ({ to: { Holder: [h.asset] }, bps: 500 }));
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop(relics.map((nft) => ({ Nft: { stash: 4, nft } })), 1_000_000_000), drop([{ Nft: { stash: 4, nft: relics[0] } }])], { shares }) } });
+  // It draws among what is left (`DrawLeft`): a box that stops selling refuses an entry of several named NFTs of one stash.
+  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop(relics.map((nft) => ({ Nft: { stash: 4, nft } })), 1_000_000_000), drop([{ Nft: { stash: 4, nft: relics[0] } }])], { shares, when_out: 'DrawLeft' }) } });
   w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Stash: [5] }])]) } });
   const kp = freshKeypair();
   w.chain.airdrop(kp.address, 10_000_000_000n);

@@ -57,12 +57,22 @@ money; it holds no files and serves nothing.
   card it may mint, in the purchase's one prompt, and the key sends back what it didn't spend. A plain compressed card
   costs none. A pack of fixed cards (nothing random) is bought in one step, its cards minted in the purchase; a pack
   too big for one transaction settles in parts (about 14 Core cards a part), which the page sends.
-- **A prize the program can't give right now is out of stock, not an error, and the odds stay as written.** A prize in a
-  token with a transfer hook (or confidential transfers) is never moved by a roll; a fixed prize its pool can't cover in
-  full, an item sold out or a stash emptied can't be given: a draw that lands on it is not made, no other outcome takes
-  its place, and that draw's worth of the price goes back at the settle. With no draw made a paid open is refunded and a
-  free roll waits to be asked again, and a box with nothing in stock is refused (SoldOut). `xsolana_check` warns of each
-  (W-OUT-OF-STOCK, W-PRIZE-SEED). Say so when they ask what happens when a prize pool runs out.
+- **When an outcome runs out, the project chooses what its box does (`whenOut`), and should hear the trade-off.**
+  An outcome runs out when its item sells out, its pool can't cover its whole prize, or its stash empties. With
+  `"stopSales"` (the default) the box isn't sold while any outcome couldn't cover this purchase and those still waiting
+  for the oracle: every roll is on the odds written, nobody can buy their way to a rare once the commons are gone, and
+  the project restocks or edits the box to sell again (a pool holds its prize for every draw waiting; a named NFT is in
+  one waiting purchase at a time). With `"drawLeft"` the box keeps selling and draws among what is left, by the written
+  weights: the others' chances rise as one runs out, so anyone watching the stock can empty a common outcome and then
+  open for the rare at better odds. Put it as: "stop selling keeps your odds honest; keep selling never stalls but lets
+  a player tilt the odds". A box selling a rare prize keeps the default; `drawLeft` suits a box of alike prizes, or one
+  only other routes roll (a grant's, a mission's), where nothing is sold. `xsolana_check` says what each does to the
+  box (W-WHEN-OUT, W-OUT-OF-STOCK, W-PRIZE-SEED, W-STASH) and `xsolana_simulate` the day it stops or each outcome runs out.
+- **A prize the program can't give right now is out of stock, not an error.** A prize in a token with a transfer hook
+  (or confidential transfers) is never moved by a roll. An outcome emptied by another route after a purchase (another
+  box sharing its pool, item or stash) can't be given: a draw that lands on it is not made, no other outcome takes its
+  place, and that draw's worth of the price goes back at the settle. With no draw made a paid open is refunded and a
+  free roll waits to be asked again, and a box with nothing in stock is refused (SoldOut).
 - **The oracle's answer reads at most 21 accounts**, so a box's distinct prize accounts (its items, pools, stashes,
   the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
   `xsolana_check` counts them.

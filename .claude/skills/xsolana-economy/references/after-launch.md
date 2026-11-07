@@ -55,10 +55,12 @@ the authority with `collectible` `Set`, by a farm's growth, or by anyone proving
 
 A new mission is a new farm: add it to the spec and publish again; `runs` ends it that long after it goes live. Near the end of a farm that shares what lands, fund it at least its release span (its longest lock, a day at least) before the end: what is not released by the end, and what a seat forfeits after it, stays in its rewards vault, where the authority may take back what is free (`loot.moveTokensIx` with `from: { Farm: [id] }`), never what the farm owes its seats. No seat needs a refresh at its end. If rewards cannot move, unstaking can explicitly forfeit them.
 
-Changing a live box's roll (its outcomes, odds, `stockOdds`, `rollsOn`, `then`) fails a purchase still waiting for its
+Changing a live box's roll (its outcomes, odds, `stockOdds`, `whenOut`, `rollsOn`, `then`) fails a purchase still waiting for its
 roll, and an auction's roll lot, each of which gets its payment back at once (`W-LIVE-ROLLS`). Any other roll waiting (a
 grant's, a mission's chest, a lottery's place, a recipe's) holds no payment and rolls on the box as edited: nothing spent is
-lost. A roll asked and left unanswered 7 days can be refunded when it holds a payment or an NFT. Its price, rise, fall, split, switch, window and gate change freely. A set's way out (the recipe that unbinds it)
+lost. A roll asked and left unanswered 7 days can be refunded when it holds a payment or an NFT (its refund names the
+box, whose count of draws waiting it leaves: `app.refund` does). A box that stops selling when an outcome runs out (the
+default) sells again once the project restocks it (more units, tokens into its pool, NFTs into its stash) or edits it. Its price, rise, fall, split, switch, window and gate change freely. A set's way out (the recipe that unbinds it)
 should take no `pay` line (`W-UNBIND-PAY`): a recipe with one waits while the project is paused or the platform
 suspends it, and the pieces stay locked in their farm meanwhile.
 

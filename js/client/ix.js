@@ -215,6 +215,19 @@ const stored = (shares = []) => {
   return shares;
 };
 
+/** The most traits a fresh item draws (`MAX_ITEM_TRAITS`, not in the IDL): each is written as its unit is minted, which
+ * one transaction must hold. */
+export const MAX_ITEM_TRAITS = 64;
+/** The longest name a fresh item's trait has, in bytes (`MAX_TRAIT_KEY`, not in the IDL). */
+export const MAX_TRAIT_KEY = 64;
+/** An item's `traits`, refused here past the program's caps (`BadItem` when the owner signs). */
+const traitsInCaps = (traits = []) => {
+  if (traits.length > MAX_ITEM_TRAITS) throw new Error(`An item draws at most ${MAX_ITEM_TRAITS} traits; this one draws ${traits.length} (BadItem).`);
+  const long = traits.find((t) => utf8(String(t.key)).length > MAX_TRAIT_KEY);
+  if (long) throw new Error(`A trait's name is at most ${MAX_TRAIT_KEY} bytes; “${String(long.key).slice(0, 24)}…” is ${utf8(String(long.key)).length} (BadItem).`);
+  return traits;
+};
+
 export const shareAccounts = (project, shares, mint, options) => shares.flatMap((s) => destinationAccounts(project, s.to, mint, options));
 
 /**
@@ -621,7 +634,7 @@ export function withDefaults(def) {
   if (kind === 'Item') {
     args.collection ??= NO_ADDRESS;
     // A fresh item's traits (`Item::traits`): none for one whose units are all alike.
-    args.traits ??= [];
+    args.traits = traitsInCaps(args.traits ?? []);
   }
   if (kind === 'Box') {
     stored(args.shares);
@@ -632,6 +645,9 @@ export function withDefaults(def) {
     if (!Array.isArray(args.entries)) throw new Error('A box needs its entries (`entries`): what its roll can give, each with its weight.');
     args.entries = args.entries.map((e) => ({ prizes: [], ...e }));
     args.subject ??= null;
+    // What it does once an entry can't be given (`WhenOut`): stop selling while any entry couldn't cover the draws of
+    // a purchase and those waiting for their answer (the default), or draw among what is left ('DrawLeft').
+    args.when_out ??= 'StopSales';
     // A fate's `then`: null sends the NFT back to its player; 'Burn', { Give: [wallet] } or { Stash: [id] }.
     args.fates = (args.fates ?? []).map((f) => ({ ...f, then: f.then ?? null, shifts: (f.shifts ?? []).map((s) => ({ from_now: false, ...s })) }));
   }
@@ -856,7 +872,8 @@ export function callbackRollIx({ order, orderState, box, boxAddress, randomness,
   const keys = [
     meta(pda.oracleIdentity(), true, false),
     meta(order, false, true),
-    meta(boxAddress ?? orderState.loot_box, false, false),
+    // Written: the order's draws leave the box's `in_flight`.
+    meta(boxAddress ?? orderState.loot_box, false, true),
     meta(ticketOf(order, orderState.asked_first), false, false),
     ...entryAccounts(orderState.project, box.entries, items),
   ];
@@ -1108,7 +1125,8 @@ export const INCINERATOR = '1nc1nerator11111111111111111111111111111111';
  * Gives an order's payment back to its player, into their account of the mint (`signer`, anyone, opens it when it is
  * not there): an order whose roll failed or never came. A rolled order is settled, never refunded
  * (`orderRefundable`). A purchase counted against a box's limit for each
- * wallet is given back. `extra`: a hook's or a memo's accounts.
+ * wallet is given back. A purchase that counts its draws in its box's `in_flight` (`order.reserved`, a box that stops
+ * selling when an entry runs out) names the box, whose count it leaves. `extra`: a hook's or a memo's accounts.
  */
 export function refundIx({ signer, orderAddress, order, subject, programs, extra = [] }) {
   const project = order.project;
@@ -1129,6 +1147,8 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
       vault: vault(project, order.mint, tokenProgram),
       player_token: ata(order.player, order.mint, tokenProgram),
       counts: order.counted != null ? pda.counts(project, order.player) : null,
+      // Required while the order counts draws in its box (`reserved`); an order read without the field names it too.
+      loot_box: order.reserved == null || BigInt(order.reserved) > 0n ? order.loot_box : null,
       ...on.accounts,
     },
     { remaining: [...on.proof, ...tailOf(extra)], writable: on.writable },
@@ -2082,12 +2102,14 @@ export function withLeafCloses(instructions) {
 /**
  * Anyone closes the Sheet of an NFT that is burned: `burned` is what shows it (the Core asset's own address, burned to
  * one byte; a Token Metadata mint holding none; or a compressed NFT's record proving its leaf burned). Its rent goes to
- * the project's `treasury` wallet. A compressed NFT's closes only on a record proven empty (its data hash all zeros: a
- * live leaf of the default owner is not burned). A Token Metadata NFT's (`tokenMetadata`: true, or its kind) also names its edition,
- * which must be closed too: its mint holds none, with no mint authority but its edition (`NotBurned` otherwise).
+ * the project's `treasury` wallet. A compressed NFT's (`tree`: the tree it was minted in) closes only on a record proven
+ * empty (its data hash all zeros: a live leaf of the default owner is not burned) that still reads against that tree,
+ * or whose tree is gone: the tree goes in the edition's place, and `burned` defaults to the NFT's record
+ * (`pda.leaf`). A Token Metadata NFT's (`tokenMetadata`: true, or its kind) names its edition, which must be closed
+ * too: its mint holds none, with no mint authority but its edition (`NotBurned` otherwise).
  */
-export const closeSheetIx = ({ project, nft, burned = nft, treasury, tokenMetadata: tm = null }) =>
-  lootIx('close_leaf', {}, { record: pda.sheet(project, nft), tree: burned, payer: treasury, project, edition: tm ? tokenMetadata.edition(nft) : null });
+export const closeSheetIx = ({ project, nft, tree = null, burned = tree ? pda.leaf(nft) : nft, treasury, tokenMetadata: tm = null }) =>
+  lootIx('close_leaf', {}, { record: pda.sheet(project, nft), tree: burned, payer: treasury, project, edition: tm ? tokenMetadata.edition(nft) : tree });
 
 /**
  * Anyone proves a compressed NFT's leaf (`compressed` from `compressedFromDas`): put it before the instruction that

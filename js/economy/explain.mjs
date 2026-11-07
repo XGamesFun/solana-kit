@@ -3,7 +3,7 @@
 // going live costs, and what the owner must know. Deterministic. Pure.
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
-import { boostReadsGrowth, boxBuys, farmEndWords, lateRunWords, listOf, lotterySplit, model, outcomeParts, placeOf, prizeLine, prizeRolls, prizes, prizeWords, rollsOf, sharesOf, stashNfts, STOCK_WORDS, toSeconds } from './model.mjs';
+import { boostReadsGrowth, boxBuys, farmEndWords, lateRunWords, listOf, lotterySplit, model, outcomeParts, placeOf, prizeLine, prizeRolls, prizes, prizeWords, rollsOf, sharesOf, stashNfts, toSeconds, whenOutWords } from './model.mjs';
 import { farmEnds, playSteps } from './plan.mjs';
 import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 
@@ -26,7 +26,7 @@ function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, 
 const ruleWords = (r) => {
   if (!r) return '';
   if (r.wallets) return `they are one of the ${r.wallets.length} wallets it names`;
-  const what = r.item ? `a “${r.item}”` : r.collection ? `an NFT of the collection ${r.collection.slice(0, 4)}…` : 'one of the game’s collectibles';
+  const what = r.item ? `a “${r.item}”` : r.collection ? `an NFT of the collection ${r.collection.slice(0, 4)}… (not a Token Metadata print)` : 'one of the game’s collectibles';
   const time = { ahead: ` whose ${r.attribute} is a time still to come`, passed: ` whose ${r.attribute} is a time past (or none)` }[r.time];
   return `${what}${r.atLeast !== undefined ? ` with ${r.attribute} at least ${r.atLeast}` : r.equals !== undefined ? ` whose ${r.attribute} is “${r.equals}”` : time ?? (r.attribute ? ` with a ${r.attribute}` : '')}`;
 };
@@ -107,12 +107,12 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       return kind === 'lottery' ? `${r.route} of the lottery “${part?.name ?? key}”` : `${named[r.route] ?? kind} “${part?.name ?? key}”`;
     }))];
     if (src.active === false && (src.rollsOn || by.length)) {
-      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} The winner or the project’s keys ask the oracle for a roll, and settle it (the oracle's fee is the asker's). A roll that holds no payment is never refunded and never lost: an edit of the box leaves it to roll on the box as it is then; one holding a payment or an NFT that the oracle leaves unanswered for 7 days can be refunded. ${STOCK_WORDS}.`);
+      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} The winner or the project’s keys ask the oracle for a roll, and settle it (the oracle's fee is the asker's). A roll that holds no payment is never refunded and never lost: an edit of the box leaves it to roll on the box as it is then; one holding a payment or an NFT that the oracle leaves unanswered for 7 days can be refunded. ${whenOutWords(src, { sold: false })}.`);
       continue;
     }
     const verb = boxBuys(src, m) ? 'Buy' : 'Open';
     const oneStep = boxBuys(src, m) ? ' It sells in one step: the price is split and what it gives handed over in the same transaction.' : '';
-    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? (boxBuys(src, m) ? ' It sells only while its pools hold every fixed prize.' : ' A prize won is set aside for its winner at once.') : ''}${b.limitedStock ? ` ${STOCK_WORDS}.` : ''}${!boxBuys(src, m) ? ' An edit of the box’s roll fails a purchase still waiting, for its refund.' : ''}${oneStep}`);
+    actions.push(`${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? (boxBuys(src, m) ? ' It sells only while its pools hold every fixed prize.' : ' A prize won is set aside for its winner at once.') : ''}${b.limitedStock ? ` ${whenOutWords(src)}.` : ''}${!boxBuys(src, m) ? ' An edit of the box’s roll fails a purchase still waiting, for its refund.' : ''}${oneStep}`);
   }
   for (const p of sim.payments) actions.push(`Pay “${p.name}”: ${p.atLeast ? `whatever the player chooses, at least ${num(p.amount)} ${sym(p.token)} (the page keeps the least; the chain takes any amount)` : `${num(p.amount)} ${sym(p.token)}`}, ${inAll(p.realCost)}. The money: ${splitOf(m.payments.find((x) => x.key === p.key)?.split, ['payer', 'payment'])}.`);
   for (const r of sim.recipes) actions.push(`Craft “${r.name}”: ${r.takes.join(' + ') || 'nothing'} → ${r.gives.join(' + ') || 'nothing'} (+ ${fee} SOL player fee).`);
