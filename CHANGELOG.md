@@ -7,7 +7,7 @@ tools see them.
 ## 0.25.0: a prize never shifts to a later round (unreleased; the program is not on devnet yet)
 
 For the program's 0.25.0: the IDL, the client, the spec and the docs follow it, and no account of 0.24 carries over:
-make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin the local build (sha256 93eb666d…, 1,739,816
+make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin the local build (sha256 9397b6fa…, 1,739,648
 bytes; slot `-` until it is deployed, so `npm run fixtures` can't fetch it yet: copy the build's `target/deploy/loot.so`
 into `js/test/fixtures`, or set `XSOLANA_PROGRAM_DIR`).
 

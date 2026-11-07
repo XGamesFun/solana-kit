@@ -29,6 +29,6 @@ bubblegum.so                     BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY ma
 mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  mainnet upgradeable fd55664396a9589330bed7e9e0c6b579781744d53f4602d2f0cfb2eacb69fcc5 2179480 339792668 -
 mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
 vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
-loot.so                          9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ  devnet  upgradeable 93eb666d808e49759b537fec062e4a4b74ae76a9b51fa3ee7d9fbbbdd854b83b 1739816 - -
+loot.so                          9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ  devnet  upgradeable 9397b6fa7f75dbb6701272ba3a4600e5778fba7b296373f26fdb04b725c59a55 1739648 - -
 mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
 test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -
