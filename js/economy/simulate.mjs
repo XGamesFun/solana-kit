@@ -11,7 +11,7 @@
 // the rest from then (`stockWalk`). It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
 import { boxOrderBytes, roundRentOf } from './plan.mjs';
-import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, lateRunWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights, whenOutWords } from './model.mjs';
+import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settleUnits, holdsRent, outcomeParts, SETTLE_RENT_UNIT, FEES, LAMPORTS_PER_SOL, ORACLE_FEE, RENT_PER_BYTE, SIGNATURE_FEE, destination, listOf, keepsPot, lotterySplit, model, placeOf, prizeLine, prizePool, prizeToken, farmEndWords, lateRunWords, prizeWords, releaseWords, sharesOf, toBps, toSeconds, toTime, weights, whenOutWords } from './model.mjs';
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
@@ -150,8 +150,9 @@ export function simulate(economy, { now = 0 } = {}) {
 
   // Per pool: fixed money in and out per day, and a rate per day for what takes a share of what it holds.
   const pools = new Map(m.pools.map((p) => [p.key, { key: p.key, currency: p.currency, seed: num(p.seed), in: [], out: [], rate: [], variance: 0 }]));
-  // Each lottery's pot is an account of its own, counted here as a pool named "lottery:<key>".
-  for (const l of m.lotteries) pools.set(`lottery:${l.key}`, { key: `lottery:${l.key}`, pot: l.name, currency: l.currency ?? game, seed: num(l.seed), in: [], out: [], rate: [], variance: 0 });
+  // Each lottery's pot is an account of its own, counted here as a pool named "lottery:<key>" (one that pays each round
+  // from its own ticket money keeps none).
+  for (const l of m.lotteries.filter(keepsPot)) pools.set(`lottery:${l.key}`, { key: `lottery:${l.key}`, pot: l.name, currency: l.currency ?? game, seed: num(l.seed), in: [], out: [], rate: [], variance: 0 });
   // Each farm's rewards vault is an account of its own too, counted as a pool named "farm:<key>".
   for (const f of m.farms) pools.set(`farm:${f.key}`, { key: `farm:${f.key}`, farm: f.name, currency: f.rewardsToken, seed: num(f.seed), in: [], out: [], rate: [], variance: 0 });
   const flowIn = (pool, by, amount) => amount && pools.get(pool)?.in.push({ by, perDay: amount });
@@ -273,6 +274,22 @@ export function simulate(economy, { now = 0 } = {}) {
     });
     if (!left.size || !(opens > 0)) return null;
     const stops = b.whenOut !== 'drawLeft';
+    const out = (i) => ({ outcome: i, gives: (b.outcomes[i].gives === 'bundle' ? (b.outcomes[i].prizes ?? []).map((x) => x.item ?? x.stash ?? x.gives) : [b.outcomes[i].item ?? b.outcomes[i].stash ?? b.outcomes[i].gives]).join(' + ') });
+    if (stops) {
+      // A box that stops selling covers each purchase by stock (order.rs `covers`): each item, stash or named NFT must
+      // hold the most any outcome takes of it in one draw, times the draws of a purchase; it stops once one can't.
+      const most = new Map();
+      for (const need of needs) for (const [k, n] of need) most.set(k, Math.max(most.get(k) ?? 0, n));
+      const short = [...most].filter(([k, n]) => left.get(k) < n * draws).map(([k]) => k);
+      const by = (keys) => w.map((_, i) => i).filter((i) => keys.some((k) => needs[i].has(k))).map(out);
+      if (short.length) return { whenOut: 'stopSales', stopsSellingInDays: 0, by: by(short) };
+      const sum = w.reduce((n, x) => n + x, 0);
+      if (!sum) return null;
+      const rate = new Map();
+      w.forEach((x, i) => needs[i].forEach((n, k) => rate.set(k, (rate.get(k) ?? 0) + (opens * draws * x * n) / sum)));
+      const next = [...rate].filter(([, r]) => r > 0).map(([k, r]) => ({ k, t: (left.get(k) - most.get(k) * draws + 1) / r })).sort((a, z) => a.t - z.t)[0];
+      return next && next.t <= days ? { whenOut: 'stopSales', stopsSellingInDays: round(next.t, 4), by: by([next.k]) } : null;
+    }
     const there = (i) => [...needs[i]].every(([k, n]) => left.get(k) >= n);
     const chances = (alive) => {
       const sum = alive.reduce((n, i) => n + w[i], 0);
@@ -281,10 +298,8 @@ export function simulate(economy, { now = 0 } = {}) {
     let alive = w.map((_, i) => i).filter(there);
     let day = 0;
     const runsOut = [];
-    const out = (i) => ({ outcome: i, gives: (b.outcomes[i].gives === 'bundle' ? (b.outcomes[i].prizes ?? []).map((x) => x.item ?? x.stash ?? x.gives) : [b.outcomes[i].item ?? b.outcomes[i].stash ?? b.outcomes[i].gives]).join(' + ') });
     const gone = w.map((_, i) => i).filter((i) => !alive.includes(i));
     if (gone.length) {
-      if (stops) return { whenOut: 'stopSales', stopsSellingInDays: 0, by: gone.map(out) };
       runsOut.push({ inDays: 0, outcomes: gone.map(out), chancesAfter: chances(alive) });
     }
     while (alive.length) {
@@ -299,17 +314,15 @@ export function simulate(economy, { now = 0 } = {}) {
       left.set(next.k, 0);
       const ended = alive.filter((i) => !there(i));
       alive = alive.filter(there);
-      if (stops) return { whenOut: 'stopSales', stopsSellingInDays: round(day, 4), by: ended.map(out) };
       runsOut.push({ inDays: round(day, 4), outcomes: ended.map(out), chancesAfter: chances(alive) });
     }
-    if (stops) return null;
     return runsOut.length ? { whenOut: 'drawLeft', runsOut, ...(alive.length ? {} : { stopsSellingInDays: runsOut.at(-1).inDays }) } : null;
   };
   /** The walk of a box's stock in words (`stockWalk`). */
   const stockNote = (b, walk) => {
     const named = (list) => list.map((x) => `outcome ${x.outcome} (${x.gives})`).join(', ');
     if (walk.whenOut === 'stopSales')
-      return `“${b.name}” stops selling ${walk.stopsSellingInDays ? `in about ${walk.stopsSellingInDays} days` : 'from the start'}, when ${named(walk.by)} runs out (its own opens alone): it isn’t sold while any outcome couldn’t cover a purchase and those still waiting for the oracle ("whenOut": "stopSales"), so every roll is on the odds as written. Restock it, or edit the box, to sell again; "drawLeft" would keep selling, the rest’s chances rising.`;
+      return `“${b.name}” stops selling ${walk.stopsSellingInDays ? `in about ${walk.stopsSellingInDays} days` : 'from the start'}, when ${named(walk.by)} runs out (its own opens alone): it isn’t sold while an item, a stash or a named NFT couldn’t cover, at the most any outcome takes of it in one draw, the draws of a purchase and of those still waiting for the oracle ("whenOut": "stopSales"), so every roll is on the odds as written. Restock it, or edit the box, to sell again; "drawLeft" would keep selling, the rest’s chances rising.`;
     const steps = walk.runsOut.map((r) => `${named(r.outcomes)} ${r.inDays ? `in about ${r.inDays} days` : 'from the start'}${r.chancesAfter.some((c) => c > 0) ? `, then ${r.chancesAfter.map((c, i) => (c > 0 ? `outcome ${i} ${round(c, 2)}%` : null)).filter(Boolean).join(', ')}` : ''}`);
     return `“${b.name}” keeps selling as its outcomes run out ("whenOut": "drawLeft"; its own opens alone): ${steps.join('; ')}${walk.stopsSellingInDays !== undefined ? `; with nothing left, it stops selling` : ''}. Each roll draws among what is left by the written weights, so a player can empty a common outcome to make a rare one likelier; "stopSales" keeps the odds as written.`;
   };
@@ -585,9 +598,13 @@ export function simulate(economy, { now = 0 } = {}) {
     // No loss: every ticket comes back to its buyer after the draw; the pot is only what is paid into it.
     if (l.noLoss) add(players.get, ticketToken, tickets * price);
     else if (l.ticketCurrency) add(burned, ticketToken, tickets * price);
-    else {
+    else if (keepsPot(l)) {
       // The split takes its shares as it does a sale's; the rest goes into the pot (not the treasury).
       carryOut(split, potToken, tickets * price, `lottery:${l.key}`, `lottery:${l.key}`);
+    } else {
+      // Paid from each round's own money: the split takes its shares, the places their percents of the rest, and
+      // what they leave goes to `rest` (below, once the places are known).
+      for (const share of sharesOf(split)) sendTo(share, potToken, (tickets * price * (share.bps ?? 0)) / 10_000, `lottery:${l.key}`);
     }
     playerAction(tickets);
     // A lottery that holds SOL for its rounds (`roundRent`, on by default) pays each entry's bytes: the buyer pays none.
@@ -610,7 +627,10 @@ export function simulate(economy, { now = 0 } = {}) {
     // One ticket bought on its own: the fee and the record are per purchase, so a bundle of tickets shares them. The
     // record's rent comes back once the round is done with it, and a no-loss ticket's price after the draw: both held.
     const realCost = realCostOf({ price, token: ticketToken, isSol: Boolean(m.tokens.get(ticketToken)?.wsol), rent: entryRent, rentIs: 'the purchase’s entry in the round', ...(l.noLoss ? { heldIs: 'the ticket’s price' } : {}), priceBack: Boolean(l.noLoss) });
-    return { key: l.key, name: l.name, price, token: ticketToken, potToken, ...(l.minSold ? { minSold: l.minSold } : {}), ticketsPerDay: round(tickets, 6), ticketsPerRound: round(perRound, 4), roundDays: round(every / DAY, 4), places, placePrizes: placed.map((p) => (p.prize ? prizeWords(p.prize, m) : null)), prizeWorthPerRound: round(prized.reduce((n, w) => n + (w ?? 0), 0)), ...(prized.includes(null) ? { unpricedPrizes: true } : {}), cutPercent: num(l.cutPercent), splitPercent: round(cut * 100, 4), drawsOnce: once, roundRentSol: round(Number(roundRentOf(l, m)) / 1e9), ...(l.ticketNft ? { ticketNft: true } : {}), ...(l.noLoss ? { noLoss: true } : {}), realCost };
+    // Each round's own money a day, for its places and its `rest` (none reaches them when tickets are burned or NFTs).
+    const roundMoney = keepsPot(l) || l.noLoss || l.ticketCurrency ? 0 : tickets * price * (1 - cut);
+    if (!keepsPot(l)) sendTo({ ...destination(l.rest) }, potToken, roundMoney * (1 - places.reduce((a, b) => a + b, 0) / 100), `lottery:${l.key}`);
+    return { key: l.key, name: l.name, price, token: ticketToken, potToken, ...(keepsPot(l) ? { pot: l.pot } : { rest: l.rest, roundMoneyPerDay: roundMoney }), ...(l.minSold ? { minSold: l.minSold } : {}), ticketsPerDay: round(tickets, 6), ticketsPerRound: round(perRound, 4), roundDays: round(every / DAY, 4), places, placePrizes: placed.map((p) => (p.prize ? prizeWords(p.prize, m) : null)), prizeWorthPerRound: round(prized.reduce((n, w) => n + (w ?? 0), 0)), ...(prized.includes(null) ? { unpricedPrizes: true } : {}), cutPercent: num(l.cutPercent), splitPercent: round(cut * 100, 4), drawsOnce: once, roundRentSol: round(Number(roundRentOf(l, m)) / 1e9), ...(l.ticketNft ? { ticketNft: true } : {}), ...(l.noLoss ? { noLoss: true } : {}), realCost };
   });
 
   // ---- decisions with a known rate
@@ -638,8 +658,8 @@ export function simulate(economy, { now = 0 } = {}) {
     const opened = c.every ? DAY / toSeconds(c.every) : 0;
     creator.fees += opened * 2 * PROJECT_FEE; // opened and decided
     platform.project += opened * 2 * PROJECT_FEE;
-    const split = prizeLine(c.prize)?.split ? `, and ${prizeWords(c.prize, m)} (set aside whole when it is decided; short of it, the decision is refused)` : '';
-    return { key: c.key, name: c.name, sides: c.sides, rakePercent: rake, winnersSharePercent: 100 - rake, says: `the winning side shares ${100 - rake}% of the pot, by what each put in${split}` };
+    const split = prizeLine(c.prize)?.split ? `, and ${prizeWords(c.prize, m)} (set aside whole when it is decided; short of it, the decision is refused; a part a winner gives up stays for the pool, not for later winners)` : '';
+    return { key: c.key, name: c.name, sides: c.sides, rakePercent: rake, winnersSharePercent: 100 - rake, says: `the winning side shares ${100 - rake}% of the pot as it stands when the side is named, by what each put in${split}: each winner's part is written then, whoever claims first, and anything sent to the pot after it goes to nobody (burned at the close)` };
   });
   // Auctions: each bid tops the last by the least raise, so a run of N bids ends near reserve × (1 + raise)^(N − 1).
   // The scenario counts bids a day (`auction:<key>`, DEFAULT_BIDS a day unless it says), while the auction runs.
@@ -783,13 +803,16 @@ export function simulate(economy, { now = 0 } = {}) {
   // came in, at its one draw.
   for (const l of lotteries) {
     const pool = pools.get(`lottery:${l.key}`);
-    const inflow = pool ? pool.inflow : 0;
     const run = lotteryRun.get(l.key);
     const placesTotal = l.places.reduce((a, b) => a + b, 0) / 100;
+    // A pot pays what came in once it is steady; a round paid from its own money pays its places' percents of it, the
+    // rest gone to `rest` already.
+    const inflow = pool ? pool.inflow : (l.roundMoneyPerDay ?? 0) * placesTotal;
     pool?.out.push({ by: `lottery:${l.key}`, perDay: inflow });
-    const potBeforeDraw = run.once ? run.seed + inflow * run.spreadDays : placesTotal ? (inflow * l.roundDays) / placesTotal : 0;
-    const paid = run.once ? potBeforeDraw * placesTotal : inflow * l.roundDays;
+    const potBeforeDraw = !pool ? (l.roundMoneyPerDay ?? 0) * (run.once ? run.spreadDays : l.roundDays) : run.once ? run.seed + inflow * run.spreadDays : placesTotal ? (inflow * l.roundDays) / placesTotal : 0;
+    const paid = run.once || !pool ? potBeforeDraw * placesTotal : inflow * l.roundDays;
     l.potBeforeDraw = round(potBeforeDraw);
+    if (!pool) l.roundMoneyPerDay = round(l.roundMoneyPerDay ?? 0);
     l.paidPerRound = round(paid);
     l.prizes = l.places.map((pct) => round((potBeforeDraw * pct) / 100));
     const perTicket = l.ticketsPerRound ? (paid + l.prizeWorthPerRound) / l.ticketsPerRound : null;
@@ -980,7 +1003,8 @@ export function explain(sim, economy) {
   for (const p of sim.payments) lines.push(`Payment “${p.name}”: ${p.atLeast ? 'at least ' : ''}${n(p.amount)} ${sym(p.token)}; ${inAll(p.realCost)}.`);
   for (const l of sim.lotteries) {
     const rounds = l.drawsOnce ? `${n(l.ticketsPerRound)} tickets in its one round of ${n(l.roundDays)} days (it draws once)` : `${n(l.ticketsPerRound)} tickets a round of ${n(l.roundDays)} days`;
-    lines.push(`Lottery “${l.name}”: ${rounds}; the pot reaches about ${n(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map((v, i) => `${n(v)}${l.placePrizes?.[i] ? ` and ${l.placePrizes[i]}` : ''}`).join(' / ')}; ${l.ticketNft ? (l.noLoss ? 'a ticket (one NFT, back to its buyer after the draw)' : 'a ticket (one NFT, spent at once, never refunded)') : `a ${n(l.price)} ${sym(l.token)} ticket${l.noLoss ? ' (back to its buyer after the draw)' : ''}`} ${l.noLoss ? 'wins' : 'is worth'} ${n(l.expectedPerTicket)} ${sym(l.potToken)} on average${l.noLoss ? ' on top' : ''}${l.unpricedPrizes ? ', plus its chance at the places’ prizes (no price given)' : ''}${l.returnPercent !== null ? ` (${n(l.returnPercent)}%${l.noLoss ? ' back, the ticket included' : ''})` : ''}; one ticket bought alone: ${inAll(l.realCost)}.`);
+    const from = l.rest !== undefined ? `each round pays from its own ticket money, about ${n(l.potBeforeDraw)} ${sym(l.potToken)}, what its places leave going to “${l.rest}”,` : `the pot reaches about ${n(l.potBeforeDraw)} ${sym(l.potToken)} and`;
+    lines.push(`Lottery “${l.name}”: ${rounds}; ${from} pays ${l.prizes.map((v, i) => `${n(v)}${l.placePrizes?.[i] ? ` and ${l.placePrizes[i]}` : ''}`).join(' / ')}; ${l.ticketNft ? (l.noLoss ? 'a ticket (one NFT, back to its buyer after the draw)' : 'a ticket (one NFT, spent at once, never refunded)') : `a ${n(l.price)} ${sym(l.token)} ticket${l.noLoss ? ' (back to its buyer after the draw)' : ''}`} ${l.noLoss ? 'wins' : 'is worth'} ${n(l.expectedPerTicket)} ${sym(l.potToken)} on average${l.noLoss ? ' on top' : ''}${l.unpricedPrizes ? ', plus its chance at the places’ prizes (no price given)' : ''}${l.returnPercent !== null ? ` (${n(l.returnPercent)}%${l.noLoss ? ' back, the ticket included' : ''})` : ''}; one ticket bought alone: ${inAll(l.realCost)}.`);
     if (l.minSold) lines.push(`  Fewer than ${l.minSold} tickets sold by the draw: the round is cancelled and every ticket refunded.`);
   }
   for (const f of sim.farms) {

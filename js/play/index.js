@@ -317,6 +317,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     for (const f of (spec.farms ?? []).filter((x) => x.stakes === 'collectibles' && custodies.includes(x.custody ?? 'escrow'))) {
       if (await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), asset))) return { asset, farm: f.id };
     }
+    // Or boosting the player's token seat in a farm of tokens: that seat, not one of its own (`booster`).
+    for (const f of (spec.farms ?? []).filter((x) => x.stakes !== 'collectibles' && custodies.includes(x.custody ?? 'escrow'))) {
+      const seat = wallet?.address ? await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), wallet.address)) : null;
+      if (seat?.asset === asset) return { asset, farm: f.id, booster: true };
+    }
     return null;
   };
   /** The same for one the project holds: staked in escrow. */
@@ -1169,12 +1174,19 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     return out;
   }
 
-  /** The ask for a round's draw (`round` decoded, `key` its address; null for the current round with no record). */
+  /** The ask for a round's draw (`round` decoded, `key` its address; null for the current round with no record). A
+   * round paid from a pot first moves in what the round before left it (`lottery.owing`): that round's record says
+   * which pot (gone, any will do). */
   async function drawStep(l, lottery, key, round, signer) {
     const terms = round?.terms ?? lottery.terms;
     const poolMints = await roundPoolMints(terms);
     const extra = await hookTail(roundMints({ terms }, poolMints));
-    return [computeUnitLimit(600_000), loot.drawLotteryIx({ payer: signer, project, id: l.id, lottery, round, roundAddress: key, poolMints, extra })];
+    const first = !round || round.status === 'Open';
+    const owingAt = first && lottery?.owing && lottery.owing !== NOBODY && loot.potIdOf(terms) != null ? await client.account(lottery.owing) : null;
+    const owing = owingAt?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(owingAt.data) : null;
+    // That round's answer says what it left the pot: until it lands (or the round is cancelled), this draw waits.
+    if (owing?.status === 'Drawing') throw new Error(`The round of “${l.name ?? l.key}” before this one still waits for the oracle’s answer, and this round is paid from the same pot: its draw waits until that answer lands, or that round is cancelled (anyone may ask again after ${loot.STALE_SECONDS} seconds).`);
+    return [computeUnitLimit(600_000), loot.drawLotteryIx({ payer: signer, project, id: l.id, lottery, round, roundAddress: key, owing, poolMints, extra })];
   }
 
   /**
@@ -1250,11 +1262,12 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         more.nonce = pullNonce(key, i);
         rolls.push(...loot.pullRolls({ project, round: r, entry: i, part, nonce: more.nonce }));
       } else if (part.Common) {
-        // Where a part owed in common goes: a share's payee (a collectible's holder now), the pot, a pool; one that can't
-        // take it (a pool never opened, the pot closed since, an account gone) sends it to the treasury.
+        // Where a part owed in common goes: a share's payee (a collectible's holder now), what the places leave (the
+        // pot, or the `rest` a round paid from its own money names), a pool; one that can't take it (a pool never
+        // opened, the pot closed since, an account gone) sends it to the treasury.
         const c = Number(part.Common[0]);
         const n = r.terms.shares.length;
-        const to = c < n ? r.terms.shares[c].to : c === n ? { Account: [loot.pda.pot(r.lottery)] } : r.terms.places[Number(r.prizes[c - n - 1].run)].prize.Tokens.from;
+        const to = c < n ? r.terms.shares[c].to : c === n ? loot.leftoverTo(r.lottery, r.terms) : r.terms.places[Number(r.prizes[c - n - 1].run)].prize.Tokens.from;
         if (to.Holder) more.holders = await holdersOf([{ to }]);
         const target = to.Pool ? loot.pda.pool(project, to.Pool[0]) : to.Account?.[0];
         // A pot or pool made again in another mint can't take it either: the program sends it to the treasury.
@@ -1405,7 +1418,11 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         const bps = Math.round(s.percent * 100);
         if (kind === 'chosen' && key) throw new Error(`“${p.name}” pays the holder of a “${key}” the payer names: a payment can’t check the collectible, so its split takes a chosen wallet only.`);
         if (kind === 'chosen') return chosenRecipient ? [{ to: { Wallet: [chosenRecipient] }, bps }] : [];
-        const pot = (lotteryKey) => loot.pda.pot(loot.pda.lottery(project, part('lotteries', lotteryKey).id));
+        const pot = (lotteryKey) => {
+          const l = part('lotteries', lotteryKey);
+          if (!Number.isInteger(l.pot)) throw new Error(`“${l.name ?? lotteryKey}” pays each round from its own ticket money: it keeps no pot to pay into.`);
+          return loot.pda.lotteryPot(loot.pda.lottery(project, l.id), l.pot);
+        };
         const to = kind === 'burn' ? 'Burn' : kind === 'pool' ? { Pool: [pools.get(key)] } : kind === 'account' ? { Account: [key] } : kind === 'wallet' ? { Wallet: [key] } : kind === 'treasury' ? 'Treasury' : kind === 'lottery' ? { Account: [pot(key)] } : { Holder: [key] };
         return [{ to, bps }];
       });
@@ -2308,7 +2325,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * nothing but the lottery can take it while a place names it; the winner gets it before any ticket money moves.
      * `price` (whole units of `currency`) a ticket, `drawsAt` (Unix seconds) its one draw, `minSold` the least tickets
      * (fewer: the round is cancelled and refunded), `shares` where the ticket money goes (the seller's own wallet by
-     * default: the treasury). A seller runs it in a project of their own, whose owner they are.
+     * default: the treasury). Its one place takes no money, so it keeps no pot: the round pays from its own ticket
+     * money, and what the shares leave goes to the treasury too. A seller runs it in a project of their own, whose
+     * owner they are.
      */
     async raffle(id, nft, { price, currency, drawsAt, minSold = 0, perWallet = 0, shares = [{ to: 'Treasury', bps: 10_000 }], ...others } = NO_OPTIONS) {
       only(others, ['price', 'currency', 'drawsAt', 'minSold', 'perWallet', 'shares'], 'raffle');
@@ -2317,7 +2336,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       const lotteryState = await readMaybe('Lottery', loot.pda.lottery(project, id));
       await send([...before, loot.stashIx({ signer: wallet.address, project, lottery: id, lotteryState, asset: nft, ...piece })]);
       const args = {
-        price: units(price, decimalsOf(currency)), mint: mintOf(currency), shares, places: [{ bps: 0, prize: { Held: [nft] } }],
+        price: units(price, decimalsOf(currency)), mint: mintOf(currency), pays_from: { Round: { rest: 'Treasury' } }, shares, places: [{ bps: 0, prize: { Held: [nft] } }],
         ticket_mint: NOBODY, every: 0n, draws_at: BigInt(drawsAt), gate: null, per_wallet: perWallet, min_sold: BigInt(minSold),
       };
       return send([loot.upsertIx({ owner: wallet.address, project, def: { Lottery: { id, args } }, lotteryState })]);
@@ -2511,7 +2530,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
      * collectible to take home, an auction they won (or one off by the clock: their bid back), a lottery place they
      * won, a draw that is due (anyone may reveal it, or ask again when the oracle never answered; it takes 0.0008
      * SOL), and a drawn lottery's unpaid places, which anyone may pay so the next round can open. [{ kind, says, … }];
-     * pass one to `claim`.
+     * a winner's first claim of a contest of tokens carries `potUnits` and `prizeUnits`, its part as the decision wrote
+     * it (base units, as text). Pass one to `claim`.
      */
     async claims() {
       const me = wallet.address;
@@ -2544,7 +2564,9 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
         const owed = (contest.nft ? Number(entry.amount) === 1 && (off || won) : BigInt(entry.amount) > 0n && (off || first)) || first || picks;
         if (!owed) continue;
         const says = off ? 'Your entry back: the contest is off.' : contest.nft ? `Your NFT back${picks ? ', and your pick of the losers’' : ''}.` : contest.prize != null ? 'Your share of the pot, and your prize.' : 'Your share of the pot.';
-        out.push({ kind: 'contest', id: contest.id, side: entry.side, says });
+        // A winner's part of a contest of tokens is what the decision wrote, whoever claims first (`contestWinnings`).
+        const winnings = first && !contest.nft ? loot.contestWinnings(contest, entry.amount) : null;
+        out.push({ kind: 'contest', id: contest.id, side: entry.side, says, ...(winnings ? { potUnits: String(winnings.pot), prizeUnits: String(winnings.prize) } : {}) });
       }
       // The player's holds; the project's treasury wallet's also those owed to the treasury (a hold whose player is the
       // project's own address: a dropped stash NFT, a lottery's or an auction's NFT owed to it).

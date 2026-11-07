@@ -4,6 +4,46 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.25.0: a prize never shifts to a later round (unreleased; the program is not on devnet yet)
+
+For the program's 0.25.0: the IDL, the client, the spec and the docs follow it, and no account of 0.24 carries over:
+make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin the local build (sha256 93eb666d…, 1,739,816
+bytes; slot `-` until it is deployed, so `npm run fixtures` can't fetch it yet: copy the build's `target/deploy/loot.so`
+into `js/test/fixtures`, or set `XSOLANA_PROGRAM_DIR`).
+
+- **Where a lottery's places are paid from, never a default.** The spec's lottery takes exactly one of `"pot"` (a number 0
+  to 15: a pot kept from round to round, `PaysFrom::Pot`) or `"rest"` (a destination: each round pays from its own ticket
+  money and sends what its places leave there, `PaysFrom::Round`). Neither, or both, is refused in words
+  (`E-LOTTERY-PAYS`); the schema says it too (`oneOf`, which `validate.mjs` now reads beside an object's other keywords).
+  A `rest` that is a pool, `"chosen"` or the lottery itself, a no-loss lottery without a pot, a `seed` without one, and a
+  share or a schedule paying a lottery that keeps no pot are refused (`E-LOTTERY`); tickets that bring no money to a
+  round paid from its own money are warned of. The plan writes `pays_from` and opens a pot only for a lottery that keeps
+  one (so `cost` counts a pot's rent only then); `"lottery:<key>"` resolves to that lottery's pot
+  (`@pot:<lottery>:<pot>`). `simulate`, `explain`, the guide, the approval page (`Places paid from: …`), `xsolana_status` (each pot and what it holds) and the skill say
+  which: a round's own money can't be changed from outside; a pot counts gifts and yield and what earlier rounds left,
+  and the next round always sees what the round before left. Every example with a lottery names one (`nft-raffle` and
+  `partner-vault` pay from each round with `"rest": "treasury"`; the others keep pot 0).
+- **The client.** `pda.lotteryPot(lottery, id)` (`["pot", lottery, id]`; `pda.pot` stays a contest's), `MAX_POTS`,
+  `potIdOf(terms)`, `leftoverTo(lottery, terms)`, `lotteryPots(lottery)`. `withDefaults` refuses a lottery without
+  `pays_from`. `upsertIx` passes the pot the terms pay from (pot 0's address for a lottery paid from its rounds);
+  `closeRecordIx` passes, for a lottery that opened pots, the mint, where they go, both token programs and each pot by
+  id. `drawLotteryIx` passes no pot for a round paid from its own money; paid from a pot, the pot, its mint and the
+  round's account, then, with `lottery.owing` set, that round, its account of the mint and its pot (`owing`: that
+  round's record, whose terms name its pot). `pullIx` and `commonOwed` send what the places leave to the pot or to
+  `rest`, and owe none when `rest` burns. js/play reads the `owing` round for each draw it sends (and says in words that a draw waits while that round
+  waits for the oracle, `NotDue`), its raffles pay from
+  the round (`rest` the treasury), and a payment to a lottery that keeps no pot is refused in words.
+- **Contests.** `Contest.pot_won` and `prize_won`, written at the decision; `contestWinnings(contest, amount)` gives a
+  winning entry's claim, which adds up exactly whatever the order, and js/play's `claims()` carries it (`potUnits`,
+  `prizeUnits`). The simulation, the explainer, the guide and the skill
+  say a gift after the decision goes to nobody, and a forgone split-prize part goes back to its pool.
+- **Boxes.** A box that stops selling and lists a stash's NFT at random beside one of its NFTs by name in another outcome
+  is refused (`E-ODDS`, `BadEntries`). The simulation's stock walk covers by the most any outcome takes of an item, a stash
+  or an NFT in one draw, times the draws; the words say so, and that a free roll never loses draws to what it emptied
+  itself.
+- **Recipes.** `craftIx` takes a token seat's booster as `{ asset, farm, booster: true }` on a kept `Use` or a `Show`
+  line: the player's token seat and the farm follow it; a `Staked` line refuses it. js/play finds a booster's farm.
+
 ## 0.24.0: the rules are strict (the program on devnet since 2026-11-07, slot 519,723,738)
 
 For the program's 0.24.0, "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account

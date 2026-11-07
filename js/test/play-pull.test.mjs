@@ -68,7 +68,7 @@ test('one prompt a box; a player finds and takes what they are owed; the next bu
     items: [{ key: 'badge', name: 'Badge', price: 0.01, supply: 10 }, { key: 'gem', name: 'Gem' }, { key: 'art', name: 'Sunset', supply: 1 }],
     pools: [{ key: 'house', currency: 'sol', seed: 1 }],
     boxes: [{ key: 'chest', name: 'Chest', price: 0.02, split: [{ to: 'pool:house', percent: 90 }], outcomes: [{ gives: 'item', item: 'gem', chance: 50 }, { gives: 'pay', pool: 'house', amount: 0.03, chance: 50 }] }],
-    lotteries: [{ key: 'daily', name: 'Daily', price: 0.001, every: '1h' }],
+    lotteries: [{ key: 'daily', pot: 0, name: 'Daily', price: 0.001, every: '1h' }],
     auctions: [{ key: 'sunset', name: 'Sunset', lot: { item: 'art' }, reserve: 0.01, runs: '1h' }],
   });
   // Going live made the project's standing lookup table, its addresses on chain.

@@ -22,7 +22,7 @@ function fixture(seed) {
     live: { project: w.project, collection: w.collection },
     farms: [{ key: 'vault', name: 'Vault', id: 1, stakes: 'coin' }],
     schedules: [{ key: 'team', name: 'Team vesting', id: 1 }],
-    lotteries: [{ key: 'raffle', name: 'Artwork raffle', id: 1 }],
+    lotteries: [{ key: 'raffle', pot: 0, name: 'Artwork raffle', id: 1 }],
   };
   const appOf = (address) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   return { w, spec, appOf };

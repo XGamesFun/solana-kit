@@ -31,15 +31,21 @@ export function validate(value, schema = SCHEMA, root = schema, path = 'economy'
     }
     return errors;
   }
-  // Exactly one of the shapes: none is not allowed, and two at once would be read two ways.
+  // Exactly one of the shapes: none is not allowed, and two at once would be read two ways. Shapes that only name a
+  // field each (`required`) are one choice among fields of an object, whose other keywords still apply.
   if (schema.oneOf) {
+    const fields = schema.oneOf.every((s) => Object.keys(s).length === 1 && s.required?.length === 1) ? schema.oneOf.map((s) => s.required[0]) : null;
     const results = schema.oneOf.map((s) => validate(value, s, root, path));
     const fits = results.filter((r) => r.length === 0).length;
-    if (fits !== 1) {
-      const wanted = schema.description ?? results.flat().map((e) => e.message).join('; or ');
-      add(`${show(value)} is not allowed here (${fits ? 'it fits more than one of its forms: ' : ''}${wanted})`);
+    if (fields && typeOf(value) === 'object') {
+      if (fits !== 1) add(`needs exactly one of ${fields.map((f) => `"${f}"`).join(' or ')}${fits ? ', not both' : ''}`);
+    } else {
+      if (fits !== 1) {
+        const wanted = schema.description ?? results.flat().map((e) => e.message).join('; or ');
+        add(`${show(value)} is not allowed here (${fits ? 'it fits more than one of its forms: ' : ''}${wanted})`);
+      }
+      return errors;
     }
-    return errors;
   }
   if (schema.not && validate(value, schema.not, root, path).length === 0) add(`${show(value)} is not allowed here`);
   if ('const' in schema && value !== schema.const) add(`must be ${show(schema.const)}`);

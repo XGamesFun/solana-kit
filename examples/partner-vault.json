@@ -80,6 +80,7 @@
     {
       "key": "raffle",
       "name": "Rare NFT raffle",
+      "rest": "treasury",
       "price": 0.01,
       "places": [{ "percent": 0, "prize": { "gives": "nft", "stash": "rare", "nft": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4" } }, 90],
       "firstDraw": "publish+7d"

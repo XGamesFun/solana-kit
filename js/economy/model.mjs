@@ -155,8 +155,8 @@ export function whenOutWords(b, { sold = b.active !== false } = {}) {
     return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), a roll draws among the outcomes still there by their written weights, so the others’ chances rise; with nothing left at all, a free roll waits to be asked again and a paid one is refunded';
   if (b.whenOut === 'drawLeft')
     return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), the box keeps selling while its first draw has anything left, and a roll draws among the outcomes still there by their written weights: the others’ chances rise as one runs out, so a player can empty a common outcome to make a rare one likelier (a box selling a rare prize should stop selling instead, the default)';
-  if (!sold) return STOCK_WORDS;
-  return 'When an outcome runs out, the box stops selling: it isn’t sold while any outcome couldn’t cover this purchase’s draws and those of purchases still waiting for the oracle (an item’s units left, a pool’s tokens, a stash’s NFTs), so every roll is on the odds as written and nobody can buy their way to a refund on every miss; it sells again once the project restocks or edits the box (an outcome whose odds shrink with stock needs no cover). An outcome emptied another way all the same (another route sharing its pool, item or stash) makes no draw, no other outcome taking its place, and gives back that draw’s worth of the price at the settle; with no draw made at all, the open is refunded';
+  if (!sold) return `${STOCK_WORDS}. A free roll (a prize, a recipe’s, a mission’s chest) is on the odds as written too: a draw on an outcome that is out misses and gives nothing back (a pack keeps what its other draws won; a roll that drew nothing waits to be asked again), so emptying a shared source before asking steers nothing. A pack that should draw among what is left needs "whenOut": "drawLeft"`;
+  return 'When an outcome runs out, the box stops selling: it isn’t sold while anything an outcome takes (an item’s units left, a pool’s tokens, a stash’s NFTs) couldn’t cover, at the most any outcome sharing it takes in one draw, this purchase’s draws and those of purchases still waiting for the oracle, so every roll is on the odds as written and nobody can buy their way to a refund on every miss; it sells again once the project restocks or edits the box (an outcome whose odds shrink with stock needs no cover). An outcome emptied another way all the same (another route sharing its pool, item or stash) makes no draw, no other outcome taking its place, and gives back that draw’s worth of the price at the settle; with no draw made at all, the open is refunded';
 }
 
 /**
@@ -538,7 +538,7 @@ export function lifeLines(r, m) {
   return { needs, raises };
 }
 
-/** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
+/** A lottery's place as { percent, prize }: a number is a percent of what the round pays from, and no prize. */
 export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 } : { percent: p, prize: null, times: 1 });
 
 /** "pool:house" → { kind: 'pool', key: 'house' }; "burn" → { kind: 'burn' }. */
@@ -557,7 +557,7 @@ export const sharesOf = (split) => (split ?? []).map((s) => ({ ...destination(s.
  * The program's `To` for a destination, with pool indexes resolved (the IDL's own shape). A wallet ("wallet:<address>")
  * is paid at its own token account of the part's currency (the program opens it when it is not there); "treasury" is the game's treasury wallet's; "chosen"
  * (or "chosen:<item>") is the one the buyer names when they buy; "lottery:<key>" is that lottery's pot
- * ("@pot:<id>") and "farm:<key>" that farm's rewards vault ("@rewards:<id>"), which the plan resolves once the game is
+ * ("@pot:<lottery id>:<pot id>") and "farm:<key>" that farm's rewards vault ("@rewards:<id>"), which the plan resolves once the game is
  * known.
  */
 export function toEnum(to, m) {
@@ -567,7 +567,7 @@ export function toEnum(to, m) {
   if (d.kind === 'pool') return { Pool: [m.pool.get(d.key)?.index ?? 0] };
   if (d.kind === 'account') return { Account: [d.key] };
   if (d.kind === 'wallet') return { Wallet: [d.key] };
-  if (d.kind === 'lottery') return { Account: [`@pot:${m.lottery.get(d.key)?.id ?? 0}`] };
+  if (d.kind === 'lottery') return { Account: [`@pot:${m.lottery.get(d.key)?.id ?? 0}:${m.lottery.get(d.key)?.pot ?? 0}`] };
   if (d.kind === 'farm') return { Account: [`@rewards:${m.farm.get(d.key)?.id ?? 0}`] };
   if (d.kind === 'chosen') return { Chosen: { item: d.key ? (m.item.get(d.key)?.id ?? 0) : null } };
   return { Holder: [d.key] };
@@ -616,6 +616,13 @@ export const perWalletOf = (part) => ({
 
 /** The program's `Window` for a part's "opens" and "closes" (times; 0 leaves a side open). */
 export const windowOf = (part, now) => ({ opens_at: BigInt(part?.opens ? toTime(part.opens, now) : 0), closes_at: BigInt(part?.closes ? toTime(part.closes, now) : 0) });
+
+/** Whether lottery `l` pays its places from a pot it keeps (`"pot"`, `PaysFrom::Pot`); false when each round pays from
+ * its own ticket money and sends what its places leave to `"rest"` (`PaysFrom::Round`). */
+export const keepsPot = (l) => Number.isInteger(l?.pot);
+
+/** The program's `PaysFrom` for a lottery: `{ Pot: [id] }` or `{ Round: { rest } }` (its `rest` as `toEnum` gives it). */
+export const paysFromOf = (l, m) => (keepsPot(l) ? { Pot: [l.pot] } : { Round: { rest: toEnum(l.rest, m) } });
 
 /** A lottery's split of ticket money: its own, and "cutPercent" as a share to the treasury. */
 export const lotterySplit = (l) => [...(l.split ?? []), ...(l.cutPercent ? [{ to: 'treasury', percent: l.cutPercent }] : [])];

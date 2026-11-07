@@ -68,7 +68,7 @@ t('a raffle: the NFT is locked in the lottery’s own stash, pulled by its winne
   const lotteryState = (id) => (w.chain.get(pda.lottery(w.project, id)) ? w.read('Lottery', pda.lottery(w.project, id)) : null);
   // The NFT goes into lottery 1's own stash, then the lottery is written naming it.
   w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, lotteryState: lotteryState(1), asset: art, collection: w.collection })]);
-  const lotteryArgs = (more = {}) => ({ price: PRICE, mint: w.mint, shares: [{ to: 'Treasury', bps: 9000 }], places: [{ bps: 0, prize: { Held: [art] } }], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, ...more });
+  const lotteryArgs = (more = {}) => ({ price: PRICE, mint: w.mint, pays_from: { Pot: [0] }, shares: [{ to: 'Treasury', bps: 9000 }], places: [{ bps: 0, prize: { Held: [art] } }], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, ...more });
   w.upsert({ Lottery: { id: 1, args: lotteryArgs() } });
   // Promised: it can't leave while a place names it.
   fails(() => w.chain.send(w.creator, [loot.stashIx({ signer: w.creator, project: w.project, lottery: 1, lotteryState: lotteryState(1), asset: art, out: w.creator, collection: w.collection })]), 'Promised');

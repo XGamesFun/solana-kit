@@ -82,7 +82,7 @@ test('a pack spec checks: slots, a table and a fresh item', () => {
   // As a lottery's prize it is never given (a warning); as an auction's lot it is refused (LotRefused).
   const fresh = SPEC.items[2].key;
   const placed = structuredClone(SPEC);
-  placed.lotteries = [{ key: 'draw', name: 'Draw', price: 1, places: [50, { percent: 0, prize: { gives: 'item', item: fresh } }] }];
+  placed.lotteries = [{ key: 'draw', name: 'Draw', pot: 0, price: 1, places: [50, { percent: 0, prize: { gives: 'item', item: fresh } }] }];
   const r2 = check(placed, { now: NOW });
   assert.ok(r2.warnings.some((x) => x.code === 'W-ITEM' && x.where === 'economy.lotteries.draw.places[1].prize'), JSON.stringify(r2.refusals));
   assert.ok(!r2.refusals.some((x) => /PrizeNotCovered/.test(x.message)));

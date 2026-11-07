@@ -65,6 +65,7 @@
     {
       "key": "weekly",
       "name": "Weekly draw",
+      "pot": 0,
       "price": 0.01,
       "places": [
         50,

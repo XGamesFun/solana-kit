@@ -60,7 +60,7 @@ test('the checker refuses a run of places given one by one past MAX_RUN_PLACES (
   const spec = (prize, times) => solSpec({
     items: [{ key: 'badge', name: 'Badge' }],
     pools: [{ key: 'house', currency: 'sol', seed: 10 }],
-    lotteries: [{ key: 'draw', name: 'Draw', price: 0.001, every: '1d', places: [{ percent: 50 }, { percent: 0, prize, times }] }],
+    lotteries: [{ key: 'draw', pot: 0, name: 'Draw', price: 0.001, every: '1d', places: [{ percent: 50 }, { percent: 0, prize, times }] }],
   });
   assert.deepEqual(refused(spec({ gives: 'item', item: 'badge' }, MAX)), []);
   assert.deepEqual(refused(spec({ gives: 'item', item: 'badge' }, MAX + 1)), ['E-LOTTERY economy.lotteries.draw.places[1].times']);
@@ -111,7 +111,7 @@ test('a lottery holds SOL for its rounds by default: its round’s header is the
     items: [{ key: 'badge', name: 'Badge' }],
     pools: [{ key: 'house', currency: 'sol', seed: 1 }],
     lotteries: [{
-      key: 'daily', name: 'Daily', price: 0.001, every: '1d', split: [{ to: 'treasury', percent: 10 }],
+      key: 'daily', name: 'Daily', pot: 0, price: 0.001, every: '1d', split: [{ to: 'treasury', percent: 10 }],
       places: [{ percent: 50 }, { percent: 1, times: 20 }, { percent: 0, prize: { gives: 'item', item: 'badge' }, times: 3 }, { percent: 0, prize: { gives: 'tokens', from: 'pool:house', amount: 0.01 } }],
     }],
   });

@@ -119,13 +119,13 @@ test('a lottery place that gives a roll: its winner’s pull asks for it in the 
   const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
   w.upsert({ Box: { id: CHEST, args: chest } });
   const places = [{ bps: 10_000, prize: { Roll: [CHEST] }, times: 1 }];
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places, ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const player = freshKeypair();
   w.chain.airdrop(player.address, 10_000_000_000n);
   w.fund(player.address, w.mint, 10n * PRICE);
   const spec = {
     version: 2, name: 'Draw', currency: 'gold', tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-    lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
+    lotteries: [{ key: 'draw', pot: 0, name: 'Draw', id: 1 }],
     live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
   };
   const wallet = asWallet(player);

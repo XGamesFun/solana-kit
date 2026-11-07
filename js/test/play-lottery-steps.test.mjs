@@ -50,7 +50,7 @@ async function setup(seed, lottery) {
   w.chain.warp(NOW);
   const [owner, player, rival] = [freshKeypair(), freshKeypair(), freshKeypair()];
   for (const k of [owner, player, rival]) w.chain.airdrop(k.address, 100_000_000_000n);
-  const live = await goLive(w, owner, { version: 2, network: 'devnet', name: 'Steps', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], lotteries: [{ key: 'daily', name: 'Daily', price: 0.001, every: '1h', ...lottery }] });
+  const live = await goLive(w, owner, { version: 2, network: 'devnet', name: 'Steps', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], lotteries: [{ key: 'daily', pot: 0, name: 'Daily', price: 0.001, every: '1h', ...lottery }] });
   const [mine, theirs] = [asWallet(player), asWallet(rival)];
   const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: mine, now: () => w.chain.now() });
   const other = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: theirs, now: () => w.chain.now() });

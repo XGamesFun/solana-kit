@@ -66,7 +66,7 @@ test('a draw asked again after the oracle went stale keeps its first ask, and an
   const w = world({ seed: 'guards-ticket' });
   const id = 9;
   const address = loot.pda.lottery(w.project, id);
-  w.upsert({ Lottery: { id, args: { price: 1000n, mint: w.mint, shares: [], places: [10_000], ticket_mint: SYSTEM_PROGRAM, every: 0n, draws_at: BigInt(w.chain.now() + 60), gate: null, per_wallet: 0 } } });
+  w.upsert({ Lottery: { id, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [10_000], ticket_mint: SYSTEM_PROGRAM, every: 0n, draws_at: BigInt(w.chain.now() + 60), gate: null, per_wallet: 0 } } });
   const lottery = w.read('Lottery', address);
   w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n })]);
   w.chain.warp(w.chain.now() + 61);

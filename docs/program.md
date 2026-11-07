@@ -1,10 +1,18 @@
 # The loot program: how it behaves
 
-**Version 0.24.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**: on devnet since
-slot 519,723,738 (2026-11-07). Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
-accounts carry over from older versions: make fresh economies for this one.
+**Version 0.25.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Not on devnet yet**: devnet runs
+0.24.0 (since slot 519,723,738, 2026-11-07) until this build is deployed. Nothing runs on mainnet. **Not independently
+audited** (`SECURITY.md`). No accounts carry over from older versions: make fresh economies for this one.
 
-This page describes 0.24.0, the build its IDL comes from, whose rules are strict (the program's CHANGELOG): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seller who can't be paid is owed**, and every list has a **cap**.
+This page describes 0.25.0, the build its IDL comes from. Its rule: **a prize never shifts to a later round**. A
+lottery names where its places are paid from (`PaysFrom`): each round's own ticket money, what the places leave going
+where the project says, or a pot kept from round to round (16 at most a lottery, `["pot", lottery, id]`), whose next
+ask always moves in what the round before left it (`Lottery::owing`); a contest's winners share what the decision wrote
+(`pot_won`, `prize_won`), whatever reaches its accounts later; a box that stops selling covers each purchase by the most
+any entry sharing an account takes in one draw; a free roll never loses draws to what it emptied itself; and a token
+seat's booster can be a recipe's kept `Use`.
+
+0.24.0's rules are strict (the program's CHANGELOG): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seller who can't be paid is owed**, and every list has a **cap**.
 
 What 0.23 changed, in short: who claimed what is kept in **lists of records** (a wallet's counts, a grant's claims and
 rounds in shards), so one claim pays **several rounds**; a **lottery round is a record of its own**, its money fixed at
@@ -154,7 +162,7 @@ order, offer) is created, never written over.
 | 4 | `LootBox` | `["box", project, id]` | varies | owner; never closed |
 | 5 | `Order` | `["order", project, player, nonce]` | sized to its box at the purchase (`orderBytes`) | player (or a prize's maker), back at settle or refund; whoever settles pays what the settle opens or mints |
 | 6 | `Schedule` | `["schedule", project, id]`; sealed vault `["vest", schedule]` | varies | owner |
-| 7 | `Lottery` | `["lottery", project, id]`; pot `["pot", lottery]`; own stash `["lottery_stash", lottery]` | varies | owner; stash growth by whoever puts an NFT in |
+| 7 | `Lottery` | `["lottery", project, id]`; pots `["pot", lottery, id]` (`pda.lotteryPot`, `id` below `MAX_POTS`, 16); own stash `["lottery_stash", lottery]` | varies | owner; stash growth by whoever puts an NFT in |
 | 8 | `Recipe` | `["recipe", project, id]` | varies | owner; never closed |
 | 9 | `Hold` | `["hold", asset, free_at]` | 170 (a loan's 243) | player or borrower (`payer`), back on release |
 | 10 | `Contest` | `["contest", project, id]`; pot `["pot", contest]`; split prize `["prize", contest]` | varies | the opening authority, back on close |
@@ -223,8 +231,8 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | | `stash` (`stashIx`) | owner or authority | J | NFTs into a stash (or a lottery's own), each with its weight in the draws (above 0), or out to a wallet |
 | | `run_schedule` (`runScheduleIx`) | the project's keys or who it pays (a sealed burn: anyone) | free | a run pays once, for the latest run due, and those before it lapse; a sealed fixed amount pays every due run up to `upto` (`runsDue`, `scheduleCatchesUp`), one transfer |
 | Lotteries | `buy_tickets` (`buyTicketsIx`) | player | P | an entry in the current round (its first purchase opens it; its address names the incarnation), naming the round's `revision` (`TermsChanged`) |
-| | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | the first ask of a due round fixes its money and moves the lottery on; asks again after `STALE_SECONDS`; after 7 days unanswered (`lotteryCancellable`) the next ask cancels the round; `skip_hooked` (the authority) leaves hooked sources out |
-| | `pull` (`pullIx`, `pullRolls`) | anyone; its payer opens accounts | free | one part (`partsOwed`, `commonOwed`): an entry's own, its places' pot parts or prizes in a run, a part owed in common; the last closes the round |
+| | `draw_lottery` / `callback_lottery` (`drawLotteryIx`, `callbackLotteryIx`) | anyone / oracle | free | the first ask of a due round fixes its money and moves the lottery on (paid from a pot, it first moves in what the round before left it: `owing`; refused `NotDue` while that round waits for the oracle); asks again after `STALE_SECONDS`; after 7 days unanswered (`lotteryCancellable`) the next ask cancels the round; `skip_hooked` (the authority) leaves hooked sources out |
+| | `pull` (`pullIx`, `pullRolls`) | anyone; its payer opens accounts | free | one part (`partsOwed`, `commonOwed`): an entry's own, its places' parts or prizes in a run, a part owed in common (a share, what the places leave: to the pot or to `rest`, `leftoverTo`); the last closes the round |
 | Farms | `stake_tokens` / `unstake_tokens` (`stakeTokensIx`, `unstakeTokensIx`) | player | P | stake into a tier / take out (0 only harvests) |
 | | `stake_nft` / `unstake_nft` (`stakeNftIx`, `unstakeNftIx`) | player | P | an NFT on its own seat or as a booster / out after the lock, with a mission's prize or roll |
 | | `harvest` (`harvestIx`) | player | P | rewards out, or `compound`ed |
@@ -236,7 +244,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 | Contests | `open_contest` (`openContestIx`) | authority | J | terms fixed for good |
 | | `enter` (`enterIx`) | player | P | a record in the contest's list, one side a wallet (`OtherSide`) |
 | | `decide` (`decideIx`) | authority, or anyone with a verdict; anyone for an overdue contest | J; free when overdue | names a side, or `None` calls it off |
-| | `claim` (`claimIx`) | the winner or the project's keys when it gives a prize or picks, otherwise anyone (only the winner picks losers' NFTs for 30 days, then the project's keys may too, `WinnerPicks`) | free | an entry's part of the pot, prize and the NFTs it names |
+| | `claim` (`claimIx`) | the winner or the project's keys when it gives a prize or picks, otherwise anyone (only the winner picks losers' NFTs for 30 days, then the project's keys may too, `WinnerPicks`) | free | an entry's part of what the decision wrote (`contestWinnings`: of `pot_won`, and of `prize_won` for a split prize), its prize and the NFTs it names |
 | Auctions | `open_auction` (`openAuctionIx`) | seller alone | P for a player's NFT, J for the project's lot | an auction |
 | | `bid` (`bidIx`) | player | P | tops the high bid; the topped one goes back at once |
 | | `end_auction` (`endAuctionIx`) | anyone once over; seller to call off one with no bid | free (J for the project calling off its own) | pays out, hands the lot over, closes (a roll lot sold pays out nothing: the bid stays in the vault as its order's payment); with `hold` (anyone), an NFT lot (its address alone, no proof) and a bid's winning NFTs become holds for whoever they go to, released after by anyone, the rent back to the ender |
@@ -274,7 +282,8 @@ auction, listing or offer.
 | `Chosen(item)` | chosen by the buyer at `open_box`, `buy` or `buy_tickets` (`chosen_recipient`): a wallet not the buyer's, or with an item, a collectible of it whose holder is paid. With no choice a wallet share goes to the treasury; a collectible share needs one a player holds (`BadChoice`). In a contest, the wallet `decide` names |
 
 **Every part is rounded down** (a share, a schedule's or `move_tokens`' share of a pool, a place's share of a pot, a contest claim, a price rise);
-what rounding leaves goes with the rest, or stays in the pool or pot, and a contest's last claim takes the remainder.
+what rounding leaves goes with the rest, or stays in the pool or pot; a contest's claims add up to exactly what the
+decision wrote.
 
 **Where money goes.** Money owed to a person goes to their associated token account, which the sender opens (paying
 its rent) when it isn't there, so a payment never waits. In a stored split, a share that finds nobody (a collectible
@@ -457,8 +466,11 @@ project chooses, and players see which:
 
 - `StopSales` (the default): `open_box` is refused (`SoldOut`) unless every entry can be given as many times as this
   purchase could draw it plus every draw of purchases still waiting for their answer (`LootBox.in_flight`; each order
-  counts its draws in `Order.reserved` until its answer or its refund). An item counts its units left, a pool its tokens
-  (its amount for each draw), a stash its NFTs, a named NFT once; an entry whose weight follows its item's stock
+  counts its draws in `Order.reserved` until its answer or its refund). Entries are grouped by the account they take
+  from (an item, a pool whatever amount each takes, a stash's random NFTs, a named NFT): each group must hold the most
+  any entry of it takes in one draw, times the draws (an item its units left, a pool its tokens, a stash its NFTs, a
+  named NFT once). Such a box can't list a stash's NFT at random beside one of that stash's NFTs by name (`BadEntries`:
+  a random draw could take the named one); that box is `DrawLeft`. An entry whose weight follows its item's stock
   (`stock_odds`) needs no cover, nor one weighing nothing now. So every roll of a purchase is on the odds written, and
   nobody can buy a refund on every miss once a common entry is gone. An entry emptied all the same by another route
   (another box or a prize roll sharing its pool, item or stash; the project's keys) makes no draw and gives back its
@@ -486,7 +498,10 @@ once each, and drawn from one oracle answer, each draw at its own path in the an
 purchase fixed and reading the stock the draws before it left. Answers are never shared between players. A draw that
 lands on an entry that can't be given then (under `DrawLeft` it has no weight; under `StopSales`, emptied by another
 route) isn't made: no other entry takes its place, and it is given back at the settle for what its slot is worth
-(`Order::back`, `Slot.share`). A box of one entry packs too, through the
+(`Order::back`, `Slot.share`). A free roll (paid 0: a prize, a recipe's output, a mission's chest) never loses draws to
+what it emptied itself: an entry the roll's own draws took the last of weighs 0 for its later draws, under either
+`when_out`; one already gone before the answer keeps its weight (a draw on it misses, and a roll that drew nothing
+waits to be asked again), so emptying a shared source before asking can't steer a roll. A box of one entry packs too, through the
 oracle as any other (one with nothing random in it also sells in one step with `buy`). A pack has no NFT rolled on
 (`BadEntries`). Measured
 on 0.22: a card costs the oracle's callback 2,600 to 3,700 compute units at 2 to 16 entries, so one answer draws
@@ -658,7 +673,7 @@ written again.
 | --- | --- |
 | Item | only while none was ever handed out |
 | Schedule | any time; a sealed one never |
-| Lottery | with nothing sold and nothing pending: both vaults swept where the owner says and closed. Mints are fixed for an incarnation |
+| Lottery | with nothing sold and nothing pending: every pot it opened (`Lottery::pots`) swept where the owner says and closed (`closeRecordIx` passes the mint, where they go, both token programs and each pot by id; none for a lottery that opened none). Mints are fixed for an incarnation |
 | Grant | any time, unused SOL to the owner; written again it is a new campaign that refuses old vouchers |
 | Box, Recipe | never: a version must never come back at the same address |
 | Table | never; sealed, its weights never change and its stock only goes down |
@@ -686,13 +701,33 @@ the same place. Pause and suspend stop none of it. A cliff is a first run in the
 
 ## Lotteries
 
-`LotteryArgs { terms, every, gate, per_wallet }`, its `terms` a `LotteryTerms { price, mint, shares, places,
-ticket_mint, draws_at, nft_ticket, returns, min_sold }` (`withDefaults` takes them beside `every` too). Tickets are paid
-in `ticket_mint` (burned) when it is set, else in `mint` (`paymentMint(terms)`). The prize pot is `["pot", lottery]`.
+`LotteryArgs { terms, every, gate, per_wallet }`, its `terms` a `LotteryTerms { price, mint, pays_from, shares, places,
+ticket_mint, draws_at, nft_ticket, returns, min_sold }` (`withDefaults` takes them beside `every` too, and refuses terms
+without `pays_from`: it has no default). Tickets are paid in `ticket_mint` (burned) when it is set, else in `mint`
+(`paymentMint(terms)`).
+
+**Where the places are paid from** (`pays_from`, `PaysFrom`):
+
+- `{ Round: { rest } }`: each place takes its `bps` of this round's own ticket money only (its part after the shares,
+  `to_pot`), which nothing from outside can change; what the places leave (and the part of places nobody won) goes to
+  `rest`: `Treasury`, a `Wallet`, a `Holder`, another program's `Account`, or `Burn` (it then stays in the round's account
+  for its close to burn, and is no part owed). Never a `Pool` or a `Chosen` share (`BadLottery`) or one of the lottery's
+  pots (`SameAccount`): a later prize could read it. Such a lottery opens no pot; a no-loss one can't be one.
+- `{ Pot: [id] }`: a pot kept from round to round at `["pot", lottery, id]` (`pda.lotteryPot`, `id` below `MAX_POTS`,
+  16). Each place takes its `bps` of what the pot holds at the ask with the round's part, so a seed, a sponsor, yield
+  and what earlier rounds left all count; what the places leave goes back into it. The ask that needs it first moves in
+  what the round before left that pot (`Lottery::owing`, the last round paid from a pot that may still owe it), from
+  that round's own account, so a prize never depends on who pulled the round before or when: `drawLotteryIx` takes that
+  round's record as `owing` (its terms name its pot; gone, any account stands in). While that round waits for the
+  oracle, the next ask from a pot is refused (`NotDue`).
+
+A lottery may move to another pot between rounds by an edit: `upsert` opens the pot the terms name when it isn't open
+(`upsertIx` passes it; for a lottery paid from its rounds, pot 0's address stands in), and `Lottery::pots` keeps a bit
+for each pot opened (`lotteryPots`). No share pays into any of them (`SameAccount`).
 The lottery keeps its terms, its incarnation and its round number; each **round is a record of its own**,
 `["round", lottery, incarnation, round]` (`decodeRound`), opened by its first purchase, which copies the terms (its
 `terms` and `revision`; later purchases name the round's `revision`; the gate and `per_wallet` are read live). The round holds its money in token accounts of its own, `["round-tokens", round, mint]`, so a cancel
-moves nothing and the pot holds only what nobody is owed. A draw more than 5 years off sells nothing (`SalesClosed`).
+moves nothing and a pot holds only what nobody is owed. A draw more than 5 years off sells nothing (`SalesClosed`).
 SOL sent to the lottery account beyond its rent (`roundRent` in a spec, on by default) pays each round's header and
 token accounts, lent to the round and back to the lottery at its close (`LotteryRound.opener` and each `Opened.by` then
 name the lottery; a close passes the lottery, or the project's owner once it is closed: `pullIx`'s `lotteryClosed`);
@@ -712,10 +747,12 @@ the treasury at the close). A round holds about
 **Draw.** Anyone sends `draw_lottery` once due. Places are runs: `{ bps, prize, times }`, `times` places alike (a named
 NFT or a roll is one place's; at most 64 runs, `MAX_LOTTERY_RUNS`, `BadLottery`), drawn by evenly spaced tickets with rejection sampling. A round
 nobody bought into has no record: a repeating one moves its date, one that draws once ends. **The first ask fixes the
-round's money** before anyone knows who won: what its places take of the pot moves into the round's own account (or
-what the round's ticket money leaves over is owed to the pot, `pot_owed`), each run of pool prizes moves in (a minted
-run is minted at its pull), and the lottery moves on, its next round selling at once (`drawLotteryIx` passes the pot,
-its mint and the round's account of it, then each token run's mint, and for a pool the pool and the round's account;
+round's money** before anyone knows who won: paid from a pot, what the round before left it moves in, then what its
+places take of the pot moves into the round's own account (or what the round's ticket money leaves over is owed to the
+pot, `pot_owed`); paid from its own money, what its places leave is owed to `rest`; each run of pool prizes moves in (a
+minted run is minted at its pull), and the lottery moves on, its next round selling at once (`drawLotteryIx` passes,
+for a round paid from a pot, the pot, its mint and the round's account of it, then with `lottery.owing` set that round,
+its account of the mint and its pot; then each token run's mint, and for a pool the pool and the round's account;
 a source that is frozen, paused, closed, or with `skip_hooked` hooked gives this round nothing). The lottery's own
 account goes with its current round only. An unanswered draw is asked again after `STALE_SECONDS`, naming the waiting
 round by its address (`roundAddress`) and no lottery (so a lottery closed since never strands it); the next ask after **7 days
@@ -728,8 +765,8 @@ due sends the draw first, in the same transaction, and buys into the next round.
 **Then each part is pulled** (`pull(entry, part, nonce)`, anyone, in any order): an entry's own (`Own`: a refund, a
 no-loss ticket's price, its NFT ticket back or where its price sends it), all of its places in a run at once
 (`Pot(run)`: their part of the pot; `Prize(run)`: their prize), or a part owed in common (`Common(i)`: share `i` once
-drawn, past the shares what the round owes the pot, past that after a cancel each pool's prize back to its pool;
-`commonOwed`). A place's prize is given at its pull: tokens into the buyer's account; an item, a compressed NFT, a project stash's NFT while it holds it (a named one gone from its stash refuses a stranger's pull, `PrizeNotCovered`: the winner or a project key passes it over); a roll at `prizeRollNonce(nonce + place)` (`pullRolls`; js/play asks for it in
+drawn, past the shares what the places leave, to the pot or to `rest` (`leftoverTo`; never owed when `rest` burns),
+past that after a cancel each pool's prize back to its pool; `commonOwed`). A place's prize is given at its pull: tokens into the buyer's account; an item, a compressed NFT, a project stash's NFT while it holds it (a named one gone from its stash refuses a stranger's pull, `PrizeNotCovered`: the winner or a project key passes it over); a roll at `prizeRollNonce(nonce + place)` (`pullRolls`; js/play asks for it in
 the pull's own transaction); the lottery's own stash's NFTs are taken out for every place up to the entry's last, in
 place order, whoever pulls first (`LotteryRound::assign`, `stashNfts` says which NFT each place gets; a pull with the
 stash alone only takes them out). An owed NFT passed as its hold's address `["hold", nft, 0]` in place of its piece
@@ -754,6 +791,7 @@ several runs. Nothing comes out but a place's prize
 - **NFT ticket** (`nft_ticket: { rule, then }`): one ticket for one NFT (`OneTicket`), held until the draw, then
   burned, given or stashed by its pull; home if cancelled. No price, shares or ticket mint.
 - **No-loss** (`returns`): after the draw every ticket is owed back whole; winners take only what was paid into the pot.
+  It pays from a pot (`BadLottery` otherwise).
 
 Pot and payment mints can't be non-transferable, default-frozen or switchable to it, or confidential (`BadLottery`); at
 most 8 shares (`MAX_SHARES`, as every split kept to be paid later) and 8 mints. Edits apply to the next round (the gate and `per_wallet` at once); closing or making a
@@ -770,10 +808,10 @@ Recipes that give only fixed token amounts can be crafted many `times` at once.
 | `Input` | Takes |
 | --- | --- |
 | `Burn { item, count }` | collectibles of an item, burned |
-| `Use(item)` | one collectible, kept (its life and uses are the recipe's needs and raises) |
+| `Use(item)` | one collectible, kept (its life and uses are the recipe's needs and raises); one boosting the player's token seat passes that seat `["seat", farm, player]` and the farm after it (`craftIx`'s `{ asset, farm, booster: true }`) |
 | `Pay { mint, amount, to }` | tokens burned or sent |
 | `Show { collection }` | any NFT of a collection the player holds, kept |
-| `Staked { item, farm }` | a collectible on its own seat in that farm (`NotFarmed` elsewhere) |
+| `Staked { item, farm }` | a collectible on its own seat in that farm (`NotFarmed` elsewhere, and for a token seat's booster) |
 | `Trade { collection, then }` | any NFT of a collection: burned, given or stashed |
 
 Outputs: `Output::Prize`, all of each or refused (`PrizeNotCovered`); or `Output::RollOn` (a roll on a kept
@@ -828,10 +866,15 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
   65,535 is off) | expires (i64 LE))`, the body ending `| recipient` for a contest with a chosen share (`verdictBytes`),
   checked by the Ed25519 precompile right before `decide`. A side is taken only once entries close (`EntriesOpen`),
   from the authority too; a call-off any time.
-- **Payout**: `decide` takes the shares; winners split the rest by stake, the last claim taking the remainder. A loser
-  of a contest of tokens sends nothing. The one chosen share pays the `recipient` `decide` names.
+- **Payout**: `decide` takes the shares and writes what the winners won: `pot_won`, what the pot then holds, and
+  `prize_won`, what a split prize's vault received. Each winning entry's claim pays
+  `floor(won × (claimed + entry) ÷ total) − floor(won × claimed ÷ total)`, `total` what its side put in and `claimed` what
+  the entries claimed before it put in (`contestWinnings`), so the parts add up exactly whatever the order. Gifts before
+  the decision count; tokens sent to the pot or the vault after it are nobody's, burned at the close (wrapped SOL closes
+  with its account). A loser of a contest of tokens sends nothing. The one chosen share pays the `recipient` `decide`
+  names.
 - **A prize per winning entry** (`prize`), given with its first claim (a roll at the claim's `nonce`); the player may
-  `forgo` it.
+  `forgo` it (a split prize's part forgone stays in the vault, back to its pool at the close, not to later winners).
 - **A prize split by stake** (`prize_split`, tokens only): its vault `["prize", contest]` opens with the contest;
   `decide` sets the whole prize aside or is refused (`PrizeNotCovered`); each winner takes its share by stake. A hooked
   prize mint's leftover is burned at the close, not moved back (no hook accounts for it). From a

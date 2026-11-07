@@ -46,7 +46,7 @@ test('a share of a pool as a prize is refused on every route, in words, with the
     'economy.boxes[0].outcomes[0].prizes[1]': { boxes: [{ key: 'b', name: 'B', price: 1, outcomes: [{ gives: 'bundle', prizes: [{ gives: 'item', item: 'shard' }, share], chance: 100 }] }] },
     'economy.recipes[0].out[0]': { recipes: [{ key: 'r', name: 'R', in: [], out: [share] }] },
     'economy.grants[0].prize': { grants: [{ key: 'g', name: 'G', prize: share, fund: 1 }] },
-    'economy.lotteries[0].places[0].prize': { lotteries: [{ key: 'l', name: 'L', price: 1, every: '1d', places: [{ percent: 50, prize: share }, 50] }] },
+    'economy.lotteries[0].places[0].prize': { lotteries: [{ key: 'l', pot: 0, name: 'L', price: 1, every: '1d', places: [{ percent: 50, prize: share }, 50] }] },
     'economy.farms[0].tiers[0].prize': { farms: [{ key: 'f', name: 'F', stakes: 'collectibles', rewards: 'gem', tiers: [{ lock: '1d', multiplier: 1, prize: share }] }] },
     'economy.contests[0].prize': { contests: [{ key: 'c', name: 'C', sides: 2, entriesClose: '1d', prize: share }] },
   };
@@ -351,7 +351,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
   const id = 7;
   const address = pda.lottery(w.project, id);
   const places = [{ bps: 0, prize: { Nft: { stash: 1, nft: relic } }, times: 1 }, { bps: 10_000, prize: null, times: 1 }];
-  w.upsert({ Lottery: { id, args: { terms: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, draws_at: BigInt(w.chain.now() + 60), min_sold: 0n }, every: 0n, gate: null, per_wallet: 0 } } });
+  w.upsert({ Lottery: { id, args: { terms: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places, ticket_mint: NOBODY, draws_at: BigInt(w.chain.now() + 60), min_sold: 0n }, every: 0n, gate: null, per_wallet: 0 } } });
   w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery: w.read('Lottery', address), count: 2n })]);
   w.chain.warp(w.chain.now() + 61);
   w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery: w.read('Lottery', address) })]);
@@ -362,7 +362,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
   const pull = (payer) => [computeUnitLimit(1_400_000), loot.pullIx({ payer, project: w.project, roundAddress, round: w.round(id).round, entry: 0, part: { Prize: [0] }, projectState: w.projectState(), prize: { stash: null, nfts: { [relic]: { collection: w.collection } }, collection: w.collection } })];
   fails(() => w.chain.send(w.cranker, pull(w.cranker)), 'PrizeNotCovered');
   // A stranger's payout from the page pays what it can, and leaves that one for its winner.
-  const spec = { version: 2, name: 'Pull', currency: 'gem', tokens: [{ key: 'gem', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, lotteries: [{ key: 'l', id, name: 'L' }] };
+  const spec = { version: 2, name: 'Pull', currency: 'gem', tokens: [{ key: 'gem', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, lotteries: [{ key: 'l', pot: 0, id, name: 'L' }] };
   const stranger = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: w.cranker, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   const payout = (await stranger.claims()).find((c) => c.kind === 'payout');
   assert.ok(payout);
@@ -377,7 +377,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
 
 test('a lottery of more runs than the program takes is refused; one at the cap is not', () => {
   const places = (n) => Array.from({ length: n }, () => 0.5);
-  const spec = (n) => base({ lotteries: [{ key: 'l', name: 'L', price: 1, every: '1d', places: places(n) }] });
+  const spec = (n) => base({ lotteries: [{ key: 'l', pot: 0, name: 'L', price: 1, every: '1d', places: places(n) }] });
   assert.ok(refused(spec(LIMITS.lotteryRuns + 1)).some((r) => r.code === 'E-LOTTERY' && r.where.endsWith('.places') && /BadLottery/.test(r.message)));
   assert.ok(!refused(spec(LIMITS.lotteryRuns)).some((r) => r.where.endsWith('.places') && /runs of places/.test(r.message)));
 });

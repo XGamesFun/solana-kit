@@ -473,7 +473,7 @@ describe('mechanics that run by themselves', () => {
 
   t('a lottery: tickets, a draw on its timer that fixes its money and moves it on, the oracle, then each part pulled', () => {
     const w = world();
-    const args = { price: 1000n, mint: w.mint, shares: [{ to: 'Treasury', bps: 1000 }], places: [7000, 3000], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null };
+    const args = { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [{ to: 'Treasury', bps: 1000 }], places: [7000, 3000], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null };
     w.upsert({ Lottery: { id: 1, args } });
     const address = pda.lottery(w.project, 1);
     const lottery = w.read('Lottery', address);
@@ -509,7 +509,7 @@ describe('mechanics that run by themselves', () => {
 
   t('a lottery timeout refunds its buyers by pulls and rejects stale terms', () => {
     const w = world();
-    const args = { price: 1000n, mint: w.mint, shares: [], places: [], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 5 };
+    const args = { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [], ticket_mint: '11111111111111111111111111111111', every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 5 };
     w.upsert({ Lottery: { id: 2, args } });
     const address = pda.lottery(w.project, 2);
     let lottery = w.read('Lottery', address);
@@ -525,7 +525,7 @@ describe('mechanics that run by themselves', () => {
     // The wallet's tickets this round are counted in its counts, keyed by the lottery and its incarnation.
     const counts = loot.readListAccount(w.chain.get(pda.counts(w.project, w.player)));
     assert.equal(loot.readLimit(counts, loot.countKey(address, lottery.incarnation)).inWindow, 2);
-    assert.equal(w.chain.tokens(pda.pot(address)), 0n);
+    assert.equal(w.chain.tokens(pda.lotteryPot(address, 0)), 0n);
     assert.equal(w.chain.tokens(pda.roundTokens(key, w.mint)), 4000n, 'the round holds its own money');
     fails(() => w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery, round: w.round(2).round })]), 'NotDue');
     // A round nobody draws waits; one whose draw the oracle never answers is cancelled by the next ask after the timeout.

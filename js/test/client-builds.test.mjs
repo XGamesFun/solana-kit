@@ -12,7 +12,7 @@ test('a lottery share that burns is burned at the round\'s close, the rest in th
   const w = world({ seed: 'review-burn-share' });
   const id = 91;
   const address = loot.pda.lottery(w.project, id);
-  w.upsert({ Lottery: { id, args: { price: 1000n, mint: w.mint, shares: [{ to: 'Burn', bps: 1000 }], places: [10000], ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 0 } } });
+  w.upsert({ Lottery: { id, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [{ to: 'Burn', bps: 1000 }], places: [10000], ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 0 } } });
   const lottery = w.read('Lottery', address);
   w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n })]);
   w.chain.warp(w.chain.now() + 3601);

@@ -189,7 +189,7 @@ test('the SOL total of going live counts a lottery’s seed and a sealed schedul
   const spec = {
     version: 2, name: 'Draw', currency: 'sol', collection: false, tokens: [{ key: 'sol', source: 'sol' }],
     // (`roundRent` 0: its rounds' rent is counted on its own, `check-warnings`.)
-    lotteries: [{ key: 'weekly', name: 'Weekly', price: 0.01, every: '7d', seed: 5, roundRent: 0, places: [{ percent: 100 }] }],
+    lotteries: [{ key: 'weekly', pot: 0, name: 'Weekly', price: 0.01, every: '7d', seed: 5, roundRent: 0, places: [{ percent: 100 }] }],
     schedules: [{ key: 'drip', name: 'Drip', does: 'pay', sealed: true, currency: 'sol', to: 'wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T', amount: 0.1, start: 'publish+1d', every: '1d', maxRuns: 20, fund: 2 }],
   };
   const setup = cost(spec, { now: NOW }).setup;

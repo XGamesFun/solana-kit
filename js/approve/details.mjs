@@ -92,7 +92,7 @@ function readDetails(reads, names) {
     if (!read) continue;
     const owner = read.accounts.owner ?? read.accounts.seller;
     const project = read.accounts.project;
-    const pots = new Map(names.m.lotteries.map((l) => [pda.pot(pda.lottery(project, l.id)), l.name ?? l.key]));
+    const pots = new Map(names.m.lotteries.filter((l) => Number.isInteger(l.pot)).map((l) => [pda.lotteryPot(pda.lottery(project, l.id), l.pot), l.name ?? l.key]));
     const vaults = new Map(names.m.farms.map((f) => [pda.rewards(pda.farm(project, f.id)), f.name ?? f.key]));
     // Before a wallet connects, the plan stands a made-up address in for it (one no spec may name): that one is not
     // shown. Once one is connected, only that wallet is called yours.
@@ -118,7 +118,7 @@ function readDetails(reads, names) {
     }
     // Where what a split leaves goes: a lottery's pot, an auction's seller (or the treasury for a new item), else the treasury.
     const def = read.args.def ?? {};
-    const restTo = def.Lottery ? 'its pot' : read.name === 'open_auction' ? (read.args.args?.lot?.Asset ? `the seller, ${address(read.accounts.seller)}` : treasury()) : treasury();
+    const restTo = def.Lottery ? (def.Lottery.args?.terms?.pays_from?.Pot ? 'its pot' : 'the round’s places') : read.name === 'open_auction' ? (read.args.args?.lot?.Asset ? `the seller, ${address(read.accounts.seller)}` : treasury()) : treasury();
     const to = (v) => (v === 'Burn' ? 'burned' : `to ${where(v)}`);
     const isTo = (v) => v === 'Burn' || v === 'Treasury' || (v && typeof v === 'object' && ['Pool', 'Account', 'Holder', 'Wallet', 'Chosen'].some((k) => k in v) && Object.keys(v).length === 1);
     const grantId = read.args.def?.Grant?.id;
@@ -132,6 +132,9 @@ function readDetails(reads, names) {
           const parts = v.map((s) => `${Number(s.bps) / 100}% ${to(s.to)}`);
           if (rest > 0) parts.push(v.length ? `the rest (${rest / 100}%) to ${restTo}` : `all of it to ${restTo}`);
           lines.push(`Pays: ${parts.join(', ')}`);
+        } else if (k === 'pays_from' && v && typeof v === 'object') {
+          // Where a lottery's places are paid from: a pot kept from round to round, or each round's own money.
+          lines.push(v.Pot ? `Places paid from: its pot ${v.Pot[0]}, kept from round to round (what anyone sends it, yield and what earlier rounds left all count)` : `Places paid from: each round’s own ticket money alone; what they leave is ${v.Round.rest === 'Burn' ? 'burned' : `sent to ${where(v.Round.rest)}`}`);
         } else if (k === 'to' && isTo(v)) lines.push(v === 'Burn' ? 'Burns the tokens it takes' : `Sends tokens to ${where(v)}`);
         else if (k === 'Give' && Array.isArray(v) && typeof v[0] === 'string') lines.push(`Gives the NFT to ${address(v[0])}`);
         else if (k === 'vouchers' && Array.isArray(v)) {

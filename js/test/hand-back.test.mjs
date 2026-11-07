@@ -59,7 +59,7 @@ test('an NFT lottery ticket whose price gives it to the fee box goes back to its
   const id = 1;
   const address = pda.lottery(w.project, id);
   const rule = { of: { Collection: [club] }, key: '', test: 'Any' };
-  w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, shares: [], places: [10_000], ticket_mint: NOBODY, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: { Give: [feeBox] } }, min_sold: 1n } } });
+  w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [10_000], ticket_mint: NOBODY, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: { Give: [feeBox] } }, min_sold: 1n } } });
   const lottery = w.read('Lottery', address);
   w.chain.send(w.player, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: 1n, nft: { asset: ticket, ...tm } })]);
   assert.equal(w.chain.tokens(loot.ata(w.project, ticket)), 1n, 'the project holds the ticket');
@@ -73,7 +73,7 @@ test('an NFT lottery ticket whose price gives it to the fee box goes back to its
   assert.throws(() => w.chain.send(w.cranker, pull(false)));
   assert.equal(w.chain.tokens(loot.ata(w.project, ticket)), 1n);
   // js/play's claim reads the fee box's owner and passes the buyer's token account.
-  const player = app(w, { lotteries: [{ key: 'raffle', name: 'Raffle', id }] });
+  const player = app(w, { lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id }] });
   const step = (await player.claims()).find((c) => c.kind === 'pull');
   assert.ok(step);
   await player.claim(step);

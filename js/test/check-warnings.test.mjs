@@ -67,7 +67,10 @@ test('a sealed schedule has an end and pays no holder; a list names amounts up t
 
 test('a schedule pays a lottery’s pot or a farm’s rewards; a farm nothing funds is said to pay nothing', () => {
   const raffle = example('nft-raffle');
-  const sponsored = edit(raffle, (s) => (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }], s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }]));
+  const sponsor = (s) => (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }], s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }]);
+  // A lottery paid from each round's own money keeps no pot to pay into: give it one.
+  assert.ok(edit(raffle, sponsor).refused.includes('E-LOTTERY economy.schedules.sponsor.to'));
+  const sponsored = edit(raffle, (s) => (sponsor(s), delete s.lotteries[0].rest, (s.lotteries[0].pot = 0)));
   assert.ok(sponsored.ok, sponsored.refused.join());
   const farm = example('paper-hands-farm');
   const spec = structuredClone(farm);
@@ -132,7 +135,7 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
 
 /** A round's record as `decodeRound` reads it, for the parts it owes. */
 const round = ({ returns = false, ...more } = {}) => ({
-  status: 'Drawn', terms: { returns, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n, pot_owed: 0n,
+  status: 'Drawn', lottery: WALLET, terms: { returns, pays_from: { Pot: [0] }, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n, pot_owed: 0n,
   common: [], paid: new Uint8Array(1), prizes: [], nfts: [], assigned: 0, entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }],
   ...more,
 });
@@ -151,7 +154,7 @@ test('in a lottery that returns its tickets, a ticket goes back from the draw', 
 });
 
 test('parts owed in common: a share once drawn, the pot’s, a pool’s prize back after a cancel', () => {
-  const terms = { returns: false, ticket_mint: '11111111111111111111111111111111', shares: [{ to: 'Treasury', bps: 100 }, { to: 'Burn', bps: 100 }], places: [] };
+  const terms = { returns: false, pays_from: { Pot: [0] }, ticket_mint: '11111111111111111111111111111111', shares: [{ to: 'Treasury', bps: 100 }, { to: 'Burn', bps: 100 }], places: [] };
   const prizes = [{ run: 0, mint: WALLET, each: 5n, sent: 5n, arrived: 5n, minted: false }];
   assert.deepEqual(loot.commonOwed(round({ status: 'Drawing', terms, common: [7n, 7n], pot_owed: 3n })), [], 'drawing: nothing moves');
   assert.deepEqual(loot.commonOwed(round({ terms, common: [7n, 7n], pot_owed: 3n, prizes })), [{ Common: [0] }, { Common: [2] }], 'a share that burns is burned at the close');

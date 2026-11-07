@@ -142,6 +142,7 @@
     {
       "key": "shield-raffle",
       "name": "Shield raffle",
+      "pot": 0,
       "ticketNft": {
         "rule": {
           "item": "shield"

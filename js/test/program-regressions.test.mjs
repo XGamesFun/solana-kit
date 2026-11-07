@@ -14,7 +14,7 @@ test('a full per-round ticket allowance does not exhaust future rounds', { skip 
   const id = 712;
   const address = loot.pda.lottery(w.project, id);
   w.upsert({ Lottery: { id, args: {
-    price: 1n, mint: w.mint, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM,
+    price: 1n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM,
     every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: cap,
   } } });
   w.fund(w.player, w.mint, BigInt(cap));

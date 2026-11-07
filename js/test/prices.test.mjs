@@ -154,7 +154,7 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
 
   // A lottery whose ticket costs one NFT, burned.
   const rule = { of: { Collection: [collection] }, key: '', test: 'Any' };
-  w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, nft_ticket: { rule, then: 'Burn' } } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, nft_ticket: { rule, then: 'Burn' } } } });
   const lottery = w.read('Lottery', pda.lottery(w.project, 1));
   const bought = w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, count: 1n, nft: { asset: nfts[3], ...kind } })]);
   assert.equal(bought.receipts.find((x) => x.name === 'TicketsBought').data.asset, nfts[3]);

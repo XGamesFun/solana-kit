@@ -24,7 +24,7 @@ import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '
 import { sha256 } from '../chain/sha256.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import IDL from './idl/loot.js';
-import { chosenAtPurchase, CLAIMED, decode, ENDED, idleRound, nftSlot, ownStash, paymentMint, placesPulled, prizePlacesOwed, roundFinished, roundWinners, shareOf, tokenRun } from './accounts.js';
+import { chosenAtPurchase, CLAIMED, decode, ENDED, idleRound, leftoverTo, lotteryPots, MAX_POTS, nftSlot, ownStash, paymentMint, placesPulled, potIdOf, prizePlacesOwed, roundFinished, roundWinners, shareOf, tokenRun } from './accounts.js';
 import { stream, TAG, weighted } from './random.js';
 import { tableBudget } from './sizes.js';
 import { ata, BUBBLEGUM_PROGRAM, COMPRESSION_PROGRAM, LOOT_PROGRAM, MPL_CORE_PROGRAM, NOOP_PROGRAM, pda, vault, VRF_QUEUE } from './pda.js';
@@ -665,6 +665,11 @@ export function withDefaults(def) {
     // Its terms (`LotteryTerms`, what a round copies at its first purchase), given in `terms` or beside `every`.
     const { every, gate, per_wallet: perWallet, terms: given, ...flat } = args;
     const terms = { nft_ticket: null, returns: false, min_sold: 0, ticket_mint: NO_ADDRESS, ...flat, ...given };
+    // Where its places are paid from is the project's to name, never a default: `{ Pot: [id] }`, a pot kept from round
+    // to round, or `{ Round: { rest } }`, each round's own ticket money with what its places leave going to `rest`.
+    const pays = terms.pays_from;
+    if (!pays || !(pays.Pot || pays.Round)) throw new Error('A lottery names where its places are paid from (`pays_from`): { Pot: [id] } or { Round: { rest } }.');
+    if (pays.Pot && !(Number(pays.Pot[0]) >= 0 && Number(pays.Pot[0]) < MAX_POTS)) throw new Error(`A lottery's pot id is below ${MAX_POTS}.`);
     // A run of places alike is { bps, prize, times }; a number is one place's share of the pot that gives nothing else.
     terms.places = (terms.places ?? []).map((p) => (typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 }));
     terms.shares = stored(terms.shares ?? []);
@@ -680,7 +685,8 @@ export function withDefaults(def) {
 
 /**
  * The owner writes one record (`def`: { Item: { id, args } }, { Box: … }, …), at its own address. A lottery names
- * its pot's mint, its pot (which its first write opens), its ticket mint, both token programs and the round it waits on
+ * its mint, the pot its terms pay from (which a write opens when it isn't open; pot 0's address for a lottery whose
+ * rounds pay from their own money, where any account will do), its ticket mint, both token programs and the round it waits on
  * (`lotteryState`: the lottery as it is, null for a new one; `idleRound`: its current round's record, or round 0's once
  * it drew once and ended: a lottery made again, edited once ended or made to repeat waits while that round runs or
  * still owes NFTs of its own stash), then its own stash when a place holds or draws an NFT of it. A box, a recipe, a grant or a lottery that
@@ -704,7 +710,7 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
   if (kind === 'Lottery') {
     remaining = [
       meta(args.terms.mint, false, false),
-      meta(pda.pot(recordAddress(project, def)), false, true),
+      meta(pda.lotteryPot(recordAddress(project, def), potIdOf(args.terms) ?? 0), false, true),
       meta(paymentMint(args.terms), false, false),
       meta(TOKEN_PROGRAM, false, false),
       meta(TOKEN_2022_PROGRAM, false, false),
@@ -720,9 +726,10 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
 
 /**
  * The owner closes the record at `target`, and its rent comes back: a grant's with the funds it held. A lottery
- * (`lottery`: its decoded record) sends what its pot holds to `to`, a token account of the pot's mint (the owner's own
- * by default), and closes the pot, once its current round has no record (one that drew once and ended: once its round 0
- * gave out every NFT of its own stash, `idleRound`).
+ * (`lottery`: its decoded record) sends what every pot it opened holds (`Lottery::pots`) to `to`, a token account of its
+ * mint (the owner's own by default), and closes each, once its current round has no record (one that drew once and
+ * ended: once its round 0 gave out every NFT of its own stash, `idleRound`), and once the round its `owing` names has
+ * moved in what it owes its pot (pull it first, `Part::Common`). One that never opened a pot names only those rounds.
  */
 export function closeRecordIx({ owner, project, target, lottery, schedule, programs, to, extra = [] }) {
   // A sealed schedule never closes (CannotClose): its address, and its vault's, stay bound to its terms.
@@ -730,13 +737,21 @@ export function closeRecordIx({ owner, project, target, lottery, schedule, progr
   if (!lottery) return lootIx('upsert', { def: null }, { owner, project, target });
   const { mint } = lottery.terms;
   const tokenProgram = tokenProgramOf(programs, mint);
+  const pots = lotteryPots(lottery);
+  const owing = lottery.owing && lottery.owing !== NO_ADDRESS ? [meta(lottery.owing, false, false)] : [];
   const remaining = [
     meta(idleRound(target, lottery), false, false),
-    meta(pda.pot(target), false, true),
-    meta(mint, false, true),
-    meta(to ?? ata(owner, mint, tokenProgram), false, true),
-    meta(TOKEN_PROGRAM, false, false),
-    meta(TOKEN_2022_PROGRAM, false, false),
+    // The round that may still owe a pot: the close waits until it has moved its leftover in (RoundRunning).
+    ...owing,
+    ...(pots.length
+      ? [
+          meta(mint, false, true),
+          meta(to ?? ata(owner, mint, tokenProgram), false, true),
+          meta(TOKEN_PROGRAM, false, false),
+          meta(TOKEN_2022_PROGRAM, false, false),
+          ...pots.map((id) => meta(pda.lotteryPot(target, id), false, true)),
+        ]
+      : []),
     ...tailOf(extra),
   ];
   return lootIx('upsert', { def: null }, { owner, project, target }, { remaining });
@@ -1435,12 +1450,15 @@ export function buyTicketsIx({ player, project, id, lottery, round = null, mint,
  * round asked for (null when nobody bought into the current one: it moves on, or a lottery that draws once ends, with
  * no ask), and `roundAddress` its address when it is not the current round's (an older round still waiting for its
  * answer: asked again after `STALE_SECONDS`, or after the timeout cancelled, with no lottery account, so `lottery` may be
- * null then; without `round`, the current round's, with the lottery's terms). A round's first ask fixes its money: it takes
- * the lottery's pot, its mint and the round's account of it, then each run of token prizes in place order, its mint and
- * for a pool, the pool and the round's account of the mint (`poolMints`: a pool's index to its mint). With `skipHooked`
- * (the project's authority only) a hooked pool or pot gives the round nothing. `extra`: hook accounts.
+ * null then; without `round`, the current round's, with the lottery's terms). A round's first ask fixes its money. Paid
+ * from a pot, it takes the pot, its mint and the round's account of it, then, when the lottery names a round that may
+ * still owe a pot (`lottery.owing`), that round, its account of the mint and its pot (`owing`: that round's decoded
+ * record, whose terms name its pot; without it, or when the record is gone, the pot this round pays from). A round paid
+ * from its own money takes none of these. Then each run of token prizes in place order, its mint and for a pool, the
+ * pool and the round's account of the mint (`poolMints`: a pool's index to its mint). With `skipHooked` (the project's
+ * authority only) a hooked pool or pot gives the round nothing. `extra`: hook accounts.
  */
-export function drawLotteryIx({ payer, project, id, lottery, round = null, roundAddress = null, skipHooked = false, poolMints = {}, extra = [] }) {
+export function drawLotteryIx({ payer, project, id, lottery, round = null, roundAddress = null, owing = null, skipHooked = false, poolMints = {}, extra = [] }) {
   const address = id === undefined || id === null ? null : pda.lottery(project, id);
   const key = roundAddress ?? currentRound(address, lottery);
   const rest = [];
@@ -1449,7 +1467,16 @@ export function drawLotteryIx({ payer, project, id, lottery, round = null, round
   const current = !round || round.status === 'Open';
   if (current) {
     const { terms } = round ?? lottery;
-    rest.push(meta(pda.pot(address), false, true), meta(terms.mint, false, false), meta(pda.roundTokens(key, terms.mint), false, true));
+    const potId = potIdOf(terms);
+    if (potId != null) {
+      rest.push(meta(pda.lotteryPot(address, potId), false, true), meta(terms.mint, false, false), meta(pda.roundTokens(key, terms.mint), false, true));
+      // What the round before left its pot moves in first: that round, its account of the mint, and its pot.
+      const earlier = lottery?.owing;
+      if (earlier && earlier !== NO_ADDRESS) {
+        const earlierPot = potIdOf(owing?.terms) ?? potId;
+        rest.push(meta(earlier, false, true), meta(pda.roundTokens(earlier, terms.mint), false, true), meta(pda.lotteryPot(address, earlierPot), false, true));
+      }
+    }
     for (const place of terms.places) {
       const from = place.prize?.Tokens?.from;
       if (from?.Mint) rest.push(meta(from.Mint[0], false, false));
@@ -1523,13 +1550,14 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  *   'Own'            entry `entry`'s own part: a refund, a no-loss ticket's price, or its NFT ticket back or where its
  *                    price sends it (`ticket` its kind as `piece` takes it; `handBack` when the wallet its price gives
  *                    it to is an account of the loot program; `hold`: made a hold for whoever it is owed to instead);
- *   { Pot: [run] }   the entry's places in the run, their part of the pot, paid into the buyer's account;
+ *   { Pot: [run] }   the entry's places in the run, their part of what the round pays from, paid into the buyer's account;
  *   { Prize: [run] } their prize: tokens into the buyer's account, or each place's prize (`prize`: { stash, the lottery's
  *                    own stash decoded, for NFTs not taken out yet (`stashNfts`); stashes, a project stash's id to its
  *                    decoded stash; nfts, an NFT's kind by its asset; hold, NFTs made holds; most, the most places a
  *                    pull carries; and what `prizeMetas` takes: collection, poolMints, items, projectMint }), a roll's
  *                    order at `prizeRollNonce(nonce + place)` (ask it in the same transaction: `pullRolls`);
- *   { Common: [i] }  a part owed in common: share `i`, the pot's (`i` = the shares' count), a pool's prize back after a
+ *   { Common: [i] }  a part owed in common: share `i`, what the places leave (`i` = the shares' count: to the pot, or
+ *                    to `rest` for a round paid from its own money; never owed when that burns), a pool's prize back after a
  *                    cancel (past it), paid where it goes (`holders`, `programs`); `toTreasury` when that can't take it
  *                    (a pool never opened, the pot closed since or made again in another mint, an account gone: a
  *                    holder nobody is is found here).
@@ -1564,7 +1592,7 @@ export function pullIx({ payer, project, roundAddress: key, round: r, entry = 0,
     const n = r.terms.shares.length;
     let dest;
     if (i < n) [mint, dest] = [paymentMint(r.terms), r.terms.shares[i].to];
-    else if (i === n) [mint, dest] = [r.terms.mint, { Account: [pda.pot(r.lottery)] }];
+    else if (i === n) [mint, dest] = [r.terms.mint, leftoverTo(r.lottery, r.terms)];
     else {
       const p = r.prizes[i - n - 1];
       [mint, dest] = [p.mint, r.terms.places[Number(p.run)].prize.Tokens.from];
@@ -2278,7 +2306,9 @@ export const refreshSeatIx = ({ signer, project, id, farm, by, seat, collection,
  * it lowers a number: its seat and farm follow it, and the raise may not lower a number that farm reads; for a `Trade` line the NFT traded in, as `piece` takes it: `{ asset, collection, tokenMetadata,
  * compressed }`). A collectible used that is staked in a farm holding it for the player (escrow) or locking it in their
  * wallet (freeze) is `{ asset, farm }`, `farm` that farm's id: its seat and farm follow it (a raise on it may not lower a
- * number its farm reads: `BadRecipe`). A `Staked` line names the farm its collectible
+ * number its farm reads: `BadRecipe`). One that boosts the player's token seat in a farm of tokens is
+ * `{ asset, farm, booster: true }`: the player's token seat (`["seat", farm, player]`) and that farm follow it, on a kept
+ * `Use` line or a `Show` line alike. A `Staked` line names the farm its collectible
  * is staked in (`Input::Staked { item, farm }`, escrowed or frozen there): its address, or `{ asset, farm }` with that
  * farm, and its seat and that farm follow it. Each item line passes its item's collection
  * (`items[id].collection`, the decoded Items; `collection` when not given), written for a burn: Core writes it as it
@@ -2304,12 +2334,14 @@ export function craftIx({ player, project, collection, id, recipe, assets = [], 
       // A staked one is on its seat in the farm its line names.
       if (input.Staked && typeof used !== 'string' && used.farm !== undefined && Number(used.farm) !== input.Staked.farm)
         throw new Error(`craft: the recipe takes this collectible staked in farm ${input.Staked.farm}, not farm ${used.farm}`);
+      // A booster of a token seat is on the player's seat, not one of its own: a `Staked` line refuses it (NotFarmed).
+      if (input.Staked && used?.booster) throw new Error(`craft: the recipe takes a collectible staked on a seat of its own in farm ${input.Staked.farm}; one boosting a token seat is taken by a kept line ("use")`);
       const seated = input.Staked ? { asset: typeof used === 'string' ? used : used.asset, farm: input.Staked.farm } : used;
       if (typeof seated === 'string') remaining.push(meta(seated, false, true));
       else {
-        // On a seat: its seat and its farm follow it.
+        // On a seat: its seat (its own, or the player's token seat it boosts) and its farm follow it.
         const farm = pda.farm(project, seated.farm);
-        remaining.push(meta(seated.asset, false, true), meta(pda.seat(farm, seated.asset), false, false), meta(farm, false, false));
+        remaining.push(meta(seated.asset, false, true), meta(pda.seat(farm, seated.booster ? player : seated.asset), false, false), meta(farm, false, false));
       }
     } else if (input.Pay) {
       const { mint, to } = input.Pay;
@@ -2334,7 +2366,7 @@ export function craftIx({ player, project, collection, id, recipe, assets = [], 
       const lowers = (recipe.raises ?? []).some((raise) => Number(raise.place) === place && BigInt(raise.shift.by) < 0n);
       if (lowers && typeof nft !== 'string' && nft.farm !== undefined && nft.farm !== null) {
         const farm = pda.farm(project, nft.farm);
-        remaining.push(meta(pda.seat(farm, nft.asset ?? nft.compressed ?? nft.mint), false, false), meta(farm, false, false));
+        remaining.push(meta(pda.seat(farm, nft.booster ? player : nft.asset ?? nft.compressed ?? nft.mint), false, false), meta(farm, false, false));
       }
     }
   }

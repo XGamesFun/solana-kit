@@ -20,7 +20,7 @@ function fixture(seed) {
   const spec = {
     version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
     live: { project: w.project, collection: w.collection },
-    lotteries: [{ key: 'raffle', name: 'Art raffle', id: 1 }],
+    lotteries: [{ key: 'raffle', rest: 'treasury', name: 'Art raffle', id: 1 }],
     grants: [{ key: 'prize', name: 'Prize', id: 1 }],
   };
   const appOf = (address) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
@@ -38,7 +38,7 @@ test('tickets are bought only on the terms shown: a price raised since is refuse
   assert.equal(shown.priceUnits, PRICE);
   assert.equal(shown.price, '1');
   // The owner doubles the price after the page showed it.
-  const args = { price: 2n * PRICE, mint: w.mint, shares: [{ to: 'Treasury', bps: 10_000 }], places: [{ bps: 0, prize: { Held: [art] } }], ticket_mint: A, every: 0n, draws_at: BigInt(drawsAt), gate: null, per_wallet: 0, min_sold: 0n };
+  const args = { price: 2n * PRICE, mint: w.mint, pays_from: { Round: { rest: 'Treasury' } }, shares: [{ to: 'Treasury', bps: 10_000 }], places: [{ bps: 0, prize: { Held: [art] } }], ticket_mint: A, every: 0n, draws_at: BigInt(drawsAt), gate: null, per_wallet: 0, min_sold: 0n };
   w.chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def: { Lottery: { id: 1, args } } })]);
   const before = w.balance(w.player);
   await assert.rejects(app.buyTickets('raffle', 1, { listing: shown }), /changed since the player was shown it/);

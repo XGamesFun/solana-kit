@@ -145,7 +145,7 @@ test('a link’s ordinary query is no secret; a key in one still is', () => {
 test('an auction of a roll says so in its setup step, and a pool a pay schedule drains is taken from', () => {
   const steps = plan(example('partner-vault'), { now: NOW }).steps.filter((s) => s.id.startsWith('auction:'));
   assert.ok(steps.length && steps.every((s) => /a roll of the box “/.test(s.says) && !/undefined/.test(s.says)), steps.map((s) => s.says).join('\n'));
-  const spec = sol({ pools: [{ key: 'p', currency: 'sol', seed: 1 }], lotteries: [{ key: 'l', name: 'L', price: 0.1, every: '1d' }], schedules: [{ key: 's', name: 'S', does: 'pay', from: 'p', to: 'lottery:l', amount: 0.01, every: '1d' }] });
+  const spec = sol({ pools: [{ key: 'p', currency: 'sol', seed: 1 }], lotteries: [{ key: 'l', pot: 0, name: 'L', price: 0.1, every: '1d' }], schedules: [{ key: 's', name: 'S', does: 'pay', from: 'p', to: 'lottery:l', amount: 0.01, every: '1d' }] });
   const r = check(spec, { now: NOW });
   assert.equal(r.ok, true, JSON.stringify(r.refusals));
   assert.ok(!r.warnings.some((w) => w.code === 'W-POOL' && w.where === 'economy.pools.p'), 'the schedule takes from it');

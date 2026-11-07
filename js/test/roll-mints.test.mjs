@@ -278,7 +278,7 @@ t('a lottery paid in a hooked coin: its ask and each pull carry the hook’s acc
   const programs = { [coin]: TOKEN_2022_PROGRAM };
   // What every transfer of the coin carries: the hook program, its list and the account the list names.
   const extra = [{ pubkey: HOOK, isSigner: false, isWritable: false }, { pubkey: validationAddress(coin, HOOK), isSigner: false, isWritable: false }, { pubkey: counter, isSigner: false, isWritable: true }];
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, pays_from: { Pot: [0] }, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   const lottery = w.read('Lottery', address);
   const buyers = [w.who(), w.who()];
@@ -301,8 +301,8 @@ t('js/play buys, draws and pulls a lottery paid in a hooked coin, reading the ho
   const counter = newAddress(w.random);
   w.chain.put(validationAddress(coin, HOOK), { owner: HOOK, lamports: w.chain.rent(51), data: concat(EXECUTE_DISCRIMINATOR, uintLE(39, 4), uintLE(1, 4), Uint8Array.of(0), addressBytes(counter), Uint8Array.of(0, 1)) });
   w.chain.put(counter, { owner: HOOK, lamports: w.chain.rent(16), data: new Uint8Array(16) });
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
-  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: coin, decimals: 6, program: 'token-2022' }], lotteries: [{ key: 'draw', name: 'Draw', id: 1 }], live: { project: w.project, collection: w.collection, mints: { coin } } };
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: coin, pays_from: { Pot: [0] }, shares: [{ to: 'Treasury', bps: 1000 }], places: [10_000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: coin, decimals: 6, program: 'token-2022' }], lotteries: [{ key: 'draw', pot: 0, name: 'Draw', id: 1 }], live: { project: w.project, collection: w.collection, mints: { coin } } };
   const players = [w.who(), w.who()];
   const apps = players.map((p) => solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: p, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() }));
   for (const p of players) w.chain.send(w.creator, [createAssociatedTokenAccountIdempotent(w.creator, p, coin, TOKEN_2022_PROGRAM), mintToIx({ mint: coin, to: loot.ata(p, coin, TOKEN_2022_PROGRAM), authority: w.creator, amount: 10_000n, tokenProgram: TOKEN_2022_PROGRAM })]);

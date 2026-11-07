@@ -57,7 +57,7 @@ test('a recipe’s tokens from a pool are counted in the pool’s token, not the
 });
 
 test('a lottery’s split leaves the rest of the ticket money to the pot, and the explainer says so', () => {
-  const spec = { version: 2, network: 'devnet', name: 'Edge', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], pools: [{ key: 'dev', currency: 'sol' }], lotteries: [{ key: 'l', name: 'L', price: 0.1, every: '1d', split: [{ to: 'pool:dev', percent: 10 }], cutPercent: 5 }] };
+  const spec = { version: 2, network: 'devnet', name: 'Edge', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], pools: [{ key: 'dev', currency: 'sol' }], lotteries: [{ key: 'l', pot: 0, name: 'L', price: 0.1, every: '1d', split: [{ to: 'pool:dev', percent: 10 }], cutPercent: 5 }] };
   const line = explainEconomy(spec, { now: NOW }).text.split('\n').find((l) => /Buy tickets/.test(l));
   assert.match(line, /ticket money goes 10% to the pool “dev”, 5% to your treasury, 85% into the pot/);
   assert.doesNotMatch(line, /% to your treasury\./);

@@ -52,7 +52,7 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
     pools: [{ key: 'house', currency: 'sol', seed: 1 }],
     boxes: [{ key: 'chest', name: 'Chest', price: 0.02, split: [{ to: 'pool:house', percent: 90 }], outcomes: [{ gives: 'item', item: 'gem', chance: 50 }, { gives: 'pay', pool: 'house', amount: 0.03, chance: 50 }] }],
     payments: [{ key: 'entry', name: 'Entry', amount: 0.005, split: [{ to: 'lottery:weekly', percent: 100 }] }],
-    lotteries: [{ key: 'weekly', name: 'Weekly', price: 0.001, every: '7d' }],
+    lotteries: [{ key: 'weekly', pot: 0, name: 'Weekly', price: 0.001, every: '7d' }],
     farms: [{ key: 'stake', name: 'Stake SOL', stakes: 'sol', rewards: 'sol', seed: 0.5, tiers: [{ lock: '1h', multiplier: 1 }] }],
     grants: [{ key: 'welcome', name: 'Welcome', gives: { item: 'starter' }, list: [player.address], limits: { perWallet: 1 }, fund: 0.05 }],
   };

@@ -101,12 +101,12 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
   const rule = { of: { Collection: [collection] }, key: '', test: 'Any' };
   const now = w.chain.now();
   w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
-  w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(now + 3600), gate: null, nft_ticket: { rule, then: { Stash: [3] } } } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(now + 3600), gate: null, nft_ticket: { rule, then: { Stash: [3] } } } } });
   w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args: { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule } })]);
   // An auction of an item (a roll lot takes no NFT bids).
   const lot = { lot: { Item: [2] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
   w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
-  const spec = specOf(w, { lotteries: [{ key: 'raffle', name: 'Raffle', id: 1 }], auctions: [{ key: 'mystery', name: 'Mystery lot', id: 1, seller: w.authority }] });
+  const spec = specOf(w, { lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id: 1 }], auctions: [{ key: 'mystery', name: 'Mystery lot', id: 1, seller: w.authority }] });
   const p = playerOf(w, spec);
   const q = playerOf(w, spec);
   const [me, rival] = [p.player.address, q.player.address];

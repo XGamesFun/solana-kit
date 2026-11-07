@@ -35,7 +35,7 @@ test('a cancelled NFT-ticket lottery waits on a buyer who spoiled their account 
   const id = 1;
   const address = loot.pda.lottery(w.project, id);
   const rule = { of: { Collection: [club] }, key: '', test: 'Any' };
-  w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: 'Burn' }, min_sold: 3n } } });
+  w.upsert({ Lottery: { id, args: { price: 0n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM, every: BigInt(DAY), draws_at: BigInt(w.chain.now() + DAY), gate: null, per_wallet: 0, nft_ticket: { rule, then: 'Burn' }, min_sold: 3n } } });
   const tm = { tokenMetadata: { programmable: false } };
   const buy = (who, asset) => w.chain.send(who, [computeUnitLimit(1_400_000), loot.buyTicketsIx({ player: who, project: w.project, id, lottery: w.read('Lottery', address), round: w.round(id)?.round ?? null, count: 1n, nft: { asset, ...tm } })]);
   // B buys first: B opens the round and fronts its header, back once everyone is paid.
@@ -65,7 +65,7 @@ test('a cancelled NFT-ticket lottery waits on a buyer who spoiled their account 
 
   // The client: the round's opener (B, through the player module) pays everyone, finds A's account can't take the
   // ticket, and opens a fresh one of A's in the same transaction, which the NFT goes into; the round then closes.
-  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, lotteries: [{ key: 'raffle', name: 'Raffle', id }] };
+  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id }] };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: { address: b, async signTransaction(wire) { return wire; } }, now: () => w.chain.now() });
   const claims = await app.claims();
   const payout = claims.find((c) => c.kind === 'payout' && c.round === key);

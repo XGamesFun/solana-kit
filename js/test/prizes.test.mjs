@@ -79,7 +79,7 @@ t('a grant gives a roll of a box', () => {
 t('a lottery’s place gives a roll of a box', () => {
   const { w, nfts } = stocked('prizes-lottery');
   const places = [7000, { bps: 0, prize: { Roll: [CHEST] } }];
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   let lottery = w.read('Lottery', address);
   assert.deepEqual(lottery.terms.places, [{ bps: 7000, prize: null, times: 1 }, { bps: 0, prize: { Roll: [CHEST] }, times: 1 }], 'its places as written');
@@ -156,7 +156,7 @@ t('a specific NFT and a collectible are given at once, by a grant’s claim and 
 
   // A lottery: first place takes the pot, second the artwork, each by a pull.
   const places = [10_000, { bps: 0, prize: { Nft: { stash: 1, nft: nfts[1] } } }];
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places, ticket_mint: NOBODY, every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   const rival = w.who();
   w.fund(rival, w.mint, 10n * PRICE);
@@ -175,7 +175,7 @@ t('one buyer who wins two places of the same collectible gets two, each at its o
   const w = world({ seed: 'prizes-lottery-twice' });
   w.upsert({ Item: { id: 9, args: collectible('Medal') } });
   const medal = { bps: 0, prize: { Item: [9] } };
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places: [5000, medal, medal], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
+  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, pays_from: { Pot: [0] }, shares: [], places: [5000, medal, medal], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
   const address = pda.lottery(w.project, 1);
   const lottery = w.read('Lottery', address);
   w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, mint: w.mint, count: 3n })]);
