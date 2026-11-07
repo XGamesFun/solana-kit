@@ -1,7 +1,7 @@
 # The loot program: how it behaves
 
 **Version 0.24.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Devnet only**: on devnet since
-slot 519,709,024 (2026-11-07). Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
+slot 519,723,738 (2026-11-07). Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`). No
 accounts carry over from older versions: make fresh economies for this one.
 
 This page describes the build its IDL comes from, the unreleased rules after 0.23 (the program's CHANGELOG, "the rules are strict"): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seller who can't be paid is owed**, and every list has a **cap**. They are not on devnet yet.

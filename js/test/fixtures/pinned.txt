@@ -24,10 +24,10 @@ associated_token.so              ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL ma
 memo.so                          MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr  mainnet v2          f520eaf096361abbb9639ea4dc3e5388a87b9330e121f476607b87c46ef67954 74800 - -
 mpl_core.so                      CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d mainnet upgradeable 51d41542456639a01820c747e72b9d3b4ca258930a5bbb7e78db0cda133dc209 848320 455005931 -
 token_metadata.so                metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s  mainnet upgradeable 31f0a627dba051a938de650464e55cc5397a4be0fd496929c1f9cf02fe5e9011 793991 380725176 -
-bubblegum.so                     BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY mainnet upgradeable b3a04a9d16cf2f168ae50e13756557867b3f6805c77519546147ec4065838bab 1349808 449480576 -
+bubblegum.so                     BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY mainnet upgradeable 3d75d7c63ed8a80aba9ca065914605b2fb7a6510f71fdf681805b03b6f114cb1 1349808 463294550 -
 mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  mainnet upgradeable fd55664396a9589330bed7e9e0c6b579781744d53f4602d2f0cfb2eacb69fcc5 2179480 339792668 -
 mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
 vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
-loot.so                          9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ  devnet  upgradeable 1a99430d3201e0f4fce4d8b0f3b77e6eb0ded7fec4222042d30fc59f82f6e7e5 1727056 519709024 -
+loot.so                          9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ  devnet  upgradeable 1bf01fbceb390c8888921df95f711d32e805554401e2c128e83eb16fcb11098c 1727272 519723738 -
 mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
 test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -

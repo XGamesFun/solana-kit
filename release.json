@@ -1,8 +1,8 @@
 {
   "version": "0.24.0",
   "programId": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
-  "sbfBytes": 1727056,
-  "sbfSha256": "1a99430d3201e0f4fce4d8b0f3b77e6eb0ded7fec4222042d30fc59f82f6e7e5",
+  "sbfBytes": 1727272,
+  "sbfSha256": "1bf01fbceb390c8888921df95f711d32e805554401e2c128e83eb16fcb11098c",
   "idlSha256": "32dc0d5ed56fa7fb2ef8e90ef8d96d1d8bbe940b624d3d5b636933af20ae56b4",
   "clientSha256": "f2a0f00386a08ecbd1fd939d53889d1a7a151997bf16684c641dd98a838b8d72"
 }
