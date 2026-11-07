@@ -18,7 +18,7 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
 4. **What going live costs.** "About 12.51 SOL on devnet, in one wallet approval: 12.5 SOL is the pond's seed, the
    rest is rent and fees."
 5. **Who does what while it runs** (`after-launch.md` has the table): what anyone can send (a draw, an
-   auction's end, claims), what only they can (a contest's result, a payout, a held item, a collectible's new level)
+   auction's end, claims), what only they can (a contest's result, a payout, a held item, a collectible's new level, each run of a schedule that isn't sealed: without them or a server holding a project key, an emission stops)
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,
    a score): "Checking that a player really did it is up to you, on your own server: a game runs in the player's
    browser, and the program trusts the authority's signature."
@@ -86,8 +86,8 @@ Don'ts:
   set (`traits`): say who proves them, and when.
 - **Rolls that can fail**: a box, a mission or a recipe that can burn or give away the NFT it rolls on holds it from
   the moment the roll is made until it is settled. Say the odds in plain numbers, which stats raise them, and what a
-  loss means (burned, or given to whom). Nobody can back out of a roll once it is made; anyone (the page, a keeper)
-  asks the oracle for it and settles it.
+  loss means (burned, or given to whom). Nobody can back out of a roll once it is made; anyone asks the oracle for it, and
+  the player, a key they named or the project's keys settle it.
 - **NFT custody** (a farm, a mission): Escrow is the default: the NFT moves to the project while it is staked.
   Freeze keeps it in the player's wallet, locked, with the project the only key that unlocks it; a soulbound
   collectible needs Freeze. Watch holds nothing: say plainly that a staked NFT can be sold, that its seller then

@@ -51,8 +51,8 @@ or `npx -y @xgamesfun/solana@0.23.0 tool <name> '<json>'` for any tool (always w
 
 10. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
    draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
-   win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by anyone, and
-   the person who gains from it sends it from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
+   win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
+   gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
    grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
    nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
    the owner to fund: whoever signs pays.

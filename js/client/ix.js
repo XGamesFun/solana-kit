@@ -1014,7 +1014,7 @@ export const SETTLE_LAST = 4_294_967_295;
 /**
  * Carries out a rolled order: hands over what its roll set aside (`wonAccounts`: a collectible minted, the project's
  * backend delivering a normal item from the receipt; tokens from the project's vault; an NFT taken out of its stash),
- * then splits the payment (a share may burn it). Anyone sends it, for the order at `orderAddress`; `signer` pays all
+ * then splits the payment (a share may burn it). The order's player, its settler or the project's keys send it, for the order at `orderAddress`; `signer` pays all
  * the settle opens or mints (Core assets, token accounts, Sheets, a stash's row, the fate's writes: the order lends
  * nothing, `settleRent`). `order` is the decoded Order; `projectState` the decoded Project; `items` and `nfts` as
  * `wonAccounts` takes them. `putBack`: NFTs won that the player, signing, puts back into their stash in place of taking
@@ -1151,7 +1151,7 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
 export function askRollIx({ payer, orderAddress, order, box, settler = NOBODY_KEY, poolMints, items = {}, programs }) {
   poolMints = boxPoolMints(box, poolMints);
   const opens = prizeMints(box.entries, poolMints).map(({ mint }) => createAssociatedTokenAccountIdempotent(payer, order.project, mint, tokenProgramOf(programs, mint)));
-  const ask = lootIx('ask_roll', { settler }, { payer, order: orderAddress, loot_box: order.loot_box }, {
+  const ask = lootIx('ask_roll', { settler }, { payer, order: orderAddress, loot_box: order.loot_box, project: order.project }, {
     remaining: [...entryAccounts(order.project, box.entries, items), ...prizeAccounts(order.project, box.entries, poolMints, programs)],
   });
   return [...opens, ask];

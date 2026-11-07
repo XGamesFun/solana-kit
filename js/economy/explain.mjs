@@ -107,7 +107,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       return kind === 'lottery' ? `${r.route} of the lottery “${part?.name ?? key}”` : `${named[r.route] ?? kind} “${part?.name ?? key}”`;
     }))];
     if (src.active === false && (src.rollsOn || by.length)) {
-      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} Anyone asks the oracle for a roll and settles it (the oracle's fee is the asker's), and a roll is never refunded while it waits.`);
+      actions.push(`“${b.name}” is never sold: ${by.join(' and ') || 'nothing'} rolls it. Odds: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}.${rolls} Anyone asks the oracle for a roll, and the winner or the project’s keys settle it (the oracle's fee is the asker's), and a roll is never refunded while it waits.`);
       continue;
     }
     const verb = boxBuys(src, m) ? 'Buy' : 'Open';
@@ -207,7 +207,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const by = (rows) => rows.map((r) => (r.percentPerDay !== undefined ? `${r.by} ${num(r.percentPerDay)}% of what it holds a day` : `${r.by} ${num(r.perDay)} a day`)).join(', ') || 'nothing';
     return `${p.pot ? `The pot of “${p.pot}”` : `“${p.key}”`} (${sym(p.token)}): starts at ${num(p.seed)}; in: ${by(p.ins)}; out: ${by(p.outs)}; it ${poolFate(p, sim.scenario.days)}.`;
   }));
-  section('What runs by itself', [...sim.schedules.map((s) => `“${m.schedules.find((x) => x.key === s.key)?.name ?? s.key}” ${s.says}; anyone can run it when it is due.`), ...sim.lotteries.map((l) => `“${l.name}” is drawn ${l.drawsOnce ? 'once' : `every ${num(l.roundDays)} days`} by MagicBlock’s oracle; anyone can ask for the draw (${num(sim.fees.oracleSol)} SOL to the oracle), move the drawn round on and pull what each entry is owed.`)]);
+  section('What runs on a timer', [...sim.schedules.map((s) => { const sc = m.schedules.find((x) => x.key === s.key); return `“${sc?.name ?? s.key}” ${s.says}; ${sc?.sealed ? 'its recipient runs it when it is due' : 'you, or a key of the project’s on your server, must send each run when it is due: nothing runs it otherwise'}.`; }), ...sim.lotteries.map((l) => `“${l.name}” is drawn ${l.drawsOnce ? 'once' : `every ${num(l.roundDays)} days`} by MagicBlock’s oracle; anyone can ask for the draw (${num(sim.fees.oracleSol)} SOL to the oracle), move the drawn round on and pull what each entry is owed.`)]);
   const authority = play.filter((s) => s.signer.startsWith('authority'));
   section(`What only the authority signs while it runs (${m.authority === 'owner' ? 'your wallet' : `the key ${m.authority}`})`, authority.map((s) => `${s.says} (${s.part}, ${s.ix}).`));
   if (authority.length) lines.push('- Checking that a player really did what a payout is for is up to you, on your own server: a game runs in the player’s browser, and the program trusts the authority’s signature.');

@@ -132,7 +132,7 @@ a program (`BadKey`). A typo nobody holds can't be told from a real wallet: the 
 - **Chosen shares as referrals.** A buyer-chosen share is a rebate the buyer directs and can come back to them; a
   grant's vouchers can prove a referral, a chosen share can't.
 
-The hosted keeper is optional: any client can send settles, refunds, draws and cleanups, and none can substitute a
+The hosted keeper is optional: any client can send refunds, draws and cleanups, and settles with a key the player or project gave it, and none can substitute a
 winner or bypass the program's checks.
 
 ## Accounts and addresses

@@ -642,6 +642,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     const all = [...instructions, ...asks, ...funds];
     const tried = await dryRun(wallet.address, all);
     if (tried.error?.name === 'SoldOut') throw Object.assign(new Error('The box this rolls has nothing left to give right now (SoldOut): nothing was sent. Try again once it is restocked.'), { code: tried.error.code, name: 'SoldOut' });
+    // Too heavy to be answered: a step sent alone would pay for a roll that can only fail.
+    if (tried.error?.name === 'PackTooLarge') throw Object.assign(new Error('The box this rolls is too heavy for the oracle\'s answer as it stands (PackTooLarge): nothing was sent.'), { code: tried.error.code, name: 'PackTooLarge' });
     if (!tried.ok) return { signature: await send(instructions), rolls: [] };
     const signature = await send(all);
     const rolls = [];
@@ -2154,8 +2156,8 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     },
 
     /**
-     * Runs a schedule that is due (an emission into a pool, a rent or a drip), every run due in one call: anyone may,
-     * and nothing is paid to whoever sends it but the network fee. `holders`: asset → holder, for a schedule that pays a collectible's holder.
+     * Runs a schedule that is due (an emission into a pool, a rent or a drip), every run due in one call: the project's owner or
+     * authority, or who it pays, may (a sealed burn: anyone), and nothing is paid to whoever sends it but the network fee. `holders`: asset → holder, for a schedule that pays a collectible's holder.
      * Returns null when it isn't due yet.
      */
     async runSchedule(scheduleKey, { holders, most, ...others } = NO_OPTIONS) {
@@ -2583,7 +2585,17 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       // A sealed schedule that pays this wallet: its runs that are due (vesting nobody can take back).
       for (const sc of spec.schedules ?? []) {
         const schedule = await readMaybe('Schedule', loot.pda.schedule(project, sc.id));
-        if (!schedule?.action.from.Vest || schedule.action.to.Wallet?.[0] !== me) continue;
+        if (!schedule) continue;
+        if (!schedule.action.from.Vest) {
+          // Any other schedule that is due: it waits for the project's keys or whoever it pays.
+          const state = await projectNow();
+          const to = schedule.action.to;
+          if ([state.owner, state.authority].includes(me) || to.Wallet?.[0] === me || (to.Treasury !== undefined && state.treasury === me)) {
+            if (loot.runsDue(schedule, chainTime) > 0) out.push({ kind: 'schedule', key: sc.key, says: `“${sc.name ?? sc.key}” is due to run: send it.` });
+          }
+          continue;
+        }
+        if (schedule.action.to.Wallet?.[0] !== me) continue;
         const vault = await client.account(loot.pda.vest(loot.pda.schedule(project, sc.id)));
         const held = vault ? vault.data.subarray(64, 72).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n) : 0n;
         if (loot.runsDue(schedule, chainTime, held) > 0) out.push({ kind: 'vest', key: sc.key, says: `What has vested of “${sc.name ?? sc.key}”: claim it.` });
@@ -2680,7 +2692,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       }
       if (c.kind === 'auction') return (await this.endAuction(c.key)).signature;
       if (c.kind === 'close-leaf') return send([loot.closeLeafIx({ asset: c.asset, tree: c.tree, payer: me })]);
-      if (c.kind === 'vest') return this.runSchedule(c.key);
+      if (c.kind === 'vest' || c.kind === 'schedule') return this.runSchedule(c.key);
       if (c.kind === 'unlist') return this.unlist(c.asset);
       if (c.kind === 'lookup-table') {
         const table = readTable(await client.account(c.table));

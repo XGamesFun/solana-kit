@@ -15,6 +15,7 @@ import { sha256 } from '../chain/sha256.js';
 /** The PKCS #8 header of a raw 32-byte Ed25519 seed (RFC 8410). */
 const PKCS8_ED25519 = Uint8Array.from([0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]);
 
+const DERIVED = 'derived';
 const fromBase64Url = (text) => fromBase64(text.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(text.length / 4) * 4, '='));
 
 /** An Ed25519 key from its 32-byte seed: { address, sign(message) }. */
@@ -131,7 +132,11 @@ export function keyring({ wallet, project, store = null }) {
     /** The key named `name` (an address) for a new job. */
     async key(name) {
       const sig = await signature();
-      if (sig) return derived(sig, name);
+      if (sig) {
+        // Its name is kept, so `recover` finds it once its job's account is gone.
+        if (store) safe(() => store.set(prefix() + name, DERIVED));
+        return derived(sig, name);
+      }
       const seed = randomBytes(32);
       const sealed = store ? await seal(seed).catch(() => null) : null;
       if (sealed) safe(() => store.set(prefix() + name, sealed));
@@ -144,7 +149,7 @@ export function keyring({ wallet, project, store = null }) {
       const sig = ask || root ? await signature() : null;
       if (sig) return derived(sig, name);
       const text = store ? safe(() => store.get(prefix() + name)) : null;
-      const seed = text ? await open(text).catch(() => null) : null;
+      const seed = text && text !== DERIVED ? await open(text).catch(() => null) : null;
       return seed ? keyFromSeed(seed, name) : null;
     },
 

@@ -1123,17 +1123,17 @@ export function playSteps(economy) {
     }
     add(`box:${b.key}`, 'open_box', 'player', `open “${b.name}”`);
     if (boxRolls(b, m)) add(`box:${b.key}`, 'callback_roll', 'the oracle', 'roll it');
-    add(`box:${b.key}`, 'settle', 'anyone', 'carry out what it rolled');
+    add(`box:${b.key}`, 'settle', 'the player, a key they named, or the project’s keys', 'carry out what it rolled');
   }
   for (const p of m.payments) add(`payment:${p.key}`, 'pay', 'player', `pay “${p.name}”`);
   add('payments', 'pay_nft', 'player', 'pay with an NFT (burned, or given to a wallet): the receipt is the record');
   for (const s of m.stashes) add(`stash:${s.key}`, 'stash', 'the owner or the authority', `put an NFT it holds in “${s.name}”, or take one out to any wallet`);
   for (const r of prizeRolls(m).filter((r) => !['mission', 'recipe'].includes(r.route))) {
     add(r.by, 'ask_roll', 'anyone, who pays the oracle', `ask for the roll of “${m.box.get(r.box)?.name ?? r.box}” a winner got (${r.route})`);
-    add(r.by, 'settle', 'anyone', 'carry out what it rolled');
+    add(r.by, 'settle', 'the winner, a key they named, or the project’s keys', 'carry out what it rolled');
   }
   for (const r of m.recipes) add(`recipe:${r.key}`, 'craft', 'player', `craft “${r.name}”`);
-  for (const s of m.schedules) add(`schedule:${s.key}`, 'run_schedule', 'anyone', `run “${s.name ?? s.key}” when it is due`);
+  for (const s of m.schedules) add(`schedule:${s.key}`, 'run_schedule', 'the project’s keys, or who it pays', `run “${s.name ?? s.key}” when it is due`);
   for (const l of m.lotteries) add(`lottery:${l.key}`, 'buy_tickets', 'player', 'buy tickets'), add(`lottery:${l.key}`, 'draw_lottery', 'anyone', 'ask for the draw when it is due'), add(`lottery:${l.key}`, 'pull', 'anyone', 'pay one part: a refund, a place’s part of the pot or its prize, a share owed in common');
   for (const f of m.farms) {
     if (f.stakes === 'collectibles') add(`farm:${f.key}`, 'stake_nft', 'player', 'stake a collectible'), add(`farm:${f.key}`, 'unstake_nft', 'player', 'take it out once its lock has run');

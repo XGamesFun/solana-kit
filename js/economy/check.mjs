@@ -8,7 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { vault } from '../client/pda.js';
-import { drawsFit, MAX_ORDER_BYTES } from '../client/sizes.js';
+import { drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
@@ -1003,6 +1003,30 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // rolls, or one outcome of items, with no outcome that burns the payment and no NFT to roll on (BadEntries).
     const slots = b.slots ?? [];
     const outs = b.outcomes ?? [];
+    // A fresh outcome's tables come with the answer while they fit what the box's own accounts leave, in outcome order
+    // (`tableBudget`). One past that is out of stock on every roll, so its odds would be false.
+    {
+      const box = (() => {
+        try {
+          return boxArgs(b, m);
+        } catch {
+          return null;
+        }
+      })();
+      if (box && boxRolls(b, m)) {
+        let left = Math.max(0, tableBudget(box.entries));
+        const cut = [];
+        outs.forEach((out, i) => {
+          for (const part of outcomeParts(out)) {
+            if (part.gives !== 'item') continue;
+            const tables = (m.item.get(part.item)?.drawn ?? []).filter((d) => d.table).length;
+            if (tables > left) cut.push(i);
+            else left -= tables;
+          }
+        });
+        if (cut.length) refuse('E-ODDS', `${where}.outcomes`, `${label(b)} draws from more tables than one answer of the oracle’s can carry, so outcome${cut.length === 1 ? '' : 's'} ${[...new Set(cut)].join(', ')} could never be won.`, 'Fewer outcomes with drawn traits, fewer table traits on each, or a range (`min`, `max`) in place of a table.');
+      }
+    }
     slots.forEach((s, i) => (s.from ?? []).forEach((o, j) => {
       if (o >= outs.length) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o}, but the box has ${outs.length}.`, 'Name outcomes by their place in "outcomes", from 0.');
       else if ((s.from ?? []).slice(0, j).includes(o)) refuse('E-ODDS', `${where}.slots[${i}].from[${j}]`, `Slot ${i} of ${label(b)} names outcome ${o} twice.`, 'Name each once.');

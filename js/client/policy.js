@@ -8,8 +8,8 @@ export const LOTTERY_TIMEOUT_SLOTS = constant('LOTTERY_TIMEOUT_SLOTS');
 const U64_MAX = (1n << 64n) - 1n;
 
 /**
- * The earliest slot an order can be refunded in, or null when it never can be: a rolled order has an outcome anyone
- * can carry out, and is settled, never refunded; a roll a mission or a recipe made waits for anyone to ask for it
+ * The earliest slot an order can be refunded in, or null when it never can be: a rolled order has an outcome to
+ * carry out, and is settled, never refunded; a roll a mission or a recipe made waits for anyone to ask for it
  * (`Waiting`), and once asked (`Asked`) is asked again if the oracle never answers (`rollAskable`).
  */
 export function orderRefundSlot(order) {

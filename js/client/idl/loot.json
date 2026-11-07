@@ -21,7 +21,7 @@
         {
           "name": "payer",
           "docs": [
-            "Anyone: pays the oracle."
+            "Pays the oracle: anyone, on a roll nobody paid for."
           ],
           "writable": true,
           "signer": true
@@ -35,6 +35,9 @@
         },
         {
           "name": "loot_box"
+        },
+        {
+          "name": "project"
         },
         {
           "name": "oracle_queue",

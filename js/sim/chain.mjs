@@ -63,7 +63,7 @@ const NAMES = new Map(
     return [def.name, names];
   }),
 );
-/** The least compute loot was seen to have left inside the oracle's callback on devnet. */
+/** What loot usually has left, at the low end, inside the oracle's callback on devnet (seen: 240,814 to 273,706). */
 const ORACLE_UNITS = 264_577;
 
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */

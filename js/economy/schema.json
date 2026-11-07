@@ -1180,7 +1180,7 @@
         "gives"
       ],
       "additionalProperties": false,
-      "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; anyone asks the oracle and settles it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
+      "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; anyone asks the oracle, and the player or the project’s keys settle it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
       "properties": {
         "gives": {
           "enum": [

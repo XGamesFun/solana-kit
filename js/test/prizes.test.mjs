@@ -31,7 +31,7 @@ function stocked(seed) {
 function rollAndSettle(w, orderAddress) {
   let order = w.read('Order', orderAddress);
   assert.equal(order.status, 'Waiting');
-  w.chain.send(w.cranker, loot.askRollIx({ payer: w.cranker, orderAddress, order, box: w.read('LootBox', order.loot_box) }));
+  w.chain.send(w.authority, loot.askRollIx({ payer: w.authority, orderAddress, order, box: w.read('LootBox', order.loot_box) }));
   order = w.read('Order', orderAddress);
   assert.equal(order.status, 'Rolled');
   const [{ Nft: { nft } }] = order.won;

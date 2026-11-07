@@ -185,12 +185,15 @@ if (want('farms')) {
         needs: [1, 2].map((place) => ({ place, key: 'bound', atLeast: 1 })), raises: [1, 2].flatMap((place) => [{ place, key: 'bound', by: -1 }, { place, key: 'free_at', by: '-20000d' }]) },
     ],
   });
-  const { project, collection, mints } = live.live;
+  const { project, mints } = live.live;
   const itemId = (key) => live.items.find((x) => x.key === key).id;
   const make = async (item) => {
-    const k = freshKeypair();
-    await send([owner, k], [loot.collectibleIx({ authority: owner.address, project, collection, asset: k.address, item: itemId(item), owner: owner.address, change: { Make: { attributes: [] } } })]);
-    return k.address;
+    const id = itemId(item);
+    const address = loot.pda.item(project, id);
+    const itemState = loot.decode('Item', (await rpc.account(address)).data);
+    const [asset] = loot.madeAssets(project, id, itemState);
+    await send([owner], [loot.makeIx({ authority: owner.address, project, item: id, itemState, owners: [owner.address], attributes: [] })]);
+    return asset;
   };
   const attributes = async (asset) => parseCoreAsset((await rpc.account(asset)).data).attributes;
   const [fire, water] = [await make('fire'), await make('water')];
@@ -228,9 +231,10 @@ if (want('stash')) {
   const trophy = live.items.find((x) => x.key === 'trophy').id;
   const trophies = [];
   for (let i = 0; i < 2; i++) {
-    const k = freshKeypair();
-    await send([owner, k], [loot.collectibleIx({ authority: owner.address, project, collection, asset: k.address, item: trophy, owner: owner.address, change: { Make: { attributes: [] } } })]);
-    trophies.push(k.address);
+    const itemState = loot.decode('Item', (await rpc.account(loot.pda.item(project, trophy))).data);
+    const [asset] = loot.madeAssets(project, trophy, itemState);
+    await send([owner], [loot.makeIx({ authority: owner.address, project, item: trophy, itemState, owners: [owner.address], attributes: [] })]);
+    trophies.push(asset);
   }
   for (const asset of trophies) await send([owner], [loot.stashIx({ signer: owner.address, project, id: 1, asset, collection })]);
   const entries = [{ prizes: [{ Stash: [1] }], weight: 1 }, { prizes: [{ Stash: [1] }], weight: 1 }];
@@ -273,15 +277,17 @@ if (want('packs')) {
     items: [
       { key: 'common', name: 'Common' },
       { key: 'rare', name: 'Rare' },
+      ...Array.from({ length: 12 }, (_, i) => ({ key: `card${i}`, name: `Card ${i}` })),
       { key: 'hero', name: '{color} Hero', uri: 'https://example.invalid/hero/{color}/{power}.json', drawn: [{ attribute: 'color', table: 'colors' }, { attribute: 'power', min: 1, max: 100 }] },
     ],
     boxes: [
-      { key: 'booster', name: 'Booster', price: 0.001, slots: [{ count: 4 }, { count: 1, from: [1] }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
+      { key: 'booster', name: 'Booster', price: 0.001, slots: [{ count: 4, share: 40 }, { count: 1, from: [1], share: 60 }], outcomes: [{ gives: 'item', item: 'common', weight: 9 }, { gives: 'item', item: 'rare', weight: 1 }] },
       { key: 'heroes', name: 'Heroes', price: 0.001, slots: [{ count: 3 }], outcomes: [{ gives: 'item', item: 'hero', weight: 1 }] },
+      { key: 'big', name: 'The largest pack of twelve items', price: 0.001, slots: [{ count: 36 }], outcomes: Array.from({ length: 12 }, (_, i) => ({ gives: 'item', item: `card${i}`, weight: 1 })) },
     ],
   });
   const player = freshKeypair();
-  await send([funder], [transferLamports(funder.address, player.address, 300_000_000n)]);
+  await send([funder], [transferLamports(funder.address, player.address, 500_000_000n)]);
   let prompts = 0;
   const wallet = { ...asWallet(player), async signTransaction(wire) { prompts++; return asWallet(player).signTransaction(wire); } };
   const app = solanaApp({ spec: live, rpc, wallet });
@@ -295,6 +301,10 @@ if (want('packs')) {
   if (heroes.won.length !== 3 || mine.length !== 3) throw new Error(`The hero pack gave ${heroes.won.length} heroes, ${mine.length} held.`);
   for (const c of mine) console.log(`packs: ${c.name}, color ${c.attributes.color}, power ${c.attributes.power}`);
   console.log(`packs: ${prompts} wallet prompts for both purchases`);
+  const big = await app.openBox('big', { listing: (await app.boxes()).find((l) => l.key === 'big') });
+  if (big.won.length !== 36) throw new Error(`The largest pack gave ${big.won.length} cards, not 36.`);
+  console.log(`packs: the largest pack, 36 cards, every draw made: ${(big.parts ?? [big.settled]).join(', ')}`);
+  console.log(`packs: project ${live.live.project}`);
 }
 // 8. A lottery (loot 0.23: each round is a record of its own): two fresh players buy tickets of a one-off draw due
 // 90 seconds after going live; once it is due, one reveals it, MagicBlock's real oracle draws, and the players take

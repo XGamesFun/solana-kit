@@ -66,7 +66,7 @@ await app.balances();                     // what they hold of each of the econo
   Tell the person the one command that starts it, and that it serves on devnet.
 - **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
   waits for it. Show the player that it is rolling.
-- **A page that closes before the settle**: the SOL its settle key holds is not lost. Build the wallet with
+- **A page that closes before the settle**: the SOL its settle key holds is not lost in the same browser (on another device, with nothing stored, it can't be found yet). Build the wallet with
   `walletStandardSigner(wallet, account)`: with a wallet that signs messages, the page asks once a session for a
   signature over a fixed text ("loot: the keys that settle your orders…"; it moves nothing), and every settle key comes
   from it, so a reload makes it again. With one that signs no messages, the key is kept in the page's storage,
