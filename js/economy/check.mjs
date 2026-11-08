@@ -1280,8 +1280,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       warn('W-ROLL-PRIZE', `${where}.active`, `${label(b)} is a prize of ${[...new Set(prizedBy)].join(', ')}, and is for sale too: anyone can open it for its price${price === 0n ? ' (free)' : ''}, and each opening takes from what the prize gives (a stash’s NFTs, a pool’s prizes).`, 'Set "active": false for a box only prizes roll.');
     if (prizedBy.length && b.rollsOn)
       warn('W-ROLL-PRIZE', `${where}.rollsOn`, `${label(b)} rolls on an NFT, but ${[...new Set(prizedBy)].join(', ')} give${prizedBy.length === 1 ? 's' : ''} a roll of it on nothing: its outcomes are given, and their shifts and where they send an NFT are not.`, 'Give prizes a box with no "rollsOn".');
-    if (price === 0n && !rolledBy.length && b.active !== false)
-      warn('W-FREE', `${where}.price`, `${label(b)} is free: anyone, a bot included, can open it again and again for only the fees${outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? ', and drain the pools its prizes come from' : ''}.`, 'Give it a price, a gate, or hand out openings through a grant.');
+    // Free spins are the project's to limit: warned, never refused.
+    if (price === 0n && !rolledBy.length && b.active !== false && !b.perWallet && !b.perWalletEach)
+      warn('W-FREE', `${where}.price`, `${label(b)} is free with no limit per wallet: anyone, a bot included, can open it again and again for only the fees${outcomes.flatMap(outcomeParts).some((o) => o.gives === 'pay') ? ', and drain the pools its prizes come from' : ''}.`, 'Set "perWallet" or "perWalletEach" (say one a day), give it a price or a gate, or hand out openings through a grant with limits.');
     const withChance = outcomes.filter((o) => o.chance !== undefined).length;
     const withWeight = outcomes.filter((o) => o.weight !== undefined).length;
     if (withChance && withWeight) refuse('E-ODDS', `${where}.outcomes`, `${label(b)} mixes chances and weights, so its odds cannot be read.`, 'Give every outcome a chance (percents adding up to 100), or every one a weight.');

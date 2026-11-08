@@ -347,3 +347,13 @@ test('a lottery holds SOL for its rounds’ rent (`roundRent`): one step sends i
   assert.ok(edit(raffle, (s) => (s.lotteries[0].expect = { rounds: 0 })).refused.some((r) => r.startsWith('E-SCHEMA')));
   assert.ok(edit(raffle, (s) => (s.lotteries[0].roundRent = '0.0000000001')).refused.includes('E-AMOUNT economy.lotteries.art.roundRent'));
 });
+
+test('a free box is the project’s to limit: warned with no limit per wallet, quiet with one, never refused', () => {
+  const spec = example('coin-flip-arena');
+  const box = spec.boxes.find((b) => b.active !== false);
+  const where = `W-FREE economy.boxes.${box.key}.price`;
+  const open = edit(spec, (s) => (s.boxes.find((b) => b.key === box.key).price = 0));
+  assert.ok(open.ok && open.warned.includes(where), open.refused.join());
+  const limited = edit(spec, (s) => Object.assign(s.boxes.find((b) => b.key === box.key), { price: 0, perWallet: 1 }));
+  assert.ok(limited.ok && !limited.warned.includes(where), limited.warned.join());
+});
