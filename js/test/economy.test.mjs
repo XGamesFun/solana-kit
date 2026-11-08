@@ -183,9 +183,10 @@ describe('every example goes live on the program', () => {
         const r = w.chain.send(bidder, [createAssociatedTokenAccountIdempotent(bidder, bidder, NATIVE_MINT), { programId: '11111111111111111111111111111111', keys: [{ pubkey: bidder, isSigner: true, isWritable: true }, { pubkey: wrap, isSigner: false, isWritable: true }], data: concat(uintLE(2, 4), uintLE(amount, 8)) }, { programId: TOKEN_PROGRAM, keys: [{ pubkey: wrap, isSigner: false, isWritable: true }], data: Uint8Array.of(17) }, loot.bidIx({ bidder, project: p.ctx.project, id: a.id, auction, amount })]);
         assert.ok(r.receipts.some((x) => x.name === 'BidPlaced'), 'the bid landed');
       }
-      // A player can buy from it: the first box opens with the client (one gated by a stake waits for one: play-ranked-grants;
-      // one whose share pays a collectible's holder waits for the buyer to name one).
-      const b = m.allBoxes.find((x) => !x.gate?.staked && !(x.split ?? []).some((s) => s.to?.startsWith('chosen:')));
+      // A player can buy from it: the first box opens with the client (a gated one waits for a player who passes its gate:
+      // a stake, play-ranked-grants; an NFT of a collection, which this fresh player doesn't hold; one whose share pays a
+      // collectible's holder waits for the buyer to name one).
+      const b = m.allBoxes.find((x) => !x.gate && !(x.split ?? []).some((s) => s.to?.startsWith('chosen:')));
       if (b) {
         const box = w.read('LootBox', loot.pda.box(p.ctx.project, b.id));
         const mint = box.currency;

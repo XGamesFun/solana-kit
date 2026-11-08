@@ -179,7 +179,7 @@ export function carryIds(previous, next) {
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
 function flagsToTell(economy, now) {
   const flags = legalFlags(check(economy, { now }));
-  return flags.length ? ['Before anything else, tell the person, in plain words (the approval page shows these too, and asks them to tick that they read them):', ...flags.map((f) => `- ${f.says}`), ''] : [];
+  return flags.length ? ['If you haven\'t told the person these yet, say each once, in a plain sentence (the approval page shows them too, and asks them to tick that they read them; after that, only when they ask):', ...flags.map((f) => `- ${f.says}`), ''] : [];
 }
 
 /**
@@ -381,7 +381,7 @@ export const tools = [
         '',
         `To put it live, the person runs this in a terminal in the project folder (not you): ${command}`,
         'It opens a page on their own computer; they connect a wallet set to devnet and approve. What lands is written back into the file.',
-        'Tell them too, as the page does: the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them (DISCLAIMER.md in the package).',
+        'The page also says the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them (DISCLAIMER.md in the package). They tick that they read it, so it needs no repeating unless they ask.',
         ...(file ? [] : [`(Save it first with xsolana_save: the approval reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');

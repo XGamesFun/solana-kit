@@ -1,0 +1,115 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Pack League",
+  "prompt": "A trading card game. A pack is 0.05 SOL for five cards, and the fifth card is always rare or better. A fifth of every pack goes into the weekly league pot. Card holders buy league tickets for 0.001 SOL, and each week the top three share the pot.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    }
+  ],
+  "collection": {
+    "name": "Pack League"
+  },
+  "items": [
+    {
+      "key": "common",
+      "name": "Common Card",
+      "rarity": "Common"
+    },
+    {
+      "key": "rare",
+      "name": "Rare Card",
+      "rarity": "Rare"
+    },
+    {
+      "key": "epic",
+      "name": "Epic Card",
+      "rarity": "Epic",
+      "supply": 3000
+    },
+    {
+      "key": "legendary",
+      "name": "Legendary Card",
+      "rarity": "Legendary",
+      "supply": 300
+    }
+  ],
+  "boxes": [
+    {
+      "key": "pack",
+      "name": "Card Pack",
+      "price": 0.05,
+      "split": [
+        {
+          "to": "lottery:league",
+          "percent": 20
+        }
+      ],
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "common",
+          "chance": 75
+        },
+        {
+          "gives": "item",
+          "item": "rare",
+          "chance": 19
+        },
+        {
+          "gives": "item",
+          "item": "epic",
+          "chance": 5
+        },
+        {
+          "gives": "item",
+          "item": "legendary",
+          "chance": 1
+        }
+      ],
+      "slots": [
+        {
+          "count": 4,
+          "share": 70
+        },
+        {
+          "count": 1,
+          "from": [
+            1,
+            2,
+            3
+          ],
+          "share": 30
+        }
+      ]
+    }
+  ],
+  "lotteries": [
+    {
+      "key": "league",
+      "name": "Weekly League",
+      "price": 0.001,
+      "places": [
+        50,
+        30,
+        20
+      ],
+      "every": "7d",
+      "firstDraw": "publish+7d",
+      "gate": {
+        "item": "common"
+      },
+      "perWallet": 100
+    }
+  ],
+  "scenario": {
+    "days": 28,
+    "perDay": {
+      "box:pack": 100,
+      "lottery:league": 200
+    }
+  }
+}

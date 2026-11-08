@@ -4,6 +4,43 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased (tools only; the program is 0.24.0, unchanged)
+
+- **Designing against farming and cheating** (from twelve live games, `gamesfun-data/demos/2026-11-07/AUDIT/kit-snags.md`):
+  - `check`: `W-GRANT-TOTAL` for a voucher, key or open grant that limits each wallet (person, key) but nothing a day
+    or in all (codes that each pay a set number of times are a total already); `W-GRANT-OPEN` says when an open grant's
+    prize can be sold or is a roll, and how to make farming it cost something; `W-FARM-MINT` for a farm that mints its
+    rewards for good with no end, term or upkeep, into a token that buys what earns it (or is staked for more of
+    itself); `W-FARM-SWITCH` when an NFT a farm watches can be staked in one that escrows it (the watched seat stops and
+    its unharvested rewards are lost). `W-GRANT-FUNDS` gives how many claims a fund covers in `simulate`'s own figure.
+  - `simulate`: each grant says what one wallet may claim and what 100 wallets could, with its cap; the oracle line says
+    anyone may send a draw (not "the game's keeper").
+  - `@xgamesfun/solana/results` (`server.js`, browser-safe): `collectiblesOf` and `holds` (the game's Core collectibles a
+    wallet holds, read from the chain), `proofRequest` / `verifyProof` / `readProof` / `proofText` (a wallet's signed
+    proof: game, purpose, a nonce taken once, an expiry), and `makeCodes` (80 bits by default, 64 at least) /
+    `normalizeCode` / `codeKey` / `codeAddresses` / `codeVoucher` for promo codes.
+  - The guide: "Designing against farming and cheating" (wallets aren't people, the page can't be trusted, bots play
+    well, the attributes only the program writes); a pity counter that resets and never trades (a soulbound charm the
+    box rolls on). The skill: rule 10, "Design for many wallets and bots", and the same in `after-launch.md` and
+    `sentence-to-spec.md`.
+- **A lottery's or farm's seed in a token the project mints** is minted into the pot or the rewards vault at go-live,
+  as a pool's seed is minted into the pool. It was paid from the owner's wallet, which holds none, so the setup never
+  finished (snag 1.1). Test: `minted-seeds.test.mjs`.
+- **Legal flags, once.** The skill (rule 6, `telling-the-person.md`) says each legal flag once, in a plain sentence, the
+  first time the checker raises it, and again only when the person asks or a flag of a new kind appears; no legal notes
+  in pages and apps unless asked. `xsolana_publish` passes the flags on for the agent to say if it hasn't yet, and no
+  longer asks it to repeat that the program is unaudited: the approval page shows that, and its tick box is the one
+  acknowledgment. The checker's warnings and the approval page are unchanged.
+- **Five examples from the rated economies:** `stride-sneakers` (move-to-earn), `holder-den` (staking an outside
+  collection's NFTs, frozen in the wallet), `pack-league` (packs that fill a league pot), `match-predictions` (a
+  pari-mutuel pool), `holders-drop` (a holder-gated crate, badge and raffle). Each checks and goes live in the tests.
+- **A raffle's places warning** (`W-LOTTERY` on `places`) is said only when money goes into the pot (ticket money the
+  split and the cut leave, a seed, a share another part pays it); for a lottery that draws once it says the rest stays
+  in the pot for good, not "for the next round".
+- **`{serial}` in a name:** the schema no longer says a fresh item's name takes `{serial}`. The program fills `{serial}`
+  in links only and ends every name with " #<serial>"; `{attribute}` works in both.
+- Tests: the go-live test buys only from a box with no gate (one gated on a collection waits for a holder).
+
 ## 0.24.0: the rules are strict (the program on devnet since 2026-11-07, slot 519,723,738)
 
 For the program's 0.24.0, "the rules are strict": the IDL, the client, the spec and the docs follow it, and no account

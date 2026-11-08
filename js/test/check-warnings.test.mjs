@@ -22,6 +22,24 @@ const edit = (spec, fn) => {
   fn(copy);
   return codes(copy);
 };
+/** The spec `fn` changed, as a copy. */
+const changed = (spec, fn) => {
+  const copy = structuredClone(spec);
+  fn(copy);
+  return copy;
+};
+
+test('a raffle whose ticket money all goes elsewhere leaves nothing in its pot: no places warning; one that keeps some is told it stays for good', () => {
+  const raffle = example('nft-raffle');
+  assert.ok(!codes(raffle).warned.some((w) => w.startsWith('W-LOTTERY economy.lotteries.art.places')), 'the split sends all ticket money to the treasury');
+  const keeps = edit(raffle, (s) => (s.lotteries[0].split[0].percent = 60));
+  assert.ok(keeps.warned.includes('W-LOTTERY economy.lotteries.art.places'), keeps.warned.join());
+  const said = check(changed(raffle, (s) => (s.lotteries[0].split[0].percent = 60)), { now: NOW }).warnings.find((w) => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
+  assert.match(said.message, /draws once: the other 100% of its pot, and any place nobody won, stays in the pot for good/);
+  // A lottery that draws again keeps the old words: what is left rolls into the next round.
+  const again = check(changed(example('stakers-draw'), (s) => (s.lotteries[0].places = [50])), { now: NOW }).warnings.find((w) => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
+  assert.match(again.message, /stays in it for the next round/);
+});
 
 test('what the program takes is a warning: free tickets, a faucet, a tier below x1, a fall to 0, an empty gate', () => {
   const raffle = example('nft-raffle');

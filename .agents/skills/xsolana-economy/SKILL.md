@@ -25,12 +25,15 @@ or `npx -y @xgamesfun/solana@0.24.0 tool <name> '<json>'` for any tool (always w
 5. **Numbers come from the tools.** What a box gives back, how long a pool lasts, what going live costs: quote
    `xsolana_simulate`, `xsolana_cost` and `xsolana_explain`, never your own arithmetic. What a player pays is the tools'
    "in all" number for that action (price, fee, oracle, network and rent that never comes back): quote it as is.
-6. **Flag the law.** When the checker raises `W-CHANCE-PRIZE` (paid chance at money: boxes with prizes, lotteries,
-   contests), `W-CHANCE-ITEMS` (paid random collectibles a player can resell: loot boxes, gacha) or `W-REVENUE-SHARE` (stakers paid from sales), tell the person in plain words, every time, and never
-   call anything an investment, a return or passive income. For an auction, always say `W-AUCTION-SHILL`: anyone,
-   the seller included, can bid to push the price up. Before they go live, say as well that the program is not
-   independently audited and comes as is, with no warranty: they use it at their own risk, and making sure the
-   economy is legal where it is offered is theirs. Never promise it is safe, and never give legal advice.
+6. **Flag the law once.** The first time the checker raises `W-CHANCE-PRIZE` (paid chance at money: boxes with
+   prizes, lotteries, contests), `W-CHANCE-ITEMS` (paid random collectibles a player can resell: loot boxes, gacha) or
+   `W-REVENUE-SHARE` (stakers paid from sales), say it in one plain sentence. Don't repeat it in later answers, or add
+   legal notes to pages and apps you build, unless the person asks or a flag of a new kind appears. When they ask about
+   the law, answer what you know and leave the rest to their lawyer: you are not one. Never call anything an
+   investment, a return or passive income, and never promise it is safe. The approval page shows the flags and that
+   the program is not independently audited and comes as is, and asks the owner to tick that they read them, so going
+   live needs nothing more from you. For an auction, say once how bidding works (`W-AUCTION-SHILL`): anyone, the
+   seller included, can bid to push the price up.
 7. **Take addresses from the tools, never from memory**: the program, its accounts, the IDL. Every answer names them.
 8. **Public data only in a spec**: names, prices, percents, public addresses. Leave out `id`, `index`, `shopBox`,
    and `live`: they are written when it goes live.
@@ -49,7 +52,13 @@ or `npx -y @xgamesfun/solana@0.24.0 tool <name> '<json>'` for any tool (always w
      second step). Don't withdraw a draft that checks, and don't send them elsewhere while a version on loot is on the
      table.
 
-10. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
+10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
+   (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`), keep token
+   rewards for results small, and have a server check what the page claims (`@xgamesfun/solana/results`:
+   `collectiblesOf`, `verifyProof`, `makeCodes`). The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`,
+   `W-FARM-MINT`); xsolana_guide's "Designing against farming" says why.
+
+11. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
    draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
    win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
    gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A

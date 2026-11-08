@@ -22,13 +22,14 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,
    a score): "Checking that a player really did it is up to you, on your own server: a game runs in the player's
    browser, and the program trusts the authority's signature."
-6. **Flags for the law.** `W-CHANCE-PRIZE`: "Players pay for a chance at money. That is gambling in many places once
+6. **Flags for the law, once.** `W-CHANCE-PRIZE`: "Players pay for a chance at money. That is gambling in many places once
    it is real money; this runs on devnet only." `W-CHANCE-ITEMS`: "Players pay for random items they can resell: some
    places treat that as gambling, and many require the odds to be shown." `W-REVENUE-SHARE`: "Stakers are paid from
-   what players spend; regulators look at that when they decide whether a token is a security." Say them every time
-   they are raised. Before they go live, every time: "The program isn't independently audited and comes as is, with
-   no warranty: you use it at your own risk, and making sure this is legal where you offer it is up to you." The
-   approval page shows all of this too, and keeps Approve off until the owner ticks that they read it.
+   what players spend; regulators look at that when they decide whether a token is a security." Say each once, the
+   first time the checker raises it; then leave them, saying them again only when the person asks or a flag of a new
+   kind appears, and keep them out of pages and apps unless asked. The approval page shows them, with the program's
+   status (not independently audited, as is, at their own risk, theirs to make legal where they offer it), and keeps
+   Approve off until the owner ticks that they read it.
 7. **For an auction**, say how it ends, in their words: "The highest bid when the 48 hours are up wins. Each bid must
    be at least 0.5 SOL and 5% over the last; a bid in the last 10 minutes gives everyone 10 more. Whoever is outbid
    has their SOL back at once, in the same transaction. With no bid, the lot goes back (an item's unit is never
