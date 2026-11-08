@@ -38,9 +38,10 @@ const paysWords = (l, treasury) =>
 const ruleWords = (r) => {
   if (!r) return '';
   if (r.wallets) return `they are one of the ${r.wallets.length} wallets it names`;
+  if (r.items) return `any of ${r.items.map((k) => `“${k}”`).join(', ')}`;
   const what = r.item ? `a “${r.item}”` : r.collection ? `an NFT of the collection ${r.collection.slice(0, 4)}… (not a Token Metadata print)` : 'one of the game’s collectibles';
   const time = { ahead: ` whose ${r.attribute} is a time still to come`, passed: ` whose ${r.attribute} is a time past (or none)` }[r.time];
-  return `${what}${r.atLeast !== undefined ? ` with ${r.attribute} at least ${r.atLeast}` : r.equals !== undefined ? ` whose ${r.attribute} is “${r.equals}”` : time ?? (r.attribute ? ` with a ${r.attribute}` : '')}`;
+  return `${what}${r.atLeast !== undefined ? ` with ${r.attribute} at least ${r.atLeast}` : r.equals !== undefined ? ` whose ${r.attribute} is “${r.equals}”` : r.oneOf ? ` whose ${r.attribute} is one of ${r.oneOf.map((t) => `“${t}”`).join(', ')}` : time ?? (r.attribute ? ` with a ${r.attribute}` : '')}`;
 };
 /** A stake gate in words: "at least 100 of “Staking” staked …", the farm by its name when `m` has it. */
 const stakeWords = (staked, m) => {

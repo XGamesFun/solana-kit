@@ -384,7 +384,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
     if (!rules.length) return null;
     const rule = rules[0];
     const atLeast = rule.test?.AtLeast?.[0];
-    const equals = rule.test?.Equals?.text;
+    const equals = rule.test?.OneOf?.texts?.length === 1 ? rule.test.OneOf.texts[0] : undefined;
     const item = rule.of?.Item?.[0];
     const named = rules.map((r) => r.of?.Collection?.[0]).find((c) => c && !ours(c));
     const other = named ?? null;
@@ -392,7 +392,7 @@ export function solanaApp({ spec, rpcUrl = 'https://api.devnet.solana.com', rpc 
       if (r.of?.Item?.[0] !== undefined && c.itemId !== Number(r.of.Item[0])) return false;
       const value = c.attributes?.[r.key];
       if (r.test?.AtLeast?.[0] !== undefined) return Number(value) >= Number(r.test.AtLeast[0]);
-      if (r.test?.Equals?.text !== undefined) return String(value) === String(r.test.Equals.text);
+      if (r.test?.OneOf?.texts) return r.test.OneOf.texts.map(String).includes(String(r.key === 'item_id' ? c.itemId : value));
       return true;
     };
     const pass = (c) => rules.every((r) => passes(r, c));

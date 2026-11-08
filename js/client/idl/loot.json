@@ -13189,7 +13189,7 @@
             "name": "owing",
             "docs": [
               "The last round paid from a pot that may still owe that pot what its places left (`pot_owed`):",
-              "the next ask from the same pot moves it in first, so a prize never depends on whether",
+              "the next ask from a pot (any of them) moves it in first, so a prize never depends on whether",
               "someone pulled it. The default address: none."
             ],
             "type": "pubkey"
@@ -13205,7 +13205,7 @@
           {
             "name": "terms",
             "docs": [
-              "Its round's terms; the pot's mint fixed once the pot is open."
+              "Its round's terms; its mint kept by every edit."
             ],
             "type": {
               "defined": {
@@ -13385,7 +13385,7 @@
           {
             "name": "mint",
             "docs": [
-              "The mint ticket money and the places' parts are in, and every pot's. Fixed once a pot is open."
+              "The mint ticket money and the places' parts are in, and every pot's. An edit keeps it."
             ],
             "type": "pubkey"
           },
@@ -16295,11 +16295,13 @@
             ]
           },
           {
-            "name": "Equals",
+            "name": "OneOf",
             "fields": [
               {
-                "name": "text",
-                "type": "string"
+                "name": "texts",
+                "type": {
+                  "vec": "string"
+                }
               }
             ]
           },
@@ -17080,6 +17082,14 @@
       ],
       "type": "u64",
       "value": "10000000"
+    },
+    {
+      "name": "MAX_ONE_OF",
+      "docs": [
+        "The most texts a rule's `Test::OneOf` matches."
+      ],
+      "type": "u32",
+      "value": "16"
     },
     {
       "name": "MAX_POTS",

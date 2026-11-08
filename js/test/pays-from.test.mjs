@@ -43,10 +43,11 @@ test('a lottery names where its places are paid from: exactly one of "pot" and "
   assert.ok(own.warnings.some((x) => x.code === 'W-LOTTERY' && /goes to “treasury”/.test(x.message)), 'what the places leave goes to its rest');
 });
 
-test('a round paid from its own money sends its leftover where no later prize reads it', () => {
+test('a round paid from its own money sends its leftover where the project names: a pool is warned, never refused', () => {
   const pools = [{ key: 'house', currency: 'sol', seed: 1 }];
   const refusedFor = (lottery, more = {}) => said(solSpec({ pools, ...more, lotteries: [{ ...draw, ...lottery }] })).refused;
-  assert.deepEqual(refusedFor({ rest: 'pool:house' }), ['E-LOTTERY economy.lotteries.draw.rest'], 'never a pool');
+  assert.deepEqual(refusedFor({ rest: 'pool:house' }), [], 'a pool is the project’s choice');
+  assert.ok(said(solSpec({ pools, lotteries: [{ ...draw, rest: 'pool:house' }] })).warnings.some((x) => x.code === 'W-LOTTERY' && x.where === 'economy.lotteries.draw.rest'), 'and warned: it lands when pulled');
   assert.deepEqual(refusedFor({ rest: 'chosen' }), ['E-LOTTERY economy.lotteries.draw.rest'], 'never a share the buyer chooses');
   assert.deepEqual(refusedFor({ rest: 'lottery:draw' }), ['E-LOTTERY economy.lotteries.draw.rest'], 'never its own pot');
   assert.deepEqual(refusedFor({ rest: 'burn' }), ['E-WSOL-BURN economy.lotteries.draw.rest'], 'SOL is not burned');
@@ -161,9 +162,11 @@ test('a lottery paid from each round’s own money keeps no pot: its leftover go
   const w = world({ seed: 'pays-from-round' });
   const charity = w.who();
   const args = (id, rest, more = {}) => ({ price: 1000n, mint: w.mint, pays_from: { Round: { rest } }, shares: [{ to: 'Treasury', bps: 1000 }], places: [6000], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: 0, ...more });
-  // The program refuses a pool, a share the buyer chooses and a no-loss lottery paid from its rounds.
+  // The program takes a pool (the project's choice, as for a share), and refuses a share the buyer chooses and a no-loss
+  // lottery paid from its rounds.
   w.pool(1);
-  fails(() => w.upsert({ Lottery: { id: 9, args: args(9, { Pool: [1] }) } }), 'BadLottery');
+  w.upsert({ Lottery: { id: 9, args: args(9, { Pool: [1] }) } });
+  fails(() => w.upsert({ Lottery: { id: 8, args: args(8, { Chosen: { item: null } }) } }), 'BadLottery');
   fails(() => w.upsert({ Lottery: { id: 9, args: args(9, 'Treasury', { returns: true, shares: [] }) } }), 'BadLottery');
   for (const [id, rest] of [[1, { Wallet: [charity] }], [2, 'Burn']]) {
     w.upsert({ Lottery: { id, args: args(id, rest) } });

@@ -580,7 +580,10 @@ export function toEnum(to, m) {
 export function ruleOf(rule, m) {
   if (!rule) return null;
   const time = { ahead: 'Ahead', passed: 'Passed' }[rule.time];
-  const test = rule.atLeast !== undefined ? { AtLeast: [rule.atLeast] } : rule.equals !== undefined ? { Equals: { text: String(rule.equals) } } : time ?? 'Any';
+  // Any of several items: the game's own collection, its `item_id` one of theirs.
+  if (rule.items) return { of: { Collection: ['@collection'] }, key: 'item_id', test: { OneOf: { texts: rule.items.map((k) => String(m.item.get(k)?.id ?? 0)) } } };
+  const texts = rule.oneOf ?? (rule.equals !== undefined ? [rule.equals] : null);
+  const test = rule.atLeast !== undefined ? { AtLeast: [rule.atLeast] } : texts ? { OneOf: { texts: texts.map(String) } } : time ?? 'Any';
   const of = rule.item ? { Item: [m.item.get(rule.item)?.id ?? 0] } : { Collection: [rule.collection ?? '@collection'] };
   return { of, key: rule.attribute ?? '', test };
 }

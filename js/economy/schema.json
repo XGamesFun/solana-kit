@@ -1550,7 +1550,7 @@
         },
         "rest": {
           "$ref": "#/$defs/destination",
-          "description": "Pays each round's places from that round's own ticket money only, and sends what they leave here: \"treasury\", \"burn\", \"wallet:<address>\", \"account:<token account>\" or \"holder:<collectible>\"; never a pool, a farm, a lottery or \"chosen\", which a later prize or reward could read. Nothing from outside can change a round's prizes: no seed, no gifts, no carry-over. Write exactly one of \"pot\" or \"rest\"."
+          "description": "Pays each round's places from that round's own ticket money only, and sends what they leave here: \"treasury\", \"burn\", \"wallet:<address>\", \"account:<token account>\", \"holder:<collectible>\", a pool, a farm or another lottery (\"lottery:<key>\"), never \"chosen\" or itself; a pool, farm or lottery named here counts the leftover only once someone pulls it. Nothing from outside can change a round's prizes: no seed, no gifts, no carry-over. Write exactly one of \"pot\" or \"rest\"."
         },
         "places": {
           "type": "array",
@@ -2240,7 +2240,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [],
-      "description": "What an NFT the player shows must be: of an `item` the game mints, or of a `collection` (a Core collection, or a Token Metadata collection mint it is verified in; with neither, the game's own collection, the one it has authority over); and, when `attribute` is given, its attribute at least `atLeast`, equal to `equals`, a time still `ahead` or `passed` (`time`), or present. `{ \"item\": \"pass\" }` alone means \"holds a Member Pass\". An NFT's attributes are read as they are; for one the game has no authority over, what the game wrote about it in its Sheet counts over them.",
+      "description": "What an NFT the player shows must be: of an `item` the game mints, or of a `collection` (a Core collection, or a Token Metadata collection mint it is verified in; with neither, the game's own collection, the one it has authority over); and, when `attribute` is given, its attribute at least `atLeast`, equal to `equals`, one of `oneOf`, a time still `ahead` or `passed` (`time`), or present. `{ \"item\": \"pass\" }` alone means \"holds a Member Pass\"; `{ \"items\": [\"oak\", \"pine\"] }` means any of them. An NFT's attributes are read as they are; for one the game has no authority over, what the game wrote about it in its Sheet counts over them.",
       "properties": {
         "item": {
           "$ref": "#/$defs/key",
@@ -2261,6 +2261,20 @@
         },
         "equals": {
           "type": "string"
+        },
+        "oneOf": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string" },
+          "description": "The attribute is one of these texts (at most 16): a tier of two, one species of three."
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/key" },
+          "description": "Any of these items the game mints (at most 16), in its own collection: a farm for three tree species, a gate for holders of any of five plots. Read by the program as the collection's `item_id` being one of theirs; not with `item`, `collection` or `attribute`."
         },
         "time": {
           "enum": [

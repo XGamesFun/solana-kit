@@ -774,7 +774,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       r.wallets.forEach((w, i) => isAddress(w) || refuse('E-REF', `${where}.wallets[${i}]`, `${what} lists “${w}”, which is not an address.`, 'Write the wallet’s public address.'));
       return;
     }
-    if ((r.atLeast !== undefined || r.equals !== undefined || r.time !== undefined) && !r.attribute) refuse('E-RULE', where, `${what} tests a number, a text or a time but names no attribute.`, 'Add "attribute", or leave the test out to ask only for the item.');
+    if (r.items !== undefined) {
+      if (r.item || r.collection || r.attribute) refuse('E-RULE', where, `${what} names "items" and an item, a collection or an attribute: "items" alone means any of those items.`, 'Keep "items", or the other form.');
+      if (!Array.isArray(r.items) || !r.items.length || r.items.length > 16) refuse('E-RULE', `${where}.items`, `${what} names ${r.items?.length ?? 0} items: 1 to 16.`, 'Name 1 to 16 items.');
+      for (const [i, k] of (r.items ?? []).entries()) {
+        const it = item(k, `${where}.items[${i}]`);
+        if (it && !isCollectible(it)) refuse('E-RULE', `${where}.items[${i}]`, `${what} asks for ${label(it)}, a normal item: only collectibles can be shown.`, `Make ${label(it)} a collectible.`);
+      }
+      return;
+    }
+    if (r.oneOf !== undefined && (!Array.isArray(r.oneOf) || !r.oneOf.length || r.oneOf.length > 16)) refuse('E-RULE', `${where}.oneOf`, `${what} lists ${r.oneOf?.length ?? 0} texts in "oneOf": 1 to 16.`, 'List 1 to 16 texts.');
+    if (r.oneOf !== undefined && (r.equals !== undefined || r.atLeast !== undefined || r.time !== undefined)) refuse('E-RULE', where, `${what} asks for "oneOf" and another test at once.`, 'Keep one of "atLeast", "equals", "oneOf" and "time".');
+    if ((r.atLeast !== undefined || r.equals !== undefined || r.oneOf !== undefined || r.time !== undefined) && !r.attribute) refuse('E-RULE', where, `${what} tests a number, a text or a time but names no attribute.`, 'Add "attribute", or leave the test out to ask only for the item.');
     if (r.time !== undefined && (r.atLeast !== undefined || r.equals !== undefined)) refuse('E-RULE', where, `${what} asks for a time and for a number or a text at once.`, 'Keep one of "time", "atLeast" and "equals".');
     if (!r.item && !r.collection && !r.attribute) refuse('E-RULE', where, `${what} asks for nothing: no item, no collection and no attribute.`, 'Name the item or the collection players must hold, an attribute, or both.');
     if (r.item && r.collection) refuse('E-RULE', where, `${what} names both an item and a collection: a rule is about one.`, 'Keep "item" for an item the game mints, or "collection" for any NFT of a collection.');
@@ -1670,10 +1681,12 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (keepsPot(l) && l.pot >= MAX_POTS) refuse('E-LOTTERY', `${where}.pot`, `${label(l)} names pot ${l.pot}: a lottery keeps at most ${MAX_POTS} pots, numbered 0 to ${MAX_POTS - 1} (BadLottery).`, 'Use pot 0, or another number below 16.');
     if (!keepsPot(l) && l.rest !== undefined) {
       const rest = destination(l.rest);
-      if (rest.kind === 'pool' || rest.kind === 'chosen')
-        refuse('E-LOTTERY', `${where}.rest`, `${label(l)} sends what its places leave to ${rest.kind === 'pool' ? `the pool “${rest.key}”` : 'a wallet the buyer chooses'}: a lottery paid from each round's own money sends its leftover where no later prize reads it, so the program refuses a pool or a chosen share (BadLottery).`, 'Send it to "treasury", a "wallet:<address>", a "holder:<collectible>", an "account:<token account>", or "burn" it; or keep a pot ("pot": 0) for the leftover to carry over to the next round.');
-      else if (rest.kind === 'lottery' || rest.kind === 'farm') refuse('E-LOTTERY', `${where}.rest`, `${label(l)} sends what its places leave to ${rest.kind === 'farm' ? 'a farm' : 'a lottery'}, whose later rewards or prizes read what lands there: a lottery paid from each round's own money sends its leftover where no later prize reads it.`, 'Send it to "treasury", a wallet, a holder, another program\'s account, or "burn" it; or keep a pot ("pot": 0) for the leftover to carry over to the next round.');
-      else split([{ to: l.rest, percent: 100 }], potToken, `${where}.rest`, { what: `${label(l)}’s leftover`, single: true });
+      if (rest.kind === 'chosen') refuse('E-LOTTERY', `${where}.rest`, `${label(l)} sends what its places leave to a wallet the buyer chooses: no buyer chooses a leftover (BadLottery).`, 'Send it to "treasury", a wallet, a holder, a pool, an account, or "burn" it.');
+      else if (rest.kind === 'lottery' && rest.key === l.key) refuse('E-LOTTERY', `${where}.rest`, `${label(l)} sends what its places leave into its own pot, and it keeps none (SameAccount).`, 'To carry the leftover over to the next round, write "pot": 0 in place of "rest".');
+      else {
+        if (['pool', 'lottery', 'farm'].includes(rest.kind)) warn('W-LOTTERY', `${where}.rest`, `${label(l)} sends what its places leave to ${rest.kind === 'pool' ? `the pool “${rest.key}”` : rest.kind === 'farm' ? 'a farm' : `the lottery “${rest.key}”`}: it lands when someone pulls it, so a prize or reward that reads ${rest.kind === 'farm' ? 'that farm' : rest.kind === 'pool' ? 'that pool' : 'that pot'} counts it only from then.`, 'Fine for a pool you top up anyway; send it to "treasury" if a later prize must not depend on when it is pulled.');
+        split([{ to: l.rest, percent: 100 }], potToken, `${where}.rest`, { what: `${label(l)}’s leftover`, single: true });
+      }
       if (l.noLoss) refuse('E-LOTTERY', `${where}.noLoss`, `${label(l)} gives every ticket back, so a round has no ticket money of its own for its places: a no-loss lottery pays from a pot (BadLottery).`, 'Write "pot": 0 in place of "rest", and fill the pot ("seed", a sponsor, "lottery:<key>" in a split or a schedule).');
       if (Number(l.seed ?? 0) > 0) refuse('E-LOTTERY', `${where}.seed`, `${label(l)} pays each round from that round's own ticket money: it keeps no pot to seed.`, 'Leave "seed" out, or write "pot": 0 in place of "rest" so a seed and gifts can fill a pot.');
       const percents = (l.places ?? [100]).some((p) => placeOf(p).percent > 0);
