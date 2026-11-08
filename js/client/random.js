@@ -1,7 +1,7 @@
 // The loot program's rolling module (`src/random`), mirrored: every random choice it makes is drawn from a stream of
 // the oracle's answer, by a path that names what is drawn, with one unbiased sampler. A page shows from an order's
 // answer what each draw gave (and a fresh unit's range traits) exactly as the program drew them. Held to the
-// program's own vectors (`js/test/fixtures/roll-vectors.json`, from gamesfun-loot's `tests/fixtures`).
+// program's own vectors (`js/test/fixtures/roll-vectors.json`, from the program's own tests).
 import { concat, uintLE } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
 

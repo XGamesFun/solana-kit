@@ -4,6 +4,13 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased
+
+- The five examples 0.25.0 added from the rated economies (`stride-sneakers`, `holder-den`, `pack-league`,
+  `match-predictions`, `holders-drop`) are taken out again; fuller examples come later. The tests cover each part they
+  used on their own.
+- Comments and the changelog name no local folder or internal note.
+
 ## 0.25.0: a prize never shifts to a later round (the program on devnet since 2026-11-08, slot 519,994,814)
 
 For the program's 0.25.0: the IDL, the client, the spec and the docs follow it, and no account of 0.24 carries over:
@@ -43,9 +50,9 @@ bytes, slot 519,994,814). `scripts/devnet-e2e.mjs` sends each fresh wallet's SOL
 - **Recipes.** `craftIx` takes a token seat's booster as `{ asset, farm, booster: true }` on a kept `Use` or a `Show`
   line: the player's token seat and the farm follow it; a `Staked` line refuses it. js/play finds a booster's farm.
 
-### From twelve games built on 0.24 (the tools)
+### From games built on 0.24 (the tools)
 
-- **Designing against farming and cheating** (from twelve live games, `gamesfun-data/demos/2026-11-07/AUDIT/kit-snags.md`):
+- **Designing against farming and cheating**, from what games built on 0.24 ran into:
   - `check`: `W-GRANT-TOTAL` for a voucher, key or open grant that limits each wallet (person, key) but nothing a day
     or in all (codes that each pay a set number of times are a total already); `W-GRANT-OPEN` says when an open grant's
     prize can be sold or is a roll, and how to make farming it cost something; `W-FARM-MINT` for a farm that mints its
@@ -64,15 +71,12 @@ bytes, slot 519,994,814). `scripts/devnet-e2e.mjs` sends each fresh wallet's SOL
     `sentence-to-spec.md`.
 - **A lottery's or farm's seed in a token the project mints** is minted into the pot or the rewards vault at go-live,
   as a pool's seed is minted into the pool. It was paid from the owner's wallet, which holds none, so the setup never
-  finished (snag 1.1). Test: `minted-seeds.test.mjs`.
+  finished. Test: `minted-seeds.test.mjs`.
 - **Legal flags, once.** The skill (rule 6, `telling-the-person.md`) says each legal flag once, in a plain sentence, the
   first time the checker raises it, and again only when the person asks or a flag of a new kind appears; no legal notes
   in pages and apps unless asked. `xsolana_publish` passes the flags on for the agent to say if it hasn't yet, and no
   longer asks it to repeat that the program is unaudited: the approval page shows that, and its tick box is the one
   acknowledgment. The checker's warnings and the approval page are unchanged.
-- **Five examples from the rated economies:** `stride-sneakers` (move-to-earn), `holder-den` (staking an outside
-  collection's NFTs, frozen in the wallet), `pack-league` (packs that fill a league pot), `match-predictions` (a
-  pari-mutuel pool), `holders-drop` (a holder-gated crate, badge and raffle). Each checks and goes live in the tests.
 - **`{serial}` in a name:** the schema no longer says a fresh item's name takes `{serial}`. The program fills `{serial}`
   in links only and ends every name with " #<serial>"; `{attribute}` works in both.
 - Tests: the go-live test buys only from a box with no gate (one gated on a collection waits for a holder).

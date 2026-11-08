@@ -1,6 +1,6 @@
 // A lottery's and a farm's seed in a token the project mints (no fixed supply): the owner's wallet holds none of it, so
 // going live mints the seed straight into the pot and the rewards vault, as a pool's seed is minted into the pool
-// (kit snag 1.1: the seed was paid from the owner's wallet, and the setup could never finish).
+// (it was paid from the owner's wallet, which holds none, so the setup could never finish).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as loot from '../client/index.js';
