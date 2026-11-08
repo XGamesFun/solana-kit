@@ -7,7 +7,8 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
 1. **What each play costs and is worth.** Lead with the tools' "in all" number: "A cast costs about 0.0234 SOL in
    all (0.02 SOL, the 0.002 SOL player fee, the oracle and the network, and the Perch's rent when one is caught), and
    gives back 0.01 SOL in prizes on average (50%), plus a Perch 3 casts in 10." For a box of items, the odds; for a
-   lottery, what the pot reaches and what each place wins; for a farm, a day of rewards per unit staked and what the
+   lottery, where its places are paid from (its pot, which gifts and what earlier rounds left fill, or each round's own
+   ticket money, which nothing from outside can change), what that reaches and what each place wins; for a farm, a day of rewards per unit staked and what the
    lock tiers multiply.
 2. **Where the money goes.** "55% of each cast goes into the pond that pays the Golden Carp, 5% into the monthly
    draw's pot, and the other 40% to your treasury."

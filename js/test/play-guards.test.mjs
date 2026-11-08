@@ -22,7 +22,7 @@ function fixture(seed) {
     currency: 'coin',
     tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
     live: { project: w.project, collection: w.collection },
-    lotteries: [{ key: 'raffle', name: 'Art raffle', id: 1 }],
+    lotteries: [{ key: 'raffle', rest: 'treasury', name: 'Art raffle', id: 1 }],
     grants: [{ key: 'prize', name: 'Prize', id: 1 }],
   };
   const appOf = address =>
@@ -54,6 +54,7 @@ test('tickets are bought only on the terms shown: a price raised since is refuse
   const args = {
     price: 2n * PRICE,
     mint: w.mint,
+    pays_from: { Round: { rest: 'Treasury' } },
     shares: [{ to: 'Treasury', bps: 10_000 }],
     places: [{ bps: 0, prize: { Held: [art] } }],
     ticket_mint: A,

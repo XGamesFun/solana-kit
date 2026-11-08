@@ -94,7 +94,8 @@
       "gate": {
         "item": "common"
       },
-      "perWallet": 100
+      "perWallet": 100,
+      "pot": 0
     }
   ],
   "scenario": {

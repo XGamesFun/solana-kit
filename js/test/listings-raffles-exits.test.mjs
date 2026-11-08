@@ -125,6 +125,7 @@ t(
     const lotteryArgs = (more = {}) => ({
       price: PRICE,
       mint: w.mint,
+      pays_from: { Pot: [0] },
       shares: [{ to: 'Treasury', bps: 9000 }],
       places: [{ bps: 0, prize: { Held: [art] } }],
       ticket_mint: NOBODY,

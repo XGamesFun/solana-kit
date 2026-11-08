@@ -49,6 +49,7 @@ import {
   lotterySplit,
   model,
   MOST_RENT_PER_BYTE,
+  paysFromOf,
   outcomeParts,
   perWalletOf,
   placeOf,
@@ -351,8 +352,9 @@ export const listLeaves = (list, t) =>
 const prizeOrNull = (p, m) => (prizeLine(p) ? prizeArgs(p, m) : null);
 
 /**
- * A lottery's args: its own pot in `currency` (the project's by default), ticket money split by `split` (and
- * `cutPercent` to the treasury) with the rest into the pot. No `every` draws once, at `firstDraw`.
+ * A lottery's args: its money in `currency` (the project's by default), ticket money split by `split` (and
+ * `cutPercent` to the treasury) with the rest for the places, which are paid from its pot (`pot`) or from each round's
+ * own money, what they leave going to `rest` (`paysFromOf`). No `every` draws once, at `firstDraw`.
  */
 export function lotteryArgs(l, m) {
   const potKey = l.currency ?? m.currencyKey;
@@ -364,6 +366,8 @@ export function lotteryArgs(l, m) {
     terms: {
       price: l.ticketNft ? 0n : amount(l.price, ticket),
       mint: `@mint:${potKey}`,
+      // Where the places are paid from: a pot kept from round to round, or each round's own money.
+      pays_from: paysFromOf(l, m),
       shares: shares(lotterySplit(l), m),
       // A place takes a share of the pot, a prize for its winner, or both.
       // A run of `times` places alike: "places 2 to 201 each take 1%" is one.
@@ -626,7 +630,7 @@ export function grantArgs(g, m) {
 
 /**
  * Replaces "@mint:<key>" strings anywhere in `value` with the mint `ctx` names, "@ata:<wallet>:<key>" with that
- * wallet's token account for it, "@pot:<id>" with a lottery's pot, "@farm:<id>" with a farm's address and "@rewards:<id>"
+ * wallet's token account for it, "@pot:<lottery id>:<pot id>" with a lottery's pot, "@farm:<id>" with a farm's address and "@rewards:<id>"
  * with a farm's rewards vault.
  */
 function resolve(value, ctx) {
@@ -658,7 +662,8 @@ function resolve(value, ctx) {
   }
   if (typeof value === 'string' && value.startsWith('@pot:')) {
     if (!ctx.project) throw new Error('No project yet for a lottery’s pot.');
-    return loot.pda.pot(loot.pda.lottery(ctx.project, Number(value.slice(5))));
+    const [, lottery, pot] = value.split(':');
+    return loot.pda.lotteryPot(loot.pda.lottery(ctx.project, Number(lottery)), Number(pot));
   }
   if (typeof value === 'string' && value.startsWith('@ata:')) {
     const [, wallet, key, program] = value.split(':');
@@ -904,13 +909,13 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   const record = (part, def, says, kind, what, options = () => ({})) => {
     const [variant] = Object.keys(def);
     const bytes = recordBytesOf(kind, def[variant]);
-    // A lottery's first write opens its pot: a token account as well as the record (each round holds its own money).
-    const pot =
-      kind === 'Lottery'
-        ? [{ what: `${what}’s pot`, bytes: 165 }]
-        : def.Schedule?.args.action.from.Vest
-          ? [{ what: `${what}’s sealed vault`, bytes: 165 }]
-          : [];
+    // A lottery's write opens the pot it pays from: a token account as well as the record (each round holds its own
+    // money). One paid from each round's own money opens none.
+    const pot = def.Lottery?.args.terms.pays_from.Pot
+      ? [{ what: `${what}’s pot`, bytes: 165 }]
+      : def.Schedule?.args.action.from.Vest
+        ? [{ what: `${what}’s sealed vault`, bytes: 165 }]
+        : [];
     add({
       id: `${part}:${kind}`,
       part,
@@ -1438,7 +1443,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         t,
         units,
         `Mint ${l.seed} ${t.symbol} into the pot of “${l.name}”`,
-        ctx => loot.pda.pot(loot.pda.lottery(project(ctx), l.id)),
+        ctx => loot.pda.lotteryPot(loot.pda.lottery(project(ctx), l.id), l.pot),
       );
       continue;
     }
@@ -1447,7 +1452,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       part: `lottery:${l.key}`,
       says: `Put ${l.seed} ${t.symbol} into the pot of “${l.name}”`,
       build: ctx => {
-        const pot = loot.pda.pot(loot.pda.lottery(project(ctx), l.id));
+        const pot = loot.pda.lotteryPot(loot.pda.lottery(project(ctx), l.id), l.pot);
         return [
           ...(t.wsol
             ? [
@@ -1593,6 +1598,8 @@ export const recordBytesOf = (kind, body) => {
       revision: 0,
       ...placeholders(loot.withDefaults({ Lottery: { args } }).Lottery.args),
       round: 0,
+      pots: 0,
+      owing: NOBODY,
     }),
     Grant: () => ({
       project: NOBODY,
@@ -1639,6 +1646,8 @@ export const contestBytes = (contest, m) =>
     winner: 0,
     owed: 0n,
     unclaimed: 0n,
+    pot_won: 0n,
+    prize_won: 0n,
     sides: Array(contest.sides).fill(0n),
     share: 0,
     extras: 0,

@@ -115,6 +115,7 @@ test(
         args: {
           price: 1000n,
           mint: w.mint,
+          pays_from: { Pot: [0] },
           shares: [],
           places: [10_000],
           ticket_mint: SYSTEM_PROGRAM,

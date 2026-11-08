@@ -144,6 +144,7 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
       args: {
         price: 0n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places: [],
         ticket_mint: NOBODY,
@@ -180,7 +181,7 @@ test('a player pays with NFTs: a payment, a lottery ticket, a contest stake, an 
     loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot }),
   ]);
   const spec = specOf(w, {
-    lotteries: [{ key: 'raffle', name: 'Raffle', id: 1 }],
+    lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id: 1 }],
     auctions: [{ key: 'mystery', name: 'Mystery lot', id: 1, seller: w.authority }],
   });
   const p = playerOf(w, spec);

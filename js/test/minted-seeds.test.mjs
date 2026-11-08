@@ -33,6 +33,7 @@ test(
           currency: 'dust',
           price: 10,
           seed: 5000,
+          pot: 0,
           places: [100],
           every: '7d',
           firstDraw: 'publish+7d',
@@ -63,7 +64,7 @@ test(
       });
     const lottery = loot.pda.lottery(p.ctx.project, spec.lotteries[0].id ?? 1);
     const farm = loot.pda.farm(p.ctx.project, spec.farms[0].id ?? 1);
-    assert.equal(w.chain.tokens(loot.pda.pot(lottery)), 500_000n, 'the pot holds the 5,000 DUST seed');
+    assert.equal(w.chain.tokens(loot.pda.lotteryPot(lottery, 0)), 500_000n, 'the pot holds the 5,000 DUST seed');
     assert.equal(w.chain.tokens(loot.pda.rewards(farm)), 100_000n, 'the rewards vault holds the 1,000 DUST seed');
   },
 );

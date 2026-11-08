@@ -9,8 +9,8 @@ An economy is one JSON spec (`xsolana.json` in the project) on **loot**, a Solan
 writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and the project's
 owner puts it live by approving in their own wallet. It runs on **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.24.0 <guide|examples|check|simulate|cost|explain|publish|status> [xsolana.json]`,
-or `npx -y @xgamesfun/solana@0.24.0 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.25.0 <guide|examples|check|simulate|cost|explain|publish|status> [xsolana.json]`,
+or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -87,13 +87,18 @@ or `npx -y @xgamesfun/solana@0.24.0 tool <name> '<json>'` for any tool (always w
    draws an open, a guaranteed rare), opened several at once from the page; cards whose traits differ are a fresh
    item drawing from `tables`. Every other shape (bundles, an NFT as the price, stashes, gates, no-loss lotteries,
    amounts by rank) is in `references/sentence-to-spec.md` and `xsolana_guide`.
+   A lottery always names where its places are paid from, and there is no default: ask the person if their words
+   don't say. `"pot": 0` keeps a pot from round to round: a seed, sponsors, shares of other sales and what earlier
+   rounds left all count, and the next round starts with what the round before left (a jackpot that grows, a no-loss
+   lottery). `"rest": "<destination>"` pays each round from its own ticket money alone, which nothing from outside can
+   change, and sends what the places leave there (`"treasury"`, a wallet, `"burn"`; never a pool or `"chosen"`).
    Then say what stays the project's job (`references/telling-the-person.md`): the files behind every item's link
    (every value of a fresh item's `{attribute}`), a table's rent, and the collectible rent a pack's settle pays.
 6. **Iterate on what they say.** "Make legendaries 0.5%", "a bigger seed": change, check, simulate, explain again.
 7. **Save it**: `xsolana_save {"spec": …}` writes `xsolana.json`, only if it checks. A live file keeps its program numbers.
 8. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
    run it themselves in the project folder, exactly as `xsolana_publish` gives it (it names the exact version:
-   `npx -y @xgamesfun/solana@0.24.0 approve xsolana.json`; never drop the version). It opens a page on their computer where
+   `npx -y @xgamesfun/solana@0.25.0 approve xsolana.json`; never drop the version). It opens a page on their computer where
    they connect a devnet wallet and approve; what lands is written back into `xsolana.json`. You publish nothing.
 9. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
    happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the

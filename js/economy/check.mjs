@@ -7,6 +7,7 @@
 import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
+import { MAX_POTS } from '../client/accounts.js';
 import { vault } from '../client/pda.js';
 import { boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
@@ -23,6 +24,7 @@ import {
   fromUnits,
   isAddress,
   listOf,
+  keepsPot,
   lotterySplit,
   model,
   placeOf,
@@ -746,9 +748,31 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     shares.some(
       at => path === at || path.startsWith(`${at}.`) || at.startsWith(`${path}.`) || at.startsWith(`${path}[`),
     );
+  // Where a lottery's places are paid from is the project's to name, never a default (loot 0.25): said in words, not
+  // again by the schema.
+  const paysUnsaid = new Set();
+  (Array.isArray(economy?.lotteries) ? economy.lotteries : []).forEach((l, i) => {
+    if (!l || typeof l !== 'object' || 'pot' in l !== 'rest' in l) return;
+    const at = `economy.lotteries[${i}]`;
+    paysUnsaid.add(at);
+    const both = 'pot' in l;
+    refuse(
+      'E-LOTTERY-PAYS',
+      at,
+      `The lottery “${l.name ?? l.key}” ${both ? 'names both "pot" and "rest"' : 'does not say where its places are paid from'}: a lottery pays from exactly one. "pot" (a number 0 to 15, usually 0) keeps a pot from round to round: each place takes its percent of what the pot holds at the draw with the round's ticket money, so a seed, gifts, shares of other sales, yield and what earlier rounds' places left all count, and the next round starts with what the round before left. "rest" pays each round from its own ticket money alone, which nothing from outside can change, and sends what its places leave to that destination (the treasury, a wallet, a burn…).`,
+      both
+        ? 'Keep one: "pot" for a pot that carries over and takes gifts, or "rest" for rounds that each pay from their own tickets.'
+        : 'Add "pot": 0 for a jackpot that carries over and that sponsors or other sales can fill, or "rest": "treasury" (or another destination) for rounds that each pay out of their own ticket money.',
+    );
+  });
   // An old version is said once, by E-VERSION, not again by the schema.
   for (const e of validate(economy))
-    if (!(oldVersion && e.path === 'economy.version') && !burnsGone.has(e.path) && !aboutShare(e.path))
+    if (
+      !(oldVersion && e.path === 'economy.version') &&
+      !burnsGone.has(e.path) &&
+      !aboutShare(e.path) &&
+      !(paysUnsaid.has(e.path) && e.message.startsWith('needs exactly one of'))
+    )
       refuse(
         'E-SCHEMA',
         e.path,
@@ -1309,11 +1333,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].some(program => vault(m.live.project, t.mint, program) === address),
     );
   /** Whether anything puts money into lottery `l`'s pot: its seed, a place's prize, or a share or schedule that names "lottery:<key>". */
-  const lotteryPotFilled = l =>
-    Number(l.seed ?? 0) > 0 || (l.places ?? []).some(p => typeof p === 'object' && p.prize) || lotterySharedInto(l);
-  /** Whether another part pays into lottery `l`'s pot: a share or schedule that names "lottery:<key>". */
-  const lotterySharedInto = l => {
+  const lotteryPotFilled = l => {
     const to = `lottery:${l.key}`;
+    if (Number(l.seed ?? 0) > 0 || (l.places ?? []).some(p => typeof p === 'object' && p.prize)) return true;
     const splits = [
       ...m.allBoxes,
       ...m.payments,
@@ -1462,7 +1484,51 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       );
       return;
     }
-    if ((r.atLeast !== undefined || r.equals !== undefined || r.time !== undefined) && !r.attribute)
+    if (r.items !== undefined) {
+      if (r.item || r.collection || r.attribute)
+        refuse(
+          'E-RULE',
+          where,
+          `${what} names "items" and an item, a collection or an attribute: "items" alone means any of those items.`,
+          'Keep "items", or the other form.',
+        );
+      if (!Array.isArray(r.items) || !r.items.length || r.items.length > 16)
+        refuse(
+          'E-RULE',
+          `${where}.items`,
+          `${what} names ${r.items?.length ?? 0} items: 1 to 16.`,
+          'Name 1 to 16 items.',
+        );
+      for (const [i, k] of (r.items ?? []).entries()) {
+        const it = item(k, `${where}.items[${i}]`);
+        if (it && !isCollectible(it))
+          refuse(
+            'E-RULE',
+            `${where}.items[${i}]`,
+            `${what} asks for ${label(it)}, a normal item: only collectibles can be shown.`,
+            `Make ${label(it)} a collectible.`,
+          );
+      }
+      return;
+    }
+    if (r.oneOf !== undefined && (!Array.isArray(r.oneOf) || !r.oneOf.length || r.oneOf.length > 16))
+      refuse(
+        'E-RULE',
+        `${where}.oneOf`,
+        `${what} lists ${r.oneOf?.length ?? 0} texts in "oneOf": 1 to 16.`,
+        'List 1 to 16 texts.',
+      );
+    if (r.oneOf !== undefined && (r.equals !== undefined || r.atLeast !== undefined || r.time !== undefined))
+      refuse(
+        'E-RULE',
+        where,
+        `${what} asks for "oneOf" and another test at once.`,
+        'Keep one of "atLeast", "equals", "oneOf" and "time".',
+      );
+    if (
+      (r.atLeast !== undefined || r.equals !== undefined || r.oneOf !== undefined || r.time !== undefined) &&
+      !r.attribute
+    )
       refuse(
         'E-RULE',
         where,
@@ -1585,7 +1651,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
    * treasury wallet's account of `tok`, whatever token it is. `chosen`: the buyer may name one share ("chosen",
    * "chosen:<item>"): a box's or a lottery's split; 'wallet': only "chosen", a wallet (a payment's split).
    */
-  const split = (list, tok, where, { what, chosen = false }) => {
+  const split = (list, tok, where, { what, chosen = false, single = false }) => {
+    // Where share `i` is: one destination given alone (`single`) is the field itself.
+    const to = i => (single ? where : `${where}[${i}].to`);
     const shares = sharesOf(list);
     shares.forEach((s, i) => percent(s.percent, `${where}[${i}].percent`));
     const total = shares.reduce((n, s) => n + (s.bps ?? 0), 0);
@@ -1609,11 +1677,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       );
     for (const [i, s] of shares.entries()) {
       if (s.kind === 'pool') {
-        const p = pool(s.key, `${where}[${i}].to`);
+        const p = pool(s.key, to(i));
         if (p && tok && p.currency !== tok.key)
           refuse(
             'E-POOL-MINT',
-            `${where}[${i}].to`,
+            to(i),
             `${what} is paid in ${tok.symbol}, but the pool “${p.key}” holds ${m.tokens.get(p.currency)?.symbol ?? p.currency}.`,
             `Send it to a pool of ${tok.symbol}.`,
           );
@@ -1622,17 +1690,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (s.kind === 'lottery') {
         const l = m.lottery.get(s.key);
         const potKey = l?.currency ?? m.currencyKey;
-        if (!l)
+        if (!l) refuse('E-REF', to(i), `There is no lottery “${s.key}”.`, 'Name one of "lotteries" by its key.');
+        else if (!keepsPot(l))
           refuse(
-            'E-REF',
-            `${where}[${i}].to`,
-            `There is no lottery “${s.key}”.`,
-            'Name one of "lotteries" by its key.',
+            'E-LOTTERY',
+            to(i),
+            `${what} sends a share to ${label(l)}, which pays each round from that round's own ticket money ("rest"): it keeps no pot for the share to land in.`,
+            `Give ${label(l)} a pot ("pot": 0) to take gifts and shares, or send the share elsewhere.`,
           );
         else if (tok && potKey !== tok.key)
           refuse(
             'E-POOL-MINT',
-            `${where}[${i}].to`,
+            to(i),
             `${what} is paid in ${tok.symbol}, but the pot of ${label(l)} is in ${m.tokens.get(potKey)?.symbol ?? potKey}.`,
             `Send it to a lottery whose pot is in ${tok.symbol}.`,
           );
@@ -1640,11 +1709,11 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       // A farm's rewards vault of this spec, in the token the share is paid in.
       if (s.kind === 'farm') {
         const f = m.farm.get(s.key);
-        if (!f) refuse('E-REF', `${where}[${i}].to`, `There is no farm “${s.key}”.`, 'Name one of "farms" by its key.');
+        if (!f) refuse('E-REF', to(i), `There is no farm “${s.key}”.`, 'Name one of "farms" by its key.');
         else if (tok && f.rewardsToken !== tok.key)
           refuse(
             'E-POOL-MINT',
-            `${where}[${i}].to`,
+            to(i),
             `${what} is paid in ${tok.symbol}, but ${label(f)}’s rewards are ${m.tokens.get(f.rewardsToken)?.symbol ?? f.rewardsToken}.`,
             `Send it to a farm whose rewards are ${tok.symbol}.`,
           );
@@ -1652,7 +1721,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (['account', 'holder', 'wallet'].includes(s.kind) && !isAddress(s.key))
         refuse(
           'E-REF',
-          `${where}[${i}].to`,
+          to(i),
           `${what} sends a share to “${s.to}”, which is not an address.`,
           `Write "${s.kind}:<address>".`,
         );
@@ -1660,21 +1729,21 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (s.kind === 'account' && isAddress(s.key) && gameVault(s.key, tok))
         refuse(
           'E-SPLIT',
-          `${where}[${i}].to`,
+          to(i),
           `${what} sends a share to the game’s own vault for ${tok.symbol}, where open orders, prizes set aside and bids wait: the program refuses it (it would mix into what those records hold).`,
           'Send it to a pool ("pool:<key>") or the treasury instead.',
         );
       else if (s.kind === 'account' && isAddress(s.key))
         warn(
           'W-PAYEE',
-          `${where}[${i}].to`,
+          to(i),
           `${what} pays a share to the token account ${s.key.slice(0, 4)}…: while no ${tok?.symbol ?? 'such'} account is there, that share goes to the treasury instead.`,
           `For a person's wallet, write "wallet:${s.key}": the program pays their own ${tok?.symbol ?? ''} account, and opens it when it is not there.`,
         );
       if (s.kind === 'chosen' && !chosen)
         refuse(
           'E-CHOSEN',
-          `${where}[${i}].to`,
+          to(i),
           `${what} can’t let anyone choose where a share goes: only a buyer chooses, when they pay (a box, a shop item, a lottery’s tickets, a payment).`,
           'Name the destination, or sell it as a box with one outcome that gives nothing (or the item): a box can carry the "chosen" share, a gate and opens/closes.',
         );
@@ -1683,21 +1752,21 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       else if (s.kind === 'chosen' && s.key && chosen === 'wallet')
         refuse(
           'E-CHOSEN',
-          `${where}[${i}].to`,
+          to(i),
           `${what} lets the payer pick a “${s.key}” whose holder is paid, but a payment can’t check that the collectible they name is one: only a box’s (or shop item’s) and a lottery’s buyer picks a collectible of an item.`,
           'Write "chosen" for a wallet the payer names (a referrer), or sell it as a box with one outcome that gives nothing: a box’s split can carry "chosen:<item>".',
         );
       if (s.kind === 'chosen' && s.key && !m.item.has(s.key))
         refuse(
           'E-REF',
-          `${where}[${i}].to`,
+          to(i),
           `${what} lets the buyer pick a “${s.key}”, which is not an item.`,
           'Name an item of the game ("chosen:<item key>"), or write "chosen" for a wallet.',
         );
       if (tok?.wsol && s.kind === 'burn')
         refuse(
           'E-WSOL-BURN',
-          `${where}[${i}].to`,
+          to(i),
           `${what} is paid in SOL, and wrapped SOL cannot be burned.`,
           'Send that share to a pool or a wallet instead.',
         );
@@ -2238,6 +2307,27 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           );
       }
     }
+    // A box that stops selling once an outcome is out covers each purchase's draws, and a random draw of a stash could
+    // take one of its NFTs another outcome names: it can't list both (catalog.rs, BadEntries).
+    if (b.whenOut !== 'drawLeft') {
+      // One outcome naming both is refused above already.
+      const parts = outs.map(outcomeParts);
+      const random = parts.flatMap((p, i) => p.filter(x => x.gives === 'stash').map(x => [i, x.stash]));
+      const mixed = [
+        ...new Set(
+          random
+            .filter(([i, key]) => parts.some((p, j) => j !== i && p.some(y => y.gives === 'nft' && y.stash === key)))
+            .map(([, key]) => key),
+        ),
+      ];
+      for (const key of mixed)
+        refuse(
+          'E-ODDS',
+          `${where}.outcomes`,
+          `${label(b)} gives an NFT of the stash “${key}” at random and, in another outcome, one of its NFTs by name, and it stops selling once an outcome is out ("whenOut": "stopSales", the default): a random draw could take the named one, so nothing could cover it, and the program refuses the box (BadEntries).`,
+          `Make it "whenOut": "drawLeft", or give the named NFT from a stash of its own.`,
+        );
+    }
     // A fresh outcome's tables come with the answer while they fit what the box's own accounts leave, in outcome order
     // (`tableBudget`). One past that is out of stock on every roll, so its odds would be false.
     {
@@ -2622,12 +2712,13 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(b)} rolls on an NFT, but ${[...new Set(prizedBy)].join(', ')} give${prizedBy.length === 1 ? 's' : ''} a roll of it on nothing: its outcomes are given, and their shifts and where they send an NFT are not.`,
         'Give prizes a box with no "rollsOn".',
       );
-    if (price === 0n && !rolledBy.length && b.active !== false)
+    // Free spins are the project's to limit: warned, never refused.
+    if (price === 0n && !rolledBy.length && b.active !== false && !b.perWallet && !b.perWalletEach)
       warn(
         'W-FREE',
         `${where}.price`,
-        `${label(b)} is free: anyone, a bot included, can open it again and again for only the fees${outcomes.flatMap(outcomeParts).some(o => o.gives === 'pay') ? ', and drain the pools its prizes come from' : ''}.`,
-        'Give it a price, a gate, or hand out openings through a grant.',
+        `${label(b)} is free with no limit per wallet: anyone, a bot included, can open it again and again for only the fees${outcomes.flatMap(outcomeParts).some(o => o.gives === 'pay') ? ', and drain the pools its prizes come from' : ''}.`,
+        'Set "perWallet" or "perWalletEach" (say one a day), give it a price or a gate, or hand out openings through a grant with limits.',
       );
     const withChance = outcomes.filter(o => o.chance !== undefined).length;
     const withWeight = outcomes.filter(o => o.weight !== undefined).length;
@@ -3527,10 +3618,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     }
     if (s.does === 'pay') {
       const d = destination(s.to ?? '');
-      if (d.kind === 'lottery')
-        m.lottery.has(d.key) ||
+      if (d.kind === 'lottery') {
+        const l = m.lottery.get(d.key);
+        if (!l)
           refuse('E-REF', `${where}.to`, `There is no lottery “${d.key}”.`, 'Name one of "lotteries" by its key.');
-      else if (d.kind === 'farm') {
+        else if (!keepsPot(l))
+          refuse(
+            'E-LOTTERY',
+            `${where}.to`,
+            `${label(s)} pays ${label(l)}, which pays each round from that round's own ticket money ("rest"): it keeps no pot to pay into.`,
+            `Give ${label(l)} a pot ("pot": 0), or pay elsewhere.`,
+          );
+      } else if (d.kind === 'farm') {
         const f = m.farm.get(d.key);
         if (!f) refuse('E-REF', `${where}.to`, `There is no farm “${d.key}”.`, 'Name one of "farms" by its key.');
         else if (srcToken && f.rewardsToken !== srcToken.key)
@@ -3580,6 +3679,67 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         'Wrapped SOL cannot be burned as a ticket token.',
         'Use SOL as the lottery currency, or use a burnable non-native ticket token.',
       );
+    // Where its places are paid from (lottery.rs `PaysFrom`): a pot of its own, or each round's own money with what the
+    // places leave sent to `rest`, never where a later prize could read it.
+    if (keepsPot(l) && l.pot >= MAX_POTS)
+      refuse(
+        'E-LOTTERY',
+        `${where}.pot`,
+        `${label(l)} names pot ${l.pot}: a lottery keeps at most ${MAX_POTS} pots, numbered 0 to ${MAX_POTS - 1} (BadLottery).`,
+        'Use pot 0, or another number below 16.',
+      );
+    if (!keepsPot(l) && l.rest !== undefined) {
+      const rest = destination(l.rest);
+      if (rest.kind === 'chosen')
+        refuse(
+          'E-LOTTERY',
+          `${where}.rest`,
+          `${label(l)} sends what its places leave to a wallet the buyer chooses: no buyer chooses a leftover (BadLottery).`,
+          'Send it to "treasury", a wallet, a holder, a pool, an account, or "burn" it.',
+        );
+      else if (rest.kind === 'lottery' && rest.key === l.key)
+        refuse(
+          'E-LOTTERY',
+          `${where}.rest`,
+          `${label(l)} sends what its places leave into its own pot, and it keeps none (SameAccount).`,
+          'To carry the leftover over to the next round, write "pot": 0 in place of "rest".',
+        );
+      else {
+        if (['pool', 'lottery', 'farm'].includes(rest.kind))
+          warn(
+            'W-LOTTERY',
+            `${where}.rest`,
+            `${label(l)} sends what its places leave to ${rest.kind === 'pool' ? `the pool “${rest.key}”` : rest.kind === 'farm' ? 'a farm' : `the lottery “${rest.key}”`}: it lands when someone pulls it, so a prize or reward that reads ${rest.kind === 'farm' ? 'that farm' : rest.kind === 'pool' ? 'that pool' : 'that pot'} counts it only from then.`,
+            'Fine for a pool you top up anyway; send it to "treasury" if a later prize must not depend on when it is pulled.',
+          );
+        split([{ to: l.rest, percent: 100 }], potToken, `${where}.rest`, {
+          what: `${label(l)}’s leftover`,
+          single: true,
+        });
+      }
+      if (l.noLoss)
+        refuse(
+          'E-LOTTERY',
+          `${where}.noLoss`,
+          `${label(l)} gives every ticket back, so a round has no ticket money of its own for its places: a no-loss lottery pays from a pot (BadLottery).`,
+          'Write "pot": 0 in place of "rest", and fill the pot ("seed", a sponsor, "lottery:<key>" in a split or a schedule).',
+        );
+      if (Number(l.seed ?? 0) > 0)
+        refuse(
+          'E-LOTTERY',
+          `${where}.seed`,
+          `${label(l)} pays each round from that round's own ticket money: it keeps no pot to seed.`,
+          'Leave "seed" out, or write "pot": 0 in place of "rest" so a seed and gifts can fill a pot.',
+        );
+      const percents = (l.places ?? [100]).some(p => placeOf(p).percent > 0);
+      if (percents && (l.ticketNft || l.ticketCurrency) && !l.noLoss)
+        warn(
+          'W-LOTTERY',
+          `${where}.places`,
+          `${label(l)} pays each round from its own ticket money, but its tickets ${l.ticketNft ? 'cost an NFT' : 'are burned'}: no ticket money reaches its places, so their percents pay nothing and only their prizes are won.`,
+          'Keep a pot ("pot": 0) that the owner or other sales fill, or give the places prizes and no percent.',
+        );
+    }
     if (l.ticketNft) {
       // A ticket paid with an NFT: no price, no split, no ticket token (lottery.rs BadLottery).
       if (l.price !== undefined && Number(l.price) > 0)
@@ -3786,33 +3946,15 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(l)}’s places add up to ${total / 100}% of the pot, more than all of it.`,
         'Make them add up to 100% or less.',
       );
+    else if (total < 10_000)
+      warn(
+        'W-LOTTERY',
+        `${where}.places`,
+        keepsPot(l)
+          ? `${label(l)}’s places add up to ${total / 100}%: the other ${(10_000 - total) / 100}% of each pot stays in it for the next round, as do places nobody won.`
+          : `${label(l)}’s places add up to ${total / 100}%: the other ${(10_000 - total) / 100}% of each round's ticket money, and the part of places nobody won, goes to “${l.rest}”${l.rest === 'burn' ? ' (burned when the round closes)' : ''}.`,
+      );
     const ticketSplit = lotterySplit(l);
-    if (total < 10_000) {
-      // What the places leave stays in the pot: said only when something goes into it (ticket money the split and the
-      // cut leave, a seed, or a share another part pays it), and for a lottery that draws once, said as what it is: no
-      // round ever draws it again.
-      const ticketsFill =
-        !l.ticketCurrency &&
-        !l.ticketNft &&
-        l.price !== undefined &&
-        ticketSplit.reduce((a, s) => a + Number(s.percent ?? 0), 0) < 100;
-      if (ticketsFill || Number(l.seed ?? 0) > 0 || lotterySharedInto(l)) {
-        const rest = (10_000 - total) / 100;
-        if (l.every)
-          warn(
-            'W-LOTTERY',
-            `${where}.places`,
-            `${label(l)}’s places add up to ${total / 100}%: the other ${rest}% of each pot stays in it for the next round, as do places nobody won.`,
-          );
-        else
-          warn(
-            'W-LOTTERY',
-            `${where}.places`,
-            `${label(l)}’s places add up to ${total / 100}%, and it draws once: the other ${rest}% of its pot, and any place nobody won, stays in the pot for good, since no round draws it again.`,
-            'Make the places add up to 100%, or send the ticket money elsewhere with a split (to the treasury, a charity).',
-          );
-      }
-    }
     if (ticketSplit.length && l.ticketCurrency)
       refuse(
         'E-LOTTERY',

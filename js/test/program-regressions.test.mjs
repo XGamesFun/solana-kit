@@ -19,6 +19,7 @@ test('a full per-round ticket allowance does not exhaust future rounds', { skip 
       args: {
         price: 1n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places: [],
         ticket_mint: SYSTEM_PROGRAM,

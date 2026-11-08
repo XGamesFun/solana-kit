@@ -103,7 +103,7 @@ test('a lottery’s split leaves the rest of the ticket money to the pot, and th
     tokens: [{ key: 'sol', source: 'sol' }],
     pools: [{ key: 'dev', currency: 'sol' }],
     lotteries: [
-      { key: 'l', name: 'L', price: 0.1, every: '1d', split: [{ to: 'pool:dev', percent: 10 }], cutPercent: 5 },
+      { key: 'l', pot: 0, name: 'L', price: 0.1, every: '1d', split: [{ to: 'pool:dev', percent: 10 }], cutPercent: 5 },
     ],
   };
   const line = explainEconomy(spec, { now: NOW })

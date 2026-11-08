@@ -18,6 +18,7 @@ test("a lottery share that burns is burned at the round's close, the rest in the
       args: {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [{ to: 'Burn', bps: 1000 }],
         places: [10000],
         ticket_mint: NOBODY,

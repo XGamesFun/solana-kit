@@ -253,6 +253,7 @@ t('a lottery’s places as a run, and a raffle of many NFTs drawn from its own s
       args: {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places,
         ticket_mint: NOBODY,
@@ -294,7 +295,11 @@ t('a lottery’s places as a run, and a raffle of many NFTs drawn from its own s
   );
   assert.deepEqual(art.map(x => ownerOf(w, x)).sort(), [...winners].sort(), 'each raffled place took one NFT');
   assert.equal(w.round(1), null, 'every place paid, the round closed');
-  assert.equal(w.chain.tokens(pda.pot(address)), 0n, 'the places took the whole pot: 40% and three times 20%');
+  assert.equal(
+    w.chain.tokens(pda.lotteryPot(address, 0)),
+    0n,
+    'the places took the whole pot: 40% and three times 20%',
+  );
 });
 
 t(
@@ -673,8 +678,8 @@ test('a round’s first ask carries its pot and each run of token prizes; a roun
     { bps: 5000, prize: { Tokens: { from: { Pool: [1] }, amount: 10n } }, times: 1 },
     { bps: 0, prize: { Tokens: { from: { Mint: [MINT] }, amount: 10n } }, times: 2 },
   ];
-  const terms = { mint: MINT, places, shares: [], ticket_mint: NOBODY };
-  const lottery = { incarnation: 0n, round: 0, terms };
+  const terms = { mint: MINT, pays_from: { Pot: [3] }, places, shares: [], ticket_mint: NOBODY };
+  const lottery = { incarnation: 0n, round: 0, terms, owing: NOBODY };
   const keys = status =>
     loot.drawLotteryIx({ payer: MINT, project: MINT, id: 1, lottery, round: { status, terms }, poolMints: { 1: MINT } })
       .keys;
@@ -684,7 +689,46 @@ test('a round’s first ask carries its pot and each run of token prizes; a roun
     7,
     'the pot, its mint and the round’s account of it; a pool run’s mint, pool and account; a minted run’s mint',
   );
-  assert.equal(keys('Open')[named].pubkey, pda.pot(pda.lottery(MINT, 1)));
+  assert.equal(keys('Open')[named].pubkey, pda.lotteryPot(pda.lottery(MINT, 1), 3), 'the pot its terms pay from');
+  // A round paid from its own money carries no pot; one after a round that may still owe its pot carries that round,
+  // its account of the mint and its pot (the one its own terms name).
+  const ownMoney = { ...terms, pays_from: { Round: { rest: 'Treasury' } } };
+  assert.equal(
+    loot.drawLotteryIx({
+      payer: MINT,
+      project: MINT,
+      id: 1,
+      lottery: { ...lottery, terms: ownMoney },
+      round: { status: 'Open', terms: ownMoney },
+      poolMints: { 1: MINT },
+    }).keys.length - named,
+    4,
+    'only the token runs',
+  );
+  const earlier = pda.round(pda.lottery(MINT, 1), 0n, 7);
+  const owingKeys = owing =>
+    loot
+      .drawLotteryIx({
+        payer: MINT,
+        project: MINT,
+        id: 1,
+        lottery: { ...lottery, owing: earlier },
+        round: { status: 'Open', terms },
+        owing,
+        poolMints: { 1: MINT },
+      })
+      .keys.slice(named + 3, named + 6)
+      .map(k => k.pubkey);
+  assert.deepEqual(
+    owingKeys({ terms: { ...terms, pays_from: { Pot: [1] } } }),
+    [earlier, pda.roundTokens(earlier, MINT), pda.lotteryPot(pda.lottery(MINT, 1), 1)],
+    'that round, its account and its own pot',
+  );
+  assert.deepEqual(
+    owingKeys(null).at(2),
+    pda.lotteryPot(pda.lottery(MINT, 1), 3),
+    'its record gone: the current pot stands in',
+  );
   // The lottery goes with its current round only: a waiting round is asked again or cancelled without it.
   const at = (list, name) => list[['payer', 'project', 'lottery', 'round'].indexOf(name)].pubkey;
   assert.equal(at(keys('Open'), 'lottery'), pda.lottery(MINT, 1));
@@ -711,7 +755,13 @@ test('a part owed in common goes where its share says, or to the treasury when n
     lottery: MINT,
     opener: MINT,
     owed: 5,
-    terms: { mint: MINT, places: [], shares: [{ to: { Pool: [2] }, bps: 100 }], ticket_mint: NOBODY },
+    terms: {
+      mint: MINT,
+      pays_from: { Pot: [0] },
+      places: [],
+      shares: [{ to: { Pool: [2] }, bps: 100 }],
+      ticket_mint: NOBODY,
+    },
     entries: [],
     accounts: [],
     paid: new Uint8Array(1),
@@ -746,7 +796,27 @@ test('a part owed in common goes where its share says, or to the treasury when n
     part: { Common: [1] },
     projectState: { treasury: TREASURY },
   });
-  assert.equal(pot.keys[named].pubkey, pda.pot(MINT), 'past the shares, the lottery’s pot');
+  assert.equal(pot.keys[named].pubkey, pda.lotteryPot(MINT, 0), 'past the shares, the lottery’s pot');
+  // Paid from each round's own money, what the places leave goes to its `rest`; a burned rest is never owed.
+  const own = { ...r, pot_owed: 5n, terms: { ...r.terms, pays_from: { Round: { rest: { Wallet: [TREASURY] } } } } };
+  assert.equal(
+    loot.pullIx({
+      payer: MINT,
+      project: MINT,
+      roundAddress: MINT,
+      round: own,
+      part: { Common: [1] },
+      projectState: { treasury: TREASURY },
+    }).keys[named].pubkey,
+    TREASURY,
+    'the wallet the rest names',
+  );
+  assert.deepEqual(loot.commonOwed({ ...own, common: [0n] }), [{ Common: [1] }]);
+  assert.deepEqual(
+    loot.commonOwed({ ...own, common: [0n], terms: { ...own.terms, pays_from: { Round: { rest: 'Burn' } } } }),
+    [],
+    'burned at the close, not pulled',
+  );
 });
 
 t('a collectible’s upsert reads its collection: the item says whether its compressed prizes can be minted', () => {

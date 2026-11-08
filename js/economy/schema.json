@@ -1351,6 +1351,14 @@
     "lottery": {
       "type": "object",
       "required": ["key", "name"],
+      "oneOf": [
+        {
+          "required": ["pot"]
+        },
+        {
+          "required": ["rest"]
+        }
+      ],
       "additionalProperties": false,
       "properties": {
         "key": {
@@ -1367,15 +1375,25 @@
         },
         "price": {
           "$ref": "#/$defs/amount",
-          "description": "One ticket, in the pot's currency (or in `ticketCurrency`). Leave it out for a lottery whose tickets cost an NFT (`ticketNft`)."
+          "description": "One ticket, in the lottery's currency (or in `ticketCurrency`). Leave it out for a lottery whose tickets cost an NFT (`ticketNft`)."
         },
         "ticketCurrency": {
           "$ref": "#/$defs/key",
-          "description": "Tickets paid in another token are burned, and the pot is filled from elsewhere."
+          "description": "Tickets paid in another token are burned, and no ticket money reaches the places: they are paid from what reaches the pot from elsewhere (\"pot\")."
         },
         "cutPercent": {
           "$ref": "#/$defs/percent",
-          "description": "The share of ticket money that goes to the treasury instead of the pot (the same as a split share to \"treasury\")."
+          "description": "The share of ticket money that goes to the treasury before the places (the same as a split share to \"treasury\")."
+        },
+        "pot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "description": "Pays its places from a pot it keeps from round to round, this one of its 16 (0 unless it moves to a fresh one): each place takes its percent of what the pot holds at the draw with the round's ticket money, so the seed, gifts and shares sent to it (\"lottery:<key>\"), yield, and what earlier rounds' places left all count, and the next round always starts with what the round before left. Write exactly one of \"pot\" or \"rest\". A no-loss lottery needs a pot. Changing the number between rounds starts a fresh pot; every pot it opened is emptied to the owner when it closes."
+        },
+        "rest": {
+          "$ref": "#/$defs/destination",
+          "description": "Pays each round's places from that round's own ticket money only, and sends what they leave here: \"treasury\", \"burn\", \"wallet:<address>\", \"account:<token account>\", \"holder:<collectible>\", a pool, a farm or another lottery (\"lottery:<key>\"), never \"chosen\" or itself; a pool, farm or lottery named here counts the leftover only once someone pulls it. Nothing from outside can change a round's prizes: no seed, no gifts, no carry-over. Write exactly one of \"pot\" or \"rest\"."
         },
         "places": {
           "type": "array",
@@ -1398,7 +1416,7 @@
                   },
                   "prize": {
                     "$ref": "#/$defs/prize",
-                    "description": "What its winner gets besides its share of the pot: a raffled NFT, a collectible, tokens, a roll of a box."
+                    "description": "What its winner gets besides its percent of the money: a raffled NFT, a collectible, tokens, a roll of a box."
                   },
                   "times": {
                     "type": "integer",
@@ -1410,7 +1428,7 @@
               }
             ]
           },
-          "description": "What each place wins, first place first: a percent of the pot, or { \"percent\", \"prize\", \"times\" }: a share of the pot and a prize for its winner (either, or both), for `times` places in a row. Default: one winner takes all."
+          "description": "What each place wins, first place first: a percent of what the round pays from (its pot with the round's ticket money, or with \"rest\" that round's ticket money alone), or { \"percent\", \"prize\", \"times\" }: a percent and a prize for its winner (either, or both), for `times` places in a row. Default: one winner takes all."
         },
         "every": {
           "$ref": "#/$defs/duration",
@@ -1424,11 +1442,11 @@
         },
         "currency": {
           "$ref": "#/$defs/key",
-          "description": "The pot's token. Default: the game's currency."
+          "description": "The token tickets are paid in and the places are paid in (and the pot's, with \"pot\"). Default: the game's currency."
         },
         "seed": {
           "$ref": "#/$defs/amount",
-          "description": "What the owner puts in the pot at go-live."
+          "description": "What the owner puts in the pot at go-live (a lottery with \"pot\" only)."
         },
         "roundRent": {
           "$ref": "#/$defs/amount",
@@ -1453,7 +1471,7 @@
         },
         "split": {
           "$ref": "#/$defs/split",
-          "description": "Where ticket money goes before the pot (the rest goes into the pot): a charity, a referrer the buyer names (\"chosen\"), the treasury."
+          "description": "Where ticket money goes before the places (the rest is the round's money for its places): a charity, a referrer the buyer names (\"chosen\"), the treasury."
         },
         "perWallet": {
           "type": "integer",
@@ -1463,11 +1481,11 @@
         },
         "ticketNft": {
           "$ref": "#/$defs/nftPrice",
-          "description": "A ticket costs one NFT that passes the rule, in place of tokens: held until the draw, then burned, given on or stashed; back to its buyer if the draw is cancelled. Such a lottery has no price and no split; its pot is what the owner and its places' prizes put in."
+          "description": "A ticket costs one NFT that passes the rule, in place of tokens: held until the draw, then burned, given on or stashed; back to its buyer if the draw is cancelled. Such a lottery has no price and no split; its places are paid from what the owner and others put in its pot (\"pot\"), and its places' prizes."
         },
         "noLoss": {
           "type": "boolean",
-          "description": "A no-loss lottery: every ticket goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales: \"lottery:<key>\"). No split, no cut and no `ticketCurrency`; NFT tickets come back too."
+          "description": "A no-loss lottery: every ticket goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales: \"lottery:<key>\"). It needs \"pot\". No split, no cut and no `ticketCurrency`; NFT tickets come back too."
         },
         "minSold": {
           "type": "integer",
@@ -1523,7 +1541,7 @@
           "description": "NFTs the lottery's own stash holds for its places that give { \"gives\": \"raffled\" } (each draws one at random with the round's answer): a raffle of many NFTs. Your wallet puts them in at go-live, a group a transaction, before the lottery is written; at least as many as such places. The lottery draws once."
         }
       },
-      "description": "Tickets into a pot of the lottery's own, one random draw, the winners paid. Nothing but its winners' payouts takes from the pot: not the authority, a schedule, a farm or a recipe. Anything sold or paid can send it a share (\"lottery:<key>\" in a split); a schedule can't pay a lottery."
+      "description": "Tickets sold in rounds, one random draw a round, the winners paid. It names where its places are paid from, exactly one of: \"pot\", a pot of its own kept from round to round that anything can add to (a seed, a share of a sale or payment, \"lottery:<key>\" in a split, a schedule that pays \"lottery:<key>\"); or \"rest\", each round's own ticket money alone, what the places leave going to that destination. Nothing but its winners' payouts takes from a pot: not the authority, a schedule, a farm or a recipe."
     },
     "contest": {
       "type": "object",
@@ -2019,7 +2037,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [],
-      "description": "What an NFT the player shows must be: of an `item` the game mints, or of a `collection` (a Core collection, or a Token Metadata collection mint it is verified in; with neither, the game's own collection, the one it has authority over); and, when `attribute` is given, its attribute at least `atLeast`, equal to `equals`, a time still `ahead` or `passed` (`time`), or present. `{ \"item\": \"pass\" }` alone means \"holds a Member Pass\". An NFT's attributes are read as they are; for one the game has no authority over, what the game wrote about it in its Sheet counts over them.",
+      "description": "What an NFT the player shows must be: of an `item` the game mints, or of a `collection` (a Core collection, or a Token Metadata collection mint it is verified in; with neither, the game's own collection, the one it has authority over); and, when `attribute` is given, its attribute at least `atLeast`, equal to `equals`, one of `oneOf`, a time still `ahead` or `passed` (`time`), or present. `{ \"item\": \"pass\" }` alone means \"holds a Member Pass\"; `{ \"items\": [\"oak\", \"pine\"] }` means any of them. An NFT's attributes are read as they are; for one the game has no authority over, what the game wrote about it in its Sheet counts over them.",
       "properties": {
         "item": {
           "$ref": "#/$defs/key",
@@ -2040,6 +2058,20 @@
         },
         "equals": {
           "type": "string"
+        },
+        "oneOf": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string" },
+          "description": "The attribute is one of these texts (at most 16): a tier of two, one species of three."
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/key" },
+          "description": "Any of these items the game mints (at most 16), in its own collection: a farm for three tree species, a gate for holders of any of five plots. Read by the program as the collection's `item_id` being one of theirs; not with `item`, `collection` or `attribute`."
         },
         "time": {
           "enum": ["ahead", "passed"],

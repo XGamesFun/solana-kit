@@ -167,6 +167,7 @@ t('a lottery’s place gives a roll of a box', () => {
       args: {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places,
         ticket_mint: NOBODY,
@@ -379,6 +380,7 @@ t('a specific NFT and a collectible are given at once, by a grant’s claim and 
       args: {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places,
         ticket_mint: NOBODY,
@@ -424,6 +426,7 @@ t('one buyer who wins two places of the same collectible gets two, each at its o
       args: {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places: [5000, medal, medal],
         ticket_mint: NOBODY,

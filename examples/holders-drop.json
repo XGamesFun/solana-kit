@@ -91,12 +91,7 @@
         "collection": "9gyC3T5ynfwHK2EwKrxvmayntaDXjgcbLTaPwMwdeYuh"
       },
       "perWallet": 20,
-      "split": [
-        {
-          "to": "treasury",
-          "percent": 100
-        }
-      ]
+      "rest": "treasury"
     }
   ],
   "scenario": {

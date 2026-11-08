@@ -56,8 +56,10 @@ export const pda = {
   /** Every collectible the program mints of its own accord (an order's, a prize's, an auction's lot): its address
    * names its item and its serial, minted once at most. */
   itemAsset: (item, serial) => at(seed('asset'), key(item), u32(serial)),
-  /** A contest's pot, or a lottery's: `["pot", contest or lottery]`. */
+  /** A contest's pot: `["pot", contest]`. */
   pot: record => at(seed('pot'), key(record)),
+  /** A lottery's pot `id` (below `MAX_POTS`), kept from round to round: `["pot", lottery, id]`. */
+  lotteryPot: (lottery, id) => at(seed('pot'), key(lottery), u8(id)),
   /** One round of a lottery: its record, opened by the round's first purchase (`["round", lottery, incarnation, round]`). */
   round: (lottery, incarnation, round) => at(seed('round'), key(lottery), u64(incarnation), u32(round)),
   /** A lottery round's own token account of `mint`, which the round's record owns. */

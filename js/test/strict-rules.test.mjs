@@ -83,7 +83,7 @@ test('a share of a pool as a prize is refused on every route, in words, with the
     'economy.recipes[0].out[0]': { recipes: [{ key: 'r', name: 'R', in: [], out: [share] }] },
     'economy.grants[0].prize': { grants: [{ key: 'g', name: 'G', prize: share, fund: 1 }] },
     'economy.lotteries[0].places[0].prize': {
-      lotteries: [{ key: 'l', name: 'L', price: 1, every: '1d', places: [{ percent: 50, prize: share }, 50] }],
+      lotteries: [{ key: 'l', pot: 0, name: 'L', price: 1, every: '1d', places: [{ percent: 50, prize: share }, 50] }],
     },
     'economy.farms[0].tiers[0].prize': {
       farms: [
@@ -736,6 +736,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
         terms: {
           price: 1000n,
           mint: w.mint,
+          pays_from: { Pot: [0] },
           shares: [],
           places,
           ticket_mint: NOBODY,
@@ -790,7 +791,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
     currency: 'gem',
     tokens: [{ key: 'gem', source: 'existing', mint: w.mint, decimals: 6 }],
     live: { project: w.project, collection: w.collection },
-    lotteries: [{ key: 'l', id, name: 'L' }],
+    lotteries: [{ key: 'l', pot: 0, id, name: 'L' }],
   };
   const stranger = solanaApp({
     spec,
@@ -826,7 +827,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
 
 test('a lottery of more runs than the program takes is refused; one at the cap is not', () => {
   const places = n => Array.from({ length: n }, () => 0.5);
-  const spec = n => base({ lotteries: [{ key: 'l', name: 'L', price: 1, every: '1d', places: places(n) }] });
+  const spec = n => base({ lotteries: [{ key: 'l', pot: 0, name: 'L', price: 1, every: '1d', places: places(n) }] });
   assert.ok(
     refused(spec(LIMITS.lotteryRuns + 1)).some(
       r => r.code === 'E-LOTTERY' && r.where.endsWith('.places') && /BadLottery/.test(r.message),

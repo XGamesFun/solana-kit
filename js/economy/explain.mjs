@@ -6,7 +6,9 @@ import { cost } from './cost.mjs';
 import {
   boostReadsGrowth,
   boxBuys,
+  destination,
   farmEndWords,
+  keepsPot,
   lateRunWords,
   listOf,
   lotterySplit,
@@ -38,17 +40,24 @@ function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, 
   const shares = sharesOf(split);
   if (!shares.length) return `all of it ${rest}`;
   const left = 100 - shares.reduce((n, s) => n + Number(s.percent), 0);
-  const to = s =>
-    s.kind === 'burn'
-      ? 'burned'
-      : s.kind === 'treasury'
-        ? `to ${treasury}`
-        : s.kind === 'pool'
-          ? `to the pool “${s.key}”`
-          : s.kind === 'holder'
-            ? 'to whoever holds that collectible'
-            : s.kind === 'lottery'
-              ? `into the pot of the lottery “${s.key}”`
+  const to = s => toWords(s, treasury, payer);
+  return `${shares.map(s => `${s.percent}% ${to(s)}`).join(', ')}${left > 0 ? `, ${num(left)}% ${rest}` : ''}`;
+}
+
+/** Where one destination (model `destination`) sends money, in words. */
+const toWords = (s, treasury = 'your treasury', payer = ['buyer', 'sale']) =>
+  s.kind === 'burn'
+    ? 'burned'
+    : s.kind === 'treasury'
+      ? `to ${treasury}`
+      : s.kind === 'pool'
+        ? `to the pool “${s.key}”`
+        : s.kind === 'holder'
+          ? 'to whoever holds that collectible'
+          : s.kind === 'lottery'
+            ? `into the pot of the lottery “${s.key}”`
+            : s.kind === 'farm'
+              ? `to the stakers of the farm “${s.key}”`
               : s.kind === 'wallet'
                 ? `to the wallet ${s.key.slice(0, 4)}…`
                 : s.kind === 'chosen'
@@ -56,12 +65,20 @@ function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, 
                     ? `to whoever holds the “${s.key}” the ${payer[0]} names (each ${payer[1]} its own)`
                     : `to the wallet the ${payer[0]} names (each ${payer[1]} its own: a referrer; with none named, to ${treasury})`
                   : `to the account ${s.key.slice(0, 4)}…`;
-  return `${shares.map(s => `${s.percent}% ${to(s)}`).join(', ')}${left > 0 ? `, ${num(left)}% ${rest}` : ''}`;
-}
+
+/**
+ * Where a lottery's places are paid from, in words (`"pot"` or `"rest"`): a pot counts whatever reaches it and what
+ * earlier rounds left, and the next round sees what this one leaves; a round's own money can't be changed from outside.
+ */
+const paysWords = (l, treasury) =>
+  keepsPot(l)
+    ? `its places are paid from its pot (an account of its own, which only its winners are paid from): each place takes its percent of what the pot holds when the draw is asked, with the round’s ticket money, so whatever reaches the pot counts (the seed, a sponsor, shares of other sales, yield) and so does what earlier rounds’ places left; what this round’s places leave stays in the pot, and the next round always starts with it`
+    : `its places are paid from each round’s own ticket money alone, which nothing sent from outside can change (no seed, no gift, no carry-over); what the places leave, and the part of places nobody won, goes ${toWords(destination(l.rest), treasury)}${l.rest === 'burn' ? ' when the round closes' : ''}`;
 
 const ruleWords = r => {
   if (!r) return '';
   if (r.wallets) return `they are one of the ${r.wallets.length} wallets it names`;
+  if (r.items) return `any of ${r.items.map(k => `“${k}”`).join(', ')}`;
   const what = r.item
     ? `a “${r.item}”`
     : r.collection
@@ -71,7 +88,7 @@ const ruleWords = r => {
     ahead: ` whose ${r.attribute} is a time still to come`,
     passed: ` whose ${r.attribute} is a time past (or none)`,
   }[r.time];
-  return `${what}${r.atLeast !== undefined ? ` with ${r.attribute} at least ${r.atLeast}` : r.equals !== undefined ? ` whose ${r.attribute} is “${r.equals}”` : (time ?? (r.attribute ? ` with a ${r.attribute}` : ''))}`;
+  return `${what}${r.atLeast !== undefined ? ` with ${r.attribute} at least ${r.atLeast}` : r.equals !== undefined ? ` whose ${r.attribute} is “${r.equals}”` : r.oneOf ? ` whose ${r.attribute} is one of ${r.oneOf.map(t => `“${t}”`).join(', ')}` : (time ?? (r.attribute ? ` with a ${r.attribute}` : ''))}`;
 };
 /** A stake gate in words: "at least 100 of “Staking” staked …", the farm by its name when `m` has it. */
 const stakeWords = (staked, m) => {
@@ -306,21 +323,22 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     );
   for (const l of sim.lotteries) {
     const src = m.lottery.get(l.key);
-    // Its split (and its cut, a share to the treasury) takes its shares, and the rest goes into the pot.
+    // Its split (and its cut, a share to the treasury) takes its shares, and the rest goes to the places.
+    const rest = keepsPot(src) ? 'into the pot' : 'to the round’s places';
     const others = (src.split ?? []).length
-      ? `; ticket money goes ${splitWords(lotterySplit(src), treasuryWords, 'into the pot')}`
+      ? `; ticket money goes ${splitWords(lotterySplit(src), treasuryWords, rest)}`
       : '';
     if (src.ticketNft) {
       const goes = src.noLoss
         ? 'held until the round is drawn, then goes back to its buyer (no loss)'
         : `${!src.ticketNft.then || src.ticketNft.then === 'burn' ? 'burned' : src.ticketNft.then.stash ? `put in the stash “${src.ticketNft.then.stash}”` : 'given on'} once the round is drawn (back to its buyer only if the draw is cancelled)`;
       actions.push(
-        `Buy a ticket for “${l.name}” with one NFT that is ${ruleWords(src.ticketNft.rule)} (+ ${fee} SOL player fee): it is ${goes}. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; the pot is what the owner seeds and what its places give.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
+        `Buy a ticket for “${l.name}” with one NFT that is ${ruleWords(src.ticketNft.rule)} (+ ${fee} SOL player fee): it is ${goes}. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${keepsPot(src) ? 'the pot is what the owner seeds and others send it, and what its places give' : 'no ticket money reaches the places, so they give only their prizes'}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
       );
       continue;
     }
     actions.push(
-      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; the pot (an account of its own, which only its winners are paid from) reaches about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map(num).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back (tickets are not weighted by time: someone may buy most of them right before the draw and risk only the fees)` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest into the pot` : ''}${others}${src.perWallet ? `; at most ${src.perWallet} tickets per wallet a round` : ''}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
+      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map(num).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back (tickets are not weighted by time: someone may buy most of them right before the draw and risk only the fees)` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${src.perWallet ? `; at most ${src.perWallet} tickets per wallet a round` : ''}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
     );
   }
   for (const f of sim.farms) {
@@ -474,7 +492,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       .map(placeOf)
       .map((p, i) =>
         p.prize
-          ? `${p.times > 1 ? `${p.times} places from place ${i + 1} each win` : `place ${i + 1} wins`} ${prizeWords(p.prize, m)}${p.percent ? ` and ${p.percent}% of the pot` : ''}`
+          ? `${p.times > 1 ? `${p.times} places from place ${i + 1} each win` : `place ${i + 1} wins`} ${prizeWords(p.prize, m)}${p.percent ? ` and ${p.percent}% of ${keepsPot(l) ? 'the pot' : 'the round’s money'}` : ''}`
           : null,
       )
       .filter(Boolean);

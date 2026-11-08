@@ -12,8 +12,9 @@ package `@xgamesfun/solana`:
 
 An economy is a JSON spec, not a new smart contract. Every project shares the one program, and none writes its own.
 
-> **Status:** loot 0.24.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **devnet only**. The program is
-> not independently audited, and nothing runs on mainnet until it is. See [SECURITY.md](SECURITY.md).
+> **Status:** these tools are for loot 0.25.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **devnet
+> only** (deployed 2026-11-08, slot 519,994,814). The program is not independently audited, and nothing runs
+> on mainnet until it is. See [SECURITY.md](SECURITY.md).
 
 > **Disclaimer:** provided as is, with no warranty and no guarantee that the program or the tools are safe. Use them
 > at your own risk; you are responsible for every transaction you approve and for making sure what you build is legal
@@ -44,7 +45,9 @@ An economy is a JSON spec, not a new smart contract. Every project shares the on
   named), lottery draws, auction ends, refunds (anyone), contest results (the authority or its deciders) and schedule
   runs (the project's keys). A run nobody sends on time is missed, except a sealed schedule's fixed amount. Apps built
   with `@xgamesfun/solana/play` send the steps a player needs. Don't count on a hosted keeper.
-- **The rules are strict.** A prize is a fixed amount: a jackpot that grows is a lottery's pot. A draw uses the odds
+- **The rules are strict.** A prize is a fixed amount: a jackpot that grows is a lottery's pot. A lottery says where its
+  places are paid from: a pot that carries over (gifts and what earlier rounds left count), or each round's own ticket
+  money, which nothing from outside can change. A prize never shifts to a later round. A draw uses the odds
   as written. When an outcome runs out, a box either stops selling (`stopSales`, the default) or keeps selling and
   draws among what's left (`drawLeft`, which lets a player empty a common outcome to make a rare one likelier).
 - **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls wait. An
@@ -99,13 +102,13 @@ codex plugin add xsolana@xgamesfun
 ```
 
 **Any agent with MCP** (Cursor, opencode, Cline…): run the server with
-`npx -y --package=@xgamesfun/solana@0.24.0 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.24.0 connect` register it, with
+`npx -y --package=@xgamesfun/solana@0.25.0 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.0 connect` register it, with
 the skill, for Claude Code and Codex.
 
 Then ask for an economy, for example _"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
 monthly draw"_.
 
-Going live is always yours: `npx -y @xgamesfun/solana@0.24.0 approve` opens a page on your computer where you connect a
+Going live is always yours: `npx -y @xgamesfun/solana@0.25.0 approve` opens a page on your computer where you connect a
 devnet wallet and approve each transaction. The agent never signs and never asks for a key.
 
 ## Use it from a terminal
@@ -113,12 +116,12 @@ devnet wallet and approve each transaction. The agent never signs and never asks
 Every tool runs from the CLI too, on a spec file (`xsolana.json` by default):
 
 ```bash
-npx -y @xgamesfun/solana@0.24.0 examples shop with loot boxes   # the nearest worked examples
-npx -y @xgamesfun/solana@0.24.0 check xsolana.json                 # refusals and warnings
-npx -y @xgamesfun/solana@0.24.0 simulate xsolana.json              # where the money goes, day by day
-npx -y @xgamesfun/solana@0.24.0 cost xsolana.json                  # what going live and each action cost
-npx -y @xgamesfun/solana@0.24.0 explain xsolana.json               # the economy in plain words
-npx -y @xgamesfun/solana@0.24.0 approve xsolana.json               # go live, approved in your own wallet
+npx -y @xgamesfun/solana@0.25.0 examples shop with loot boxes   # the nearest worked examples
+npx -y @xgamesfun/solana@0.25.0 check xsolana.json                 # refusals and warnings
+npx -y @xgamesfun/solana@0.25.0 simulate xsolana.json              # where the money goes, day by day
+npx -y @xgamesfun/solana@0.25.0 cost xsolana.json                  # what going live and each action cost
+npx -y @xgamesfun/solana@0.25.0 explain xsolana.json               # the economy in plain words
+npx -y @xgamesfun/solana@0.25.0 approve xsolana.json               # go live, approved in your own wallet
 ```
 
 `xsolana help` lists every command. Every command names the exact version, so `npx` runs that release and never whatever

@@ -520,6 +520,7 @@ t(
         args: {
           price: 1000n,
           mint: coin,
+          pays_from: { Pot: [0] },
           shares: [{ to: 'Treasury', bps: 1000 }],
           places: [10_000],
           ticket_mint: NOBODY,
@@ -589,6 +590,7 @@ t('js/play buys, draws and pulls a lottery paid in a hooked coin, reading the ho
       args: {
         price: 1000n,
         mint: coin,
+        pays_from: { Pot: [0] },
         shares: [{ to: 'Treasury', bps: 1000 }],
         places: [10_000],
         ticket_mint: NOBODY,
@@ -602,7 +604,7 @@ t('js/play buys, draws and pulls a lottery paid in a hooked coin, reading the ho
     version: 2,
     currency: 'coin',
     tokens: [{ key: 'coin', source: 'existing', mint: coin, decimals: 6, program: 'token-2022' }],
-    lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
+    lotteries: [{ key: 'draw', pot: 0, name: 'Draw', id: 1 }],
     live: { project: w.project, collection: w.collection, mints: { coin } },
   };
   const players = [w.who(), w.who()];

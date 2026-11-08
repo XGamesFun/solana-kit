@@ -4,7 +4,46 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased (tools only; the program is 0.24.0, unchanged)
+## 0.25.0: a prize never shifts to a later round (the program on devnet since 2026-11-08, slot 519,994,814)
+
+For the program's 0.25.0: the IDL, the client, the spec and the docs follow it, and no account of 0.24 carries over:
+make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin devnet's build (sha256 ea19d15d…, 1,741,840
+bytes, slot 519,994,814). `scripts/devnet-e2e.mjs` sends each fresh wallet's SOL back to the funder at the end of a run.
+
+- **Where a lottery's places are paid from, never a default.** The spec's lottery takes exactly one of `"pot"` (a number 0
+  to 15: a pot kept from round to round, `PaysFrom::Pot`) or `"rest"` (a destination: each round pays from its own ticket
+  money and sends what its places leave there, `PaysFrom::Round`). Neither, or both, is refused in words
+  (`E-LOTTERY-PAYS`); the schema says it too (`oneOf`, which `validate.mjs` now reads beside an object's other keywords).
+  A `rest` that is a pool, `"chosen"` or the lottery itself, a no-loss lottery without a pot, a `seed` without one, and a
+  share or a schedule paying a lottery that keeps no pot are refused (`E-LOTTERY`); tickets that bring no money to a
+  round paid from its own money are warned of. The plan writes `pays_from` and opens a pot only for a lottery that keeps
+  one (so `cost` counts a pot's rent only then); `"lottery:<key>"` resolves to that lottery's pot
+  (`@pot:<lottery>:<pot>`). `simulate`, `explain`, the guide, the approval page (`Places paid from: …`), `xsolana_status` (each pot and what it holds) and the skill say
+  which: a round's own money can't be changed from outside; a pot counts gifts and yield and what earlier rounds left,
+  and the next round always sees what the round before left. Every example with a lottery names one (`nft-raffle` and
+  `partner-vault` pay from each round with `"rest": "treasury"`; the others keep pot 0).
+- **The client.** `pda.lotteryPot(lottery, id)` (`["pot", lottery, id]`; `pda.pot` stays a contest's), `MAX_POTS`,
+  `potIdOf(terms)`, `leftoverTo(lottery, terms)`, `lotteryPots(lottery)`. `withDefaults` refuses a lottery without
+  `pays_from`. `upsertIx` passes the pot the terms pay from (pot 0's address for a lottery paid from its rounds);
+  `closeRecordIx` passes, for a lottery that opened pots, the mint, where they go, both token programs and each pot by
+  id. `drawLotteryIx` passes no pot for a round paid from its own money; paid from a pot, the pot, its mint and the
+  round's account, then, with `lottery.owing` set, that round, its account of the mint and its pot (`owing`: that
+  round's record, whose terms name its pot). `pullIx` and `commonOwed` send what the places leave to the pot or to
+  `rest`, and owe none when `rest` burns. js/play reads the `owing` round for each draw it sends (and says in words that a draw waits while that round
+  waits for the oracle, `NotDue`), its raffles pay from
+  the round (`rest` the treasury), and a payment to a lottery that keeps no pot is refused in words.
+- **Contests.** `Contest.pot_won` and `prize_won`, written at the decision; `contestWinnings(contest, amount)` gives a
+  winning entry's claim, which adds up exactly whatever the order, and js/play's `claims()` carries it (`potUnits`,
+  `prizeUnits`). The simulation, the explainer, the guide and the skill
+  say a gift after the decision goes to nobody, and a forgone split-prize part goes back to its pool.
+- **Boxes.** A box that stops selling and lists a stash's NFT at random beside one of its NFTs by name in another outcome
+  is refused (`E-ODDS`, `BadEntries`). The simulation's stock walk covers by the most any outcome takes of an item, a stash
+  or an NFT in one draw, times the draws; the words say so, and that a free roll never loses draws to what it emptied
+  itself.
+- **Recipes.** `craftIx` takes a token seat's booster as `{ asset, farm, booster: true }` on a kept `Use` or a `Show`
+  line: the player's token seat and the farm follow it; a `Staked` line refuses it. js/play finds a booster's farm.
+
+### From twelve games built on 0.24 (the tools)
 
 - **Designing against farming and cheating** (from twelve live games, `gamesfun-data/demos/2026-11-07/AUDIT/kit-snags.md`):
   - `check`: `W-GRANT-TOTAL` for a voucher, key or open grant that limits each wallet (person, key) but nothing a day
@@ -34,9 +73,6 @@ tools see them.
 - **Five examples from the rated economies:** `stride-sneakers` (move-to-earn), `holder-den` (staking an outside
   collection's NFTs, frozen in the wallet), `pack-league` (packs that fill a league pot), `match-predictions` (a
   pari-mutuel pool), `holders-drop` (a holder-gated crate, badge and raffle). Each checks and goes live in the tests.
-- **A raffle's places warning** (`W-LOTTERY` on `places`) is said only when money goes into the pot (ticket money the
-  split and the cut leave, a seed, a share another part pays it); for a lottery that draws once it says the rest stays
-  in the pot for good, not "for the next round".
 - **`{serial}` in a name:** the schema no longer says a fresh item's name takes `{serial}`. The program fills `{serial}`
   in links only and ends every name with " #<serial>"; `{attribute}` works in both.
 - Tests: the go-live test buys only from a box with no gate (one gated on a collection waits for a holder).

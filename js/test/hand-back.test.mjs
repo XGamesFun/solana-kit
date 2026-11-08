@@ -116,6 +116,7 @@ test(
         args: {
           price: 0n,
           mint: w.mint,
+          pays_from: { Pot: [0] },
           shares: [],
           places: [10_000],
           ticket_mint: NOBODY,
@@ -168,7 +169,7 @@ test(
     assert.throws(() => w.chain.send(w.cranker, pull(false)));
     assert.equal(w.chain.tokens(loot.ata(w.project, ticket)), 1n);
     // js/play's claim reads the fee box's owner and passes the buyer's token account.
-    const player = app(w, { lotteries: [{ key: 'raffle', name: 'Raffle', id }] });
+    const player = app(w, { lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id }] });
     const step = (await player.claims()).find(c => c.kind === 'pull');
     assert.ok(step);
     await player.claim(step);

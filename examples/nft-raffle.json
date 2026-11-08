@@ -15,6 +15,7 @@
     {
       "key": "art",
       "name": "The artwork",
+      "rest": "treasury",
       "price": 0.1,
       "raffle": {
         "nft": "ArtNFT1111111111111111111111111111111111111",

@@ -109,6 +109,7 @@
     {
       "key": "buyers-draw",
       "name": "Buyers' draw",
+      "pot": 0,
       "price": 1,
       "cutPercent": 5,
       "places": [70, 30],

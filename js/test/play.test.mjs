@@ -63,7 +63,7 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
       },
     ],
     payments: [{ key: 'entry', name: 'Entry', amount: 0.005, split: [{ to: 'lottery:weekly', percent: 100 }] }],
-    lotteries: [{ key: 'weekly', name: 'Weekly', price: 0.001, every: '7d' }],
+    lotteries: [{ key: 'weekly', pot: 0, name: 'Weekly', price: 0.001, every: '7d' }],
     farms: [
       {
         key: 'stake',

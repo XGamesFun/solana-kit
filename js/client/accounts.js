@@ -266,6 +266,20 @@ export const ENDED = 2;
 export const shareOf = (contest, entry) =>
   Number(contest.share) + (Number(entry.place) < Number(contest.extras) ? 1 : 0);
 
+/**
+ * What a winning entry that put in `amount` takes with its first claim of a decided contest of tokens: its part of what
+ * the decision wrote (`pot_won`, the pot once the shares were taken; `prize_won`, a split prize's vault), by what it put
+ * in against its side's total. The winners claimed before it took `won × claimed ÷ total`, so the parts add up exactly
+ * whatever the order: `{ pot, prize }` (the prize part is 0 when the claim forgoes it). Tokens sent to the pot after the
+ * decision are nobody's.
+ */
+export function contestWinnings(contest, amount) {
+  const total = BigInt(contest.sides[contest.winner] ?? 0) || 1n;
+  const claimed = total - BigInt(contest.unclaimed);
+  const part = won => (BigInt(won) * (claimed + BigInt(amount))) / total - (BigInt(won) * claimed) / total;
+  return { pot: part(contest.pot_won), prize: part(contest.prize_won) };
+}
+
 /** What a count allows `n` more of at `now` under `limit` ({ total, per_window, window }, 0 is no limit; a lottery's
  * window is its round plus one, given as `window`). */
 export function countAllows(
@@ -471,10 +485,23 @@ export function decodeTokenMetadata(data) {
 const END_BITS = (1n << 48n) - 1n;
 export const OWN_PAID = 1n << 63n;
 
-/** The mint a lottery's tickets are paid in (`terms`: a Lottery's or a round's): its ticket mint, burned, or its pot's. */
+/** The mint a lottery's tickets are paid in (`terms`: a Lottery's or a round's): its ticket mint, burned, or `mint`. */
 export const paymentMint = terms => (ticketsBurn(terms) ? terms.ticket_mint : terms.mint);
 /** Whether a lottery's tickets are burned: they are paid in a ticket mint of its own. */
 export const ticketsBurn = terms => Boolean(terms.ticket_mint) && terms.ticket_mint !== NO_ADDRESS;
+
+/** The most pots one lottery keeps (`MAX_POTS`): a pot's id is below it. */
+export const MAX_POTS = Number(IDL.constants.find(c => c.name === 'MAX_POTS').value);
+/** The pot a lottery's places are paid from (`terms.pays_from`: `{ Pot: [id] }`), or null when each round pays from its
+ * own ticket money (`{ Round: { rest } }`). */
+export const potIdOf = terms => (terms?.pays_from?.Pot ? Number(terms.pays_from.Pot[0]) : null);
+/** Where what a round's places leave goes (`Part::Common` past the shares): its pot, or the `rest` a round paid from
+ * its own money names (`lotteryAddress`: the lottery's). */
+export const leftoverTo = (lotteryAddress, terms) =>
+  potIdOf(terms) != null ? { Account: [pda.lotteryPot(lotteryAddress, potIdOf(terms))] } : terms.pays_from.Round.rest;
+/** The ids of the pots a lottery opened (`Lottery::pots`, one bit an id), lowest first: a close empties each. */
+export const lotteryPots = lottery =>
+  Array.from({ length: MAX_POTS }, (_, id) => id).filter(id => (Number(lottery.pots ?? 0) >> id) & 1);
 
 /** A share the buyer chooses (a referrer, a collectible's holder): paid out of the price as they buy, from their own account. */
 export const chosenAtPurchase = share => Boolean(share.to?.Chosen);
@@ -702,7 +729,7 @@ export function partsOwed(r, i, { places = true } = {}) {
 
 /**
  * The parts of a round owed in common, of no entry (`{ Common: [i] }`): each share paid in common once drawn (one that
- * burns is burned at the close), then what the round owes the lottery's pot (`i` = the shares' count), then after a
+ * burns is burned at the close), then what its places leave, owed to its pot or to `rest` (`i` = the shares' count), then after a
  * cancel each pool's token prize back to its pool (past it).
  */
 export function commonOwed(r) {
@@ -710,7 +737,13 @@ export function commonOwed(r) {
   const out = [];
   if (r.status === 'Drawn')
     r.terms.shares.forEach((s, i) => s.to !== 'Burn' && BigInt(r.common[i] ?? 0) > 0n && out.push({ Common: [i] }));
-  if ((r.status === 'Drawn' || r.status === 'Cancelled') && BigInt(r.pot_owed) > 0n) out.push({ Common: [n] });
+  // What the places leave, to the pot or to `rest`: a burned rest stays for the close to burn, and is no part owed.
+  if (
+    (r.status === 'Drawn' || r.status === 'Cancelled') &&
+    BigInt(r.pot_owed) > 0n &&
+    leftoverTo(r.lottery, r.terms) !== 'Burn'
+  )
+    out.push({ Common: [n] });
   if (r.status === 'Cancelled')
     r.prizes.forEach((p, k) => !p.minted && BigInt(p.arrived) > 0n && out.push({ Common: [n + 1 + k] }));
   return out;
@@ -722,7 +755,7 @@ export const entryOf = (r, ticket) => r.entries.findIndex(e => e.start <= BigInt
 /** Whether a round is done and owes nothing: the next pull closes it, given its close's accounts. */
 export const roundFinished = r => (r.status === 'Drawn' || r.status === 'Cancelled') && Number(r.owed) === 0;
 
-/** Whether a lottery's place wins something: a share of the pot, a prize, or both. */
+/** Whether a lottery's place wins something: a part of what the round pays from, a prize, or both. */
 export const placeSet = place => Number(place.bps) > 0 || place.prize != null;
 
 /** The address of a lottery's current round's record (there or not). */

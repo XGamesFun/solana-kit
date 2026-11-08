@@ -126,7 +126,13 @@ test('a pack spec checks: slots, a table and a fresh item', () => {
   const fresh = SPEC.items[2].key;
   const placed = structuredClone(SPEC);
   placed.lotteries = [
-    { key: 'draw', name: 'Draw', price: 1, places: [50, { percent: 0, prize: { gives: 'item', item: fresh } }] },
+    {
+      key: 'draw',
+      name: 'Draw',
+      pot: 0,
+      price: 1,
+      places: [50, { percent: 0, prize: { gives: 'item', item: fresh } }],
+    },
   ];
   const r2 = check(placed, { now: NOW });
   assert.ok(

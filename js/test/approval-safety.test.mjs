@@ -307,7 +307,16 @@ test('the SOL total of going live counts a lottery’s seed and a sealed schedul
     tokens: [{ key: 'sol', source: 'sol' }],
     // (`roundRent` 0: its rounds' rent is counted on its own, `check-warnings`.)
     lotteries: [
-      { key: 'weekly', name: 'Weekly', price: 0.01, every: '7d', seed: 5, roundRent: 0, places: [{ percent: 100 }] },
+      {
+        key: 'weekly',
+        pot: 0,
+        name: 'Weekly',
+        price: 0.01,
+        every: '7d',
+        seed: 5,
+        roundRent: 0,
+        places: [{ percent: 100 }],
+      },
     ],
     schedules: [
       {

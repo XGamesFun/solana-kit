@@ -4,7 +4,7 @@
     "xsolana": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "--package=@xgamesfun/solana@0.24.0", "xsolana", "mcp"]
+      "args": ["-y", "--package=@xgamesfun/solana@0.25.0", "xsolana", "mcp"]
     }
   }
 }

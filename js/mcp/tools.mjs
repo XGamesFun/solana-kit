@@ -586,6 +586,9 @@ export const tools = [
         ...m.items.map(it => [`item:${it.key}`, pda.item(project, it.id)]),
         ...m.farms.map(f => [`farm:${f.key}`, pda.farm(project, f.id)]),
         ...m.lotteries.map(l => [`lottery:${l.key}`, pda.lottery(project, l.id)]),
+        ...m.lotteries
+          .filter(l => Number.isInteger(l.pot))
+          .map(l => [`lottery:${l.key} (pot ${l.pot})`, pda.lotteryPot(pda.lottery(project, l.id), l.pot)]),
         ...m.schedules.map(s => [`schedule:${s.key}`, pda.schedule(project, s.id)]),
         ...m.recipes.map(r => [`recipe:${r.key}`, pda.recipe(project, r.id)]),
         ...m.grants.map(g => [`grant:${g.key}`, pda.grant(project, g.id)]),
@@ -608,7 +611,7 @@ export const tools = [
             sol: Number(BigInt(a.lamports ?? 0) - rentOf(a.data?.length ?? 0)) / 1e9,
           };
         const tokenAmount =
-          a.data?.length >= 72 && part.startsWith('pool:')
+          a.data?.length >= 72 && (part.startsWith('pool:') || part.includes(' (pot '))
             ? Number(new DataView(a.data.buffer, a.data.byteOffset).getBigUint64(64, true))
             : undefined;
         const decoded = a.owner === LOOT_PROGRAM ? decodeAny(a.data) : null;
@@ -680,6 +683,7 @@ export const tools = [
         '  loot.openListingIx / takeListingIx / closeListingIx, loot.listingTerms(listing), loot.pda.listing(project, asset), loot.renterOf(listing, now)',
         '  a take or a bid signs the record’s terms: loot.listingTerms / offerTerms / auctionTerms(record), the hash of its bytes as read, but what a take changes',
         '  loot.decodeRound(data), loot.partsOwed(round, entry), loot.commonOwed(round), loot.pullIx(...)   a round’s parts, each pulled in any order (a place’s roll: loot.pullRolls, asked in the same transaction)',
+        '  loot.drawLotteryIx({ ..., lottery, round, owing })   a round paid from a pot first moves in what the round before left it (`lottery.owing`, its record as `owing`); loot.pda.lotteryPot(lottery, id), loot.potIdOf(terms), loot.leftoverTo(lottery, terms)',
         '  loot.decodeEnds(data), loot.endsToWalk(farm, ends, now), loot.farmNeedsWalk(farm, ends, now), loot.walkFarmParts({ project, id, farm, ends, now }), loot.pda.ends(farm)   a farm’s record of when seats stop earning',
         '  loot.orderRefundable(order, slot, now), loot.rollAskable(order, slot, now), loot.lotteryDrawStuck(round, now), loot.lotteryCancellable(round, now)   deadlines, by the chain’s clock',
         '  loot.runsDue(schedule, now, vaultBalance), loot.scheduleCatchesUp(schedule), loot.pda.vest(schedule), loot.pda.prizeVault(contest), loot.pda.lotteryStash(lottery), loot.pda.rewards(farm)',

@@ -258,7 +258,7 @@ test('an auction of a roll says so in its setup step, and a pool a pay schedule 
   );
   const spec = sol({
     pools: [{ key: 'p', currency: 'sol', seed: 1 }],
-    lotteries: [{ key: 'l', name: 'L', price: 0.1, every: '1d' }],
+    lotteries: [{ key: 'l', pot: 0, name: 'L', price: 0.1, every: '1d' }],
     schedules: [{ key: 's', name: 'S', does: 'pay', from: 'p', to: 'lottery:l', amount: 0.01, every: '1d' }],
   });
   const r = check(spec, { now: NOW });

@@ -151,6 +151,7 @@ test('the checker refuses a run of places given one by one past MAX_RUN_PLACES (
       lotteries: [
         {
           key: 'draw',
+          pot: 0,
           name: 'Draw',
           price: 0.001,
           every: '1d',
@@ -246,6 +247,7 @@ test(
         {
           key: 'daily',
           name: 'Daily',
+          pot: 0,
           price: 0.001,
           every: '1d',
           split: [{ to: 'treasury', percent: 10 }],

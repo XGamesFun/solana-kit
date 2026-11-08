@@ -60,7 +60,7 @@ async function setup(seed, lottery) {
     name: 'Steps',
     currency: 'sol',
     tokens: [{ key: 'sol', source: 'sol' }],
-    lotteries: [{ key: 'daily', name: 'Daily', price: 0.001, every: '1h', ...lottery }],
+    lotteries: [{ key: 'daily', pot: 0, name: 'Daily', price: 0.001, every: '1h', ...lottery }],
   });
   const [mine, theirs] = [asWallet(player), asWallet(rival)];
   const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: mine, now: () => w.chain.now() });

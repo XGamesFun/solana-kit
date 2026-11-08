@@ -26,36 +26,6 @@ const edit = (spec, fn) => {
   fn(copy);
   return codes(copy);
 };
-/** The spec `fn` changed, as a copy. */
-const changed = (spec, fn) => {
-  const copy = structuredClone(spec);
-  fn(copy);
-  return copy;
-};
-
-test('a raffle whose ticket money all goes elsewhere leaves nothing in its pot: no places warning; one that keeps some is told it stays for good', () => {
-  const raffle = example('nft-raffle');
-  assert.ok(
-    !codes(raffle).warned.some(w => w.startsWith('W-LOTTERY economy.lotteries.art.places')),
-    'the split sends all ticket money to the treasury',
-  );
-  const keeps = edit(raffle, s => (s.lotteries[0].split[0].percent = 60));
-  assert.ok(keeps.warned.includes('W-LOTTERY economy.lotteries.art.places'), keeps.warned.join());
-  const said = check(
-    changed(raffle, s => (s.lotteries[0].split[0].percent = 60)),
-    { now: NOW },
-  ).warnings.find(w => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
-  assert.match(
-    said.message,
-    /draws once: the other 100% of its pot, and any place nobody won, stays in the pot for good/,
-  );
-  // A lottery that draws again keeps the old words: what is left rolls into the next round.
-  const again = check(
-    changed(example('stakers-draw'), s => (s.lotteries[0].places = [50])),
-    { now: NOW },
-  ).warnings.find(w => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
-  assert.match(again.message, /stays in it for the next round/);
-});
 
 test('what the program takes is a warning: free tickets, a faucet, a tier below x1, a fall to 0, an empty gate', () => {
   const raffle = example('nft-raffle');
@@ -130,13 +100,13 @@ test('a sealed schedule has an end and pays no holder; a list names amounts up t
 
 test('a schedule pays a lottery’s pot or a farm’s rewards; a farm nothing funds is said to pay nothing', () => {
   const raffle = example('nft-raffle');
-  const sponsored = edit(
-    raffle,
-    s => (
-      (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }]),
-      (s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }])
-    ),
+  const sponsor = s => (
+    (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }]),
+    (s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }])
   );
+  // A lottery paid from each round's own money keeps no pot to pay into: give it one.
+  assert.ok(edit(raffle, sponsor).refused.includes('E-LOTTERY economy.schedules.sponsor.to'));
+  const sponsored = edit(raffle, s => (sponsor(s), delete s.lotteries[0].rest, (s.lotteries[0].pot = 0)));
   assert.ok(sponsored.ok, sponsored.refused.join());
   const farm = example('paper-hands-farm');
   const spec = structuredClone(farm);
@@ -275,8 +245,10 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
 /** A round's record as `decodeRound` reads it, for the parts it owes. */
 const round = ({ returns = false, ...more } = {}) => ({
   status: 'Drawn',
+  lottery: WALLET,
   terms: {
     returns,
+    pays_from: { Pot: [0] },
     ticket_mint: '11111111111111111111111111111111',
     shares: [],
     places: [{ bps: 10_000, prize: null, times: 1 }],
@@ -319,6 +291,7 @@ test('in a lottery that returns its tickets, a ticket goes back from the draw', 
 test('parts owed in common: a share once drawn, the pot’s, a pool’s prize back after a cancel', () => {
   const terms = {
     returns: false,
+    pays_from: { Pot: [0] },
     ticket_mint: '11111111111111111111111111111111',
     shares: [
       { to: 'Treasury', bps: 100 },
@@ -715,4 +688,19 @@ test('a lottery holds SOL for its rounds’ rent (`roundRent`): one step sends i
       'E-AMOUNT economy.lotteries.art.roundRent',
     ),
   );
+});
+
+test('a free box is the project’s to limit: warned with no limit per wallet, quiet with one, never refused', () => {
+  const spec = example('coin-flip-arena');
+  const box = spec.boxes.find(b => b.active !== false);
+  const where = `W-FREE economy.boxes.${box.key}.price`;
+  const open = edit(spec, s => (s.boxes.find(b => b.key === box.key).price = 0));
+  assert.ok(open.ok && open.warned.includes(where), open.refused.join());
+  const limited = edit(spec, s =>
+    Object.assign(
+      s.boxes.find(b => b.key === box.key),
+      { price: 0, perWallet: 1 },
+    ),
+  );
+  assert.ok(limited.ok && !limited.warned.includes(where), limited.warned.join());
 });

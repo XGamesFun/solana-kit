@@ -89,6 +89,7 @@
     {
       "key": "raffle",
       "name": "Rare NFT raffle",
+      "rest": "treasury",
       "price": 0.01,
       "places": [
         {

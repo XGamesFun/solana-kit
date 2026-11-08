@@ -79,6 +79,7 @@
     {
       "key": "raffle",
       "name": "Shelter Raffle",
+      "pot": 0,
       "price": 0.002,
       "seed": 0.05,
       "split": [

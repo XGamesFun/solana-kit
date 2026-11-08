@@ -45,6 +45,7 @@ test(
         args: {
           price: 0n,
           mint: w.mint,
+          pays_from: { Pot: [0] },
           shares: [],
           places: [],
           ticket_mint: SYSTEM_PROGRAM,
@@ -118,7 +119,7 @@ test(
       currency: 'coin',
       tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
       live: { project: w.project, collection: w.collection },
-      lotteries: [{ key: 'raffle', name: 'Raffle', id }],
+      lotteries: [{ key: 'raffle', pot: 0, name: 'Raffle', id }],
     };
     const app = solanaApp({
       spec,

@@ -275,6 +275,7 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
       args: {
         price: 0n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [],
         places: [],
         ticket_mint: NOBODY,

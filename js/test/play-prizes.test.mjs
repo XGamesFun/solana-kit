@@ -218,6 +218,7 @@ test(
         args: {
           price: 1000n,
           mint: w.mint,
+          pays_from: { Pot: [0] },
           shares: [],
           places,
           ticket_mint: NOBODY,
@@ -235,7 +236,7 @@ test(
       name: 'Draw',
       currency: 'gold',
       tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-      lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
+      lotteries: [{ key: 'draw', pot: 0, name: 'Draw', id: 1 }],
       live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
     };
     const wallet = asWallet(player);

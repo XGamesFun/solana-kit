@@ -911,6 +911,7 @@ describe('mechanics that run by themselves', () => {
       const args = {
         price: 1000n,
         mint: w.mint,
+        pays_from: { Pot: [0] },
         shares: [{ to: 'Treasury', bps: 1000 }],
         places: [7000, 3000],
         ticket_mint: '11111111111111111111111111111111',
@@ -1012,6 +1013,7 @@ describe('mechanics that run by themselves', () => {
     const args = {
       price: 1000n,
       mint: w.mint,
+      pays_from: { Pot: [0] },
       shares: [],
       places: [],
       ticket_mint: '11111111111111111111111111111111',
@@ -1043,7 +1045,7 @@ describe('mechanics that run by themselves', () => {
     // The wallet's tickets this round are counted in its counts, keyed by the lottery and its incarnation.
     const counts = loot.readListAccount(w.chain.get(pda.counts(w.project, w.player)));
     assert.equal(loot.readLimit(counts, loot.countKey(address, lottery.incarnation)).inWindow, 2);
-    assert.equal(w.chain.tokens(pda.pot(address)), 0n);
+    assert.equal(w.chain.tokens(pda.lotteryPot(address, 0)), 0n);
     assert.equal(w.chain.tokens(pda.roundTokens(key, w.mint)), 4000n, 'the round holds its own money');
     fails(
       () =>

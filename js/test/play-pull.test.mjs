@@ -86,7 +86,7 @@ test(
           ],
         },
       ],
-      lotteries: [{ key: 'daily', name: 'Daily', price: 0.001, every: '1h' }],
+      lotteries: [{ key: 'daily', pot: 0, name: 'Daily', price: 0.001, every: '1h' }],
       auctions: [{ key: 'sunset', name: 'Sunset', lot: { item: 'art' }, reserve: 0.01, runs: '1h' }],
     });
     // Going live made the project's standing lookup table, its addresses on chain.

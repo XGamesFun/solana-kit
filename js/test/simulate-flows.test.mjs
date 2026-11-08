@@ -52,7 +52,7 @@ test('a recipe’s pay line to the treasury lands in the treasury, and one to a 
         out: [{ gives: 'item', item: 'sword' }],
       },
     ],
-    lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }],
+    lotteries: [{ key: 'draw', pot: 0, name: 'Draw', price: 0.01, places: [100], every: '1d' }],
     scenario: { days: 30, perDay: { 'recipe:fee': 10, 'recipe:entry': 4, 'lottery:draw': 0 } },
   });
   const s = sim(spec);
@@ -67,7 +67,7 @@ test('a schedule that pays a lottery fills its pot, by a fixed amount or by a sh
   const base = {
     ...gold,
     pools: [{ key: 'bank', currency: 'gold', seed: 1000 }],
-    lotteries: [{ key: 'draw', name: 'Draw', price: 10, places: [100], every: '1d', noLoss: true }],
+    lotteries: [{ key: 'draw', pot: 0, name: 'Draw', price: 10, places: [100], every: '1d', noLoss: true }],
     scenario: { days: 30, perDay: { 'lottery:draw': 10 } },
   };
   const fixed = sim({
@@ -93,12 +93,15 @@ test('a schedule that pays a lottery fills its pot, by a fixed amount or by a sh
 
 test('a ticket’s “in all” counts its entry’s bytes, which never come back, and leaves out a no-loss ticket’s price', () => {
   // A lottery that holds SOL for its rounds (`roundRent`, on by default) pays each entry: the buyer pays none.
-  const funded = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }] }))
-    .lotteries[0];
+  const funded = sim(
+    solSpec({ lotteries: [{ key: 'draw', pot: 0, name: 'Draw', price: 0.01, places: [100], every: '1d' }] }),
+  ).lotteries[0];
   assert.equal(funded.realCost.rentSol, 0);
   assert.ok(funded.roundRentSol > 0);
   const plain = sim(
-    solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d', roundRent: 0 }] }),
+    solSpec({
+      lotteries: [{ key: 'draw', pot: 0, name: 'Draw', price: 0.01, places: [100], every: '1d', roundRent: 0 }],
+    }),
   ).lotteries[0].realCost;
   // An entry of 40 bytes in the round (its buyer and its tickets' end), at 5,080 lamports a byte.
   assert.equal(plain.rentSol, 0.0002032);
@@ -106,7 +109,17 @@ test('a ticket’s “in all” counts its entry’s bytes, which never come bac
   const noLoss = sim(
     solSpec({
       lotteries: [
-        { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+        {
+          key: 'draw',
+          pot: 0,
+          name: 'Draw',
+          price: 0.5,
+          places: [100],
+          every: '1d',
+          noLoss: true,
+          seed: 1,
+          roundRent: 0,
+        },
       ],
     }),
   ).lotteries[0].realCost;
@@ -117,13 +130,33 @@ test('a ticket’s “in all” counts its entry’s bytes, which never come bac
     sim(
       solSpec({
         lotteries: [
-          { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+          {
+            key: 'draw',
+            pot: 0,
+            name: 'Draw',
+            price: 0.5,
+            places: [100],
+            every: '1d',
+            noLoss: true,
+            seed: 1,
+            roundRent: 0,
+          },
         ],
       }),
     ),
     solSpec({
       lotteries: [
-        { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+        {
+          key: 'draw',
+          pot: 0,
+          name: 'Draw',
+          price: 0.5,
+          places: [100],
+          every: '1d',
+          noLoss: true,
+          seed: 1,
+          roundRent: 0,
+        },
       ],
     }),
   );

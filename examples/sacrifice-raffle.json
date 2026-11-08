@@ -90,6 +90,7 @@
     {
       "key": "weekly",
       "name": "Grand and minors",
+      "pot": 0,
       "price": 1,
       "ticketCurrency": "ticket",
       "places": [50, 10, 10, 10, 5, 5, 5, 5],

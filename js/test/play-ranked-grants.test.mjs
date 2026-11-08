@@ -145,7 +145,7 @@ test(
     const lotteryAddress = loot.pda.lottery(project, live.lotteries.find(l => l.key === 'draw').id);
     const lottery = () => w.read('Lottery', lotteryAddress);
     assert.equal(lottery().terms.returns, true);
-    const pot = await held(w, loot.pda.pot(lotteryAddress));
+    const pot = await held(w, loot.pda.lotteryPot(lotteryAddress, 0));
     assert.equal(pot, 100_000_000n + 10_000_000n, 'the seed and half a badge');
 
     // The draw: every ticket goes back to its buyer, and the two places share the pot. A stranger reveals it and pays each
