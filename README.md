@@ -13,7 +13,7 @@ package `@xgamesfun/solana`:
 An economy is a JSON spec, not a new smart contract. Every project shares the one program, and none writes its own.
 
 > **Status:** these tools are for loot 0.25.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **devnet
-> only**; devnet still runs 0.24.0 until 0.25.0 is deployed. The program is not independently audited, and nothing runs
+> only** (deployed 2026-11-08, slot 519,994,814). The program is not independently audited, and nothing runs
 > on mainnet until it is. See [SECURITY.md](SECURITY.md).
 
 > **Disclaimer:** provided as is, with no warranty and no guarantee that the program or the tools are safe. Use them

@@ -5,7 +5,8 @@
 // authority signs; and an auction, where two fresh players bid through js/play, the outbid one has their SOL back at
 // once, and the winner ends it; and farm times and a set, where two pieces staked with their lock and fuel on the NFT
 // are refuelled and bound into a badge by recipes, held in until the badge is burned. Spends a little devnet SOL; every
-// key lives in memory only.
+// key lives in memory only, and at the end of the run (or when it fails) each fresh wallet sends what it still holds back
+// to the funder, so a run leaves only the rent of the records it made.
 //
 //   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
 //
@@ -13,7 +14,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { freshKeypair } from '../js/approve/ed25519.mjs';
+import { freshKeypair as newKeypair } from '../js/approve/ed25519.mjs';
 import { keypairFromSecret } from './keypair.mjs';
 import { createApproval, devnetChain } from '../js/approve/server.mjs';
 import { fromBase64, toBase64 } from '../js/chain/bytes.js';
@@ -46,6 +47,33 @@ async function send(signers, instructions) {
   await rpc.confirm(signature, { lastValidBlockHeight });
   return signature;
 }
+
+// Every fresh wallet of the run, to send what it still holds back to the funder at the end (`sweepBack`).
+const fresh = [];
+function freshKeypair() {
+  const k = newKeypair();
+  fresh.push(k);
+  return k;
+}
+async function sweepBack() {
+  let back = 0n;
+  for (const k of fresh) {
+    try {
+      const lamports = BigInt(await rpc.balance(k.address));
+      if (lamports <= 5_000n) continue;
+      await send([k], [transferLamports(k.address, funder.address, lamports - 5_000n)]);
+      back += lamports - 5_000n;
+    } catch (e) {
+      console.log(`  could not send ${k.address}'s SOL back: ${e.message}`);
+    }
+  }
+  console.log(`Sent ${Number(back) / 1e9} SOL back to the funder from ${fresh.length} fresh wallets.`);
+}
+process.on('unhandledRejection', async (e) => {
+  console.error(e);
+  await sweepBack();
+  process.exit(1);
+});
 
 const owner = freshKeypair();
 console.log(`owner ${owner.address}`);
@@ -403,4 +431,5 @@ if (want('compressed')) {
   if (minted !== 1n) throw new Error(`The tree counts ${minted} minted, not 1.`);
   console.log(`compressed: ${player.address} claimed ${claimed}; the tree ${tree} holds badge ${loot.pda.compressedAsset(tree, 0)}`);
 }
+await sweepBack();
 console.log(`\nDone. Specs with their live sections: ${dir}`);

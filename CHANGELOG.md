@@ -4,12 +4,11 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## 0.25.0: a prize never shifts to a later round (unreleased; the program is not on devnet yet)
+## 0.25.0: a prize never shifts to a later round (the program on devnet since 2026-11-08, slot 519,994,814)
 
 For the program's 0.25.0: the IDL, the client, the spec and the docs follow it, and no account of 0.24 carries over:
-make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin the local build (sha256 0b8e0d67…, 1,741,344
-bytes; slot `-` until it is deployed, so `npm run fixtures` can't fetch it yet: copy the build's `target/deploy/loot.so`
-into `js/test/fixtures`, or set `XSOLANA_PROGRAM_DIR`).
+make economies again. `js/test/fixtures/pinned.txt` and `release.json` pin devnet's build (sha256 ea19d15d…, 1,741,840
+bytes, slot 519,994,814). `scripts/devnet-e2e.mjs` sends each fresh wallet's SOL back to the funder at the end of a run.
 
 - **Where a lottery's places are paid from, never a default.** The spec's lottery takes exactly one of `"pot"` (a number 0
   to 15: a pot kept from round to round, `PaysFrom::Pot`) or `"rest"` (a destination: each round pays from its own ticket
