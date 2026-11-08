@@ -21,7 +21,7 @@ const NOW = 1_790_000_000;
 const skip = cannotRun();
 const SHELTER = '9F8NQski3wBvLykJTJEj896jDHXtHMUde8KGGN2sdqQa';
 
-const asWallet = (kp) => ({
+const asWallet = kp => ({
   address: kp.address,
   async signTransaction(wire) {
     const t = readTransaction(wire);
@@ -38,7 +38,7 @@ async function goLive(w, owner, spec) {
   const session = await createApproval({ file, chain, now: () => NOW });
   for (let i = 0; i < 8 && !session.state().done; i++) {
     const batch = await session.prepare(owner.address);
-    const signed = batch.transactions.map((b64) => {
+    const signed = batch.transactions.map(b64 => {
       const t = readTransaction(fromBase64(b64));
       const s = [...t.signatures];
       s[t.signers.indexOf(owner.address)] = owner.sign(t.message);
@@ -55,54 +55,79 @@ const wrapped = async (w, owner) => {
   return a ? new DataView(a.data.buffer, a.data.byteOffset).getBigUint64(64, true) : 0n;
 };
 
-test('Shelter Fair: one ticket a wallet, rent to the plot named, the shelter and a referrer paid after a timely draw, a badge per ticket', { skip: skip ?? false }, async () => {
-  const w = world({ project: false, seed: 'shelter' });
-  w.chain.warp(NOW);
-  const [owner, player, landlord, referrer] = [freshKeypair(), freshKeypair(), freshKeypair(), freshKeypair()];
-  for (const k of [owner, player, landlord]) w.chain.airdrop(k.address, 100_000_000_000n);
-  const spec = JSON.parse(readFileSync(new URL('../../examples/shelter-fair.json', import.meta.url), 'utf8'));
-  const live = await goLive(w, owner, spec);
-  assert.ok((live.live?.project ?? live.live?.game), 'live');
-  const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
-  const theirs = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(landlord), now: () => w.chain.now() });
+test(
+  'Shelter Fair: one ticket a wallet, rent to the plot named, the shelter and a referrer paid after a timely draw, a badge per ticket',
+  { skip: skip ?? false },
+  async () => {
+    const w = world({ project: false, seed: 'shelter' });
+    w.chain.warp(NOW);
+    const [owner, player, landlord, referrer] = [freshKeypair(), freshKeypair(), freshKeypair(), freshKeypair()];
+    for (const k of [owner, player, landlord]) w.chain.airdrop(k.address, 100_000_000_000n);
+    const spec = JSON.parse(readFileSync(new URL('../../examples/shelter-fair.json', import.meta.url), 'utf8'));
+    const live = await goLive(w, owner, spec);
+    assert.ok(live.live?.project ?? live.live?.game, 'live');
+    const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
+    const theirs = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(landlord), now: () => w.chain.now() });
 
-  // One ticket per wallet.
-  const ticket = await app.buy('ticket', { listing: (await app.shop()).find((l) => l.key === 'ticket') });
-  assert.ok(ticket.asset);
-  await assert.rejects(app.buy('ticket', { listing: (await app.shop()).find((l) => l.key === 'ticket') }), /OverWallet/);
+    // One ticket per wallet.
+    const ticket = await app.buy('ticket', { listing: (await app.shop()).find(l => l.key === 'ticket') });
+    assert.ok(ticket.asset);
+    await assert.rejects(
+      app.buy('ticket', { listing: (await app.shop()).find(l => l.key === 'ticket') }),
+      /OverWallet/,
+    );
 
-  // The landlord's plot, and their wrapped-SOL account to take its rent; the player opens a crate on it.
-  const plot = (await theirs.buy('plot', { listing: (await theirs.shop()).find((l) => l.key === 'plot') })).asset;
-  w.chain.send(landlord.address, [createAssociatedTokenAccountIdempotent(landlord.address, landlord.address, NATIVE_MINT)]);
-  const before = await wrapped(w, landlord.address);
-  await app.openBox('crate', { listing: (await app.boxes()).find((l) => l.key === 'crate'), chosenRecipient: plot });
-  assert.equal((await wrapped(w, landlord.address)) - before, 500_000n, '10% of the 0.005 SOL crate');
+    // The landlord's plot, and their wrapped-SOL account to take its rent; the player opens a crate on it.
+    const plot = (await theirs.buy('plot', { listing: (await theirs.shop()).find(l => l.key === 'plot') })).asset;
+    w.chain.send(landlord.address, [
+      createAssociatedTokenAccountIdempotent(landlord.address, landlord.address, NATIVE_MINT),
+    ]);
+    const before = await wrapped(w, landlord.address);
+    await app.openBox('crate', { listing: (await app.boxes()).find(l => l.key === 'crate'), chosenRecipient: plot });
+    assert.equal((await wrapped(w, landlord.address)) - before, 500_000n, '10% of the 0.005 SOL crate');
 
-  // Raffle tickets wait in the round's own account; the referrer the buyer chose is paid as they buy, and the shelter's
-  // share waits for the draw.
-  w.chain.airdrop(referrer.address, 1_000_000_000n);
-  w.chain.send(referrer.address, [createAssociatedTokenAccountIdempotent(referrer.address, referrer.address, NATIVE_MINT)]);
-  const shelterBefore = await wrapped(w, SHELTER);
-  await app.buyTickets('raffle', 5, { chosenRecipient: referrer.address, listing: (await app.lotteries()).find((l) => l.key === 'raffle') });
-  assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 0n);
-  assert.equal(await wrapped(w, referrer.address), 500_000n, '5% of 0.01 SOL to the buyer’s choice, as they buy');
-  await assert.rejects(app.buyTickets('raffle', 6, { listing: (await app.lotteries()).find((l) => l.key === 'raffle') }), /OverWindow/, 'ten tickets a wallet a round');
+    // Raffle tickets wait in the round's own account; the referrer the buyer chose is paid as they buy, and the shelter's
+    // share waits for the draw.
+    w.chain.airdrop(referrer.address, 1_000_000_000n);
+    w.chain.send(referrer.address, [
+      createAssociatedTokenAccountIdempotent(referrer.address, referrer.address, NATIVE_MINT),
+    ]);
+    const shelterBefore = await wrapped(w, SHELTER);
+    await app.buyTickets('raffle', 5, {
+      chosenRecipient: referrer.address,
+      listing: (await app.lotteries()).find(l => l.key === 'raffle'),
+    });
+    assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 0n);
+    assert.equal(await wrapped(w, referrer.address), 500_000n, '5% of 0.01 SOL to the buyer’s choice, as they buy');
+    await assert.rejects(
+      app.buyTickets('raffle', 6, { listing: (await app.lotteries()).find(l => l.key === 'raffle') }),
+      /OverWindow/,
+      'ten tickets a wallet a round',
+    );
 
-  // The open grant: the ticket holder claims a badge once.
-  await app.claimGrant('early-bird');
-  await assert.rejects(app.claimGrant('early-bird'), /OverWallet/);
-  const badges = (await app.collectibles()).filter((c) => c.item === 'badge');
-  assert.equal(badges.length, 1);
+    // The open grant: the ticket holder claims a badge once.
+    await app.claimGrant('early-bird');
+    await assert.rejects(app.claimGrant('early-bird'), /OverWallet/);
+    const badges = (await app.collectibles()).filter(c => c.item === 'badge');
+    assert.equal(badges.length, 1);
 
-  const address = loot.pda.lottery((live.live.project ?? live.live.game), live.lotteries.find((l) => l.key === 'raffle').id);
-  const lottery = () => w.read('Lottery', address);
-  w.chain.warp(Number(lottery().terms.draws_at));
-  await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
-  // The ask moved the lottery on: drawn once, it has ended. The place and the shelter's share are pulled, in any order.
-  assert.equal(lottery().round, 1, 'drawn once: it has ended');
-  await app.claim((await app.claims()).find((c) => c.kind === 'pull'));
-  await app.claim((await app.claims()).find((c) => c.kind === 'payout'));
-  assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 2_000_000n, '20% of 0.01 SOL, pulled in common');
-  assert.deepEqual((await app.claims()).filter((c) => c.key === 'raffle'), [], 'everyone paid, the round closed');
-  assert.equal((await app.lotteries()).find((l) => l.key === 'raffle').status, 'Ended');
-});
+    const address = loot.pda.lottery(
+      live.live.project ?? live.live.game,
+      live.lotteries.find(l => l.key === 'raffle').id,
+    );
+    const lottery = () => w.read('Lottery', address);
+    w.chain.warp(Number(lottery().terms.draws_at));
+    await app.claim((await app.claims()).find(c => c.kind === 'reveal'));
+    // The ask moved the lottery on: drawn once, it has ended. The place and the shelter's share are pulled, in any order.
+    assert.equal(lottery().round, 1, 'drawn once: it has ended');
+    await app.claim((await app.claims()).find(c => c.kind === 'pull'));
+    await app.claim((await app.claims()).find(c => c.kind === 'payout'));
+    assert.equal((await wrapped(w, SHELTER)) - shelterBefore, 2_000_000n, '20% of 0.01 SOL, pulled in common');
+    assert.deepEqual(
+      (await app.claims()).filter(c => c.key === 'raffle'),
+      [],
+      'everyone paid, the round closed',
+    );
+    assert.equal((await app.lotteries()).find(l => l.key === 'raffle').status, 'Ended');
+  },
+);

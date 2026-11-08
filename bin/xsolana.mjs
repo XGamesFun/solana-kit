@@ -74,7 +74,8 @@ function parseArgs(rest) {
     flags.add(name);
     if (eq > 0) values.set(name, a.slice(eq + 1));
     else if (VALUED.has(name)) {
-      if (i + 1 >= rest.length || rest[i + 1].startsWith('--')) throw new UsageError(`${name} needs a value (${name} <value> or ${name}=<value>).`);
+      if (i + 1 >= rest.length || rest[i + 1].startsWith('--'))
+        throw new UsageError(`${name} needs a value (${name} <value> or ${name}=<value>).`);
       values.set(name, rest[++i]);
     }
   }
@@ -85,7 +86,8 @@ function parseArgs(rest) {
 function portOf(value) {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!/^\d+$/.test(String(value)) || n < 1 || n > 65535) throw new UsageError(`--port must be a whole number from 1 to 65535, not ${JSON.stringify(value)}.`);
+  if (!/^\d+$/.test(String(value)) || n < 1 || n > 65535)
+    throw new UsageError(`--port must be a whole number from 1 to 65535, not ${JSON.stringify(value)}.`);
   return n;
 }
 
@@ -93,8 +95,11 @@ async function main(argv) {
   const [command, ...rest] = argv;
   const { flags, values, positional } = parseArgs(rest);
   const takes = Object.hasOwn(FLAGS, command) ? FLAGS[command] : null;
-  const unknown = takes && [...flags].find((f) => !takes.includes(f));
-  if (unknown) throw new UsageError(`“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).`);
+  const unknown = takes && [...flags].find(f => !takes.includes(f));
+  if (unknown)
+    throw new UsageError(
+      `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).`,
+    );
 
   async function tool(name, input) {
     const { runTool } = await import('../js/mcp/server.mjs');
@@ -135,7 +140,13 @@ async function main(argv) {
     }
     case 'connect': {
       const { connect } = await import('../js/connect/connect.mjs');
-      process.exitCode = await connect({ agent: values.get('--agent'), local: flags.has('--local'), remove: flags.has('--remove'), dryRun: flags.has('--dry-run'), scope: values.get('--scope') });
+      process.exitCode = await connect({
+        agent: values.get('--agent'),
+        local: flags.has('--local'),
+        remove: flags.has('--remove'),
+        dryRun: flags.has('--dry-run'),
+        scope: values.get('--scope'),
+      });
       break;
     }
     case 'tool': {
@@ -145,12 +156,15 @@ async function main(argv) {
         break;
       }
       const from = values.get('--args-file');
-      const raw = from ? await readFile(from, 'utf8') : positional[1] ?? '{}';
+      const raw = from ? await readFile(from, 'utf8') : (positional[1] ?? '{}');
       let input;
       try {
         input = JSON.parse(raw);
       } catch (e) {
-        throw new UsageError(`The arguments ${from ? `in ${from} ` : ''}are not JSON (${e.message}). Give them as one word, as in: xsolana tool xsolana_check '{"file":"xsolana.json"}'.`, { cause: e });
+        throw new UsageError(
+          `The arguments ${from ? `in ${from} ` : ''}are not JSON (${e.message}). Give them as one word, as in: xsolana tool xsolana_check '{"file":"xsolana.json"}'.`,
+          { cause: e },
+        );
       }
       await tool(positional[0], input);
       break;
@@ -176,7 +190,8 @@ async function main(argv) {
 /** One line for a failure: what went wrong, without a stack (a missing file names the file). */
 function oneLine(e) {
   if (e?.code === 'ENOENT' && e.path) return `${e.path} does not exist.`;
-  if (e?.code === 'EADDRINUSE') return `Port ${e.port} is in use: pick another with --port, or leave it out for any free one.`;
+  if (e?.code === 'EADDRINUSE')
+    return `Port ${e.port} is in use: pick another with --port, or leave it out for any free one.`;
   return String(e?.message ?? e);
 }
 

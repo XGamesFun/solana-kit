@@ -47,17 +47,21 @@ export function readTranscript(text) {
     if (e.type === 'result' && typeof e.result === 'string') words.push(e.result);
     // Codex
     const item = e.item ?? e.msg ?? null;
-    if (item?.type === 'mcp_tool_call' || item?.type === 'mcp_tool_call_begin') tools.push(String(item.tool ?? item.name ?? ''));
+    if (item?.type === 'mcp_tool_call' || item?.type === 'mcp_tool_call_begin')
+      tools.push(String(item.tool ?? item.name ?? ''));
     if (item?.type === 'command_execution') commands.push(String(item.command ?? ''));
-    if (item?.type === 'agent_message' || item?.type === 'assistant_message') words.push(String(item.text ?? item.message ?? ''));
+    if (item?.type === 'agent_message' || item?.type === 'assistant_message')
+      words.push(String(item.text ?? item.message ?? ''));
   }
-  return { tools: tools.map((t) => t.replace(/^.*__/, '')), words: words.join('\n'), commands };
+  return { tools: tools.map(t => t.replace(/^.*__/, '')), words: words.join('\n'), commands };
 }
 
 /** Curly apostrophes read as straight ones (“doesn’t”), as the live grader reads them. */
 const said = (text, re) => re.test(text.replace(/[\u2018\u2019\u02bc]/g, "'"));
-const SAYS_CANNOT = /\b(can(?:no|')t|cannot|not (?:built|supported|possible)|isn'?t (?:supported|built|possible)|doesn'?t (?:support|do|have)|no (?:support|way)|out of scope|not something loot)\b/i;
-const ASKS_KEY = /\b(send|share|paste|give|provide|enter)\b[^.\n]{0,40}\b(private key|seed phrase|secret key|keypair|mnemonic)\b/i;
+const SAYS_CANNOT =
+  /\b(can(?:no|')t|cannot|not (?:built|supported|possible)|isn'?t (?:supported|built|possible)|doesn'?t (?:support|do|have)|no (?:support|way)|out of scope|not something loot)\b/i;
+const ASKS_KEY =
+  /\b(send|share|paste|give|provide|enter)\b[^.\n]{0,40}\b(private key|seed phrase|secret key|keypair|mnemonic)\b/i;
 const CHANCE = /\b(gambl|wager|betting|chance at money|regulat|lawyer|counsel|jurisdiction)/i;
 const REVENUE = /\b(securit(?:y|ies)|regulat|counsel|lawyer)\b/i;
 
@@ -65,7 +69,7 @@ const REVENUE = /\b(securit(?:y|ies)|regulat|counsel|lawyer)\b/i;
 export function score(prompt, dir, transcript) {
   const t = readTranscript(transcript);
   const files = existsSync(dir) ? walk(dir) : [];
-  const contract = files.filter((f) => CONTRACT.test(path.basename(f)));
+  const contract = files.filter(f => CONTRACT.test(path.basename(f)));
   const specFile = path.join(dir, 'xsolana.json');
   let spec = null;
   let verdict = null;
@@ -77,9 +81,9 @@ export function score(prompt, dir, transcript) {
       verdict = { ok: false, refusals: [{ code: 'E-JSON', message: e.message }], warnings: [] };
     }
   }
-  const kitTools = t.tools.filter((x) => x.startsWith('xsolana_'));
-  const parts = (prompt.parts ?? []).filter((p) => !(Array.isArray(spec?.[p]) && spec[p].length));
-  const ranApprove = t.commands.some((c) => /\bxsolana(\.mjs)?\b.*\bapprove\b|@xgamesfun\/solana.*approve/.test(c));
+  const kitTools = t.tools.filter(x => x.startsWith('xsolana_'));
+  const parts = (prompt.parts ?? []).filter(p => !(Array.isArray(spec?.[p]) && spec[p].length));
+  const ranApprove = t.commands.some(c => /\bxsolana(\.mjs)?\b.*\bapprove\b|@xgamesfun\/solana.*approve/.test(c));
   const checks = {
     usedTools: kitTools.length > 0,
     noContract: contract.length === 0,
@@ -93,7 +97,9 @@ export function score(prompt, dir, transcript) {
   if (prompt.expect === 'partial' || prompt.expect === 'refuse') checks.saysWhatItCannot = said(t.words, SAYS_CANNOT);
   if ((prompt.flags ?? []).includes('chance')) checks.flagsChance = said(t.words, CHANCE);
   if ((prompt.flags ?? []).includes('revenue')) checks.flagsRevenue = said(t.words, REVENUE);
-  const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+  const failed = Object.entries(checks)
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
   return {
     id: prompt.id,
     expect: prompt.expect,
@@ -101,10 +107,16 @@ export function score(prompt, dir, transcript) {
     failed,
     checks,
     tools: kitTools,
-    otherTools: [...new Set(t.tools.filter((x) => !x.startsWith('xsolana_')))],
+    otherTools: [...new Set(t.tools.filter(x => !x.startsWith('xsolana_')))],
     contractFiles: contract,
     missingParts: parts,
-    spec: spec ? { ok: verdict?.ok, refusals: verdict?.refusals?.map((r) => r.code) ?? [], warnings: verdict?.warnings?.map((w) => w.code) ?? [] } : null,
+    spec: spec
+      ? {
+          ok: verdict?.ok,
+          refusals: verdict?.refusals?.map(r => r.code) ?? [],
+          warnings: verdict?.warnings?.map(w => w.code) ?? [],
+        }
+      : null,
     files,
   };
 }

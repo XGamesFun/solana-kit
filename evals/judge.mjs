@@ -26,7 +26,7 @@ const parallel = Number(opt('parallel', 4));
 const tag = opt('tag') ? `-${opt('tag')}` : '';
 const promptFile = path.resolve(opt('prompts', path.join(ROOT, 'evals/composition-prompts.json')));
 if (!existsSync(path.join(runDir, 'summary.json'))) throw new Error(`No round at ${runDir} (summary.json missing).`);
-const PROMPTS = new Map(JSON.parse(readFileSync(promptFile, 'utf8')).prompts.map((p) => [p.id, p]));
+const PROMPTS = new Map(JSON.parse(readFileSync(promptFile, 'utf8')).prompts.map(p => [p.id, p]));
 const { version: LOOT_VERSION } = JSON.parse(readFileSync(path.join(ROOT, 'release.json'), 'utf8'));
 // How the program behaves (docs/program.md), so the judge can tell a real limit from an overclaim.
 const programSpec = path.join(ROOT, 'docs/program.md');
@@ -36,14 +36,19 @@ if (!PROGRAM_MD) console.error(`No ${programSpec}: judging from the parts and co
 // What loot can do, from the schema and the parts' own words: the judge's reference. The "cannot" list is left out on
 // purpose: it is one of the things being judged.
 const REFERENCE = [
-  ...catalog().map((p) => `${p.part}: ${p.says}${p.atPlayTime ? ` At play time: ${p.atPlayTime}.` : ''}\n  fields: ${p.fields.map((f) => f.name).join(', ')}`),
+  ...catalog().map(
+    p =>
+      `${p.part}: ${p.says}${p.atPlayTime ? ` At play time: ${p.atPlayTime}.` : ''}\n  fields: ${p.fields.map(f => f.name).join(', ')}`,
+  ),
   '',
   'Conventions:',
-  ...CONVENTIONS.map((c) => `- ${c}`),
+  ...CONVENTIONS.map(c => `- ${c}`),
   '',
-  ...(PROGRAM_MD ? ['How the program behaves (docs/program.md), for anything the parts above leave out:', PROGRAM_MD, ''] : []),
+  ...(PROGRAM_MD
+    ? ['How the program behaves (docs/program.md), for anything the parts above leave out:', PROGRAM_MD, '']
+    : []),
   'Made from a page at run time, not in xsolana.json, but part of loot: fixed-price listings of any NFT between players (for sale or for rent by the period), bids for any NFT that passes a rule, and fixed-term loans against an NFT between players (no price oracle, no liquidation).',
-  'Truly outside loot: AMMs, order books, bonding curves with sell-back, fees on trades made elsewhere, lending against tokens, liquidation by price, leverage/perps/price oracles, native SOL staking, governance votes, pulling funds from a wallet without its signature, mainnet (not audited yet). What the chain cannot see (a match, steps, a store visit, a score) is vouched for by a signer: a voucher key (a results server such as the games.fun loot server, or the project\'s own), which is a normal composition, not a gap.',
+  "Truly outside loot: AMMs, order books, bonding curves with sell-back, fees on trades made elsewhere, lending against tokens, liquidation by price, leverage/perps/price oracles, native SOL staking, governance votes, pulling funds from a wallet without its signature, mainnet (not audited yet). What the chain cannot see (a match, steps, a store visit, a score) is vouched for by a signer: a voucher key (a results server such as the games.fun loot server, or the project's own), which is a normal composition, not a gap.",
 ].join('\n');
 
 const SYSTEM = `You judge how an AI coding agent handled a person's request to build an onchain economy on loot, a shared Solana program configured by a JSON spec. You are strict and concrete.
@@ -72,7 +77,9 @@ function runsOf(dir) {
     if (!ent.isDirectory() || !['claude', 'codex'].includes(ent.name)) continue;
     const harness = ent.name;
     const hdir = path.join(dir, harness);
-    for (const ent of readdirSync(hdir, { withFileTypes: true })) if (ent.isDirectory() && existsSync(path.join(hdir, ent.name, 'transcript.jsonl'))) out.push({ harness, id: ent.name, dir: path.join(hdir, ent.name) });
+    for (const ent of readdirSync(hdir, { withFileTypes: true }))
+      if (ent.isDirectory() && existsSync(path.join(hdir, ent.name, 'transcript.jsonl')))
+        out.push({ harness, id: ent.name, dir: path.join(hdir, ent.name) });
   }
   return out;
 }
@@ -88,7 +95,9 @@ async function judge(run) {
     let verdict;
     try {
       const v = check(JSON.parse(raw));
-      verdict = v.ok ? `checks clean (${v.warnings.length} warnings)` : `REFUSED: ${v.refusals.map((r) => r.code).join(', ')}`;
+      verdict = v.ok
+        ? `checks clean (${v.warnings.length} warnings)`
+        : `REFUSED: ${v.refusals.map(r => r.code).join(', ')}`;
     } catch (e) {
       verdict = `unreadable: ${e.message}`;
     }
@@ -103,7 +112,14 @@ async function judge(run) {
     '\nYour verdict (JSON only):',
   ].join('\n');
   for (let attempt = 0; attempt < 3; attempt++) {
-    const text = await askClaude({ system: SYSTEM, prompt, model, cwd: run.dir, env: process.env, timeoutMs: 8 * 60_000 });
+    const text = await askClaude({
+      system: SYSTEM,
+      prompt,
+      model,
+      cwd: run.dir,
+      env: process.env,
+      timeoutMs: 8 * 60_000,
+    });
     const v = jsonOf(text);
     if (v && typeof v.score === 'number') return v;
   }
@@ -122,15 +138,19 @@ await Promise.all(
       writeFileSync(path.join(run.dir, `judge${tag}.json`), JSON.stringify(v, null, 2));
       const p = PROMPTS.get(run.id);
       results.push({ ...run, split: p.split, v });
-      console.error(`${String(v.score ?? '?').padStart(2)} ${run.harness} ${run.id}${v.undersold?.length ? ` undersold ${v.undersold.length}` : ''}${v.overclaimed?.length ? ` overclaimed ${v.overclaimed.length}` : ''}`);
+      console.error(
+        `${String(v.score ?? '?').padStart(2)} ${run.harness} ${run.id}${v.undersold?.length ? ` undersold ${v.undersold.length}` : ''}${v.overclaimed?.length ? ` overclaimed ${v.overclaimed.length}` : ''}`,
+      );
     }
   }),
 );
 
-results.sort((a, b) => a.harness.localeCompare(b.harness) || a.split.localeCompare(b.split) || a.id.localeCompare(b.id));
-const count = (rs, s) => rs.reduce((n, r) => n + (r.v.asks ?? []).filter((a) => a.status === s).length, 0);
-const mean = (rs) => (rs.length ? (rs.reduce((n, r) => n + (r.v.score ?? 0), 0) / rs.length).toFixed(2) : '-');
-const groups = [...new Set(results.map((r) => `${r.harness}/${r.split}`))];
+results.sort(
+  (a, b) => a.harness.localeCompare(b.harness) || a.split.localeCompare(b.split) || a.id.localeCompare(b.id),
+);
+const count = (rs, s) => rs.reduce((n, r) => n + (r.v.asks ?? []).filter(a => a.status === s).length, 0);
+const mean = rs => (rs.length ? (rs.reduce((n, r) => n + (r.v.score ?? 0), 0) / rs.length).toFixed(2) : '-');
+const groups = [...new Set(results.map(r => `${r.harness}/${r.split}`))];
 const md = [
   `# Composition judge, ${path.basename(runDir)}`,
   '',
@@ -138,20 +158,25 @@ const md = [
   '',
   '| Group | Runs | Mean score | Undersold claims | Overclaims | declined-wrongly | dropped | composed |',
   '| --- | --- | --- | --- | --- | --- | --- | --- |',
-  ...groups.map((g) => {
-    const rs = results.filter((r) => `${r.harness}/${r.split}` === g);
+  ...groups.map(g => {
+    const rs = results.filter(r => `${r.harness}/${r.split}` === g);
     return `| ${g} | ${rs.length} | ${mean(rs)} | ${rs.reduce((n, r) => n + (r.v.undersold?.length ?? 0), 0)} | ${rs.reduce((n, r) => n + (r.v.overclaimed?.length ?? 0), 0)} | ${count(rs, 'declined-wrongly')} | ${count(rs, 'dropped')} | ${count(rs, 'composed')} |`;
   }),
   '',
   '| Harness | Split | Prompt | Score | Asks (status) | Summary |',
   '| --- | --- | --- | --- | --- | --- |',
-  ...results.map((r) => `| ${r.harness} | ${r.split} | ${r.id} | ${r.v.score ?? '?'} | ${(r.v.asks ?? []).map((a) => a.status).join(', ')} | ${String(r.v.summary ?? r.v.error ?? '').replace(/\|/g, '/')} |`),
+  ...results.map(
+    r =>
+      `| ${r.harness} | ${r.split} | ${r.id} | ${r.v.score ?? '?'} | ${(r.v.asks ?? []).map(a => a.status).join(', ')} | ${String(r.v.summary ?? r.v.error ?? '').replace(/\|/g, '/')} |`,
+  ),
   '',
   '## Findings',
-  ...results.flatMap((r) => [
-    ...(r.v.undersold ?? []).map((u) => `- **${r.harness} ${r.id}** undersold: ${u}`),
-    ...(r.v.overclaimed ?? []).map((u) => `- **${r.harness} ${r.id}** overclaimed: ${u}`),
-    ...(r.v.asks ?? []).filter((a) => a.status === 'declined-wrongly' || a.status === 'dropped').map((a) => `- ${r.harness} ${r.id} ${a.status}: ${a.ask}: ${a.note}`),
+  ...results.flatMap(r => [
+    ...(r.v.undersold ?? []).map(u => `- **${r.harness} ${r.id}** undersold: ${u}`),
+    ...(r.v.overclaimed ?? []).map(u => `- **${r.harness} ${r.id}** overclaimed: ${u}`),
+    ...(r.v.asks ?? [])
+      .filter(a => a.status === 'declined-wrongly' || a.status === 'dropped')
+      .map(a => `- ${r.harness} ${r.id} ${a.status}: ${a.ask}: ${a.note}`),
   ]),
 ];
 writeFileSync(path.join(runDir, `judge${tag}.md`), `${md.join('\n')}\n`);

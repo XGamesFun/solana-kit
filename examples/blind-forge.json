@@ -111,10 +111,7 @@
       "name": "Buyers' draw",
       "price": 1,
       "cutPercent": 5,
-      "places": [
-        70,
-        30
-      ],
+      "places": [70, 30],
       "every": "7d"
     }
   ],

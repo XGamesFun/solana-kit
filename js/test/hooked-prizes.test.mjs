@@ -20,14 +20,20 @@ const MINT = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const hooked = (powers = { transferHook: true }) => ({
   version: 2,
   currency: 'sol',
-  tokens: [{ key: 'sol', source: 'sol' }, { key: 'pts', source: 'existing', mint: MINT, decimals: 6, program: 'token-2022', powers }],
+  tokens: [
+    { key: 'sol', source: 'sol' },
+    { key: 'pts', source: 'existing', mint: MINT, decimals: 6, program: 'token-2022', powers },
+  ],
   pools: [{ key: 'jackpot', currency: 'pts', seed: 1000 }],
   items: [{ key: 'hero', name: 'Hero', uri: 'https://example.invalid/h.json' }],
   boxes: [],
 });
-const roll = [{ gives: 'pay', pool: 'jackpot', amount: 10, chance: 50 }, { gives: 'nothing', chance: 50 }];
+const roll = [
+  { gives: 'pay', pool: 'jackpot', amount: 10, chance: 50 },
+  { gives: 'nothing', chance: 50 },
+];
 const one = [{ gives: 'pay', pool: 'jackpot', amount: 10 }];
-const outOfStock = (spec) => check(spec, { now: NOW }).warnings.filter((r) => r.code === 'W-OUT-OF-STOCK');
+const outOfStock = spec => check(spec, { now: NOW }).warnings.filter(r => r.code === 'W-OUT-OF-STOCK');
 
 test('a box that rolls a prize in a token with a transfer hook is warned of: that outcome is out of stock', () => {
   const spec = { ...hooked(), boxes: [{ key: 'crate', name: 'Crate', price: 0.01, outcomes: roll }] };
@@ -44,8 +50,21 @@ test('a box that rolls a prize in a token with a transfer hook is warned of: tha
 test('a box of one outcome is warned of too once a recipe, a mission or a prize rolls it: every roll of it is refused', () => {
   const forge = { key: 'forge', name: 'Forge', price: 0, active: false, outcomes: one };
   const routes = {
-    recipe: { recipes: [{ key: 'sacrifice', name: 'Sacrifice', in: [{ takes: 'burn', item: 'hero' }], out: [{ gives: 'roll', box: 'forge' }] }] },
-    grant: { grants: [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'forge' }, limits: { total: 10, perWallet: 1 } }] },
+    recipe: {
+      recipes: [
+        {
+          key: 'sacrifice',
+          name: 'Sacrifice',
+          in: [{ takes: 'burn', item: 'hero' }],
+          out: [{ gives: 'roll', box: 'forge' }],
+        },
+      ],
+    },
+    grant: {
+      grants: [
+        { key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'forge' }, limits: { total: 10, perWallet: 1 } },
+      ],
+    },
   };
   for (const [route, parts] of Object.entries(routes)) {
     const [r, ...more] = outOfStock({ ...hooked(), boxes: [forge], ...parts });
@@ -57,7 +76,10 @@ test('a box of one outcome is warned of too once a recipe, a mission or a prize 
 
 test('a box of one outcome nothing else rolls, or a token without a hook, is not warned of', () => {
   // one outcome, sold, rolled by nothing: its prize moves in the purchase, where the hook's accounts come along
-  assert.deepEqual(outOfStock({ ...hooked(), boxes: [{ key: 'chest', name: 'Chest', price: 0.01, outcomes: one }] }), []);
+  assert.deepEqual(
+    outOfStock({ ...hooked(), boxes: [{ key: 'chest', name: 'Chest', price: 0.01, outcomes: one }] }),
+    [],
+  );
   // the same rolled box in a Token-2022 coin with no hook
   const plain = { ...hooked({}), boxes: [{ key: 'crate', name: 'Crate', price: 0.01, outcomes: roll }] };
   assert.deepEqual(outOfStock(plain), []);
@@ -66,7 +88,7 @@ test('a box of one outcome nothing else rolls, or a token without a hook, is not
 
 test('W-MINT-POWERS says a settle of a price waits for the hook, and a rolled box can’t give the token as a prize', () => {
   const v = check({ ...hooked(), boxes: [{ key: 'chest', name: 'Chest', price: 0.01, outcomes: one }] }, { now: NOW });
-  const w = v.warnings.find((x) => x.code === 'W-MINT-POWERS');
+  const w = v.warnings.find(x => x.code === 'W-MINT-POWERS');
   assert.match(w.message, /a price or its shares/);
   assert.match(w.message, /can’t give it as a prize/);
   assert.doesNotMatch(w.message, /a refused settle waits until the hook allows it\)/);
@@ -77,7 +99,7 @@ test('W-MINT-POWERS says a settle of a price waits for the hook, and a rolled bo
 const flip = example('coin-flip-arena').spec;
 const rising = (days, perDay, rise = { growthPercent: 1 }) => ({
   ...flip,
-  boxes: flip.boxes.map((b) => ({ ...b, rise })),
+  boxes: flip.boxes.map(b => ({ ...b, rise })),
   scenario: { ...flip.scenario, days, perDay: { ...flip.scenario.perDay, 'box:flip': perDay } },
 });
 const quick = async (what, run) => {
@@ -91,32 +113,44 @@ const quick = async (what, run) => {
 test('the schema bounds the scenario’s days and counts a day', async () => {
   const v = await quick('check', () => check(rising(1e6, 1e7), { now: NOW }));
   assert.equal(v.ok, false);
-  assert.ok(v.refusals.some((r) => r.code === 'E-SCHEMA' && r.where === 'economy.scenario.days'));
-  assert.ok(v.refusals.some((r) => r.code === 'E-SCHEMA' && r.where === 'economy.scenario.perDay.box:flip'));
+  assert.ok(v.refusals.some(r => r.code === 'E-SCHEMA' && r.where === 'economy.scenario.days'));
+  assert.ok(v.refusals.some(r => r.code === 'E-SCHEMA' && r.where === 'economy.scenario.perDay.box:flip'));
   for (const tool of ['xsolana_check', 'xsolana_simulate', 'xsolana_explain', 'xsolana_cost']) {
     const r = await quick(tool, () => runTool(tool, { spec: rising(1e6, 1e7) }, { now: NOW }));
     assert.notEqual(r.ok, true, tool);
   }
-  assert.equal(check(rising(3650, 1e6), { now: NOW }).refusals.filter((r) => r.code === 'E-SCHEMA').length, 0, 'ten years at a million a day is a scenario');
+  assert.equal(
+    check(rising(3650, 1e6), { now: NOW }).refusals.filter(r => r.code === 'E-SCHEMA').length,
+    0,
+    'ten years at a million a day is a scenario',
+  );
 });
 
 test('salePrices stops once the price stops moving, and throws past ten million sales of one that still moves', async () => {
   // 1% a sale reaches the cap within a few thousand sales: the rest are counted at it
-  const capped = await quick('a price at its cap', () => salePrices({ price: 0.1, rise: { growthPercent: 1 } }, 1e6, 3650));
+  const capped = await quick('a price at its cap', () =>
+    salePrices({ price: 0.1, rise: { growthPercent: 1 } }, 1e6, 3650),
+  );
   assert.equal(capped.count, 3.65e9);
   assert.equal(capped.last, 1e18);
   assert.ok(capped.average > 0.99e18 && capped.average <= 1e18);
   // a fall to its floor with no rise stays there, and sales closer together than its steps hold the price
-  const floored = await quick('a price at its floor', () => salePrices({ price: 10, fall: { every: '1s', step: 1, floor: 2 } }, 1e4, 3650));
+  const floored = await quick('a price at its floor', () =>
+    salePrices({ price: 10, fall: { every: '1s', step: 1, floor: 2 } }, 1e4, 3650),
+  );
   assert.equal(floored.last, 2);
-  const held = await quick('a price sales hold', () => salePrices({ price: 10, fall: { every: '1h', step: 1, floor: 2 } }, 1e6, 3650));
+  const held = await quick('a price sales hold', () =>
+    salePrices({ price: 10, fall: { every: '1h', step: 1, floor: 2 } }, 1e6, 3650),
+  );
   assert.deepEqual([held.first, held.last, held.average], [10, 10, 10]);
   // the walk is the same as before where it ends on its own
   const small = salePrices({ price: 0.1, rise: { growthPercent: 1 } }, 100, 30);
   assert.equal(small.count, 3000);
   assert.equal(small.first, 0.1);
   // a rise too small to reach the cap keeps moving: refused past ten million, which check skips and xsolana_simulate says
-  await quick('a price still moving', () => assert.throws(() => salePrices({ price: 0.1, rise: { growthPercent: 1e-9 } }, 1e6, 3650), /10,000,000 sales/));
+  await quick('a price still moving', () =>
+    assert.throws(() => salePrices({ price: 0.1, rise: { growthPercent: 1e-9 } }, 1e6, 3650), /10,000,000 sales/),
+  );
   const slow = rising(3650, 1e6, { growthPercent: 1e-9 });
   assert.equal((await quick('check', () => check(slow, { now: NOW }))).ok, true);
   const r = await quick('xsolana_simulate', () => runTool('xsolana_simulate', { spec: slow }, { now: NOW }));
@@ -142,11 +176,20 @@ test('xsolana_save saves over a one-token spec with no currency, live or not, an
   const live = { project: '11111111111111111111111111111111' };
   const file = path.join(dir, 'level-ladder.json');
   writeFileSync(file, JSON.stringify({ ...ladder, live }));
-  const r = await runTool('xsolana_save', { spec: { ...ladder, name: 'Ladder, renamed' }, file: 'level-ladder.json' }, { cwd: dir, now: NOW });
+  const r = await runTool(
+    'xsolana_save',
+    { spec: { ...ladder, name: 'Ladder, renamed' }, file: 'level-ladder.json' },
+    { cwd: dir, now: NOW },
+  );
   assert.equal(r.ok, true, r.text);
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).live, live, 'the live section is kept');
   // what is not a spec stays refused: no tokens, or keys a spec doesn't have
-  for (const [name, body] of [['package.json', { name: 'my-game', version: '1.0.0' }], ['vercel.json', { version: 2, name: 'my-app' }], ['bare.json', { version: 2 }], ['odd.json', { version: 2, tokens: [], currency: 1 }]]) {
+  for (const [name, body] of [
+    ['package.json', { name: 'my-game', version: '1.0.0' }],
+    ['vercel.json', { version: 2, name: 'my-app' }],
+    ['bare.json', { version: 2 }],
+    ['odd.json', { version: 2, tokens: [], currency: 1 }],
+  ]) {
     writeFileSync(path.join(dir, name), JSON.stringify(body));
     const no = await runTool('xsolana_save', { spec, file: name }, { cwd: dir, now: NOW });
     assert.equal(no.ok, false, name);

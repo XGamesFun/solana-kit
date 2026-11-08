@@ -79,6 +79,7 @@ money; it holds no files and serves nothing.
   `xsolana_check` counts them.
 
 Don'ts:
+
 - Don't show mints, account addresses, PDAs, lamports or instruction names unless asked.
 - Don't promise returns, profits or "passive income". Say what the program does, with the numbers.
 - Don't hide a gap: if loot can't do what they asked, the first line says so and offers the nearest thing.

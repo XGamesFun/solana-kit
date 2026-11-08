@@ -23,16 +23,34 @@ import { BPF_LOADER_UPGRADEABLE, LOOT_PROGRAM, pda, VRF_QUEUE } from '../client/
 const SLOTS_PER_SECOND = 2.5;
 const TOKEN_PROGRAMS = new Set([TOKEN_PROGRAM, TOKEN_2022_PROGRAM]);
 /** LiteSVM's transaction errors without fields, by number (its TransactionErrorFieldless). */
-const TX_ERRORS = ['AccountInUse', 'AccountLoadedTwice', 'AccountNotFound', 'ProgramAccountNotFound', 'InsufficientFundsForFee', 'InvalidAccountForFee', 'AlreadyProcessed', 'BlockhashNotFound', 'CallChainTooDeep', 'MissingSignatureForFee', 'InvalidAccountIndex', 'SignatureFailure', 'InvalidProgramForExecution (a program the transaction calls is not loaded)', 'SanitizeFailure'];
+const TX_ERRORS = [
+  'AccountInUse',
+  'AccountLoadedTwice',
+  'AccountNotFound',
+  'ProgramAccountNotFound',
+  'InsufficientFundsForFee',
+  'InvalidAccountForFee',
+  'AlreadyProcessed',
+  'BlockhashNotFound',
+  'CallChainTooDeep',
+  'MissingSignatureForFee',
+  'InvalidAccountIndex',
+  'SignatureFailure',
+  'InvalidProgramForExecution (a program the transaction calls is not loaded)',
+  'SanitizeFailure',
+];
 
 /** LiteSVM's classes, or a plain sentence when it is not installed. */
 export function loadLiteSVM(from = import.meta.url) {
-  if (process.platform === 'win32') throw new Error('LiteSVM has no Windows build (its npm package ships Linux and macOS binaries only).');
+  if (process.platform === 'win32')
+    throw new Error('LiteSVM has no Windows build (its npm package ships Linux and macOS binaries only).');
   try {
     const m = createRequire(from)('litesvm');
     return { LiteSVM: m.LiteSVM, Rent: m.Rent, FeatureSet: m.FeatureSet };
   } catch {
-    throw new Error('LiteSVM is not installed: `npm install litesvm@1.5.0` (an optional dependency, used by the tests and the full simulation).');
+    throw new Error(
+      'LiteSVM is not installed: `npm install litesvm@1.5.0` (an optional dependency, used by the tests and the full simulation).',
+    );
   }
 }
 
@@ -40,7 +58,7 @@ export function loadLiteSVM(from = import.meta.url) {
 export function seeded(seed = 'loot') {
   let counter = 0n;
   let pool = new Uint8Array(0);
-  return (n) => {
+  return n => {
     const out = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
       if (!pool.length) pool = createHash('sha256').update(`${seed}:${counter++}`).digest();
@@ -52,13 +70,13 @@ export function seeded(seed = 'loot') {
 }
 
 /** A fresh address nobody holds a key to (none is needed: signatures are not checked). */
-export const newAddress = (random) => encodeBase58(random(32));
+export const newAddress = random => encodeBase58(random(32));
 
 /** Each loot instruction's name → its account names, flattened in order. */
 const NAMES = new Map(
-  IDL.instructions.map((def) => {
+  IDL.instructions.map(def => {
     const names = [];
-    const walk = (list) => list.forEach((a) => (a.accounts ? walk(a.accounts) : names.push(a.name)));
+    const walk = list => list.forEach(a => (a.accounts ? walk(a.accounts) : names.push(a.name)));
     walk(def.accounts);
     return [def.name, names];
   }),
@@ -67,7 +85,7 @@ const NAMES = new Map(
 const ORACLE_UNITS = 340_000;
 
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
-export const lootName = (ix) => {
+export const lootName = ix => {
   const def = ix.programId === LOOT_PROGRAM ? instructionOf(ix.data) : null;
   return def ? { name: def.name, names: NAMES.get(def.name), tag: def.discriminator.length } : null;
 };
@@ -83,12 +101,17 @@ const refused = (said, logs) => {
 export function tokenAccount(account) {
   if (!account || !TOKEN_PROGRAMS.has(account.owner) || account.data.length < 165) return null;
   if (account.data.length > 165 && account.data[165] !== 2) return null; // Token-2022 account type: 2 = account
-  return { mint: encodeBase58(account.data.subarray(0, 32)), owner: encodeBase58(account.data.subarray(32, 64)), amount: readUintLE(account.data, 64, 8) };
+  return {
+    mint: encodeBase58(account.data.subarray(0, 32)),
+    owner: encodeBase58(account.data.subarray(32, 64)),
+    amount: readUintLE(account.data, 64, 8),
+  };
 }
 
 /** A mint's supply and decimals. */
 export function mintAccount(account) {
-  if (!account || !TOKEN_PROGRAMS.has(account.owner) || account.data.length < 82 || account.data.length === 165) return null;
+  if (!account || !TOKEN_PROGRAMS.has(account.owner) || account.data.length < 82 || account.data.length === 165)
+    return null;
   if (account.data.length > 165 && account.data[165] !== 1) return null;
   return { supply: readUintLE(account.data, 36, 8), decimals: account.data[44] };
 }
@@ -99,7 +122,7 @@ function tokenMoves(keys, instructions, mintOf) {
   for (const { program, accounts, data } of instructions) {
     if (!TOKEN_PROGRAMS.has(program) || data.length < 9) continue;
     const amount = readUintLE(data, 1, 8);
-    const a = (i) => keys[accounts[i]];
+    const a = i => keys[accounts[i]];
     if (data[0] === 3) out.push({ kind: 'transfer', from: a(0), to: a(1), mint: mintOf(a(0)), amount });
     else if (data[0] === 12) out.push({ kind: 'transfer', from: a(0), to: a(2), mint: a(1), amount });
     else if (data[0] === 7 || data[0] === 14) out.push({ kind: 'mint', from: null, to: a(1), mint: a(0), amount });
@@ -116,7 +139,13 @@ function newSVM({ LiteSVM, FeatureSet, Rent }, runtime) {
   if (!runtime) return new LiteSVM();
   const features = FeatureSet.allEnabled();
   for (const id of runtime.off) features.deactivate(decodeBase58(id));
-  const svm = LiteSVM.default().withFeatureSet(features).withBuiltins().withLamports(1_000_000_000_000_000n).withSysvars().withDefaultPrograms().withPrecompiles();
+  const svm = LiteSVM.default()
+    .withFeatureSet(features)
+    .withBuiltins()
+    .withLamports(1_000_000_000_000_000n)
+    .withSysvars()
+    .withDefaultPrograms()
+    .withPrecompiles();
   const { lamportsPerByteYear, exemptionThreshold, burnPercent } = runtime.rent;
   svm.setRent(new Rent(lamportsPerByteYear, exemptionThreshold, burnPercent));
   return svm;
@@ -130,7 +159,18 @@ function newSVM({ LiteSVM, FeatureSet, Rent }, runtime) {
  * generator; `upgradeAuthority` makes that address the loot program's upgrade authority (so it can `init_platform`);
  * `onSent(record)` sees every landed transaction.
  */
-export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], runtime = null, start = 1_790_000_000, random = seeded(), upgradeAuthority = null, onSent = () => {} }) {
+export function simChain({
+  LiteSVM,
+  FeatureSet,
+  Rent,
+  programs,
+  accounts = [],
+  runtime = null,
+  start = 1_790_000_000,
+  random = seeded(),
+  upgradeAuthority = null,
+  onSent = () => {},
+}) {
   const svm = newSVM({ LiteSVM, FeatureSet, Rent }, runtime);
   svm.withSigverify(false);
   svm.withBlockhashCheck(false);
@@ -141,9 +181,15 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     else svm.addProgramWithLoader(address, program.bytes, program.loader);
   }
   const put = (address, { owner, lamports, data, executable = false }) =>
-    svm.setAccount({ address, lamports: BigInt(lamports), data: Uint8Array.from(data), programAddress: owner, executable });
+    svm.setAccount({
+      address,
+      lamports: BigInt(lamports),
+      data: Uint8Array.from(data),
+      programAddress: owner,
+      executable,
+    });
   for (const a of accounts) put(a.address, a);
-  const queue = accounts.find((a) => a.address === VRF_QUEUE);
+  const queue = accounts.find(a => a.address === VRF_QUEUE);
   const queueBytes = queue ? Uint8Array.from(queue.data) : null;
 
   function get(address) {
@@ -185,7 +231,12 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     const out = new Map();
     for (const k of keys) {
       const a = get(k);
-      out.set(k, a ? { lamports: a.lamports, owner: a.owner, token: tokenAccount(a), mint: mintAccount(a), size: a.data.length } : null);
+      out.set(
+        k,
+        a
+          ? { lamports: a.lamports, owner: a.owner, token: tokenAccount(a), mint: mintAccount(a), size: a.data.length }
+          : null,
+      );
     }
     return out;
   }
@@ -194,15 +245,18 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
   function sendRaw(payer, instructions, { label = '', role = 'player' } = {}) {
     const message = compileMessage({ payer, blockhash: svm.latestBlockhash(), instructions });
     const signers = signersOf(message);
-    const keys = [...new Set([payer, ...instructions.flatMap((ix) => [ix.programId, ...ix.keys.map((k) => k.pubkey)])])];
+    const keys = [...new Set([payer, ...instructions.flatMap(ix => [ix.programId, ...ix.keys.map(k => k.pubkey)])])];
     const before = snapshot(keys);
-    const signatures = Object.fromEntries(signers.map((s) => [s, random(64)]));
+    const signatures = Object.fromEntries(signers.map(s => [s, random(64)]));
     const result = svm.sendTransaction({ messageBytes: message, signatures });
     const failed = typeof result.err === 'function';
     const logs = (failed ? result.meta() : result).logs();
     if (failed) {
       const err = result.err();
-      const said = typeof err === 'number' ? (TX_ERRORS[err] ?? `transaction error ${err}`) : String(err?.toString?.() ?? 'failed');
+      const said =
+        typeof err === 'number'
+          ? (TX_ERRORS[err] ?? `transaction error ${err}`)
+          : String(err?.toString?.() ?? 'failed');
       throw Object.assign(new Error(refused(said, logs)), { logs, label });
     }
     const after = snapshot(keys);
@@ -218,7 +272,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
         run.push({ program: ordered[c.programIdIndex()], accounts: Array.from(c.accounts()), data: c.data() });
       }
     });
-    const mintOf = (account) => (before.get(account) ?? after.get(account))?.token?.mint ?? null;
+    const mintOf = account => (before.get(account) ?? after.get(account))?.token?.mint ?? null;
     const record = {
       id,
       payer,
@@ -251,7 +305,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     for (const ix of instructions) {
       const known = lootName(ix);
       if (!known || !['open_box', 'ask_roll', 'draw_lottery', 'roll'].includes(known.name)) continue;
-      const account = (name) => ix.keys[known.names.indexOf(name)]?.pubkey;
+      const account = name => ix.keys[known.names.indexOf(name)]?.pubkey;
       const randomness = random(32);
       // A box's roll: asked by a purchase, or by anyone for a roll a mission or a recipe made.
       if (known.name === 'open_box' || known.name === 'ask_roll') {
@@ -261,7 +315,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
         const box = decode('LootBox', get(orderState.loot_box).data);
         // Each prize pool's mint: tokens won move to the project's vault for it in the roll. A pool not opened has none.
         const poolMints = {};
-        for (const prize of box.entries.flatMap((e) => e.prizes)) {
+        for (const prize of box.entries.flatMap(e => e.prizes)) {
           const pool = prize.Tokens?.from.Pool?.[0];
           if (pool === undefined) continue;
           const held = get(pda.pool(orderState.project, pool));
@@ -269,25 +323,44 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
         }
         // Each item a prize names, as the oracle reads the roll's accounts: a fresh one's tables follow it.
         const items = {};
-        for (const prize of box.entries.flatMap((e) => e.prizes)) {
+        for (const prize of box.entries.flatMap(e => e.prizes)) {
           const id = prize.Item?.[0] ?? prize.Compressed?.item;
           const held = id === undefined ? null : get(pda.item(orderState.project, id));
           if (held?.data?.length) items[id] = decode('Item', held.data);
         }
         restoreQueue();
         // The compute the real oracle's answer has left when loot is called (read from its devnet callbacks), and no more heap.
-        answers.push(sendRaw(oracle, [computeUnitLimit(ORACLE_UNITS), callbackRollIx({ order, orderState, box, randomness, poolMints, items })], { label: `${label} (oracle)`, role: 'oracle' }));
+        answers.push(
+          sendRaw(
+            oracle,
+            [computeUnitLimit(ORACLE_UNITS), callbackRollIx({ order, orderState, box, randomness, poolMints, items })],
+            { label: `${label} (oracle)`, role: 'oracle' },
+          ),
+        );
       } else if (known.name === 'draw_lottery') {
         // The round's record is the request's only account: one nobody bought into asks nothing.
         const round = account('round');
         const held = get(round);
         restoreQueue();
-        if (!held?.data?.length || held.owner !== LOOT_PROGRAM || decode('LotteryRound', held.data).status !== 'Drawing') continue;
-        answers.push(sendRaw(oracle, [callbackLotteryIx({ round, randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
+        if (
+          !held?.data?.length ||
+          held.owner !== LOOT_PROGRAM ||
+          decode('LotteryRound', held.data).status !== 'Drawing'
+        )
+          continue;
+        answers.push(
+          sendRaw(oracle, [callbackLotteryIx({ round, randomness })], { label: `${label} (oracle)`, role: 'oracle' }),
+        );
       } else {
         const project = account('project');
         restoreQueue();
-        answers.push(sendRaw(oracle, [callbackRandomIx({ project, reference: ix.data.subarray(known.tag, known.tag + 32), randomness })], { label: `${label} (oracle)`, role: 'oracle' }));
+        answers.push(
+          sendRaw(
+            oracle,
+            [callbackRandomIx({ project, reference: ix.data.subarray(known.tag, known.tag + 32), randomness })],
+            { label: `${label} (oracle)`, role: 'oracle' },
+          ),
+        );
       }
     }
     return answers;
@@ -312,13 +385,29 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     const logs = (failed ? result.meta() : result).logs();
     if (failed) {
       const err = result.err();
-      const said = typeof err === 'number' ? (TX_ERRORS[err] ?? `transaction error ${err}`) : String(err?.toString?.() ?? 'failed');
+      const said =
+        typeof err === 'number'
+          ? (TX_ERRORS[err] ?? `transaction error ${err}`)
+          : String(err?.toString?.() ?? 'failed');
       throw Object.assign(new Error(refused(said, logs)), { logs, label });
     }
     tick();
     const { keys, instructions: compiled } = readMessage(message);
-    const instructions = compiled.map((ix) => ({ programId: keys[ix.programIndex], keys: ix.accountIndexes.map((k) => ({ pubkey: keys[k], isSigner: false, isWritable: false })), data: ix.data }));
-    onSent({ id: encodeBase58(slots[0]), payer: signers[0], role, label, instructions, logs, receipts: receipts(logs, null), at: now });
+    const instructions = compiled.map(ix => ({
+      programId: keys[ix.programIndex],
+      keys: ix.accountIndexes.map(k => ({ pubkey: keys[k], isSigner: false, isWritable: false })),
+      data: ix.data,
+    }));
+    onSent({
+      id: encodeBase58(slots[0]),
+      payer: signers[0],
+      role,
+      label,
+      instructions,
+      logs,
+      receipts: receipts(logs, null),
+      at: now,
+    });
     answer(instructions, label);
     return encodeBase58(slots[0]);
   }
@@ -331,7 +420,9 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     const slot = svm.getClock().slot;
     // Every slot has a block here: the last 512, newest first.
     const hash = svm.latestBlockhash();
-    svm.setSlotHashes(Array.from({ length: Number(slot < 512n ? slot + 1n : 512n) }, (_, i) => ({ slot: slot - BigInt(i), hash })));
+    svm.setSlotHashes(
+      Array.from({ length: Number(slot < 512n ? slot + 1n : 512n) }, (_, i) => ({ slot: slot - BigInt(i), hash })),
+    );
   }
 
   /** The methods of the client's rpc that the play calls read, answered from the local chain. */
@@ -339,7 +430,7 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     url: 'litesvm:',
     async accounts(addresses) {
       if (addresses.includes(SYSVAR_SLOT_HASHES)) freshSlotHashes();
-      return addresses.map((a) => {
+      return addresses.map(a => {
         const x = get(a);
         return x ? { ...x, lamports: Number(x.lamports) } : null;
       });
@@ -354,12 +445,21 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
       return tokenAccount(get(address))?.amount ?? 0n;
     },
     async programAccounts(program, filters = []) {
-      const found = svm.getProgramAccounts(program).map((a) => ({ pubkey: a.address, account: { owner: a.programAddress, lamports: Number(a.lamports), data: a.data, executable: a.executable } }));
+      const found = svm.getProgramAccounts(program).map(a => ({
+        pubkey: a.address,
+        account: { owner: a.programAddress, lamports: Number(a.lamports), data: a.data, executable: a.executable },
+      }));
       const memcmp = (data, { offset, bytes }) => {
         const want = decodeBase58(bytes);
         return data.length >= offset + want.length && want.every((b, i) => data[offset + i] === b);
       };
-      return found.filter((x) => filters.every((f) => (f.memcmp ? memcmp(x.account.data, f.memcmp) : f.dataSize === undefined || x.account.data.length === f.dataSize)));
+      return found.filter(x =>
+        filters.every(f =>
+          f.memcmp
+            ? memcmp(x.account.data, f.memcmp)
+            : f.dataSize === undefined || x.account.data.length === f.dataSize,
+        ),
+      );
     },
     async latestBlockhash() {
       return { blockhash: svm.latestBlockhash(), lastValidBlockHeight: Number.MAX_SAFE_INTEGER };
@@ -370,16 +470,26 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     /** Dry-runs a wire transaction (its signatures are not checked) and returns `accounts`' state after it; nothing changes. */
     async simulate(wire, { accounts: watch = [] } = {}) {
       const { message, signatures: slots, signers } = readTransaction(wire);
-      const result = svm.simulateTransaction({ messageBytes: message, signatures: Object.fromEntries(signers.map((s, i) => [s, slots[i]])) });
+      const result = svm.simulateTransaction({
+        messageBytes: message,
+        signatures: Object.fromEntries(signers.map((s, i) => [s, slots[i]])),
+      });
       if (typeof result.err === 'function') {
         const logs = result.meta().logs();
-        throw Object.assign(new Error(`The network refused this in a dry run: ${refused(String(result.err()), logs)}`), { logs });
+        throw Object.assign(
+          new Error(`The network refused this in a dry run: ${refused(String(result.err()), logs)}`),
+          { logs },
+        );
       }
-      const post = new Map(result.postAccounts().map((x) => [x.address, x]));
-      const accounts = await Promise.all(watch.map(async (a) => {
-        const x = post.get(a);
-        return x ? { owner: x.programAddress, lamports: Number(x.lamports), data: x.data, executable: x.executable } : rpc.accounts([a]).then(([y]) => y);
-      }));
+      const post = new Map(result.postAccounts().map(x => [x.address, x]));
+      const accounts = await Promise.all(
+        watch.map(async a => {
+          const x = post.get(a);
+          return x
+            ? { owner: x.programAddress, lamports: Number(x.lamports), data: x.data, executable: x.executable }
+            : rpc.accounts([a]).then(([y]) => y);
+        }),
+      );
       return { unitsConsumed: Number(result.meta().computeUnitsConsumed()), logs: result.meta().logs(), accounts };
     },
     async confirm(signature) {
@@ -387,7 +497,8 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
     },
     async call(method, params = []) {
       if (method === 'getSlot') return Number(svm.getClock().slot);
-      if (method === 'getMinimumBalanceForRentExemption') return Number(svm.minimumBalanceForRentExemption(BigInt(params[0])));
+      if (method === 'getMinimumBalanceForRentExemption')
+        return Number(svm.minimumBalanceForRentExemption(BigInt(params[0])));
       throw new Error(`The local chain does not answer ${method}.`);
     },
   };
@@ -420,8 +531,8 @@ export function simChain({ LiteSVM, FeatureSet, Rent, programs, accounts = [], r
       svm.expireBlockhash();
     },
     airdrop: (address, lamports) => svm.airdrop(address, BigInt(lamports)),
-    rent: (bytes) => svm.minimumBalanceForRentExemption(BigInt(bytes)),
-    tokens: (address) => tokenAccount(get(address))?.amount ?? 0n,
+    rent: bytes => svm.minimumBalanceForRentExemption(BigInt(bytes)),
+    tokens: address => tokenAccount(get(address))?.amount ?? 0n,
     account: (name, address) => decode(name, get(address).data),
   };
 }

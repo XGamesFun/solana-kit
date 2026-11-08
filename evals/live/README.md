@@ -8,24 +8,24 @@ conversation.
 
 ## The parts
 
-| File | What it is |
-| --- | --- |
-| `run.mjs` | the runner: one card × one harness per run, in parallel; records, grades, writes `summary.md` |
-| `cards.json` | the scenario cards (below) |
-| `agents.mjs` | the agent under test (`claude -p` / `codex exec`, resumed turn by turn), the player robot, `LIMIT` (a usage-limit reply) |
-| `usersim.mjs` | the simulated person: Claude with no tools, answering in JSON moves (say, run a command, open the app, done) |
-| `approver.mjs` | runs the approval command the agent gave, and approves on the page with the owner's test wallet |
-| `wallet.mjs` | the test wallet in a headless Chrome: refuses any transaction it can't explain, and logs what it signed |
-| `browser-mcp.mjs` | the browser the player robot drives, with the player's test wallet in it |
-| `registry.mjs` | a local npm registry serving this checkout, packed, as `@xgamesfun/solana`, so agents test the code here, not npm's |
-| `funds.mjs` | the eval funder, throwaway wallets, topping up and sweeping back |
-| `procs.mjs` | process groups: every server a run starts (and any the agent leaves running) stops with it |
-| `grade.mjs` | the grader: `S-` security findings, `M-` mistakes, `N-` notes |
-| `reclaim.mjs` | after a run, moves the game's SOL pools back to the owner's test wallet (lottery pots stay) so the sweep returns them |
-| `regrade.mjs` | grades saved runs again with the current grader and cards |
-| `digest.mjs` | one Markdown file per saved run (card, grade, conversation) for reading closely |
-| `sweep.mjs` | sends test wallets' devnet SOL back to the funder after a killed run |
-| `REVIEW.md` | how to review a round's conversations, and what to report |
+| File              | What it is                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `run.mjs`         | the runner: one card × one harness per run, in parallel; records, grades, writes `summary.md`                            |
+| `cards.json`      | the scenario cards (below)                                                                                               |
+| `agents.mjs`      | the agent under test (`claude -p` / `codex exec`, resumed turn by turn), the player robot, `LIMIT` (a usage-limit reply) |
+| `usersim.mjs`     | the simulated person: Claude with no tools, answering in JSON moves (say, run a command, open the app, done)             |
+| `approver.mjs`    | runs the approval command the agent gave, and approves on the page with the owner's test wallet                          |
+| `wallet.mjs`      | the test wallet in a headless Chrome: refuses any transaction it can't explain, and logs what it signed                  |
+| `browser-mcp.mjs` | the browser the player robot drives, with the player's test wallet in it                                                 |
+| `registry.mjs`    | a local npm registry serving this checkout, packed, as `@xgamesfun/solana`, so agents test the code here, not npm's      |
+| `funds.mjs`       | the eval funder, throwaway wallets, topping up and sweeping back                                                         |
+| `procs.mjs`       | process groups: every server a run starts (and any the agent leaves running) stops with it                               |
+| `grade.mjs`       | the grader: `S-` security findings, `M-` mistakes, `N-` notes                                                            |
+| `reclaim.mjs`     | after a run, moves the game's SOL pools back to the owner's test wallet (lottery pots stay) so the sweep returns them    |
+| `regrade.mjs`     | grades saved runs again with the current grader and cards                                                                |
+| `digest.mjs`      | one Markdown file per saved run (card, grade, conversation) for reading closely                                          |
+| `sweep.mjs`       | sends test wallets' devnet SOL back to the funder after a killed run                                                     |
+| `REVIEW.md`       | how to review a round's conversations, and what to report                                                                |
 
 ## Before a round
 
@@ -39,7 +39,7 @@ conversation.
 - **An RPC URL of the harness's own.** `XSOLANA_EVAL_RPC_URL` is used for funding, approvals and the test wallets.
   - Use a keyed devnet RPC: the public one rate-limits a full round.
   - It's never passed to the agents under test, and it's scrubbed from everything recorded.
-  - `XSOLANA_RPC_URL`, if set, *is* passed to the agents, as a person's own setting would be.
+  - `XSOLANA_RPC_URL`, if set, _is_ passed to the agents, as a person's own setting would be.
 - **Program version.** The program on devnet must be the version this checkout's client speaks (`release.json`
   names it). A client of another version builds instructions or vouchers the program refuses.
 
@@ -55,6 +55,7 @@ XSOLANA_EVAL_RPC_URL=… node evals/live/run.mjs --harness codex  --parallel 2 -
 ```
 
 Options:
+
 - `--keeper`: a round with a results server beside it. The server is not part of this repository: name a
   folder holding its `scripts/loot-server.mjs` (with its npm packages installed) with `--server-dir <dir>` or
   `XSOLANA_EVAL_SERVER_DIR`; the runner stops at once without one. One server runs at the cards' `{KEEPER}`: it signs
@@ -76,6 +77,7 @@ many Linux machines. Each session works in a throwaway temp folder, but it can r
 rounds on a machine or account you're comfortable with. `XSOLANA_EVAL_CODEX_SANDBOX` picks another mode.
 
 Results go in `evals/results/live-<time>/` (git-ignored). For each `<harness>/<card>/` run:
+
 - `conversation.json`;
 - `turn-N.jsonl` (the agent's raw events);
 - `player-N.jsonl`;
@@ -125,13 +127,17 @@ the code before acting on them.
   "checks": {
     "expect": "build | refuse",
     "parts": ["the spec parts it must have: boxes, pools, lotteries, farms, grants, auctions…"],
-    "intent": [{ "type": "boxReturn", "min": 90, "max": 99 }, { "type": "seedAtMost", "sol": 0.2 }],
+    "intent": [
+      { "type": "boxReturn", "min": 90, "max": 99 },
+      { "type": "seedAtMost", "sol": 0.2 }
+    ],
     "flags": ["chance"]
   }
 }
 ```
 
 More card fields:
+
 - `"keeper": true`: the card needs a `--keeper` round.
 - a beat's `waitMinutes`: the run waits that long on the real clock before the person says it ("it's been an hour").
 - `checks.scripts`: the person may run the agent's `node <script>.mjs …` (their game server reporting a winner).

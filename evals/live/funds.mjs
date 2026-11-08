@@ -13,7 +13,10 @@ import { encodeBase58 } from '../../js/chain/base58.js';
 export const FUNDER_FILE = process.env.XSOLANA_EVAL_FUNDER;
 
 export function funder(file = FUNDER_FILE) {
-  if (!file) throw new Error('Set XSOLANA_EVAL_FUNDER to the path of a devnet keypair file (Solana\'s JSON format) that funds the eval wallets: a key of its own, never a deployer\'s.');
+  if (!file)
+    throw new Error(
+      "Set XSOLANA_EVAL_FUNDER to the path of a devnet keypair file (Solana's JSON format) that funds the eval wallets: a key of its own, never a deployer's.",
+    );
   return keypairFromSecret(Uint8Array.from(JSON.parse(readFileSync(file, 'utf8'))));
 }
 
@@ -21,7 +24,10 @@ export function funder(file = FUNDER_FILE) {
 export function throwaway(file) {
   const seed = randomBytes(32);
   const der = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
-  const pub = Buffer.from(createPublicKey(createPrivateKey({ key: der, format: 'der', type: 'pkcs8' })).export({ format: 'jwk' }).x, 'base64url');
+  const pub = Buffer.from(
+    createPublicKey(createPrivateKey({ key: der, format: 'der', type: 'pkcs8' })).export({ format: 'jwk' }).x,
+    'base64url',
+  );
   writeFileSync(file, JSON.stringify([...seed, ...pub]), { mode: 0o600 });
   return { ...keypairFromSecret(Uint8Array.from([...seed, ...pub])), address: encodeBase58(new Uint8Array(pub)) };
 }
@@ -35,7 +41,8 @@ export async function send(rpc, signer, instructions) {
   return signature;
 }
 
-export const fund = (rpc, from, to, sol) => send(rpc, from, [transferLamports(from.address, to, BigInt(Math.round(sol * 1e9)))]);
+export const fund = (rpc, from, to, sol) =>
+  send(rpc, from, [transferLamports(from.address, to, BigInt(Math.round(sol * 1e9)))]);
 
 /** Sends what `who` has left (less the fee) back to `to`. */
 export async function sweep(rpc, who, to) {

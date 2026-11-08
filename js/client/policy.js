@@ -20,7 +20,8 @@ export function orderRefundAt(order) {
   const slot = BigInt(order.requested_slot);
   if (order.status === 'Failed') return { slot, at: null };
   if (order.status === 'Pending') return { slot, at: BigInt(order.asked_at) + STALE_SECONDS };
-  if (order.status === 'Asked' && (BigInt(order.paid ?? 0) > 0n || order.held)) return { slot: null, at: BigInt(order.first_asked_at) + LOTTERY_TIMEOUT_SECONDS };
+  if (order.status === 'Asked' && (BigInt(order.paid ?? 0) > 0n || order.held))
+    return { slot: null, at: BigInt(order.first_asked_at) + LOTTERY_TIMEOUT_SECONDS };
   if (['Rolled', 'Waiting', 'Asked'].includes(order.status)) return null;
   throw new Error('Unknown order status.');
 }
@@ -39,7 +40,8 @@ export function orderRefundable(order, slot, now) {
  * again is asked from the next slot on.
  */
 export const rollAskable = (order, slot, now) =>
-  (order.status === 'Waiting' && (BigInt(order.asked_first ?? 0) === 0n || BigInt(slot) > BigInt(order.requested_slot))) ||
+  (order.status === 'Waiting' &&
+    (BigInt(order.asked_first ?? 0) === 0n || BigInt(slot) > BigInt(order.requested_slot))) ||
   (order.status === 'Asked' && BigInt(now) > BigInt(order.asked_at) + STALE_SECONDS);
 
 /**
@@ -50,12 +52,16 @@ export function contestOff(contest, now) {
   if (contest.verdict === 'Off') return true;
   if (contest.verdict !== 'Open') return false;
   const total = contest.sides.reduce((sum, side) => sum + BigInt(side), 0n);
-  return BigInt(now) > BigInt(contest.result_by) || (BigInt(now) >= BigInt(contest.closes_at) && total < BigInt(contest.min_pot ?? 0));
+  return (
+    BigInt(now) > BigInt(contest.result_by) ||
+    (BigInt(now) >= BigInt(contest.closes_at) && total < BigInt(contest.min_pot ?? 0))
+  );
 }
 
 /** Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
  * `STALE_SECONDS` by `now` (Unix seconds, the chain's clock): anyone may ask again. */
-export const lotteryDrawStuck = (round, now) => round?.status === 'Drawing' && BigInt(now) > BigInt(round.asked_at) + STALE_SECONDS;
+export const lotteryDrawStuck = (round, now) =>
+  round?.status === 'Drawing' && BigInt(now) > BigInt(round.asked_at) + STALE_SECONDS;
 
 /**
  * Whether a lottery round's draw (`round`: its decoded record) was asked for and the oracle has not answered within
@@ -63,7 +69,8 @@ export const lotteryDrawStuck = (round, now) => round?.status === 'Drawing' && B
  * the next ask of that round (`drawLotteryIx` with its address) cancels it, and every entry is refunded. A round nobody
  * asked to draw is never cancelled.
  */
-export const lotteryCancellable = (round, now) => round?.status === 'Drawing' && BigInt(now) > BigInt(round.first_asked_at) + LOTTERY_TIMEOUT_SECONDS;
+export const lotteryCancellable = (round, now) =>
+  round?.status === 'Drawing' && BigInt(now) > BigInt(round.first_asked_at) + LOTTERY_TIMEOUT_SECONDS;
 
 /** A farm seat's `earns_until` when nothing ends its earning (i64::MAX): no tier term and no fuel it reads. */
 export const NO_END = (1n << 63n) - 1n;

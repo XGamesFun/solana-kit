@@ -22,7 +22,7 @@ const NOW = 1_790_000_000;
 
 /** A wallet: signs each prepared wire in its own slot, as signTransaction does. */
 const signAll = (wallet, wires) =>
-  wires.map((b64) => {
+  wires.map(b64 => {
     const t = readTransaction(fromBase64(b64));
     const sigs = [...t.signatures];
     sigs[t.signers.indexOf(wallet.address)] = wallet.sign(t.message);
@@ -60,50 +60,101 @@ function failsAfterSuccess(w, ix) {
   throw new Error('the transaction succeeded');
 }
 
-test('a transaction with an error gives no receipts, though its logs show every instruction succeeded', { skip }, () => {
-  const w = world({ seed: 'error-receipts' });
-  const balance = w.balance(w.player);
-  const pay = loot.payIx({ player: w.player, project: w.project, mint: w.mint, treasury: w.treasury, amount: PRICE, shares: [], reference: 'order-1' });
-  const [logs, error] = failsAfterSuccess(w, pay);
-  assert.match(error, /rent/i);
-  assert.equal(w.balance(w.player), balance, 'the payment was rolled back');
-  assert.ok(logs.includes(`Program ${loot.LOOT_PROGRAM} success`) && !logs.some((l) => / failed/.test(l)), 'the logs read as all-success');
-  const err = { InsufficientFundsForRent: { account_index: 4 } };
-  assert.deepEqual(loot.receipts(logs, err), []);
-  assert.deepEqual(loot.receipts({ meta: { err, logMessages: logs } }), []);
-  assert.throws(() => loot.receipts(logs), /meta\.err/);
-  assert.throws(() => loot.receipts({ logMessages: logs }), /meta\.err/);
+test(
+  'a transaction with an error gives no receipts, though its logs show every instruction succeeded',
+  { skip },
+  () => {
+    const w = world({ seed: 'error-receipts' });
+    const balance = w.balance(w.player);
+    const pay = loot.payIx({
+      player: w.player,
+      project: w.project,
+      mint: w.mint,
+      treasury: w.treasury,
+      amount: PRICE,
+      shares: [],
+      reference: 'order-1',
+    });
+    const [logs, error] = failsAfterSuccess(w, pay);
+    assert.match(error, /rent/i);
+    assert.equal(w.balance(w.player), balance, 'the payment was rolled back');
+    assert.ok(
+      logs.includes(`Program ${loot.LOOT_PROGRAM} success`) && !logs.some(l => / failed/.test(l)),
+      'the logs read as all-success',
+    );
+    const err = { InsufficientFundsForRent: { account_index: 4 } };
+    assert.deepEqual(loot.receipts(logs, err), []);
+    assert.deepEqual(loot.receipts({ meta: { err, logMessages: logs } }), []);
+    assert.throws(() => loot.receipts(logs), /meta\.err/);
+    assert.throws(() => loot.receipts({ logMessages: logs }), /meta\.err/);
 
-  w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
-  w.upsert({ Box: { id: 8, args: boxArgs(PRICE, [itemDrop(2)]) } });
-  const buy = () => loot.buyIx({ player: w.player, project: w.project, box: w.read('LootBox', loot.pda.box(w.project, 8)), treasury: w.treasury, items: { 2: w.read('Item', loot.pda.item(w.project, 2)) } });
-  const [buyLogs] = failsAfterSuccess(w, buy());
-  assert.deepEqual(loot.receipts({ meta: { err: { InsufficientFundsForRent: { account_index: 6 } }, logMessages: buyLogs } }), []);
-  const sent = w.chain.send(w.player, [buy()]);
-  assert.deepEqual(loot.receipts({ meta: { err: null, logMessages: sent.logs } }).map((r) => r.name), ['Bought', 'PrizeGiven']);
-  assert.deepEqual(loot.receipts(sent.logs, null).map((r) => r.name), ['Bought', 'PrizeGiven']);
-});
+    w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
+    w.upsert({ Box: { id: 8, args: boxArgs(PRICE, [itemDrop(2)]) } });
+    const buy = () =>
+      loot.buyIx({
+        player: w.player,
+        project: w.project,
+        box: w.read('LootBox', loot.pda.box(w.project, 8)),
+        treasury: w.treasury,
+        items: { 2: w.read('Item', loot.pda.item(w.project, 2)) },
+      });
+    const [buyLogs] = failsAfterSuccess(w, buy());
+    assert.deepEqual(
+      loot.receipts({ meta: { err: { InsufficientFundsForRent: { account_index: 6 } }, logMessages: buyLogs } }),
+      [],
+    );
+    const sent = w.chain.send(w.player, [buy()]);
+    assert.deepEqual(
+      loot.receipts({ meta: { err: null, logMessages: sent.logs } }).map(r => r.name),
+      ['Bought', 'PrizeGiven'],
+    );
+    assert.deepEqual(
+      loot.receipts(sent.logs, null).map(r => r.name),
+      ['Bought', 'PrizeGiven'],
+    );
+  },
+);
 
 test('the approval reads an existing mint’s decimals and refuses a spec that says otherwise', { skip }, async () => {
-  const seeded = (decimals, mint) => (w) => ({
-    version: 2, name: 'Prize pool', currency: 'usdc', collection: false,
+  const seeded = (decimals, mint) => w => ({
+    version: 2,
+    name: 'Prize pool',
+    currency: 'usdc',
+    collection: false,
     tokens: [{ key: 'usdc', symbol: 'USDC', source: 'existing', mint: mint ?? w.mint, decimals }],
     pools: [{ key: 'prizes', currency: 'usdc', seed: 1 }],
   });
   // The mint has 6 decimals: 9 would put 1,000 USDC in the pool while the page says 1.
   const wrong = await approval('decimals-wrong', seeded(9));
   const state = await wrong.session.stateFor(wrong.owner.address);
-  assert.match(state.refused, /9 decimals; its mint \w+ has 6, so every amount in it would be 1000 times what the page shows\. Write "decimals": 6\./);
-  await assert.rejects(wrong.session.prepare(wrong.owner.address), (e) => e.status === 409 && /has 6/.test(e.message));
+  assert.match(
+    state.refused,
+    /9 decimals; its mint \w+ has 6, so every amount in it would be 1000 times what the page shows\. Write "decimals": 6\./,
+  );
+  await assert.rejects(wrong.session.prepare(wrong.owner.address), e => e.status === 409 && /has 6/.test(e.message));
   assert.equal(wrong.w.balance(wrong.owner.address), 5_000_000_000n, 'nothing moved');
 
-  const price = await approval('decimals-price', (w) => ({
-    version: 2, name: 'Shop', currency: 'usdc', collection: false,
+  const price = await approval('decimals-price', w => ({
+    version: 2,
+    name: 'Shop',
+    currency: 'usdc',
+    collection: false,
     tokens: [{ key: 'usdc', symbol: 'USDC', source: 'existing', mint: w.mint, decimals: 3 }],
     pools: [{ key: 'house', currency: 'usdc' }],
-    boxes: [{ key: 'chest', name: 'Chest', price: 10, split: [{ to: 'pool:house', percent: 100 }], outcomes: [{ gives: 'nothing', chance: 100 }] }],
+    boxes: [
+      {
+        key: 'chest',
+        name: 'Chest',
+        price: 10,
+        split: [{ to: 'pool:house', percent: 100 }],
+        outcomes: [{ gives: 'nothing', chance: 100 }],
+      },
+    ],
   }));
-  await assert.rejects(price.session.prepare(price.owner.address), /3 decimals; its mint \w+ has 6, so every amount in it would be 1\/1000 of what the page shows/);
+  await assert.rejects(
+    price.session.prepare(price.owner.address),
+    /3 decimals; its mint \w+ has 6, so every amount in it would be 1\/1000 of what the page shows/,
+  );
 
   const wsol = await approval('decimals-wsol', seeded(12, NATIVE_MINT));
   await assert.rejects(wsol.session.prepare(wsol.owner.address), /wrapped SOL, which has 9/);
@@ -115,31 +166,53 @@ test('the approval reads an existing mint’s decimals and refuses a spec that s
   assert.equal(right.w.chain.tokens(loot.pda.pool(saved.live.project, saved.pools[0].index)), 1_000_000n);
 });
 
-test('the page lists each wallet of a grant’s list with its amount, the prize and the limits, and warns of outside ones', { skip }, async () => {
-  let attacker, members;
-  const a = await approval('grant-list', (w) => {
-    members = [newAddress(w.random), newAddress(w.random)];
-    attacker = newAddress(w.random);
-    return {
-      version: 2, name: 'Airdrop', currency: 'coin', collection: false,
-      tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6 }],
-      pools: [{ key: 'prizes', currency: 'coin', seed: 300 }],
-      grants: [{ key: 'drop', name: 'Community airdrop', prize: { gives: 'tokens', from: 'pool:prizes', amount: 100 }, list: [...members, { wallet: attacker, amount: 50, round: 2 }], limits: { total: 3 } }],
-    };
-  });
-  for (const state of [a.session.state(), await a.session.stateFor(a.owner.address)]) {
-    const grant = state.steps.find((s) => s.id.startsWith('grant:drop')).details;
-    assert.ok(grant.includes('Each claim gets: up to 100 COIN from the pool “prizes”'), grant.join('\n'));
-    assert.ok(grant.includes('Limits: 3 claims in all'));
-    for (const m of members) assert.ok(grant.includes(`On its list, ${m}: gets the prize above`));
-    assert.ok(grant.includes(`On its list, ${attacker}: gets 50 COIN, in round 2`));
-    assert.ok(state.warnings.some((x) => x.includes('other than your wallet') && x.includes(attacker)), state.warnings.join('\n'));
-  }
-});
+test(
+  'the page lists each wallet of a grant’s list with its amount, the prize and the limits, and warns of outside ones',
+  { skip },
+  async () => {
+    let attacker, members;
+    const a = await approval('grant-list', w => {
+      members = [newAddress(w.random), newAddress(w.random)];
+      attacker = newAddress(w.random);
+      return {
+        version: 2,
+        name: 'Airdrop',
+        currency: 'coin',
+        collection: false,
+        tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6 }],
+        pools: [{ key: 'prizes', currency: 'coin', seed: 300 }],
+        grants: [
+          {
+            key: 'drop',
+            name: 'Community airdrop',
+            prize: { gives: 'tokens', from: 'pool:prizes', amount: 100 },
+            list: [...members, { wallet: attacker, amount: 50, round: 2 }],
+            limits: { total: 3 },
+          },
+        ],
+      };
+    });
+    for (const state of [a.session.state(), await a.session.stateFor(a.owner.address)]) {
+      const grant = state.steps.find(s => s.id.startsWith('grant:drop')).details;
+      assert.ok(grant.includes('Each claim gets: up to 100 COIN from the pool “prizes”'), grant.join('\n'));
+      assert.ok(grant.includes('Limits: 3 claims in all'));
+      for (const m of members) assert.ok(grant.includes(`On its list, ${m}: gets the prize above`));
+      assert.ok(grant.includes(`On its list, ${attacker}: gets 50 COIN, in round 2`));
+      assert.ok(
+        state.warnings.some(x => x.includes('other than your wallet') && x.includes(attacker)),
+        state.warnings.join('\n'),
+      );
+    }
+  },
+);
 
 test('a change is held against the records on chain, not the file’s own copy of what is live', { skip }, async () => {
   const a = await approval('chain-records', () => ({
-    version: 2, name: 'Shop', currency: 'sol', collection: false, tokens: [{ key: 'sol', source: 'sol' }],
+    version: 2,
+    name: 'Shop',
+    currency: 'sol',
+    collection: false,
+    tokens: [{ key: 'sol', source: 'sol' }],
     boxes: [{ key: 'chest', name: 'Chest', price: 0.1, split: [], outcomes: [{ gives: 'nothing', chance: 100 }] }],
   }));
   const saved = await a.runAll();
@@ -151,21 +224,40 @@ test('a change is held against the records on chain, not the file’s own copy o
   planted.live.published.boxes[0] = { ...planted.live.published.boxes[0], split: share };
   writeFileSync(a.file, JSON.stringify(planted, null, 2));
   const session = await createApproval({ file: a.file, chain: approvalChain(a.w), now: () => NOW });
-  assert.ok(session.state().warnings.some((x) => /not been read from the chain yet/.test(x)));
+  assert.ok(session.state().warnings.some(x => /not been read from the chain yet/.test(x)));
   const state = await session.stateFor(a.owner.address);
-  const box = state.steps.find((s) => s.id.startsWith('box:chest')).details;
-  assert.ok(box.some((d) => d.includes(`50% to the wallet ${attacker}`) && d.includes('(changed: it was all of it to the treasury')), box.join('\n'));
-  assert.ok(state.warnings.some((x) => x.includes('the live economy does not') && x.includes(attacker)), state.warnings.join('\n'));
+  const box = state.steps.find(s => s.id.startsWith('box:chest')).details;
+  assert.ok(
+    box.some(
+      d => d.includes(`50% to the wallet ${attacker}`) && d.includes('(changed: it was all of it to the treasury'),
+    ),
+    box.join('\n'),
+  );
+  assert.ok(
+    state.warnings.some(x => x.includes('the live economy does not') && x.includes(attacker)),
+    state.warnings.join('\n'),
+  );
   // What the wallet is asked to sign is marked the same way.
   const batch = await session.prepare(a.owner.address);
-  assert.ok(batch.details.flat().some((d) => d.includes(attacker) && d.includes('(changed:')));
+  assert.ok(batch.details.flat().some(d => d.includes(attacker) && d.includes('(changed:')));
 });
 
 test('rent the RPC asks for is held against what any cluster charges, and refused above it', { skip }, async () => {
-  const coins = () => ({ version: 2, name: 'Coins', currency: 'coin', collection: false, tokens: [{ key: 'coin', source: 'game', symbol: 'COIN', decimals: 6 }], pools: [{ key: 'p', currency: 'coin' }] });
+  const coins = () => ({
+    version: 2,
+    name: 'Coins',
+    currency: 'coin',
+    collection: false,
+    tokens: [{ key: 'coin', source: 'game', symbol: 'COIN', decimals: 6 }],
+    pools: [{ key: 'p', currency: 'coin' }],
+  });
   const lying = await approval('rent-cap', coins, { chain: { rent: async () => 500_000_000_000n } });
   const sol = lying.w.chain.get(lying.owner.address).lamports;
-  await assert.rejects(lying.session.prepare(lying.owner.address), (e) => e.status === 502 && /needs 500000000000 lamports of rent; no cluster charges more than 1461600/.test(e.message));
+  await assert.rejects(
+    lying.session.prepare(lying.owner.address),
+    e =>
+      e.status === 502 && /needs 500000000000 lamports of rent; no cluster charges more than 1461600/.test(e.message),
+  );
   await assert.rejects(lying.session.stateFor(lying.owner.address), /no cluster charges more/);
   assert.equal(lying.w.chain.get(lying.owner.address).lamports, sol);
   // LiteSVM's own rent is within the bound, and goes live.
@@ -174,7 +266,28 @@ test('rent the RPC asks for is held against what any cluster charges, and refuse
 });
 
 test('the player module takes only a plain decimal amount, with at most the token’s decimals', () => {
-  for (const bad of ['0x1', '0x10', '0b1', '0o7', '1.2.3', '', ' ', '1e3', '-1', '1.0000009', '1,5', '.5', '5.', 'abc', undefined, null, -1, Infinity, NaN, 1n]) {
+  for (const bad of [
+    '0x1',
+    '0x10',
+    '0b1',
+    '0o7',
+    '1.2.3',
+    '',
+    ' ',
+    '1e3',
+    '-1',
+    '1.0000009',
+    '1,5',
+    '.5',
+    '5.',
+    'abc',
+    undefined,
+    null,
+    -1,
+    Infinity,
+    NaN,
+    1n,
+  ]) {
     assert.throws(() => units(bad, 6), /is not an amount|more decimals/, String(bad));
   }
   assert.equal(units('1.5', 6), 1_500_000n);
@@ -187,10 +300,30 @@ test('the player module takes only a plain decimal amount, with at most the toke
 
 test('the SOL total of going live counts a lottery’s seed and a sealed schedule’s funds', () => {
   const spec = {
-    version: 2, name: 'Draw', currency: 'sol', collection: false, tokens: [{ key: 'sol', source: 'sol' }],
+    version: 2,
+    name: 'Draw',
+    currency: 'sol',
+    collection: false,
+    tokens: [{ key: 'sol', source: 'sol' }],
     // (`roundRent` 0: its rounds' rent is counted on its own, `check-warnings`.)
-    lotteries: [{ key: 'weekly', name: 'Weekly', price: 0.01, every: '7d', seed: 5, roundRent: 0, places: [{ percent: 100 }] }],
-    schedules: [{ key: 'drip', name: 'Drip', does: 'pay', sealed: true, currency: 'sol', to: 'wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T', amount: 0.1, start: 'publish+1d', every: '1d', maxRuns: 20, fund: 2 }],
+    lotteries: [
+      { key: 'weekly', name: 'Weekly', price: 0.01, every: '7d', seed: 5, roundRent: 0, places: [{ percent: 100 }] },
+    ],
+    schedules: [
+      {
+        key: 'drip',
+        name: 'Drip',
+        does: 'pay',
+        sealed: true,
+        currency: 'sol',
+        to: 'wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T',
+        amount: 0.1,
+        start: 'publish+1d',
+        every: '1d',
+        maxRuns: 20,
+        fund: 2,
+      },
+    ],
   };
   const setup = cost(spec, { now: NOW }).setup;
   assert.deepEqual(setup.seeds, { SOL: 7 });
@@ -213,7 +346,7 @@ test('the browser is opened with a one-time code, never the session token', { sk
   const asked = [];
   let served;
   try {
-    served = await approve({ file, chain: approvalChain(w), log: () => {}, openLink: (url) => asked.push(url) });
+    served = await approve({ file, chain: approvalChain(w), log: () => {}, openLink: url => asked.push(url) });
   } finally {
     if (noOpen !== undefined) process.env.XSOLANA_NO_OPEN = noOpen;
   }
@@ -238,52 +371,86 @@ test('the browser is opened with a one-time code, never the session token', { sk
 // The one-time code was once on xdg-open's command line, which another user of the machine can read
 // (/proc/<pid>/cmdline) and redeem before the browser does. The opener now gets the path of a page only this user can
 // read, which sends the browser on to the code's link, and the page is removed once the code is used.
-test('the opener\'s command line carries no code; the page it opens is private and removed once used', { skip }, async () => {
-  const w = world({ project: false, seed: 'opener-page' });
-  const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-approval-')), 'xsolana.json');
-  writeFileSync(file, readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url)));
-  const noOpen = process.env.XSOLANA_NO_OPEN;
-  delete process.env.XSOLANA_NO_OPEN;
-  const spawned = [];
-  const spawnImpl = (cmd, args) => { spawned.push([cmd, ...args]); return { unref() {} }; };
-  let served;
-  try {
-    served = await approve({ file, chain: approvalChain(w), log: () => {}, openLink: (url) => openBrowser(url, { spawnImpl }) });
-  } finally {
-    if (noOpen !== undefined) process.env.XSOLANA_NO_OPEN = noOpen;
-  }
-  const { server, opened } = served;
-  try {
-    const code = new URL(opened).searchParams.get('c');
-    assert.equal(spawned.length, 1);
-    assert.ok(!spawned[0].join(' ').includes(code), 'no code on the command line');
-    const page = spawned[0].at(-1);
-    assert.equal(statSync(page).mode & 0o777, 0o600);
-    assert.equal(statSync(path.dirname(page)).mode & 0o777, 0o700);
-    assert.ok(readFileSync(page, 'utf8').includes(`url=${opened}`), 'the page sends the browser on to the code\'s link');
-    assert.equal((await fetch(opened, { redirect: 'manual' })).status, 303);
-    for (let i = 0; i < 50 && existsSync(path.dirname(page)); i++) await new Promise((r) => setTimeout(r, 10));
-    assert.equal(existsSync(path.dirname(page)), false, 'removed once the code is used');
-  } finally {
-    server.close();
-  }
-});
+test(
+  "the opener's command line carries no code; the page it opens is private and removed once used",
+  { skip },
+  async () => {
+    const w = world({ project: false, seed: 'opener-page' });
+    const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-approval-')), 'xsolana.json');
+    writeFileSync(file, readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url)));
+    const noOpen = process.env.XSOLANA_NO_OPEN;
+    delete process.env.XSOLANA_NO_OPEN;
+    const spawned = [];
+    const spawnImpl = (cmd, args) => {
+      spawned.push([cmd, ...args]);
+      return { unref() {} };
+    };
+    let served;
+    try {
+      served = await approve({
+        file,
+        chain: approvalChain(w),
+        log: () => {},
+        openLink: url => openBrowser(url, { spawnImpl }),
+      });
+    } finally {
+      if (noOpen !== undefined) process.env.XSOLANA_NO_OPEN = noOpen;
+    }
+    const { server, opened } = served;
+    try {
+      const code = new URL(opened).searchParams.get('c');
+      assert.equal(spawned.length, 1);
+      assert.ok(!spawned[0].join(' ').includes(code), 'no code on the command line');
+      const page = spawned[0].at(-1);
+      assert.equal(statSync(page).mode & 0o777, 0o600);
+      assert.equal(statSync(path.dirname(page)).mode & 0o777, 0o700);
+      assert.ok(
+        readFileSync(page, 'utf8').includes(`url=${opened}`),
+        "the page sends the browser on to the code's link",
+      );
+      assert.equal((await fetch(opened, { redirect: 'manual' })).status, 303);
+      for (let i = 0; i < 50 && existsSync(path.dirname(page)); i++) await new Promise(r => setTimeout(r, 10));
+      assert.equal(existsSync(path.dirname(page)), false, 'removed once the code is used');
+    } finally {
+      server.close();
+    }
+  },
+);
 
-test('a change that makes a closed grant again with the same list is warned: the list would pay its rounds again', { skip }, async () => {
-  const a = await approval('grant-remade', (w) => ({
-    version: 2, name: 'Airdrop', currency: 'coin', collection: false,
-    tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6 }],
-    pools: [{ key: 'prizes', currency: 'coin', seed: 300 }],
-    grants: [{ key: 'drop', name: 'Community airdrop', prize: { gives: 'tokens', from: 'pool:prizes', amount: 100 }, list: [newAddress(w.random)] }],
-  }));
-  const saved = await a.runAll();
-  const grant = loot.pda.grant(saved.live.project, saved.grants[0].id);
-  a.w.chain.send(a.owner.address, [loot.closeRecordIx({ owner: a.owner.address, project: saved.live.project, target: grant })]);
-  assert.equal(a.w.chain.get(grant), null, 'closed');
-  const again = structuredClone(saved);
-  again.grants[0].name = 'Community airdrop, again';
-  writeFileSync(a.file, JSON.stringify(again, null, 2));
-  const session = await createApproval({ file: a.file, chain: approvalChain(a.w), now: () => NOW });
-  const state = await session.stateFor(a.owner.address);
-  assert.ok(state.warnings.some((x) => x.includes('again after it was closed, with the same list')), state.warnings.join('\n'));
-});
+test(
+  'a change that makes a closed grant again with the same list is warned: the list would pay its rounds again',
+  { skip },
+  async () => {
+    const a = await approval('grant-remade', w => ({
+      version: 2,
+      name: 'Airdrop',
+      currency: 'coin',
+      collection: false,
+      tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6 }],
+      pools: [{ key: 'prizes', currency: 'coin', seed: 300 }],
+      grants: [
+        {
+          key: 'drop',
+          name: 'Community airdrop',
+          prize: { gives: 'tokens', from: 'pool:prizes', amount: 100 },
+          list: [newAddress(w.random)],
+        },
+      ],
+    }));
+    const saved = await a.runAll();
+    const grant = loot.pda.grant(saved.live.project, saved.grants[0].id);
+    a.w.chain.send(a.owner.address, [
+      loot.closeRecordIx({ owner: a.owner.address, project: saved.live.project, target: grant }),
+    ]);
+    assert.equal(a.w.chain.get(grant), null, 'closed');
+    const again = structuredClone(saved);
+    again.grants[0].name = 'Community airdrop, again';
+    writeFileSync(a.file, JSON.stringify(again, null, 2));
+    const session = await createApproval({ file: a.file, chain: approvalChain(a.w), now: () => NOW });
+    const state = await session.stateFor(a.owner.address);
+    assert.ok(
+      state.warnings.some(x => x.includes('again after it was closed, with the same list')),
+      state.warnings.join('\n'),
+    );
+  },
+);

@@ -26,38 +26,65 @@ const meta = (pubkey, isSigner, isWritable) => ({ pubkey, isSigner, isWritable }
 const ix = (keys, data) => ({ programId: LOOKUP_TABLE_PROGRAM, keys, data });
 
 /** The table `authority` makes at `slot` (a recent slot: the table's address names it): [address, bump]. */
-export const tableAddress = (authority, slot) => findProgramAddress([addressBytes(authority), uintLE(slot, 8)], LOOKUP_TABLE_PROGRAM);
+export const tableAddress = (authority, slot) =>
+  findProgramAddress([addressBytes(authority), uintLE(slot, 8)], LOOKUP_TABLE_PROGRAM);
 
 /** Makes the table `authority` owns at `slot`, its rent paid by `payer`. Returns { address, instruction }. */
 export function createTableIx({ authority, payer = authority, slot }) {
   const [address, bump] = tableAddress(authority, slot);
-  const instruction = ix([meta(address, false, true), meta(authority, true, false), meta(payer, true, true), meta(SYSTEM_PROGRAM, false, false)], concat(uintLE(0, 4), uintLE(slot, 8), Uint8Array.of(bump)));
+  const instruction = ix(
+    [
+      meta(address, false, true),
+      meta(authority, true, false),
+      meta(payer, true, true),
+      meta(SYSTEM_PROGRAM, false, false),
+    ],
+    concat(uintLE(0, 4), uintLE(slot, 8), Uint8Array.of(bump)),
+  );
   return { address, instruction };
 }
 
 /** Adds `addresses` to `table`, the rent of its growth paid by `payer`. */
 export const extendTableIx = ({ table, authority, payer = authority, addresses }) =>
-  ix([meta(table, false, true), meta(authority, true, false), meta(payer, true, true), meta(SYSTEM_PROGRAM, false, false)], concat(uintLE(2, 4), uintLE(addresses.length, 8), ...addresses.map(addressBytes)));
+  ix(
+    [
+      meta(table, false, true),
+      meta(authority, true, false),
+      meta(payer, true, true),
+      meta(SYSTEM_PROGRAM, false, false),
+    ],
+    concat(uintLE(2, 4), uintLE(addresses.length, 8), ...addresses.map(addressBytes)),
+  );
 
 /** Freezes `table`: nobody can add to it or close it after. */
-export const freezeTableIx = ({ table, authority }) => ix([meta(table, false, true), meta(authority, true, false)], uintLE(1, 4));
+export const freezeTableIx = ({ table, authority }) =>
+  ix([meta(table, false, true), meta(authority, true, false)], uintLE(1, 4));
 
 /** Deactivates `table`: transactions can still use it until it cools down, then it can be closed. */
-export const deactivateTableIx = ({ table, authority }) => ix([meta(table, false, true), meta(authority, true, false)], uintLE(3, 4));
+export const deactivateTableIx = ({ table, authority }) =>
+  ix([meta(table, false, true), meta(authority, true, false)], uintLE(3, 4));
 
 /** Closes a cooled-down `table`: its rent goes to `recipient`. */
-export const closeTableIx = ({ table, authority, recipient = authority }) => ix([meta(table, false, true), meta(authority, true, false), meta(recipient, false, true)], uintLE(4, 4));
+export const closeTableIx = ({ table, authority, recipient = authority }) =>
+  ix([meta(table, false, true), meta(authority, true, false), meta(recipient, false, true)], uintLE(4, 4));
 
 /**
  * A table's account read back: { authority (null once frozen), deactivationSlot (null while active),
  * lastExtendedSlot, addresses }, or null when `account` is not a lookup table.
  */
 export function readTable(account) {
-  if (!account || account.owner !== LOOKUP_TABLE_PROGRAM || account.data.length < TABLE_HEADER_BYTES || readUintLE(account.data, 0, 4) !== 1n) return null;
+  if (
+    !account ||
+    account.owner !== LOOKUP_TABLE_PROGRAM ||
+    account.data.length < TABLE_HEADER_BYTES ||
+    readUintLE(account.data, 0, 4) !== 1n
+  )
+    return null;
   const data = account.data;
   const deactivation = readUintLE(data, 4, 8);
   const addresses = [];
-  for (let at = TABLE_HEADER_BYTES; at + 32 <= data.length; at += 32) addresses.push(encodeBase58(data.subarray(at, at + 32)));
+  for (let at = TABLE_HEADER_BYTES; at + 32 <= data.length; at += 32)
+    addresses.push(encodeBase58(data.subarray(at, at + 32)));
   return {
     authority: data[21] === 1 ? encodeBase58(data.subarray(22, 54)) : null,
     deactivationSlot: deactivation === ACTIVE ? null : deactivation,
@@ -67,7 +94,7 @@ export function readTable(account) {
 }
 
 /** The filter that finds the tables `authority` owns (getProgramAccounts on LOOKUP_TABLE_PROGRAM). */
-export const tablesOf = (authority) => [{ memcmp: { offset: 22, bytes: authority } }];
+export const tablesOf = authority => [{ memcmp: { offset: 22, bytes: authority } }];
 
 /**
  * The slots the SlotHashes sysvar holds (its account's data: a count, then a slot and a hash each), newest first. It
@@ -95,7 +122,8 @@ export const SLOT_HASHES_HELD = 512;
 export function tableStep(table, slot, recent = null) {
   if (table.deactivationSlot === null) return 'active';
   if (BigInt(slot) <= table.deactivationSlot) return 'cooling';
-  if (recent) return recent.length >= SLOT_HASHES_HELD && recent.every((s) => s > table.deactivationSlot) ? 'close' : 'cooling';
+  if (recent)
+    return recent.length >= SLOT_HASHES_HELD && recent.every(s => s > table.deactivationSlot) ? 'close' : 'cooling';
   return BigInt(slot) > table.deactivationSlot + TABLE_COOLDOWN_SLOTS ? 'close' : 'cooling';
 }
 
@@ -105,17 +133,21 @@ export function tableStep(table, slot, recent = null) {
  * (`asV0`).
  */
 export function transactionLocks(payer, instructions, { asV0 = false } = {}) {
-  return new Set([payer, ...instructions.flatMap((i) => [i.programId, ...i.keys.map((k) => k.pubkey)])]).size + (asV0 ? 2 : 0);
+  return (
+    new Set([payer, ...instructions.flatMap(i => [i.programId, ...i.keys.map(k => k.pubkey)])]).size + (asV0 ? 2 : 0)
+  );
 }
 
 /** The accounts of `instructions` a table can hold: every one that is neither a signer nor a program they call, once. */
 export function tableAccounts(instructions) {
-  const signers = new Set(instructions.flatMap((i) => i.keys.filter((k) => k.isSigner).map((k) => k.pubkey)));
-  const programs = new Set(instructions.map((i) => i.programId));
-  return [...new Set(instructions.flatMap((i) => i.keys.map((k) => k.pubkey)))].filter((a) => !signers.has(a) && !programs.has(a));
+  const signers = new Set(instructions.flatMap(i => i.keys.filter(k => k.isSigner).map(k => k.pubkey)));
+  const programs = new Set(instructions.map(i => i.programId));
+  return [...new Set(instructions.flatMap(i => i.keys.map(k => k.pubkey)))].filter(
+    a => !signers.has(a) && !programs.has(a),
+  );
 }
 
-const sizeOf = (input) => {
+const sizeOf = input => {
   try {
     return transactionSize(compileMessage(input));
   } catch {
@@ -151,14 +183,23 @@ export function planTable({ payer, blockhash, slot, instructions, first = [] }) 
   const final = [...instructions, deactivateTableIx({ table: address, authority: payer })];
   // A transaction locks at most 64 accounts, its programs and those it loads from a table included.
   if (transactionLocks(payer, final) > MAX_ACCOUNT_LOCKS) return null;
-  if (sizeOf({ payer, blockhash, instructions: final, version: 0, lookupTables: [table] }) > MAX_TRANSACTION_BYTES) return null;
+  if (sizeOf({ payer, blockhash, instructions: final, version: 0, lookupTables: [table] }) > MAX_TRANSACTION_BYTES)
+    return null;
   const steps = [];
   let step = [create];
   let left = addresses;
   while (left.length) {
     // As many addresses as fit this step's transaction.
     let n = left.length;
-    while (n > 0 && sizeOf({ payer, blockhash, instructions: [...step, extendTableIx({ table: address, authority: payer, addresses: left.slice(0, n) })] }) > MAX_TRANSACTION_BYTES) n--;
+    while (
+      n > 0 &&
+      sizeOf({
+        payer,
+        blockhash,
+        instructions: [...step, extendTableIx({ table: address, authority: payer, addresses: left.slice(0, n) })],
+      }) > MAX_TRANSACTION_BYTES
+    )
+      n--;
     if (n === 0) {
       // Not one address fits beside the table's creation: the creation goes alone. Not one fits a transaction of its
       // own: no table can be made for this payer.
@@ -187,17 +228,23 @@ export function planTable({ payer, blockhash, slot, instructions, first = [] }) 
  * null when nothing fits: more accounts than a transaction locks, or instructions too long even as v0.
  */
 export function sendPlan({ payer, blockhash = SYSTEM_PROGRAM, instructions, alone = () => false }) {
-  if (compileFitting({ payer, blockhash, instructions })) return { legacy: true, first: [], budget: [], rest: instructions, table: false };
-  if (planTable({ payer, blockhash, slot: 0n, instructions })) return { legacy: false, first: [], budget: [], rest: instructions, table: true };
-  const budget = instructions.filter((i) => i.programId === COMPUTE_BUDGET_PROGRAM);
-  const first = instructions.filter((i) => alone(i));
-  const rest = instructions.filter((i) => !alone(i));
-  if (!first.length || first.some((i) => !compileFitting({ payer, blockhash, instructions: [...budget, i] }))) return null;
-  if (compileFitting({ payer, blockhash, instructions: rest })) return { legacy: false, first, budget, rest, table: false };
-  return planTable({ payer, blockhash, slot: 0n, instructions: rest }) ? { legacy: false, first, budget, rest, table: true } : null;
+  if (compileFitting({ payer, blockhash, instructions }))
+    return { legacy: true, first: [], budget: [], rest: instructions, table: false };
+  if (planTable({ payer, blockhash, slot: 0n, instructions }))
+    return { legacy: false, first: [], budget: [], rest: instructions, table: true };
+  const budget = instructions.filter(i => i.programId === COMPUTE_BUDGET_PROGRAM);
+  const first = instructions.filter(i => alone(i));
+  const rest = instructions.filter(i => !alone(i));
+  if (!first.length || first.some(i => !compileFitting({ payer, blockhash, instructions: [...budget, i] })))
+    return null;
+  if (compileFitting({ payer, blockhash, instructions: rest }))
+    return { legacy: false, first, budget, rest, table: false };
+  return planTable({ payer, blockhash, slot: 0n, instructions: rest })
+    ? { legacy: false, first, budget, rest, table: true }
+    : null;
 }
 
-const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const pause = ms => new Promise(r => setTimeout(r, ms));
 /** The tables this page made, by address: two sends never name the same one, even in one slot. */
 const madeHere = new Set();
 
@@ -229,24 +276,47 @@ async function freshSlot(rpc, payer) {
  * plain sentence when it can't be sent. Returns { signature (the last transaction's), table (its address, or null),
  * steps (the signatures of the transactions before it) }.
  */
-export async function sendFitting({ rpc, payer, instructions, sign, table = true, alone = () => false, first = [], standing = [], sleep = pause }) {
-  const sendOne = async (build) => {
+export async function sendFitting({
+  rpc,
+  payer,
+  instructions,
+  sign,
+  table = true,
+  alone = () => false,
+  first = [],
+  standing = [],
+  sleep = pause,
+}) {
+  const sendOne = async build => {
     const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();
     const message = build(blockhash);
     const signature = await rpc.send(await sign(message));
     await rpc.confirm?.(signature, { lastValidBlockHeight });
     return signature;
   };
-  const plain = (list) => sendOne((bh) => compileMessage({ payer, blockhash: bh, instructions: list }));
+  const plain = list => sendOne(bh => compileMessage({ payer, blockhash: bh, instructions: list }));
   const { blockhash } = await rpc.latestBlockhash();
   const plan = sendPlan({ payer, blockhash, instructions, alone });
-  if (!plan) throw new Error(`This transaction is too large to send even as a v0 one with a lookup table: it names ${tableAccounts(instructions).length + 1} accounts or more (a transaction locks at most 64), or its instructions are too long.`);
+  if (!plan)
+    throw new Error(
+      `This transaction is too large to send even as a v0 one with a lookup table: it names ${tableAccounts(instructions).length + 1} accounts or more (a transaction locks at most 64), or its instructions are too long.`,
+    );
   if (plan.legacy) return { signature: await plain(instructions), table: null, steps: [] };
   // Standing tables (a project's, made at go-live; each still active) that hold enough of its accounts: one v0
   // transaction with them, and no table of its own.
   const fits = standing.length && compileFitting({ payer, blockhash, instructions, tables: standing });
-  if (fits && fits[0] === 0x80) return { signature: await sendOne((bh) => compileMessage({ payer, blockhash: bh, instructions, version: 0, lookupTables: standing })), table: null, steps: [] };
-  if (plan.table && !table) throw new Error(`This transaction takes ${sizeOf({ payer, blockhash, instructions })} bytes, more than the ${MAX_TRANSACTION_BYTES} a legacy one holds, and this key holds no rent for a lookup table.`);
+  if (fits && fits[0] === 0x80)
+    return {
+      signature: await sendOne(bh =>
+        compileMessage({ payer, blockhash: bh, instructions, version: 0, lookupTables: standing }),
+      ),
+      table: null,
+      steps: [],
+    };
+  if (plan.table && !table)
+    throw new Error(
+      `This transaction takes ${sizeOf({ payer, blockhash, instructions })} bytes, more than the ${MAX_TRANSACTION_BYTES} a legacy one holds, and this key holds no rent for a lookup table.`,
+    );
   const steps = [];
   const proofs = async () => {
     for (const ix of plan.first) steps.push(await plain([...plan.budget, ix]));
@@ -264,16 +334,28 @@ export async function sendFitting({ rpc, payer, instructions, sign, table = true
   let usable = false;
   for (let i = 0; i < 40 && !usable; i++) {
     held = readTable(await rpc.account(made.table.address));
-    usable = Boolean(held && made.table.addresses.every((a) => held.addresses.includes(a)) && BigInt(await rpc.call('getSlot', [{ commitment: 'confirmed' }])) > held.lastExtendedSlot);
+    usable = Boolean(
+      held &&
+      made.table.addresses.every(a => held.addresses.includes(a)) &&
+      BigInt(await rpc.call('getSlot', [{ commitment: 'confirmed' }])) > held.lastExtendedSlot,
+    );
     if (!usable) await sleep(400);
   }
-  if (!held || !made.table.addresses.every((a) => held.addresses.includes(a))) throw new Error(`The lookup table ${made.table.address} doesn't hold this transaction's accounts yet: try again in a moment.`);
+  if (!held || !made.table.addresses.every(a => held.addresses.includes(a)))
+    throw new Error(
+      `The lookup table ${made.table.address} doesn't hold this transaction's accounts yet: try again in a moment.`,
+    );
   // Sent before the slot passes the table's last addition, the transaction would be refused for addresses it can't load.
-  if (!usable) throw new Error(`The lookup table ${made.table.address} is made, but the network has not moved past the slot it was last added to: try again in a moment.`);
+  if (!usable)
+    throw new Error(
+      `The lookup table ${made.table.address} is made, but the network has not moved past the slot it was last added to: try again in a moment.`,
+    );
   await proofs();
   const tables = [{ address: made.table.address, addresses: held.addresses }];
   const message = compileFitting({ payer, blockhash, instructions: made.final, tables });
   if (!message || message[0] !== 0x80) throw new Error('This transaction doesn’t fit even with its lookup table.');
-  const signature = await sendOne((bh) => compileMessage({ payer, blockhash: bh, instructions: made.final, version: 0, lookupTables: tables }));
+  const signature = await sendOne(bh =>
+    compileMessage({ payer, blockhash: bh, instructions: made.final, version: 0, lookupTables: tables }),
+  );
   return { signature, table: made.table.address, steps };
 }

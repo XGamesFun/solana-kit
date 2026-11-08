@@ -24,9 +24,7 @@
       "name": "The raise",
       "currency": "sol",
       "sides": 1,
-      "sideNames": [
-        "Back it"
-      ],
+      "sideNames": ["Back it"],
       "entriesClose": "7d",
       "resultDue": "8d",
       "minPot": 50,

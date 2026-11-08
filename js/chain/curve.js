@@ -9,7 +9,7 @@ const P = 2n ** 255n - 19n;
 const D = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
 const Y_MASK = (1n << 255n) - 1n;
 
-const mod = (a) => {
+const mod = a => {
   const r = a % P;
   return r >= 0n ? r : r + P;
 };

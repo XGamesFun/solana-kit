@@ -19,11 +19,18 @@ export const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 export const EXECUTE_DISCRIMINATOR = Uint8Array.of(105, 37, 101, 197, 75, 251, 102, 26);
 
 const ACCOUNT_TYPE_MINT = 1;
-const EXTENSION = { DefaultAccountState: 6, MemoTransfer: 8, PermanentDelegate: 12, TransferHook: 14, PausableConfig: 26 };
+const EXTENSION = {
+  DefaultAccountState: 6,
+  MemoTransfer: 8,
+  PermanentDelegate: 12,
+  TransferHook: 14,
+  PausableConfig: 26,
+};
 const META_BYTES = 35;
 
 function checkedSlice(data, at, length, what) {
-  if (!Number.isInteger(at) || !Number.isInteger(length) || at < 0 || length < 0 || at + length > data.length) throw new RangeError(`${what} runs past the data`);
+  if (!Number.isInteger(at) || !Number.isInteger(length) || at < 0 || length < 0 || at + length > data.length)
+    throw new RangeError(`${what} runs past the data`);
   return data.subarray(at, at + length);
 }
 
@@ -57,7 +64,12 @@ export function hookProgramOf(mintData) {
  * each reads the setting once, as it opens, and a refund or payout opened into a frozen account would never land.
  */
 export function mayStartFrozen({ owner, data }) {
-  if (owner !== TOKEN_2022_PROGRAM || data.length <= TOKEN_ACCOUNT_BYTES || data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT) return false;
+  if (
+    owner !== TOKEN_2022_PROGRAM ||
+    data.length <= TOKEN_ACCOUNT_BYTES ||
+    data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT
+  )
+    return false;
   const state = extension(data, EXTENSION.DefaultAccountState);
   if (!state) return false;
   const freezer = data.length >= 50 && readUintLE(data, 46, 4) !== 0n;
@@ -73,10 +85,16 @@ export function mayStartFrozen({ owner, data }) {
 export function mintPowers({ owner, data }) {
   const out = [];
   if (owner !== TOKEN_PROGRAM && owner !== TOKEN_2022_PROGRAM) return out;
-  const option = (at) => (data.length >= at + 36 && readUintLE(data, at, 4) === 1n ? encodeBase58(data.subarray(at + 4, at + 36)) : null);
+  const option = at =>
+    data.length >= at + 36 && readUintLE(data, at, 4) === 1n ? encodeBase58(data.subarray(at + 4, at + 36)) : null;
   const freezer = option(46);
   if (freezer) out.push({ power: 'freeze', holder: freezer });
-  if (owner !== TOKEN_2022_PROGRAM || data.length <= TOKEN_ACCOUNT_BYTES || data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT) return out;
+  if (
+    owner !== TOKEN_2022_PROGRAM ||
+    data.length <= TOKEN_ACCOUNT_BYTES ||
+    data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT
+  )
+    return out;
   const address = (value, at) => {
     const a = value && value.length >= at + 32 ? encodeBase58(value.subarray(at, at + 32)) : null;
     return a === NO_ADDRESS ? null : a;
@@ -97,7 +115,8 @@ export function requiresMemo(accountData) {
 }
 
 /** The hook's list of extra accounts for this mint. */
-export const validationAddress = (mint, hookProgram) => pdaOf([utf8('extra-account-metas'), addressBytes(mint)], hookProgram);
+export const validationAddress = (mint, hookProgram) =>
+  pdaOf([utf8('extra-account-metas'), addressBytes(mint)], hookProgram);
 
 /** The ExtraAccountMeta entries of an "extra-account-metas" account: [{ discriminator, config, isSigner, isWritable }]. */
 export function readExtraMetas(data) {
@@ -113,7 +132,12 @@ export function readExtraMetas(data) {
       return Array.from({ length: count }, (_, i) => {
         const o = at + 16 + i * META_BYTES;
         if (o + META_BYTES > at + 12 + length) throw new RangeError('extra account list runs past its entry');
-        return { discriminator: data[o], config: data.subarray(o + 1, o + 33), isSigner: data[o + 33] !== 0, isWritable: data[o + 34] !== 0 };
+        return {
+          discriminator: data[o],
+          config: data.subarray(o + 1, o + 33),
+          isSigner: data[o + 33] !== 0,
+          isWritable: data[o + 34] !== 0,
+        };
       });
     }
     at += 12 + length;
@@ -124,7 +148,7 @@ export function readExtraMetas(data) {
 /** The seeds a PDA entry packs into its 32 bytes: [{ literal } | { ixData: [index, length] } | { key: index } | { data: [account, at, length] }]. */
 function unpackSeeds(config) {
   const seeds = [];
-  for (let at = 0; at < config.length && config[at] !== 0; ) {
+  for (let at = 0; at < config.length && config[at] !== 0;) {
     const kind = config[at];
     if (kind === 1) {
       seeds.push({ literal: checkedSlice(config, at + 2, config[at + 1], 'literal seed') });
@@ -182,8 +206,12 @@ async function resolveFor(mint, hookProgram, validation, metas, transfer, read) 
 }
 
 /** Whether the hook's list depends on which transfer it is (an account, the amount or account data). */
-const perTransfer = (metas) =>
-  metas.some((m) => m.discriminator >= 128 || (m.discriminator === 1 && unpackSeeds(m.config).some((s) => !s.literal && !(s.key === 1 || s.key === 4))));
+const perTransfer = metas =>
+  metas.some(
+    m =>
+      m.discriminator >= 128 ||
+      (m.discriminator === 1 && unpackSeeds(m.config).some(s => !s.literal && !(s.key === 1 || s.key === 4))),
+  );
 
 /**
  * The accounts to append after an instruction's own remaining accounts so every transfer of `mint` it makes can run:
@@ -205,13 +233,20 @@ export async function transferExtras(rpc, mint, transfers = []) {
   if (!list) throw new Error('The transfer hook account list is missing.');
   if (list.owner !== hookProgram) throw new Error('The transfer hook account list has the wrong owner.');
   const metas = readExtraMetas(list.data);
-  const read = async (address) => (await rpc.accounts([address]))[0]?.data ?? null;
-  const cases = perTransfer(metas) ? transfers : [{ source: NO_ADDRESS, destination: NO_ADDRESS, authority: NO_ADDRESS, amount: 0n }];
+  const read = async address => (await rpc.accounts([address]))[0]?.data ?? null;
+  const cases = perTransfer(metas)
+    ? transfers
+    : [{ source: NO_ADDRESS, destination: NO_ADDRESS, authority: NO_ADDRESS, amount: 0n }];
   if (!cases.length) throw new Error('This token’s transfer hook needs to know each transfer; pass them.');
-  for (const transfer of cases) for (const m of await resolveFor(mint, hookProgram, validation, metas, transfer, read)) extras.push(m);
+  for (const transfer of cases)
+    for (const m of await resolveFor(mint, hookProgram, validation, metas, transfer, read)) extras.push(m);
   // One entry per address; writable if any transfer needs it writable.
   const merged = new Map();
-  for (const m of extras) merged.set(m.pubkey, merged.has(m.pubkey) ? { ...m, isWritable: m.isWritable || merged.get(m.pubkey).isWritable } : m);
+  for (const m of extras)
+    merged.set(
+      m.pubkey,
+      merged.has(m.pubkey) ? { ...m, isWritable: m.isWritable || merged.get(m.pubkey).isWritable } : m,
+    );
   return [...merged.values()];
 }
 
@@ -220,7 +255,11 @@ export function associatedAccountSize(mintAccount) {
   if (mintAccount?.owner === TOKEN_PROGRAM) return TOKEN_ACCOUNT_BYTES;
   if (mintAccount?.owner !== TOKEN_2022_PROGRAM) throw new Error('The mint is not owned by a supported token program.');
   const data = mintAccount.data;
-  if (data.length !== MINT_BYTES && (data.length < TOKEN_ACCOUNT_BYTES + 1 || data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT)) throw new Error('Invalid Token-2022 mint layout.');
+  if (
+    data.length !== MINT_BYTES &&
+    (data.length < TOKEN_ACCOUNT_BYTES + 1 || data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT)
+  )
+    throw new Error('Invalid Token-2022 mint layout.');
   const required = new Map([[7, 0]]); // ImmutableOwner, set by the associated token program.
   for (let at = TOKEN_ACCOUNT_BYTES + 1; at + 4 <= data.length;) {
     const kind = Number(readUintLE(data, at, 2));
@@ -242,6 +281,6 @@ export async function resolveTransfers(rpc, mint, transfers = []) {
   const [account] = await rpc.accounts([mint]);
   if (!account) throw new Error(`There is no token ${mint} on this network.`);
   const accountSize = associatedAccountSize(account);
-  const cached = { accounts: async (keys) => keys.length === 1 && keys[0] === mint ? [account] : rpc.accounts(keys) };
+  const cached = { accounts: async keys => (keys.length === 1 && keys[0] === mint ? [account] : rpc.accounts(keys)) };
   return { tokenProgram: account.owner, accountSize, extraAccounts: await transferExtras(cached, mint, transfers) };
 }

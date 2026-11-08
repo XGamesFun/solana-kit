@@ -17,21 +17,48 @@ const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
 const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';
-const names = (record) => record.receipts.map((r) => r.name);
+const names = record => record.receipts.map(r => r.name);
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
-const fails = (fn, why) => assert.throws(fn, (e) => String(e.message).includes(why) || (e.logs ?? []).join('\n').includes(why), why);
+const fails = (fn, why) =>
+  assert.throws(fn, e => String(e.message).includes(why) || (e.logs ?? []).join('\n').includes(why), why);
 const stashOf = (w, id) => loot.decodeStash(w.chain.get(pda.stash(w.project, id))?.data)?.nfts ?? [];
 
 /** A Core collection `maker` controls, and `n` of its assets for `owner`. */
 function partner(w, owner, n) {
   const maker = w.who();
   const collection = newAddress(w.random);
-  const str = (s) => concat(uintLE(utf8(s).length, 4), utf8(s));
-  w.chain.send(maker, [{ programId: MPL_CORE_PROGRAM, keys: [meta(collection, true, true), meta(maker, false, false), meta(maker, true, true), meta(SYSTEM_PROGRAM, false, false)], data: concat(Uint8Array.of(21), str('Partners'), str('x'), Uint8Array.of(0, 0)) }]);
-  const mint = (to) => {
+  const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
+  w.chain.send(maker, [
+    {
+      programId: MPL_CORE_PROGRAM,
+      keys: [
+        meta(collection, true, true),
+        meta(maker, false, false),
+        meta(maker, true, true),
+        meta(SYSTEM_PROGRAM, false, false),
+      ],
+      data: concat(Uint8Array.of(21), str('Partners'), str('x'), Uint8Array.of(0, 0)),
+    },
+  ]);
+  const mint = to => {
     const asset = newAddress(w.random);
     const data = concat(Uint8Array.of(20, 0), str('Partner'), str('x'), Uint8Array.of(0, 0));
-    w.chain.send(maker, [{ programId: MPL_CORE_PROGRAM, keys: [meta(asset, true, true), meta(collection, false, true), meta(maker, true, false), meta(maker, true, true), meta(to, false, false), meta(MPL_CORE_PROGRAM, false, false), meta(SYSTEM_PROGRAM, false, false), meta(MPL_CORE_PROGRAM, false, false)], data }]);
+    w.chain.send(maker, [
+      {
+        programId: MPL_CORE_PROGRAM,
+        keys: [
+          meta(asset, true, true),
+          meta(collection, false, true),
+          meta(maker, true, false),
+          meta(maker, true, true),
+          meta(to, false, false),
+          meta(MPL_CORE_PROGRAM, false, false),
+          meta(SYSTEM_PROGRAM, false, false),
+          meta(MPL_CORE_PROGRAM, false, false),
+        ],
+        data,
+      },
+    ]);
     return asset;
   };
   return { collection, nfts: Array.from({ length: n }, () => mint(owner)), mint };
@@ -40,15 +67,27 @@ function partner(w, owner, n) {
 t('a project takes a second collection, and each item is minted into its own', () => {
   const w = world({ seed: 'prices-collections' });
   const second = newAddress(w.random);
-  w.chain.send(w.creator, [createCollectionInstruction({ collection: second, creator: w.creator, name: 'Second', uri: 'x', project: w.project })]);
-  w.chain.send(w.creator, [loot.updateProjectIx({ owner: w.creator, project: w.project, collections: [w.collection, second] })]);
+  w.chain.send(w.creator, [
+    createCollectionInstruction({
+      collection: second,
+      creator: w.creator,
+      name: 'Second',
+      uri: 'x',
+      project: w.project,
+    }),
+  ]);
+  w.chain.send(w.creator, [
+    loot.updateProjectIx({ owner: w.creator, project: w.project, collections: [w.collection, second] }),
+  ]);
   assert.deepEqual(w.projectState().collections, [w.collection, second]);
   assert.equal(w.chain.get(w.project).data.length, loot.projectBytes(2));
   w.upsert({ Item: { id: 5, args: collectible('Banner', 0, { collection: second }) } });
   const banner = w.make(5, w.player);
   assert.equal(parseCoreAsset(w.chain.get(banner).data).collection, second);
   // A second project of the same owner, numbered 1, with no collection at all.
-  w.chain.send(w.creator, [loot.createProjectIx({ owner: w.creator, id: 1, authority: w.authority, treasury: w.treasury })]);
+  w.chain.send(w.creator, [
+    loot.createProjectIx({ owner: w.creator, id: 1, authority: w.authority, treasury: w.treasury }),
+  ]);
   const other = w.read('Project', pda.project(w.creator, 1));
   assert.deepEqual([other.creator, other.collections], [w.creator, []]);
 });
@@ -59,13 +98,32 @@ t('buy sells a box with no roll in one instruction: the price split at once, a b
   w.upsert({ Item: { id: 1, args: collectible('Crown') } });
   w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
   // Two crowns, a potion and 300 coins from pool 1; 20% of the price burned.
-  w.upsert({ Box: { id: 7, args: boxArgs(PRICE, [drop([{ Item: [1] }, { Item: [1] }, fromPool(1, 300n)])], { shares: [{ to: 'Burn', bps: 2000 }] }) } });
+  w.upsert({
+    Box: {
+      id: 7,
+      args: boxArgs(PRICE, [drop([{ Item: [1] }, { Item: [1] }, fromPool(1, 300n)])], {
+        shares: [{ to: 'Burn', bps: 2000 }],
+      }),
+    },
+  });
   w.upsert({ Box: { id: 8, args: boxArgs(PRICE, [itemDrop(2), itemDrop(1)]) } });
   const items = () => ({ 1: w.read('Item', pda.item(w.project, 1)), 2: w.read('Item', pda.item(w.project, 2)) });
-  const buy = (id) => loot.buyIx({ player: w.player, project: w.project, box: w.read('LootBox', pda.box(w.project, id)), treasury: w.treasury, items: items(), poolMints: { 1: w.mint } });
+  const buy = id =>
+    loot.buyIx({
+      player: w.player,
+      project: w.project,
+      box: w.read('LootBox', pda.box(w.project, id)),
+      treasury: w.treasury,
+      items: items(),
+      poolMints: { 1: w.mint },
+    });
   const [coins, treasury] = [w.balance(w.player), w.balance(w.treasury)];
   const r = w.chain.send(w.player, [computeUnitLimit(600_000), buy(7)]);
-  assert.deepEqual(names(r), ['Bought', 'PrizeGiven', 'PrizeGiven', 'PrizeGiven'], 'the receipt first, then each prize');
+  assert.deepEqual(
+    names(r),
+    ['Bought', 'PrizeGiven', 'PrizeGiven', 'PrizeGiven'],
+    'the receipt first, then each prize',
+  );
   const item = pda.item(w.project, 1);
   assert.deepEqual([ownerOf(w, pda.itemAsset(item, 1)), ownerOf(w, pda.itemAsset(item, 2))], [w.player, w.player]);
   assert.equal(w.balance(w.player), coins - PRICE + 300n);
@@ -75,36 +133,57 @@ t('buy sells a box with no roll in one instruction: the price split at once, a b
   fails(() => w.chain.send(w.player, [buy(8)]), 'Rolls');
 });
 
-t('a rolled bundle: the roll sets each prize aside, and whoever settles pays what it mints; a box that rolls gives no roll', () => {
-  const w = world({ seed: 'prices-bundle' });
-  const coin = w.newMint(w.creator);
-  w.chain.send(w.creator, [setAuthorityIx({ account: coin, current: w.creator, newAuthority: w.project })]);
-  w.upsert({ Item: { id: 1, args: collectible('Gem') } });
-  w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
-  const minted = { Tokens: { from: { Mint: [coin] }, amount: 40n } };
-  // A roll is given only by a box that doesn't roll (BadEntries).
-  fails(() => w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }, { Roll: [9] }]), drop([])]) } }), 'BadEntries');
-  // The bundle all but always: a weight of 1,000,000 against 1.
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted], 1_000_000), drop([])]) } });
-  const box = w.read('LootBox', pda.box(w.project, 1));
-  // What a throwaway key that settles it is funded with: a unit for the collectible, one for the coin it may pay.
-  assert.equal(loot.settleRent(box), 2n * loot.SETTLE_RENT_UNIT);
-  const r = w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box, nonce: 1n })]);
-  assert.equal(r.answers.length, 1);
-  const orderAddress = pda.order(w.project, w.player, 1n);
-  const order = w.read('Order', orderAddress);
-  assert.deepEqual(order.won, [{ Item: { item: 1, serial: 1, drawn: null } }, { Tokens: { mint: coin, amount: 40n } }]);
-  w.chain.nextSlot();
-  const had = w.chain.get(w.authority).lamports;
-  const s = w.chain.send(w.authority, [computeUnitLimit(600_000), loot.settleIx({ signer: w.authority, orderAddress, order, projectState: w.projectState(), items: { 1: w.read('Item', pda.item(w.project, 1)) } })]);
-  const settled = s.receipts.find((x) => x.name === 'OrderSettled').data;
-  // The receipt names what was won; what each became follows from it: the collectible at its item and serial.
-  assert.deepEqual([settled.from, settled.won], [0, order.won]);
-  assert.ok(w.chain.get(pda.itemAsset(pda.item(w.project, 1), 1)), 'the collectible is minted');
-  assert.equal(w.balance(w.player, coin), 40n);
-  const spent = had - w.chain.get(w.authority).lamports;
-  assert.ok(spent > 1_000_000n && spent < loot.settleRent(box), `the settler paid the collectible's rent and the coin's account: ${spent}`);
-});
+t(
+  'a rolled bundle: the roll sets each prize aside, and whoever settles pays what it mints; a box that rolls gives no roll',
+  () => {
+    const w = world({ seed: 'prices-bundle' });
+    const coin = w.newMint(w.creator);
+    w.chain.send(w.creator, [setAuthorityIx({ account: coin, current: w.creator, newAuthority: w.project })]);
+    w.upsert({ Item: { id: 1, args: collectible('Gem') } });
+    w.upsert({ Box: { id: 9, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
+    const minted = { Tokens: { from: { Mint: [coin] }, amount: 40n } };
+    // A roll is given only by a box that doesn't roll (BadEntries).
+    fails(
+      () => w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Item: [1] }, { Roll: [9] }]), drop([])]) } }),
+      'BadEntries',
+    );
+    // The bundle all but always: a weight of 1,000,000 against 1.
+    w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop([{ Item: [1] }, minted], 1_000_000), drop([])]) } });
+    const box = w.read('LootBox', pda.box(w.project, 1));
+    // What a throwaway key that settles it is funded with: a unit for the collectible, one for the coin it may pay.
+    assert.equal(loot.settleRent(box), 2n * loot.SETTLE_RENT_UNIT);
+    const r = w.chain.send(w.player, [loot.openBoxIx({ player: w.player, project: w.project, box, nonce: 1n })]);
+    assert.equal(r.answers.length, 1);
+    const orderAddress = pda.order(w.project, w.player, 1n);
+    const order = w.read('Order', orderAddress);
+    assert.deepEqual(order.won, [
+      { Item: { item: 1, serial: 1, drawn: null } },
+      { Tokens: { mint: coin, amount: 40n } },
+    ]);
+    w.chain.nextSlot();
+    const had = w.chain.get(w.authority).lamports;
+    const s = w.chain.send(w.authority, [
+      computeUnitLimit(600_000),
+      loot.settleIx({
+        signer: w.authority,
+        orderAddress,
+        order,
+        projectState: w.projectState(),
+        items: { 1: w.read('Item', pda.item(w.project, 1)) },
+      }),
+    ]);
+    const settled = s.receipts.find(x => x.name === 'OrderSettled').data;
+    // The receipt names what was won; what each became follows from it: the collectible at its item and serial.
+    assert.deepEqual([settled.from, settled.won], [0, order.won]);
+    assert.ok(w.chain.get(pda.itemAsset(pda.item(w.project, 1), 1)), 'the collectible is minted');
+    assert.equal(w.balance(w.player, coin), 40n);
+    const spent = had - w.chain.get(w.authority).lamports;
+    assert.ok(
+      spent > 1_000_000n && spent < loot.settleRent(box),
+      `the settler paid the collectible's rent and the coin's account: ${spent}`,
+    );
+  },
+);
 
 t('a list gate lets in the wallets on it, its proof passed where an NFT shown would be', () => {
   const w = world({ seed: 'prices-list' });
@@ -115,7 +194,8 @@ t('a list gate lets in the wallets on it, its proof passed where an NFT shown wo
   w.upsert({ Box: { id: 3, args: boxArgs(10n, [itemDrop(2)], { gate }) } });
   const box = w.read('LootBox', pda.box(w.project, 3));
   const items = { 2: w.read('Item', pda.item(w.project, 2)) };
-  const buy = (listProof) => loot.buyIx({ player: w.player, project: w.project, box, treasury: w.treasury, items, listProof });
+  const buy = listProof =>
+    loot.buyIx({ player: w.player, project: w.project, box, treasury: w.treasury, items, listProof });
   fails(() => w.chain.send(w.player, [buy(loot.merkleProof(leaves, 0))]), 'GateNotMet');
   w.chain.send(w.player, [buy(loot.merkleProof(leaves, 1))]);
   assert.equal(w.read('Item', pda.item(w.project, 2)).issued, 1);
@@ -126,11 +206,15 @@ t('a hold is addressed by its end, and its release names nothing more', () => {
   w.upsert({ Item: { id: 1, args: collectible('Sword') } });
   const sword = w.make(1, w.player);
   const freeAt = w.chain.now() + 60;
-  w.chain.send(w.player, [loot.holdIx({ player: w.player, project: w.project, collection: w.collection, asset: sword, freeAt })]);
+  w.chain.send(w.player, [
+    loot.holdIx({ player: w.player, project: w.project, collection: w.collection, asset: sword, freeAt }),
+  ]);
   const hold = w.read('Hold', pda.hold(sword, freeAt));
   assert.equal(hold.free_at, BigInt(freeAt));
   w.chain.warp(freeAt);
-  w.chain.send(w.cranker, [loot.releaseIx({ signer: w.cranker, project: w.project, collection: w.collection, asset: sword, hold })]);
+  w.chain.send(w.cranker, [
+    loot.releaseIx({ signer: w.cranker, project: w.project, collection: w.collection, asset: sword, hold }),
+  ]);
   assert.equal(ownerOf(w, sword), w.player);
 });
 
@@ -139,7 +223,16 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   const { collection, nfts, mint } = partner(w, w.player, 4);
   const kind = { collection, hasAuthority: false };
   // pay_nft: given to the treasury, then one burned.
-  const r = w.chain.send(w.player, [loot.payNftIx({ player: w.player, project: w.project, asset: nfts[0], to: w.treasury, collection, reference: 'entry' })]);
+  const r = w.chain.send(w.player, [
+    loot.payNftIx({
+      player: w.player,
+      project: w.project,
+      asset: nfts[0],
+      to: w.treasury,
+      collection,
+      reference: 'entry',
+    }),
+  ]);
   assert.deepEqual(names(r), ['PaidNft']);
   assert.equal(ownerOf(w, nfts[0]), w.treasury);
   w.chain.send(w.player, [loot.payNftIx({ player: w.player, project: w.project, asset: nfts[1], collection })]);
@@ -147,17 +240,63 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
 
   // A recipe's trade-in: the partner NFT into the chest, a ticket out.
   w.upsert({ Item: { id: 2, args: { ...collectible('Ticket'), kind: 'Normal' } } });
-  w.upsert({ Recipe: { id: 1, args: { active: true, inputs: [{ Trade: { collection, then: { Stash: [4] } } }], outputs: [{ Prize: [{ Item: [2] }] }], needs: [], keeps: [], raises: [] } } });
+  w.upsert({
+    Recipe: {
+      id: 1,
+      args: {
+        active: true,
+        inputs: [{ Trade: { collection, then: { Stash: [4] } } }],
+        outputs: [{ Prize: [{ Item: [2] }] }],
+        needs: [],
+        keeps: [],
+        raises: [],
+      },
+    },
+  });
   const items = { 2: w.read('Item', pda.item(w.project, 2)) };
-  w.chain.send(w.player, [computeUnitLimit(400_000), loot.craftIx({ player: w.player, project: w.project, id: 1, recipe: w.read('Recipe', pda.recipe(w.project, 1)), assets: [{ asset: nfts[2], ...kind }], items })]);
+  w.chain.send(w.player, [
+    computeUnitLimit(400_000),
+    loot.craftIx({
+      player: w.player,
+      project: w.project,
+      id: 1,
+      recipe: w.read('Recipe', pda.recipe(w.project, 1)),
+      assets: [{ asset: nfts[2], ...kind }],
+      items,
+    }),
+  ]);
   assert.deepEqual(stashOf(w, 4), [nfts[2]]);
 
   // A lottery whose ticket costs one NFT, burned.
   const rule = { of: { Collection: [collection] }, key: '', test: 'Any' };
-  w.upsert({ Lottery: { id: 1, args: { price: 0n, mint: w.mint, shares: [], places: [], ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null, nft_ticket: { rule, then: 'Burn' } } } });
+  w.upsert({
+    Lottery: {
+      id: 1,
+      args: {
+        price: 0n,
+        mint: w.mint,
+        shares: [],
+        places: [],
+        ticket_mint: NOBODY,
+        every: 0n,
+        draws_at: BigInt(w.chain.now() + 3600),
+        gate: null,
+        nft_ticket: { rule, then: 'Burn' },
+      },
+    },
+  });
   const lottery = w.read('Lottery', pda.lottery(w.project, 1));
-  const bought = w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id: 1, lottery, count: 1n, nft: { asset: nfts[3], ...kind } })]);
-  assert.equal(bought.receipts.find((x) => x.name === 'TicketsBought').data.asset, nfts[3]);
+  const bought = w.chain.send(w.player, [
+    loot.buyTicketsIx({
+      player: w.player,
+      project: w.project,
+      id: 1,
+      lottery,
+      count: 1n,
+      nft: { asset: nfts[3], ...kind },
+    }),
+  ]);
+  assert.equal(bought.receipts.find(x => x.name === 'TicketsBought').data.asset, nfts[3]);
   assert.equal(ownerOf(w, nfts[3]), w.project, 'held until the draw');
   w.chain.warp(w.chain.now() + 3601);
   w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 1, lottery })]);
@@ -167,36 +306,121 @@ t('an NFT as the price: a payment, a trade-in, a ticket, a stake and a bid', () 
   // A contest of NFTs: the winner takes its own back and the loser's.
   const [a, b] = [mint(w.player), mint(w.cranker)];
   const now = w.chain.now();
-  const args = { sides: 2, closes_at: BigInt(now + 100), result_by: BigInt(now + 200), shares: [], gate: null, nft: rule };
-  w.chain.send(w.authority, [loot.openContestIx({ authority: w.authority, project: w.project, projectState: w.projectState(), id: 1, mint: w.mint, args })]);
+  const args = {
+    sides: 2,
+    closes_at: BigInt(now + 100),
+    result_by: BigInt(now + 200),
+    shares: [],
+    gate: null,
+    nft: rule,
+  };
+  w.chain.send(w.authority, [
+    loot.openContestIx({
+      authority: w.authority,
+      project: w.project,
+      projectState: w.projectState(),
+      id: 1,
+      mint: w.mint,
+      args,
+    }),
+  ]);
   let contest = w.read('Contest', pda.contest(w.project, 1));
-  w.chain.send(w.player, [loot.enterIx({ player: w.player, project: w.project, id: 1, contest, side: 0, nft: { asset: a, ...kind } })]);
-  w.chain.send(w.cranker, [loot.enterIx({ player: w.cranker, project: w.project, id: 1, contest, side: 1, nft: { asset: b, ...kind } })]);
+  w.chain.send(w.player, [
+    loot.enterIx({ player: w.player, project: w.project, id: 1, contest, side: 0, nft: { asset: a, ...kind } }),
+  ]);
+  w.chain.send(w.cranker, [
+    loot.enterIx({ player: w.cranker, project: w.project, id: 1, contest, side: 1, nft: { asset: b, ...kind } }),
+  ]);
   w.chain.warp(now + 150);
-  w.chain.send(w.authority, [loot.decideIx({ signer: w.authority, project: w.project, contest: w.read('Contest', pda.contest(w.project, 1)), side: 0 })]);
+  w.chain.send(w.authority, [
+    loot.decideIx({
+      signer: w.authority,
+      project: w.project,
+      contest: w.read('Contest', pda.contest(w.project, 1)),
+      side: 0,
+    }),
+  ]);
   contest = w.read('Contest', pda.contest(w.project, 1));
-  w.chain.send(w.player, [loot.claimIx({ payer: w.player, project: w.project, projectState: w.projectState(), id: 1, contest, entries: w.entries(1), player: w.player, nfts: [w.entryOf(1, w.player), w.entryOf(1, w.cranker)], kinds: { [a]: kind, [b]: kind } })]);
+  w.chain.send(w.player, [
+    loot.claimIx({
+      payer: w.player,
+      project: w.project,
+      projectState: w.projectState(),
+      id: 1,
+      contest,
+      entries: w.entries(1),
+      player: w.player,
+      nfts: [w.entryOf(1, w.player), w.entryOf(1, w.cranker)],
+      kinds: { [a]: kind, [b]: kind },
+    }),
+  ]);
   assert.deepEqual([ownerOf(w, a), ownerOf(w, b)], [w.player, w.player]);
 
   // An auction whose bids are NFTs (of an item: a roll lot takes no NFT bids): a bundle of two tops one of one, which
   // goes back.
   const [c, d, e] = [mint(w.player), mint(w.cranker), mint(w.cranker)];
   w.upsert({ Item: { id: 9, args: { ...collectible('Relic'), kind: 'Normal' } } });
-  const lot = { lot: { Item: [9] }, reserve: 1n, min_raise_bps: 0, starts_at: BigInt(w.chain.now()), ends_at: BigInt(w.chain.now() + 600), extend: 0, shares: [], gate: null, nft_bids: rule };
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot })]);
+  const lot = {
+    lot: { Item: [9] },
+    reserve: 1n,
+    min_raise_bps: 0,
+    starts_at: BigInt(w.chain.now()),
+    ends_at: BigInt(w.chain.now() + 600),
+    extend: 0,
+    shares: [],
+    gate: null,
+    nft_bids: rule,
+  };
+  w.chain.send(w.authority, [
+    loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot }),
+  ]);
   const auction = () => w.read('Auction', pda.auction(w.project, w.authority, 1));
   // Made with room for the most a bid holds, the seller's rent: bids write in place, and no bidder pays rent.
   const opened = w.chain.get(pda.auction(w.project, w.authority, 1));
   assert.equal(opened.data.length, loot.accountBytes('Auction', auction()) + 32 * loot.MAX_BID_NFTS);
-  w.chain.send(w.player, [loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: auction(), nfts: [{ asset: c, ...kind }] })]);
-  w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.bidIx({ bidder: w.cranker, project: w.project, id: 1, auction: auction(), nfts: [{ asset: d, ...kind }, { asset: e, ...kind }], held: [kind] })]);
+  w.chain.send(w.player, [
+    loot.bidIx({ bidder: w.player, project: w.project, id: 1, auction: auction(), nfts: [{ asset: c, ...kind }] }),
+  ]);
+  w.chain.send(w.cranker, [
+    computeUnitLimit(600_000),
+    loot.bidIx({
+      bidder: w.cranker,
+      project: w.project,
+      id: 1,
+      auction: auction(),
+      nfts: [
+        { asset: d, ...kind },
+        { asset: e, ...kind },
+      ],
+      held: [kind],
+    }),
+  ]);
   assert.equal(ownerOf(w, c), w.player, 'the bid it topped went back');
   assert.deepEqual(auction().held, [d, e]);
   const bid = w.chain.get(pda.auction(w.project, w.authority, 1));
   assert.deepEqual([bid.data.length, bid.lamports], [opened.data.length, opened.lamports], 'the same size and rent');
-  assert.deepEqual(loot.auctionTerms(bid.data), loot.auctionTerms(auction()), 'its terms, from its bytes or from what they decode to');
+  assert.deepEqual(
+    loot.auctionTerms(bid.data),
+    loot.auctionTerms(auction()),
+    'its terms, from its bytes or from what they decode to',
+  );
   assert.deepEqual(loot.auctionTerms(bid.data), loot.auctionTerms(opened.data), 'a bid never changes them');
   w.chain.warp(w.chain.now() + 601);
-  w.chain.send(w.cranker, [computeUnitLimit(600_000), loot.endAuctionIx({ signer: w.cranker, project: w.project, projectState: w.projectState(), id: 1, auction: auction(), item: w.read('Item', pda.item(w.project, 9)), held: [kind, kind] })]);
-  assert.deepEqual([ownerOf(w, d), ownerOf(w, e)], [w.treasury, w.treasury], 'the winning NFTs went to the treasury, for the project’s item');
+  w.chain.send(w.cranker, [
+    computeUnitLimit(600_000),
+    loot.endAuctionIx({
+      signer: w.cranker,
+      project: w.project,
+      projectState: w.projectState(),
+      id: 1,
+      auction: auction(),
+      item: w.read('Item', pda.item(w.project, 9)),
+      held: [kind, kind],
+    }),
+  ]);
+  assert.deepEqual(
+    [ownerOf(w, d), ownerOf(w, e)],
+    [w.treasury, w.treasury],
+    'the winning NFTs went to the treasury, for the project’s item',
+  );
 });

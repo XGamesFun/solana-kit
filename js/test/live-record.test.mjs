@@ -13,11 +13,25 @@ const WALLET = '8yPDcN7S2mxbFrQLqqGfUkg3fTBbZ8ZqYqJ5AD4QK6Ag';
 const PROJECT = '2cis7nmNiwkBw181AXnNFLUxpR2ESE9tikkF5WHozrUy';
 
 test('a live record for a project with no collection names none, and checks', () => {
-  const spec = { version: 2, network: 'devnet', name: 'Messages', currency: 'sol', collection: false, tokens: [{ key: 'sol', source: 'sol' }], items: [{ key: 'msg', name: 'Message', kind: 'normal', price: 0.001 }] };
-  const live = recordLanded(spec, { ctx: { project: PROJECT, collection: null, treasury: WALLET, authority: WALLET, mints: {} }, signatures: [] });
+  const spec = {
+    version: 2,
+    network: 'devnet',
+    name: 'Messages',
+    currency: 'sol',
+    collection: false,
+    tokens: [{ key: 'sol', source: 'sol' }],
+    items: [{ key: 'msg', name: 'Message', kind: 'normal', price: 0.001 }],
+  };
+  const live = recordLanded(spec, {
+    ctx: { project: PROJECT, collection: null, treasury: WALLET, authority: WALLET, mints: {} },
+    signatures: [],
+  });
   assert.equal('collection' in live.live, false);
   const verdict = check(live);
-  assert.deepEqual(verdict.refusals.map((r) => r.code), []);
+  assert.deepEqual(
+    verdict.refusals.map(r => r.code),
+    [],
+  );
 });
 
 // A live spec whose authority or treasury changed was once told “nothing to publish”, while the chain kept the old
@@ -26,7 +40,11 @@ test('a change to a live project’s authority or treasury is named, never dropp
   const example = JSON.parse(readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url), 'utf8'));
   const { live: _, ...published } = example;
   const spec = { ...example, live: { program: 'x', project: PROJECT, treasury: WALLET, authority: WALLET, published } };
-  const rotated = { ...spec, keys: { ...(spec.keys ?? {}), authority: 'Fresh1111111111111111111111111111111111111' }, treasury: 'wallet:Treas111111111111111111111111111111111' };
+  const rotated = {
+    ...spec,
+    keys: { ...(spec.keys ?? {}), authority: 'Fresh1111111111111111111111111111111111111' },
+    treasury: 'wallet:Treas111111111111111111111111111111111',
+  };
   assert.deepEqual(changedParts(rotated).settings, ['its authority', 'its treasury']);
   assert.deepEqual(changedParts(spec).settings, []);
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-settings-'));

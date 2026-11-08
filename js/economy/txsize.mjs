@@ -18,7 +18,7 @@ export const MAX_TRANSACTION_BYTES = 1232;
 export const WALLET_ROOM = 64;
 export const BUDGET = MAX_TRANSACTION_BYTES - WALLET_ROOM;
 
-export const compact = (n) => (n < 0x80 ? 1 : n < 0x4000 ? 2 : 3);
+export const compact = n => (n < 0x80 ? 1 : n < 0x4000 ? 2 : 3);
 
 /**
  * instructions: [{ program: name, accounts: [names], data: bytes }]; signers: [names] (the fee payer first).
@@ -30,8 +30,20 @@ export function transactionSize({ instructions, signers }) {
     for (const a of ix.accounts) keys.add(a);
     keys.add(`program:${ix.program}`);
   }
-  const body = instructions.reduce((n, ix) => n + 1 + compact(ix.accounts.length) + ix.accounts.length + compact(ix.data) + ix.data, 0);
-  return compact(signers.length) + 64 * signers.length + 3 + compact(keys.size) + 32 * keys.size + 32 + compact(instructions.length) + body;
+  const body = instructions.reduce(
+    (n, ix) => n + 1 + compact(ix.accounts.length) + ix.accounts.length + compact(ix.data) + ix.data,
+    0,
+  );
+  return (
+    compact(signers.length) +
+    64 * signers.length +
+    3 +
+    compact(keys.size) +
+    32 * keys.size +
+    32 +
+    compact(instructions.length) +
+    body
+  );
 }
 
 /** How many accounts the transaction locks: each account once, its programs and signers included. */

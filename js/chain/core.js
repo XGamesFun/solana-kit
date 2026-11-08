@@ -9,14 +9,21 @@ import { meta } from './programs.js';
 export { MPL_CORE_PROGRAM };
 /** MPL Core `CreateCollectionV2`. */
 const CREATE_COLLECTION_V2 = 21;
-const PLUGIN = { Royalties: 0, FreezeDelegate: 1, UpdateDelegate: 4, PermanentFreezeDelegate: 5, Attributes: 6, BubblegumV2: 15 };
+const PLUGIN = {
+  Royalties: 0,
+  FreezeDelegate: 1,
+  UpdateDelegate: 4,
+  PermanentFreezeDelegate: 5,
+  Attributes: 6,
+  BubblegumV2: 15,
+};
 const ASSET_V1 = 1;
 const COLLECTION_V1 = 5;
 const PLUGIN_HEADER = 3;
 const UPDATE_AUTHORITY_COLLECTION = 2;
 
 /** A Borsh string as Core writes it. */
-const coreString = (text) => {
+const coreString = text => {
   const bytes = utf8(text);
   return concat(uintLE(bytes.length, 4), bytes);
 };
@@ -27,8 +34,17 @@ const coreString = (text) => {
  * it also carries Bubblegum's plugin, so compressed NFTs can be minted into it. The collection address signs too (a
  * fresh key).
  */
-export function createCollectionInstruction({ collection, creator, name, uri, royaltyBps = 500, project, compressed = false }) {
-  if (!project) throw new Error('createCollectionInstruction needs the loot project that mints into the collection (`project`).');
+export function createCollectionInstruction({
+  collection,
+  creator,
+  name,
+  uri,
+  royaltyBps = 500,
+  project,
+  compressed = false,
+}) {
+  if (!project)
+    throw new Error('createCollectionInstruction needs the loot project that mints into the collection (`project`).');
   const data = concat(
     Uint8Array.of(CREATE_COLLECTION_V2),
     coreString(name),
@@ -64,7 +80,7 @@ export function createCollectionInstruction({ collection, creator, name, uri, ro
 
 function reader(data, start) {
   let at = start;
-  const need = (n) => {
+  const need = n => {
     if (at + n > data.length) throw new RangeError('read past the end of the account');
   };
   return {

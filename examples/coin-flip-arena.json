@@ -66,11 +66,7 @@
       "key": "weekly",
       "name": "Weekly draw",
       "price": 0.01,
-      "places": [
-        50,
-        30,
-        20
-      ],
+      "places": [50, 30, 20],
       "every": "7d",
       "firstDraw": "publish+7d"
     }

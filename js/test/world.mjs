@@ -32,11 +32,11 @@ const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const BPF_LOADER_2 = 'BPFLoader2111111111111111111111111111111111';
 
 /** The words of each line of a file of js/test/fixtures, comments left out. */
-const lines = (name) =>
+const lines = name =>
   readFileSync(path.join(fixtures, name), 'utf8')
     .split('\n')
-    .filter((l) => l.trim() && !l.trimStart().startsWith('#'))
-    .map((l) => l.trim().split(/\s+/));
+    .filter(l => l.trim() && !l.trimStart().startsWith('#'))
+    .map(l => l.trim().split(/\s+/));
 
 let pins = null;
 const read = new Map();
@@ -46,7 +46,7 @@ const read = new Map();
  */
 export function pinned(name) {
   if (read.has(name)) return read.get(name);
-  pins ??= new Map(lines('pinned.txt').map((w) => [w[0], w[4]]));
+  pins ??= new Map(lines('pinned.txt').map(w => [w[0], w[4]]));
   const want = pins.get(name);
   if (!want) throw new Error(`js/test/fixtures/${name} is not in ${path.join(fixtures, 'pinned.txt')}`);
   const at = path.join(fixtures, name);
@@ -66,9 +66,9 @@ if (!['mainnet', 'devnet'].includes(cluster)) throw new Error(`XSOLANA_TEST_CLUS
 export function runtime(cluster = 'mainnet') {
   const column = cluster === 'mainnet' ? 2 : 3;
   const words = lines('runtime.txt');
-  const rent = words.find((w) => w[0] === 'rent' && w[1] === cluster);
+  const rent = words.find(w => w[0] === 'rent' && w[1] === cluster);
   return {
-    off: words.filter((w) => w[0] === 'feature' && w[column] === 'off').map((w) => w[1]),
+    off: words.filter(w => w[0] === 'feature' && w[column] === 'off').map(w => w[1]),
     rent: { lamportsPerByteYear: BigInt(rent[2]), exemptionThreshold: Number(rent[3]), burnPercent: Number(rent[4]) },
   };
 }
@@ -78,9 +78,22 @@ export const FEES = { player: 2_000_000n, project: 10_000n };
 
 /** Why the chain tests can't run here, or null when they can. */
 export function cannotRun() {
-  if (localBuild && !existsSync(localBuild)) return `${localBuild} is missing: run \`anchor build --ignore-keys\` in XSOLANA_PROGRAM_DIR, or unset it to test the pinned devnet build`;
-  const needed = ['pinned.txt', 'runtime.txt', 'spl_token.so', 'token_2022.so', 'associated_token.so', 'memo.so', 'mpl_core.so', 'vrf.so', 'mainnet/queue.json', ...(localBuild ? [] : ['loot.so'])];
-  for (const f of needed) if (!existsSync(path.join(fixtures, f))) return `${path.join(fixtures, f)} is missing: ${FETCH}`;
+  if (localBuild && !existsSync(localBuild))
+    return `${localBuild} is missing: run \`anchor build --ignore-keys\` in XSOLANA_PROGRAM_DIR, or unset it to test the pinned devnet build`;
+  const needed = [
+    'pinned.txt',
+    'runtime.txt',
+    'spl_token.so',
+    'token_2022.so',
+    'associated_token.so',
+    'memo.so',
+    'mpl_core.so',
+    'vrf.so',
+    'mainnet/queue.json',
+    ...(localBuild ? [] : ['loot.so']),
+  ];
+  for (const f of needed)
+    if (!existsSync(path.join(fixtures, f))) return `${path.join(fixtures, f)} is missing: ${FETCH}`;
   try {
     loadLiteSVM();
   } catch (e) {
@@ -91,7 +104,12 @@ export function cannotRun() {
 
 function queueAccount() {
   const q = JSON.parse(pinned('mainnet/queue.json').toString('utf8'));
-  return { address: q.pubkey, owner: q.account.owner, lamports: BigInt(q.account.lamports), data: fromBase64(q.account.data[0]) };
+  return {
+    address: q.pubkey,
+    owner: q.account.owner,
+    lamports: BigInt(q.account.lamports),
+    data: fromBase64(q.account.data[0]),
+  };
 }
 
 /** A collectible item's args. */
@@ -130,7 +148,8 @@ export const fromPool = (pool, amount) => ({ Tokens: { from: { Pool: [pool] }, a
 
 /** Why the compressed NFT tests can't run here (Bubblegum as on mainnet, `npm run fixtures`), or null. */
 export function cannotRunCompressed() {
-  for (const f of ['bubblegum.so', 'mpl_account_compression.so', 'mpl_noop.so']) if (!existsSync(path.join(fixtures, f))) return `js/test/fixtures/${f} is missing: ${FETCH}`;
+  for (const f of ['bubblegum.so', 'mpl_account_compression.so', 'mpl_noop.so'])
+    if (!existsSync(path.join(fixtures, f))) return `js/test/fixtures/${f} is missing: ${FETCH}`;
   return cannotRun();
 }
 
@@ -157,11 +176,12 @@ export function approvalChain(w, overrides = {}) {
   }
   return {
     latestBlockhash: async () => ({ blockhash: w.chain.svm.latestBlockhash(), lastValidBlockHeight: 1e12 }),
-    rent: async (bytes) => w.chain.rent(bytes),
-    send: async (wire) => w.chain.sendWire(wire),
+    rent: async bytes => w.chain.rent(bytes),
+    send: async wire => w.chain.sendWire(wire),
     confirm: async () => {},
-    account: async (address) => w.chain.rpc.account(address),
-    signatureStatus: async (signature) => (w.sent.has(signature) ? { err: w.sent.get(signature), confirmationStatus: 'confirmed' } : null),
+    account: async address => w.chain.rpc.account(address),
+    signatureStatus: async signature =>
+      w.sent.has(signature) ? { err: w.sent.get(signature), confirmationStatus: 'confirmed' } : null,
     blockHeight: async () => 0,
     ...overrides,
   };
@@ -213,7 +233,13 @@ export function world({ seed = 'world', platform = true, project = true, compres
   w.newMint = (authority = w.creator) => {
     const mint = newAddress(random);
     chain.send(authority, [
-      createAccountIx({ from: authority, address: mint, lamports: chain.rent(MINT_BYTES), space: MINT_BYTES, owner: TOKEN_PROGRAM }),
+      createAccountIx({
+        from: authority,
+        address: mint,
+        lamports: chain.rent(MINT_BYTES),
+        space: MINT_BYTES,
+        owner: TOKEN_PROGRAM,
+      }),
       initializeMint2Ix({ mint, decimals: 6, authority }),
     ]);
     return mint;
@@ -234,22 +260,28 @@ export function world({ seed = 'world', platform = true, project = true, compres
   w.balance = (wallet, mint = w.mint) => chain.tokens(loot.ata(wallet, mint));
   /** The owner writes a record: a collectible with no collection is minted into the project's, a box with no currency
    * is priced in the project's token. */
-  w.upsert = (def) => {
-    if (def.Item?.args.kind === 'Collectible') def = { Item: { ...def.Item, args: { collection: w.collection, ...def.Item.args } } };
+  w.upsert = def => {
+    if (def.Item?.args.kind === 'Collectible')
+      def = { Item: { ...def.Item, args: { collection: w.collection, ...def.Item.args } } };
     if (def.Box && !def.Box.args.currency) def = { Box: { ...def.Box, args: { ...def.Box.args, currency: w.mint } } };
     // A lottery written again names its current round's record (its own, as it is now).
     const lottery = def.Lottery ? chain.get(loot.pda.lottery(w.project, def.Lottery.id)) : null;
-    const lotteryState = lottery?.data?.length ? chain.account('Lottery', loot.pda.lottery(w.project, def.Lottery.id)) : null;
+    const lotteryState = lottery?.data?.length
+      ? chain.account('Lottery', loot.pda.lottery(w.project, def.Lottery.id))
+      : null;
     return chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def, lotteryState })]);
   };
   /** What an ask for a roll of boxes `ids` needs of them (`loot.askRollIx`, `loot.rollAccounts`): each box, the items
    * its prizes name and each pool's mint, as the chain holds them now. */
   w.rolls = (ids = []) => {
     const out = { boxes: {}, items: {}, poolMints: {}, programs: {} };
-    const record = (name, address) => (chain.get(address)?.owner === loot.LOOT_PROGRAM && chain.get(address).data.length ? chain.account(name, address) : null);
+    const record = (name, address) =>
+      chain.get(address)?.owner === loot.LOOT_PROGRAM && chain.get(address).data.length
+        ? chain.account(name, address)
+        : null;
     for (const id of ids) {
       const box = (out.boxes[id] = record('LootBox', loot.pda.box(w.project, id)));
-      for (const p of box?.entries.flatMap((e) => e.prizes) ?? []) {
+      for (const p of box?.entries.flatMap(e => e.prizes) ?? []) {
         const item = p.Item?.[0] ?? p.Compressed?.item;
         if (item !== undefined) out.items[item] = record('Item', loot.pda.item(w.project, item));
         const pool = p.Tokens?.from.Pool?.[0];
@@ -275,16 +307,18 @@ export function world({ seed = 'world', platform = true, project = true, compres
   };
   /** `who` pays `amount` of `mint`, split by `shares`. */
   w.payIn = (payer, mint, amount, shares = [], extra = {}) =>
-    chain.send(payer, [loot.payIx({ player: payer, project: w.project, mint, treasury: w.treasury, amount, shares, ...extra })]);
+    chain.send(payer, [
+      loot.payIx({ player: payer, project: w.project, mint, treasury: w.treasury, amount, shares, ...extra }),
+    ]);
   /** A decoded account. */
   w.read = (name, address) => chain.account(name, address);
   w.projectState = () => w.read('Project', w.project);
   /** Lottery `id`'s latest round with a record (its current one, or the one before, drawing, drawn or cancelled and
    * still paying out): { address, round } (`loot.decodeRound`), or null. */
-  w.round = (id) => {
+  w.round = id => {
     const lottery = loot.pda.lottery(w.project, id);
     const l = chain.account('Lottery', lottery);
-    for (const n of [l.round, l.round - 1].filter((n) => n >= 0)) {
+    for (const n of [l.round, l.round - 1].filter(n => n >= 0)) {
       const address = loot.pda.round(lottery, l.incarnation, n);
       const held = chain.get(address);
       if (held?.owner === loot.LOOT_PROGRAM && held.data.length) return { address, round: loot.decodeRound(held.data) };
@@ -296,34 +330,58 @@ export function world({ seed = 'world', platform = true, project = true, compres
    * Returns the records. */
   w.finishRound = (id, { places = true, payer = w.cranker, extra = {}, kinds = {}, items } = {}) => {
     const out = [];
-    const stash = (r) => loot.decodeStash(chain.get(loot.pda.lotteryStash(r.lottery))?.data ?? null);
+    const stash = r => loot.decodeStash(chain.get(loot.pda.lotteryStash(r.lottery))?.data ?? null);
     for (let at = w.round(id); at; at = w.round(id)) {
       const r = at.round;
       if (r.status !== 'Drawn' && r.status !== 'Cancelled') break;
-      let pick = loot.roundFinished(r) ? { entry: 0, part: 'Own' } : loot.commonOwed(r).map((part) => ({ entry: 0, part }))[0];
+      let pick = loot.roundFinished(r)
+        ? { entry: 0, part: 'Own' }
+        : loot.commonOwed(r).map(part => ({ entry: 0, part }))[0];
       if (!pick) {
         const i = r.entries.findIndex((_, j) => loot.partsOwed(r, j, { places }).length);
         if (i < 0) break;
         pick = { entry: i, part: loot.partsOwed(r, i, { places })[0] };
       }
-      const prize = { stash: stash(r), nfts: kinds, collection: w.collection, items: typeof items === 'function' ? items() : items };
-      out.push(chain.send(payer, [computeUnitLimit(1_400_000), loot.pullIx({ payer, project: w.project, roundAddress: at.address, round: r, ...pick, projectState: w.projectState(), ticket: kinds[r.entries[pick.entry]?.nft] ?? {}, prize, ...extra })]));
+      const prize = {
+        stash: stash(r),
+        nfts: kinds,
+        collection: w.collection,
+        items: typeof items === 'function' ? items() : items,
+      };
+      out.push(
+        chain.send(payer, [
+          computeUnitLimit(1_400_000),
+          loot.pullIx({
+            payer,
+            project: w.project,
+            roundAddress: at.address,
+            round: r,
+            ...pick,
+            projectState: w.projectState(),
+            ticket: kinds[r.entries[pick.entry]?.nft] ?? {},
+            prize,
+            ...extra,
+          }),
+        ]),
+      );
     }
     return out;
   };
 
   /** Contest `id`'s entries (`loot.decodeEntries`), in the list's order, and where a player's is. */
-  w.entries = (id) => {
+  w.entries = id => {
     const contest = chain.account('Contest', loot.pda.contest(w.project, id));
     return loot.decodeEntries(chain.get(loot.contestEntries(loot.pda.contest(w.project, id), contest)).data);
   };
-  w.entryOf = (id, player) => w.entries(id).findIndex((e) => e.player === player);
+  w.entryOf = (id, player) => w.entries(id).findIndex(e => e.player === player);
 
   /** The authority mints one of `itemId` to `owner`; returns the asset. */
   w.make = (itemId, owner, attributes = []) => {
     const itemState = chain.account('Item', loot.pda.item(w.project, itemId));
     const [asset] = loot.madeAssets(w.project, itemId, itemState);
-    chain.send(w.authority, [loot.makeIx({ authority: w.authority, project: w.project, item: itemId, itemState, owners: [owner], attributes })]);
+    chain.send(w.authority, [
+      loot.makeIx({ authority: w.authority, project: w.project, item: itemId, itemState, owners: [owner], attributes }),
+    ]);
     return asset;
   };
 
@@ -336,11 +394,28 @@ export function world({ seed = 'world', platform = true, project = true, compres
   // The owner's Core collection, with the project's address as its update delegate.
   w.collection = newAddress(random);
   w.project = loot.pda.project(w.creator, 0);
-  chain.send(w.creator, [createCollectionInstruction({ collection: w.collection, creator: w.creator, name: 'Gecko Zombies', uri: 'https://example.invalid/collection.json', project: w.project, compressed })]);
+  chain.send(w.creator, [
+    createCollectionInstruction({
+      collection: w.collection,
+      creator: w.creator,
+      name: 'Gecko Zombies',
+      uri: 'https://example.invalid/collection.json',
+      project: w.project,
+      compressed,
+    }),
+  ]);
 
   if (platform) chain.send(admin, [loot.initPlatformIx({ admin, fees: FEES })]);
   if (platform && project) {
-    chain.send(w.creator, [loot.createProjectIx({ owner: w.creator, id: 0, collections: [w.collection], treasury: w.treasury, authority: w.authority })]);
+    chain.send(w.creator, [
+      loot.createProjectIx({
+        owner: w.creator,
+        id: 0,
+        collections: [w.collection],
+        treasury: w.treasury,
+        authority: w.authority,
+      }),
+    ]);
   }
   return w;
 }

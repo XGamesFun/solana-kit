@@ -49,25 +49,27 @@ class ApproveError extends Error {
 export function devnetChain(url = process.env.XSOLANA_RPC_URL || DEVNET) {
   const rpc = rpcClient(notMainnet(url));
   let cluster = null;
-  const checked = () => (cluster ??= checkCluster(rpc).catch((e) => {
-    cluster = null;
-    throw e;
-  }));
+  const checked = () =>
+    (cluster ??= checkCluster(rpc).catch(e => {
+      cluster = null;
+      throw e;
+    }));
   return {
     url,
     latestBlockhash: async () => {
       await checked();
       return rpc.latestBlockhash();
     },
-    rent: async (bytes) => BigInt(await rpc.call('getMinimumBalanceForRentExemption', [bytes])),
-    send: async (wire) => {
+    rent: async bytes => BigInt(await rpc.call('getMinimumBalanceForRentExemption', [bytes])),
+    send: async wire => {
       await checked();
       return rpc.send(wire);
     },
     confirm: (signature, options) => rpc.confirm(signature, options),
-    account: (address) => rpc.account(address),
+    account: address => rpc.account(address),
     /** A sent transaction's status from the whole history: { err, confirmationStatus }, or null when unseen. */
-    signatureStatus: async (signature) => (await rpc.call('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])).value[0],
+    signatureStatus: async signature =>
+      (await rpc.call('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])).value[0],
     blockHeight: () => rpc.blockHeight(),
   };
 }
@@ -79,7 +81,10 @@ export function devnetChain(url = process.env.XSOLANA_RPC_URL || DEVNET) {
  */
 export async function writeWhole(file, text) {
   const target = await realpath(file).catch(() => file);
-  const mode = await stat(target).then((s) => s.mode & 0o777, () => 0o644);
+  const mode = await stat(target).then(
+    s => s.mode & 0o777,
+    () => 0o644,
+  );
   const temp = path.join(path.dirname(target), `.${path.basename(target)}.${randomBytes(6).toString('hex')}.tmp`);
   try {
     const handle = await openFile(temp, 'wx', mode);
@@ -103,7 +108,10 @@ function walletAddress(wallet) {
   try {
     addressBytes(text);
   } catch {
-    throw new ApproveError(400, `${text ? JSON.stringify(text.slice(0, 60)) : 'No wallet'}: that is not a Solana address. Connect a wallet and try again.`);
+    throw new ApproveError(
+      400,
+      `${text ? JSON.stringify(text.slice(0, 60)) : 'No wallet'}: that is not a Solana address. Connect a wallet and try again.`,
+    );
   }
   return text;
 }
@@ -112,18 +120,25 @@ function walletAddress(wallet) {
  * One approval session for the spec in `file`. `chain`: { latestBlockhash, rent(bytes), send(wire), confirm(sig) }.
  * `write(file, text)` writes the spec file (`writeWhole`). Exposed for tests; `approve` serves it.
  */
-export async function createApproval({ file, chain = devnetChain(), now = () => Math.floor(Date.now() / 1000), clock = Date.now, write = writeWhole }) {
+export async function createApproval({
+  file,
+  chain = devnetChain(),
+  now = () => Math.floor(Date.now() / 1000),
+  clock = Date.now,
+  write = writeWhole,
+}) {
   let spec = JSON.parse(await readFile(file, 'utf8'));
   if (spec.economy) spec = spec.economy;
   const verdict = check(spec, { now: now() });
-  if (!verdict.ok) throw new ApproveError(400, `${file} does not check:\n${describe({ refusals: verdict.refusals, warnings: [] })}`);
+  if (!verdict.ok)
+    throw new ApproveError(400, `${file} does not check:\n${describe({ refusals: verdict.refusals, warnings: [] })}`);
   const keys = new Map();
   let prepared = null;
   let busy = false;
   // One wallet read, prepare or complete at a time: each settles and writes the live section, and a batch built while
   // another batch lands would send that batch's steps again.
   let queue = Promise.resolve();
-  const serial = (fn) => {
+  const serial = fn => {
     const run = queue.then(fn, fn);
     queue = run.catch(() => {});
     return run;
@@ -150,13 +165,19 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       await checkMints({ m: model(spec, { now: at }), chain });
     } catch (e) {
       if (!(e instanceof MintMismatch)) throw e;
-      throw new ApproveError(409, `${e.message} Nothing was sent: correct ${path.basename(file)}, then run \`xsolana approve\` again.`);
+      throw new ApproveError(
+        409,
+        `${e.message} Nothing was sent: correct ${path.basename(file)}, then run \`xsolana approve\` again.`,
+      );
     }
     try {
       return await checkLive({ live: live(), m: model(spec, { now: at }), wallet, chain });
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
-      throw new ApproveError(409, `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file \`xsolana approve\` wrote, or remove its live section to start a new setup.`);
+      throw new ApproveError(
+        409,
+        `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file \`xsolana approve\` wrote, or remove its live section to start a new setup.`,
+      );
     }
   }
 
@@ -166,15 +187,30 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     for (const name of p0.freshKeys) if (!keys.has(name)) keys.set(name, freshKeypair());
     // The accounts the owner makes outside loot: a mint, and the project's tree of compressed NFTs.
     const tree = compressedTree(model(spec, { now: at }));
-    const rents = new Map(await Promise.all([MINT_BYTES, ...(tree ? [tree.bytes] : [])].map(async (bytes) => [bytes, boundedRent(bytes, await chain.rent(bytes))])));
-    const rent = (bytes) => {
+    const rents = new Map(
+      await Promise.all(
+        [MINT_BYTES, ...(tree ? [tree.bytes] : [])].map(async bytes => [
+          bytes,
+          boundedRent(bytes, await chain.rent(bytes)),
+        ]),
+      ),
+    );
+    const rent = bytes => {
       if (!rents.has(bytes)) throw new Error(`No rent known for ${bytes} bytes.`);
       return rents.get(bytes);
     };
     const addresses = Object.fromEntries([...keys].map(([n, k]) => [n, k.address]));
     // A recent slot, for the project's standing lookup table (made at go-live at a slot still in the slot hashes when it lands).
     const hashes = slotHashes((await chain.account(SYSVAR_SLOT_HASHES).catch(() => null))?.data);
-    const p = prepare(spec, { owner, keys: addresses, live: live() ?? {}, now: at, rent, only, slot: hashes[0] ?? null });
+    const p = prepare(spec, {
+      owner,
+      keys: addresses,
+      live: live() ?? {},
+      now: at,
+      rent,
+      only,
+      slot: hashes[0] ?? null,
+    });
     if (!p.ok) throw new ApproveError(400, describe({ refusals: p.refusals, warnings: [] }));
     return p;
   }
@@ -183,7 +219,10 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
    * What each step pays to whom and which keys it trusts, read back from its instructions, in full. A change says, for
    * a record that is live already, how each line differs from what is on chain (`readLive`).
    */
-  const names = () => namesOf(model(spec, { now: at }), { treasury: madeSoFar(live())?.treasury ?? model(spec, { now: at }).treasuryWallet ?? null });
+  const names = () =>
+    namesOf(model(spec, { now: at }), {
+      treasury: madeSoFar(live())?.treasury ?? model(spec, { now: at }).treasuryWallet ?? null,
+    });
   /**
    * What is live, read from the chain once a wallet connects and the file's live section is checked: for each step,
    * the lines of the records it writes as they are on chain now ([] for a record not there yet), and the treasury.
@@ -204,10 +243,11 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     // A grant published before and gone from the chain (closed) that the change makes again with a list: a list leaf
     // names no grant or incarnation, so the same root would pay every listed round again.
     const remade = [];
-    const published = new Set((spec.live.published.grants ?? []).map((g) => g.key));
+    const published = new Set((spec.live.published.grants ?? []).map(g => g.key));
     for (const g of model(spec, { now: at }).grants) {
       if (!g.list?.length || !published.has(g.key) || !p.ctx.project) continue;
-      if (!(await chain.account(pda.grant(p.ctx.project, g.id)).catch(() => 'unread'))) remade.push(`“${g.name ?? g.key}”`);
+      if (!(await chain.account(pda.grant(p.ctx.project, g.id)).catch(() => 'unread')))
+        remade.push(`“${g.name ?? g.key}”`);
     }
     wasLive = { steps: was, treasury: p.ctx.treasury, remade };
   }
@@ -217,13 +257,27 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     return was ? compareDetails(lines, was) : lines;
   };
   /** The lines a change is held against for its outside-address warning: what was read from the chain, or nothing yet. */
-  const wasLines = () => (spec.live?.published ? [...(wasLive ? [...wasLive.steps.values()].flat() : []), ...(wasLive?.treasury ? [`Treasury: ${wasLive.treasury}`] : [])] : null);
-  const remadeLists = () => (wasLive?.remade?.length ? `This change makes ${wasLive.remade.join(', ')} again after it was closed, with the same list: a list names no grant, so every wallet on it could claim every listed round again. Give the grant a fresh list (new rounds) before you approve.` : null);
-  const unread = () => (spec.live?.published && !wasLive ? 'What is live has not been read from the chain yet: connect your wallet, and each line is marked against what is on chain.' : null);
+  const wasLines = () =>
+    spec.live?.published
+      ? [
+          ...(wasLive ? [...wasLive.steps.values()].flat() : []),
+          ...(wasLive?.treasury ? [`Treasury: ${wasLive.treasury}`] : []),
+        ]
+      : null;
+  const remadeLists = () =>
+    wasLive?.remade?.length
+      ? `This change makes ${wasLive.remade.join(', ')} again after it was closed, with the same list: a list names no grant, so every wallet on it could claim every listed round again. Give the grant a fresh list (new rounds) before you approve.`
+      : null;
+  const unread = () =>
+    spec.live?.published && !wasLive
+      ? 'What is live has not been read from the chain yet: connect your wallet, and each line is marked against what is on chain.'
+      : null;
 
   // The project's own settings a change names are never published: the page says so.
   const changed = mode === 'change' ? changedParts(spec).settings : [];
-  const settings = changed.length ? `This change names new project settings (${changed.join(', ')}) that publishing never writes: on chain they stay as they are.` : null;
+  const settings = changed.length
+    ? `This change names new project settings (${changed.join(', ')}) that publishing never writes: on chain they stay as they are.`
+    : null;
 
   const legal = legalFlags(verdict);
 
@@ -231,7 +285,17 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
   const said = new Map();
   function view(p, n = names(), extra = {}) {
     const done = new Set(live()?.landed ?? []);
-    const steps = p.ok ? p.transactions.flatMap((t) => t.steps.map((s, i) => ({ id: s.id, says: s.says, details: detailsOf(t, i, n), signer: t.signer, done: done.has(s.id) }))) : [];
+    const steps = p.ok
+      ? p.transactions.flatMap(t =>
+          t.steps.map((s, i) => ({
+            id: s.id,
+            says: s.says,
+            details: detailsOf(t, i, n),
+            signer: t.signer,
+            done: done.has(s.id),
+          })),
+        )
+      : [];
     for (const s of steps) said.set(s.id, s);
     return {
       name: spec.name ?? path.basename(file),
@@ -240,13 +304,25 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       program: LOOT_PROGRAM,
       cluster: 'devnet',
       setupSol: cost(spec, { now: at, live: live(), only }).setup?.totalSol ?? null,
-      warnings: [...(extra.refused ? [extra.refused] : []), ...verdict.warnings.filter((w) => !Object.hasOwn(LEGAL, w.code)).map((w) => w.message), ...[settings, unread(), remadeLists(), outsideAddresses(steps.flatMap((s) => s.details), { was: wasLines(), owner: n.owner })].filter(Boolean)],
+      warnings: [
+        ...(extra.refused ? [extra.refused] : []),
+        ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
+        ...[
+          settings,
+          unread(),
+          remadeLists(),
+          outsideAddresses(
+            steps.flatMap(s => s.details),
+            { was: wasLines(), owner: n.owner },
+          ),
+        ].filter(Boolean),
+      ],
       // The legal flags in plain words, shown in a block of their own whatever the agent said: Approve waits until the
       // owner ticks that they read them.
       legal,
       authority: model(spec).authority,
       steps,
-      landed: [...done].map((id) => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),
+      landed: [...done].map(id => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),
       signatures: [...signatures],
       // The project the setup sends to, once a wallet is connected: always that wallet's own (or the one it is the
       // authority of).
@@ -308,17 +384,26 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       const v = view(p0, namesOf(model(spec, { now: at }), { owner: wallet }), { refused: e.message });
       return { ...v, remaining: p0.ok ? p0.transactions.length : 0, done: false };
     }
-    if (!p0.ok || !p0.transactions.length) return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
+    if (!p0.ok || !p0.transactions.length)
+      return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
     const p = await build(trusted.owner);
     await readLive(p);
-    const v = view(p, namesOf(model(spec, { now: at }), { owner: wallet, treasury: p.ctx.treasury }), { project: p.ctx.project });
+    const v = view(p, namesOf(model(spec, { now: at }), { owner: wallet, treasury: p.ctx.treasury }), {
+      project: p.ctx.project,
+    });
     return { ...v, remaining: p.transactions.length, done: false };
   }
 
   async function prepareFor(wallet) {
     // A second ask while a batch is out for signing (a double click) gets that same batch, not a new one that would
     // make the first signature fail.
-    if (prepared && prepared.wallet === wallet && prepared.generation === generation && prepared.expires > clock() + 15_000) return answer(prepared);
+    if (
+      prepared &&
+      prepared.wallet === wallet &&
+      prepared.generation === generation &&
+      prepared.expires > clock() + 15_000
+    )
+      return answer(prepared);
     await settlePending();
     const trusted = await trust(wallet);
     const p = await build(trusted.owner);
@@ -327,18 +412,24 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     const authority = p.ctx.authority;
     const first = p.transactions[0];
     const signer = first.signer === 'authority' ? authority : p.ctx.owner;
-    if (signer !== wallet) throw new ApproveError(403, first.signer === 'authority' ? `The next step is the authority’s: connect the wallet ${authority} and approve it there.` : `The next step is the project owner’s: connect the wallet ${p.ctx.owner} and approve it there.`);
+    if (signer !== wallet)
+      throw new ApproveError(
+        403,
+        first.signer === 'authority'
+          ? `The next step is the authority’s: connect the wallet ${authority} and approve it there.`
+          : `The next step is the project owner’s: connect the wallet ${p.ctx.owner} and approve it there.`,
+      );
     const batch = [];
     for (const t of p.transactions) {
       if (t.signer !== first.signer || batch.length >= PER_APPROVAL) break;
       batch.push(t);
     }
     const { blockhash, lastValidBlockHeight } = await chain.latestBlockhash();
-    const wires = batch.map((t) => {
+    const wires = batch.map(t => {
       const message = compileMessage({ payer: wallet, blockhash, instructions: t.instructions });
       const { signers } = readTransaction(wireTransaction(message));
-      const sigs = signers.map((s) => {
-        const fresh = [...keys.values()].find((k) => k.address === s);
+      const sigs = signers.map(s => {
+        const fresh = [...keys.values()].find(k => k.address === s);
         return fresh ? fresh.sign(message) : new Uint8Array(64);
       });
       return wireTransaction(message, sigs);
@@ -346,13 +437,27 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     // What each transaction pays to whom, read back from the very instructions the wallet signs.
     const n = namesOf(model(spec, { now: at }), { owner: wallet, treasury: p.ctx.treasury });
     // Every line names the project it goes to first: always the wallet's own, or the one it is the authority of.
-    const details = batch.map((t) => [`Project: ${p.ctx.project}${p.ctx.owner === wallet ? ' (your own)' : ` (owned by ${p.ctx.owner})`}`, ...t.steps.flatMap((_, i) => detailsOf(t, i, n))]);
-    prepared = { id: randomBytes(12).toString('hex'), wallet, wires, batch, details, ctx: p.ctx, lastValidBlockHeight, generation, expires: clock() + PREPARE_TTL_MS };
+    const details = batch.map(t => [
+      `Project: ${p.ctx.project}${p.ctx.owner === wallet ? ' (your own)' : ` (owned by ${p.ctx.owner})`}`,
+      ...t.steps.flatMap((_, i) => detailsOf(t, i, n)),
+    ]);
+    prepared = {
+      id: randomBytes(12).toString('hex'),
+      wallet,
+      wires,
+      batch,
+      details,
+      ctx: p.ctx,
+      lastValidBlockHeight,
+      generation,
+      expires: clock() + PREPARE_TTL_MS,
+    };
     return answer(prepared);
   }
 
   async function complete(wallet, id, signed) {
-    if (!prepared || !sameText(prepared.id, String(id ?? ''))) throw new ApproveError(409, 'That batch is not the one prepared: ask for the next one.');
+    if (!prepared || !sameText(prepared.id, String(id ?? '')))
+      throw new ApproveError(409, 'That batch is not the one prepared: ask for the next one.');
     if (prepared.expires < clock()) {
       prepared = null;
       throw new ApproveError(410, 'That batch expired (90 seconds). Ask for it again.');
@@ -360,7 +465,8 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     if (prepared.wallet !== wallet) throw new ApproveError(403, 'That batch was prepared for another wallet.');
     const batch = prepared;
     prepared = null;
-    if (batch.generation !== generation) throw new ApproveError(409, 'Something landed after that batch was built: ask for the next one.');
+    if (batch.generation !== generation)
+      throw new ApproveError(409, 'Something landed after that batch was built: ask for the next one.');
     const wires = checkSigned(batch.wires, signed, wallet);
     busy = true;
     try {
@@ -370,7 +476,12 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
         // sent twice (`settlePending`).
         const signature = encodeBase58(readTransaction(wire).signatures[0]);
         const sent = batch.batch[i];
-        await remember({ signature, steps: sent.steps.map((s) => s.id), made: madeBy(sent, batch.ctx), lastValidBlockHeight: batch.lastValidBlockHeight });
+        await remember({
+          signature,
+          steps: sent.steps.map(s => s.id),
+          made: madeBy(sent, batch.ctx),
+          lastValidBlockHeight: batch.lastValidBlockHeight,
+        });
         try {
           await chain.send(wire);
         } catch (e) {
@@ -386,7 +497,11 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
           const status = chain.signatureStatus ? await chain.signatureStatus(signature).catch(() => null) : null;
           if (!landedStatus(status)) {
             if (status?.err || !chain.signatureStatus) await forget(signature);
-            else throw new ApproveError(503, `${e.message} It may still land: it is looked up on chain before anything is sent again, so approving again never sends it twice. Wait a minute, then ask for the next batch.`);
+            else
+              throw new ApproveError(
+                503,
+                `${e.message} It may still land: it is looked up on chain before anything is sent again, so approving again never sends it twice. Wait a minute, then ask for the next batch.`,
+              );
             throw e;
           }
         }
@@ -401,13 +516,21 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
 
   /** A prepared batch as the page gets it: the wires to sign, and what each does in words. */
   function answer(b) {
-    return { id: b.id, project: b.ctx.project, transactions: b.wires.map(toBase64), says: b.batch.map((t) => t.steps.map((s) => s.says).join('; ')), details: b.details };
+    return {
+      id: b.id,
+      project: b.ctx.project,
+      transactions: b.wires.map(toBase64),
+      says: b.batch.map(t => t.steps.map(s => s.says).join('; ')),
+      details: b.details,
+    };
   }
 
   /** What a transaction's steps make, from the context it was built with: recorded when it lands. */
   function madeBy(transaction, ctx) {
-    const ids = new Set(transaction.steps.map((s) => s.id));
-    const mints = Object.fromEntries([...ids].filter((id) => id.startsWith('token:')).map((id) => [id.slice(6), ctx.mints[id.slice(6)]]));
+    const ids = new Set(transaction.steps.map(s => s.id));
+    const mints = Object.fromEntries(
+      [...ids].filter(id => id.startsWith('token:')).map(id => [id.slice(6), ctx.mints[id.slice(6)]]),
+    );
     return {
       ...(ids.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
       ...(ids.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
@@ -423,7 +546,16 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
    */
   async function remember(entry) {
     const was = spec.live ?? {};
-    spec = { ...spec, live: { ...was, landed: was.landed ?? [], partial: true, ...(only ? { changing: [...only] } : {}), pending: [...(was.pending ?? []), entry].slice(-60) } };
+    spec = {
+      ...spec,
+      live: {
+        ...was,
+        landed: was.landed ?? [],
+        partial: true,
+        ...(only ? { changing: [...only] } : {}),
+        pending: [...(was.pending ?? []), entry].slice(-60),
+      },
+    };
     generation++;
     await write(file, `${JSON.stringify(spec, null, 2)}\n`);
   }
@@ -431,7 +563,7 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
   /** Takes a transaction out of the pending list: it landed (and is recorded), failed, or can no longer land. */
   async function forget(signature) {
     if (!spec.live?.pending) return;
-    const pending = spec.live.pending.filter((p) => p.signature !== signature);
+    const pending = spec.live.pending.filter(p => p.signature !== signature);
     const { pending: _, ...rest } = spec.live;
     spec = { ...spec, live: pending.length ? { ...rest, pending } : rest };
     generation++;
@@ -442,7 +574,9 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
   async function projectOwner(project) {
     if (!project || !chain.account) return null;
     const account = await chain.account(project).catch(() => null);
-    return account && account.owner === LOOT_PROGRAM && accountKind(account.data) === 'Project' ? decode('Project', account.data).owner : null;
+    return account && account.owner === LOOT_PROGRAM && accountKind(account.data) === 'Project'
+      ? decode('Project', account.data).owner
+      : null;
   }
 
   /**
@@ -459,7 +593,11 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       const status = await chain.signatureStatus(entry.signature);
       if (landedStatus(status)) {
         if (!signatures.includes(entry.signature)) signatures.push(entry.signature);
-        await landed({ steps: entry.steps.map((id) => ({ id })) }, { ...(entry.made ?? {}), owner: await projectOwner(entry.made?.project ?? spec.live?.project) }, entry.signature);
+        await landed(
+          { steps: entry.steps.map(id => ({ id })) },
+          { ...(entry.made ?? {}), owner: await projectOwner(entry.made?.project ?? spec.live?.project) },
+          entry.signature,
+        );
         continue;
       }
       if (status?.err) {
@@ -472,7 +610,10 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
         await forget(entry.signature);
         continue;
       }
-      throw new ApproveError(409, `The transaction ${entry.signature}, sent earlier, has not landed yet and may still: wait a minute and try again, so nothing is sent twice.`);
+      throw new ApproveError(
+        409,
+        `The transaction ${entry.signature}, sent earlier, has not landed yet and may still: wait a minute and try again, so nothing is sent twice.`,
+      );
     }
   }
 
@@ -483,10 +624,11 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
    */
   async function landed(transaction, ctx, signature) {
     const was = spec.live ?? {};
-    const ids = transaction.steps.map((s) => s.id);
+    const ids = transaction.steps.map(s => s.id);
     const made = new Set(ids);
     const mints = { ...(was.mints ?? {}) };
-    for (const id of ids) if (id.startsWith('token:') && ctx.mints?.[id.slice(6)]) mints[id.slice(6)] = ctx.mints[id.slice(6)];
+    for (const id of ids)
+      if (id.startsWith('token:') && ctx.mints?.[id.slice(6)]) mints[id.slice(6)] = ctx.mints[id.slice(6)];
     const progress = {
       ...was,
       program: LOOT_PROGRAM,
@@ -499,8 +641,10 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
       partial: true,
       ...(only ? { changing: [...only] } : {}),
       // (each signature once: one found again by `settlePending` may have been recorded already)
-      transactions: (was.transactions ?? []).some((t) => t.signature === signature) ? was.transactions : [...(was.transactions ?? []), { signature }].slice(-60),
-      pending: (was.pending ?? []).filter((p) => p.signature !== signature),
+      transactions: (was.transactions ?? []).some(t => t.signature === signature)
+        ? was.transactions
+        : [...(was.transactions ?? []), { signature }].slice(-60),
+      pending: (was.pending ?? []).filter(p => p.signature !== signature),
     };
     if (!progress.pending.length) delete progress.pending;
     if (!Object.keys(progress.mints).length) delete progress.mints;
@@ -511,7 +655,13 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
     if (rest.ok && rest.transactions.length === 0) {
       const { live: _, ...bare } = spec;
       // Everything the setup made, whichever session or transaction made it.
-      const all = { ...ctx, ...Object.fromEntries(['project', 'treasury', 'authority', 'collection', 'tree', 'tables'].map((k) => [k, progress[k] ?? ctx[k]])), mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) } };
+      const all = {
+        ...ctx,
+        ...Object.fromEntries(
+          ['project', 'treasury', 'authority', 'collection', 'tree', 'tables'].map(k => [k, progress[k] ?? ctx[k]]),
+        ),
+        mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
+      };
       const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
       final.live = { ...final.live, transactions: progress.transactions };
       spec = final;
@@ -529,12 +679,19 @@ export async function createApproval({ file, chain = devnetChain(), now = () => 
 function boundedRent(bytes, lamports) {
   const most = (BigInt(bytes) + ACCOUNT_OVERHEAD) * MOST_RENT_PER_BYTE;
   const given = BigInt(lamports);
-  if (given > most) throw new ApproveError(502, `The RPC says an account of ${bytes} bytes needs ${given} lamports of rent; no cluster charges more than ${most}. Nothing was sent: use another RPC (XSOLANA_RPC_URL).`);
+  if (given > most)
+    throw new ApproveError(
+      502,
+      `The RPC says an account of ${bytes} bytes needs ${given} lamports of rent; no cluster charges more than ${most}. Nothing was sent: use another RPC (XSOLANA_RPC_URL).`,
+    );
   return given;
 }
 
 /** Whether a signature's status says it landed: confirmed or finalized, and not failed. */
-const landedStatus = (status) => Boolean(status && !status.err && (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized'));
+const landedStatus = status =>
+  Boolean(
+    status && !status.err && (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized'),
+  );
 
 const sameText = (a, b) => {
   const x = Buffer.from(String(a));
@@ -544,7 +701,8 @@ const sameText = (a, b) => {
 
 /** The wallet's signed copies: each the exact prepared message, each with the wallet's valid signature. */
 function checkSigned(prepared, signed, wallet) {
-  if (!Array.isArray(signed) || signed.length !== prepared.length) throw new ApproveError(400, 'The wallet’s answer does not match the request.');
+  if (!Array.isArray(signed) || signed.length !== prepared.length)
+    throw new ApproveError(400, 'The wallet’s answer does not match the request.');
   return prepared.map((wire, i) => {
     let mine;
     let theirs;
@@ -554,11 +712,13 @@ function checkSigned(prepared, signed, wallet) {
     } catch {
       throw new ApproveError(400, 'The wallet returned something that is not a transaction.');
     }
-    if (!equalBytes(mine.message, theirs.message)) throw new ApproveError(400, 'The wallet changed the transaction before signing it, so nothing was sent.');
+    if (!equalBytes(mine.message, theirs.message))
+      throw new ApproveError(400, 'The wallet changed the transaction before signing it, so nothing was sent.');
     const slot = mine.signers.indexOf(wallet);
     if (slot < 0) throw new ApproveError(400, 'This transaction was not prepared for that wallet.');
     const signature = theirs.signatures[slot];
-    if (!verifySignature(wallet, mine.message, signature)) throw new ApproveError(400, 'The wallet’s signature is missing or does not match your wallet.');
+    if (!verifySignature(wallet, mine.message, signature))
+      throw new ApproveError(400, 'The wallet’s signature is missing or does not match your wallet.');
     const signatures = [...mine.signatures];
     signatures[slot] = signature;
     return wireTransaction(mine.message, signatures);
@@ -589,7 +749,7 @@ export function ownRequest(headers, port) {
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   if (!hosts.includes(String(headers.host ?? '').toLowerCase())) return false;
   if (headers.origin === undefined) return true;
-  return hosts.some((h) => String(headers.origin).toLowerCase() === `http://${h}`);
+  return hosts.some(h => String(headers.origin).toLowerCase() === `http://${h}`);
 }
 
 /** A request's body, as text: refused (413) past `limit` bytes, and the rest of it read and let go. */
@@ -597,7 +757,7 @@ function readBody(req, limit = BODY_LIMIT) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on('data', (chunk) => {
+    req.on('data', chunk => {
       size += chunk.length;
       if (size > limit) return reject(new ApproveError(413, 'That request is too large.'));
       chunks.push(chunk);
@@ -629,9 +789,18 @@ export async function openBrowser(url, { spawnImpl = spawn, dir = tmpdir() } = {
   try {
     await chmod(folder, 0o700);
     const file = path.join(folder, 'open.html');
-    const href = url.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-    await writeFile(file, `<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${href}"><title>xsolana approve</title><a href="${href}">Open the approval page</a>\n`, { mode: 0o600, flag: 'wx' });
-    const [cmd, args] = process.platform === 'darwin' ? ['open', [file]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', file]] : ['xdg-open', [file]];
+    const href = url.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+    await writeFile(
+      file,
+      `<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${href}"><title>xsolana approve</title><a href="${href}">Open the approval page</a>\n`,
+      { mode: 0o600, flag: 'wx' },
+    );
+    const [cmd, args] =
+      process.platform === 'darwin'
+        ? ['open', [file]]
+        : process.platform === 'win32'
+          ? ['cmd', ['/c', 'start', '', file]]
+          : ['xdg-open', [file]];
     spawnImpl(cmd, args, { stdio: 'ignore', detached: true }).unref();
   } catch {
     /* the link is printed anyway */
@@ -646,16 +815,33 @@ export async function openBrowser(url, { spawnImpl = spawn, dir = tmpdir() } = {
  * after. The default `openLink` keeps even the code off the opener's command line (`openBrowser`); one that answers a
  * function has it called once the code is used.
  */
-export async function approve({ file = 'xsolana.json', port, open = true, chain = devnetChain(), log = (...a) => console.error(...a), openLink = openBrowser } = {}) {
+export async function approve({
+  file = 'xsolana.json',
+  port,
+  open = true,
+  chain = devnetChain(),
+  log = (...a) => console.error(...a),
+  openLink = openBrowser,
+} = {}) {
   const session = await createApproval({ file: path.resolve(file), chain });
   const token = randomBytes(18).toString('base64url');
   let code = randomBytes(18).toString('base64url');
   // (removes the file the browser was opened with, once: `openLink` answers how)
   let removeOpener = null;
-  const forget = () => { const remove = removeOpener; removeOpener = null; remove?.(); };
+  const forget = () => {
+    const remove = removeOpener;
+    removeOpener = null;
+    remove?.();
+  };
   const page = await readFile(path.join(ROOT, 'approve/page.html'), 'utf8');
   const policy = pagePolicy(page);
-  const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': policy, 'x-frame-options': 'DENY' };
+  const headers = {
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'content-security-policy': policy,
+    'x-frame-options': 'DENY',
+  };
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const send = (status, body, type = 'application/json') => {
@@ -664,27 +850,41 @@ export async function approve({ file = 'xsolana.json', port, open = true, chain 
     };
     try {
       // Only a request to this server by its own name (DNS rebinding: a site whose name now points at 127.0.0.1).
-      if (!ownRequest(req.headers, server.address().port)) return send(403, 'Open the link `xsolana approve` printed.', 'text/plain');
+      if (!ownRequest(req.headers, server.address().port))
+        return send(403, 'Open the link `xsolana approve` printed.', 'text/plain');
       if (req.method === 'GET' && url.pathname === '/') {
         const once = url.searchParams.get('c');
         if (once !== null) {
-          if (!code || !sameText(once, code)) return send(403, 'This link has been opened already: open the link `xsolana approve` printed.', 'text/plain');
+          if (!code || !sameText(once, code))
+            return send(
+              403,
+              'This link has been opened already: open the link `xsolana approve` printed.',
+              'text/plain',
+            );
           code = null;
           forget();
           res.writeHead(303, { ...headers, location: `/?t=${token}` });
           return res.end();
         }
-        if (!sameText(url.searchParams.get('t') ?? '', token)) return send(403, 'Open the link `xsolana approve` printed.', 'text/plain');
+        if (!sameText(url.searchParams.get('t') ?? '', token))
+          return send(403, 'Open the link `xsolana approve` printed.', 'text/plain');
         return send(200, page.replace('__TOKEN__', token), 'text/html; charset=utf-8');
       }
-      if (req.method === 'GET' && BROWSER_FILES.test(url.pathname)) return send(200, await readFile(path.join(ROOT, url.pathname.slice(4)), 'utf8'), 'text/javascript; charset=utf-8');
-      if (!sameText(req.headers['x-xsolana-token'] ?? '', token)) return send(403, { error: 'Not this session’s page.' });
+      if (req.method === 'GET' && BROWSER_FILES.test(url.pathname))
+        return send(
+          200,
+          await readFile(path.join(ROOT, url.pathname.slice(4)), 'utf8'),
+          'text/javascript; charset=utf-8',
+        );
+      if (!sameText(req.headers['x-xsolana-token'] ?? '', token))
+        return send(403, { error: 'Not this session’s page.' });
       if (req.method === 'GET' && url.pathname === '/api/state') {
         const wallet = url.searchParams.get('wallet');
         return send(200, wallet ? await session.stateFor(wallet) : session.state());
       }
       const body = req.method === 'POST' ? await readJson(req) : {};
-      if (req.method === 'POST' && url.pathname === '/api/prepare') return send(200, await session.prepare(String(body.wallet ?? '')));
+      if (req.method === 'POST' && url.pathname === '/api/prepare')
+        return send(200, await session.prepare(String(body.wallet ?? '')));
       if (req.method === 'POST' && url.pathname === '/api/complete') {
         const state = await session.complete(String(body.wallet ?? ''), body.id, body.transactions);
         if (state.done) {
@@ -712,7 +912,9 @@ export async function approve({ file = 'xsolana.json', port, open = true, chain 
   const link = `${origin}/?t=${token}`;
   const opened = `${origin}/?c=${code}`;
   log(`Approve going live in your wallet (devnet): ${link}`);
-  log('Leave this running until the page says it is live. Ctrl+C stops it; running it again goes on from where it stopped.');
+  log(
+    'Leave this running until the page says it is live. Ctrl+C stops it; running it again goes on from where it stopped.',
+  );
   if (open && !process.env.XSOLANA_NO_OPEN) {
     const remove = await openLink(opened);
     if (typeof remove === 'function') {

@@ -92,16 +92,7 @@
       "name": "Grand and minors",
       "price": 1,
       "ticketCurrency": "ticket",
-      "places": [
-        50,
-        10,
-        10,
-        10,
-        5,
-        5,
-        5,
-        5
-      ],
+      "places": [50, 10, 10, 10, 5, 5, 5, 5],
       "every": "7d"
     }
   ],

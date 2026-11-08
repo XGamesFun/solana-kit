@@ -102,8 +102,8 @@ codex plugin add xsolana@xgamesfun
 `npx -y --package=@xgamesfun/solana@0.24.0 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.24.0 connect` register it, with
 the skill, for Claude Code and Codex.
 
-Then ask for an economy, for example *"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
-monthly draw"*.
+Then ask for an economy, for example _"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
+monthly draw"_.
 
 Going live is always yours: `npx -y @xgamesfun/solana@0.24.0 approve` opens a page on your computer where you connect a
 devnet wallet and approve each transaction. The agent never signs and never asks for a key.
@@ -135,45 +135,45 @@ import * as loot from '@xgamesfun/solana/client';
 const ix = loot.openBoxIx({ player, project, box, nonce }); // one builder per instruction, no Solana SDK
 ```
 
-| Import | What |
-| --- | --- |
-| `@xgamesfun/solana` | the economy tools: `check`, `simulate`, `plan`, `cost`, `explainEconomy`, `model` |
-| `@xgamesfun/solana/client` | every PDA, one builder per instruction, account and receipt decoders, grant vouchers |
-| `@xgamesfun/solana/play` | `solanaApp`: what a player does with a live economy, from a browser app |
-| `@xgamesfun/solana/results` | results and vouchers a game's server signs |
-| `@xgamesfun/solana/chain/*` | browser-safe Solana primitives: base58, Borsh, transactions, PDAs, tokens, Core |
-| `@xgamesfun/solana/idl.json` | the program's IDL, the authority for account and argument layouts |
-| `@xgamesfun/solana/release.json` | the program build, IDL and client this release is pinned to |
+| Import                           | What                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| `@xgamesfun/solana`              | the economy tools: `check`, `simulate`, `plan`, `cost`, `explainEconomy`, `model`    |
+| `@xgamesfun/solana/client`       | every PDA, one builder per instruction, account and receipt decoders, grant vouchers |
+| `@xgamesfun/solana/play`         | `solanaApp`: what a player does with a live economy, from a browser app              |
+| `@xgamesfun/solana/results`      | results and vouchers a game's server signs                                           |
+| `@xgamesfun/solana/chain/*`      | browser-safe Solana primitives: base58, Borsh, transactions, PDAs, tokens, Core      |
+| `@xgamesfun/solana/idl.json`     | the program's IDL, the authority for account and argument layouts                    |
+| `@xgamesfun/solana/release.json` | the program build, IDL and client this release is pinned to                          |
 
 The client, chain and play modules run in browsers and Node 22 or later, with no bundler required. The package
 ships TypeScript declarations for every entry point.
 
 ## Documentation
 
-| | |
-| --- | --- |
-| [`docs/program.md`](docs/program.md) | the program: who signs, accounts, every instruction, fees, limits, receipts, costs |
-| [`docs/nfts.md`](docs/nfts.md) | NFTs and tokens, with and without the project's authority |
-| [`docs/harnesses.md`](docs/harnesses.md) | how the plugin reaches Claude Code and Codex, and the release checklist |
-| [`skills/xsolana-economy`](skills/xsolana-economy/SKILL.md) | the skill an agent follows |
-| [`examples/`](examples) | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated |
-| [`evals/`](evals/README.md) | fresh-session evals of agents building on loot |
-| [`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md) | versions, the trust model, reporting a vulnerability |
+|                                                              |                                                                                             |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| [`docs/program.md`](docs/program.md)                         | the program: who signs, accounts, every instruction, fees, limits, receipts, costs          |
+| [`docs/nfts.md`](docs/nfts.md)                               | NFTs and tokens, with and without the project's authority                                   |
+| [`docs/harnesses.md`](docs/harnesses.md)                     | how the plugin reaches Claude Code and Codex, and the release checklist                     |
+| [`skills/xsolana-economy`](skills/xsolana-economy/SKILL.md)  | the skill an agent follows                                                                  |
+| [`examples/`](examples)                                      | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated |
+| [`evals/`](evals/README.md)                                  | fresh-session evals of agents building on loot                                              |
+| [`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md) | versions, the trust model, reporting a vulnerability                                        |
 
 ## Layout
 
-| Path | What |
-| --- | --- |
-| `js/chain/` | browser-safe Solana primitives, no SDK |
-| `js/client/` | the client; `idl/` is the program's IDL |
-| `js/economy/` | the economy spec (version 2, `schema.json`), checker, simulation, setup plan, cost, explainer, guide |
-| `js/play/`, `js/results/` | a player's side of a live economy; results a server vouches for |
-| `js/approve/`, `js/mcp/`, `js/connect/` | the approval page, the MCP server and its tools, `xsolana connect` |
-| `js/sim/`, `js/test/` | LiteSVM running the real program; the tests and their pinned fixtures |
-| `bin/xsolana.mjs` | the CLI |
-| `skills/`, `plugin/` | the skill (copied to `plugin/skills`, `.claude/skills`, `.agents/skills`) and the plugin |
-| `scripts/` | fixtures, skill sync, IDL sync, release manifest, a devnet end-to-end run |
-| `release.json` | the program binary, IDL and client hashes this version is pinned to |
+| Path                                    | What                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `js/chain/`                             | browser-safe Solana primitives, no SDK                                                               |
+| `js/client/`                            | the client; `idl/` is the program's IDL                                                              |
+| `js/economy/`                           | the economy spec (version 2, `schema.json`), checker, simulation, setup plan, cost, explainer, guide |
+| `js/play/`, `js/results/`               | a player's side of a live economy; results a server vouches for                                      |
+| `js/approve/`, `js/mcp/`, `js/connect/` | the approval page, the MCP server and its tools, `xsolana connect`                                   |
+| `js/sim/`, `js/test/`                   | LiteSVM running the real program; the tests and their pinned fixtures                                |
+| `bin/xsolana.mjs`                       | the CLI                                                                                              |
+| `skills/`, `plugin/`                    | the skill (copied to `plugin/skills`, `.claude/skills`, `.agents/skills`) and the plugin             |
+| `scripts/`                              | fixtures, skill sync, IDL sync, release manifest, a devnet end-to-end run                            |
+| `release.json`                          | the program binary, IDL and client hashes this version is pinned to                                  |
 
 ## Development
 
@@ -189,14 +189,14 @@ npm run check      # fixtures, skill copies and release.json in step, lint, then
 
 Nothing in the tests deploys or spends SOL.
 
-| Variable | What it does |
-| --- | --- |
-| `XSOLANA_RPC_URL` | a devnet RPC of your own for `xsolana approve` and `xsolana status` (a mainnet URL is refused) |
-| `XSOLANA_NO_OPEN` | `xsolana approve` prints its link without opening a browser |
-| `XSOLANA_DEBUG` | the CLI prints a failure's whole stack, not one line |
-| `XSOLANA_PROGRAM_DIR` | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it | To try the tools in your own agent from a clone,
-`node bin/xsolana.mjs connect --local` registers this checkout's MCP server and the skill with Claude Code and Codex
-(`--remove` takes them out again).
+| Variable                                                                                                             | What it does                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `XSOLANA_RPC_URL`                                                                                                    | a devnet RPC of your own for `xsolana approve` and `xsolana status` (a mainnet URL is refused) |
+| `XSOLANA_NO_OPEN`                                                                                                    | `xsolana approve` prints its link without opening a browser                                    |
+| `XSOLANA_DEBUG`                                                                                                      | the CLI prints a failure's whole stack, not one line                                           |
+| `XSOLANA_PROGRAM_DIR`                                                                                                | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it       | To try the tools in your own agent from a clone, |
+| `node bin/xsolana.mjs connect --local` registers this checkout's MCP server and the skill with Claude Code and Codex |
+| (`--remove` takes them out again).                                                                                   |
 
 After editing `skills/`, run `npm run sync-skills`. Changes to tool texts, the skill or the plugin are best measured
 with the evals before and after ([`evals/README.md`](evals/README.md)). [`AGENTS.md`](AGENTS.md) has the rules for

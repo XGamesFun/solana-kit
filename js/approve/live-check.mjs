@@ -30,19 +30,33 @@ export async function checkLive({ live, m, wallet, chain }) {
     return t?.source === 'game' && (!t.mint || t.mint.startsWith('@'));
   });
   if (!made.project && !setupMints.length && !made.collection && !made.tree) return { owner: wallet, project: own };
-  if (typeof chain.account !== 'function') throw new Error('The file says part of this economy is live already, and this connection cannot read the chain to check it: nothing was sent.');
-  const read = (address) => chain.account(address);
+  if (typeof chain.account !== 'function')
+    throw new Error(
+      'The file says part of this economy is live already, and this connection cannot read the chain to check it: nothing was sent.',
+    );
+  const read = address => chain.account(address);
 
   let owner = wallet;
   let project = own;
   if (made.project) {
     const account = await read(made.project);
-    if (!account || account.owner !== LOOT_PROGRAM || accountKind(account.data) !== 'Project') throw new LiveMismatch(`The file names the project ${made.project}, and there is no loot project at that address.`);
+    if (!account || account.owner !== LOOT_PROGRAM || accountKind(account.data) !== 'Project')
+      throw new LiveMismatch(
+        `The file names the project ${made.project}, and there is no loot project at that address.`,
+      );
     const state = decode('Project', account.data);
-    if (pda.project(state.owner, m.projectNumber) !== made.project) throw new LiveMismatch(`The file names the project ${made.project}, which is not project number ${m.projectNumber} of its owner ${state.owner}.`);
-    if (state.owner !== wallet && state.authority !== wallet) throw new LiveMismatch(`The file names the project ${made.project}, which belongs to the wallet ${state.owner}, not to the connected wallet ${wallet}. Your own project number ${m.projectNumber} is at ${own}.`);
-    if (made.treasury && made.treasury !== state.treasury) throw new LiveMismatch(`The file says the treasury is ${made.treasury}; on chain it is ${state.treasury}.`);
-    if (made.authority && made.authority !== state.authority) throw new LiveMismatch(`The file says the authority is ${made.authority}; on chain it is ${state.authority}.`);
+    if (pda.project(state.owner, m.projectNumber) !== made.project)
+      throw new LiveMismatch(
+        `The file names the project ${made.project}, which is not project number ${m.projectNumber} of its owner ${state.owner}.`,
+      );
+    if (state.owner !== wallet && state.authority !== wallet)
+      throw new LiveMismatch(
+        `The file names the project ${made.project}, which belongs to the wallet ${state.owner}, not to the connected wallet ${wallet}. Your own project number ${m.projectNumber} is at ${own}.`,
+      );
+    if (made.treasury && made.treasury !== state.treasury)
+      throw new LiveMismatch(`The file says the treasury is ${made.treasury}; on chain it is ${state.treasury}.`);
+    if (made.authority && made.authority !== state.authority)
+      throw new LiveMismatch(`The file says the authority is ${made.authority}; on chain it is ${state.authority}.`);
     owner = state.owner;
     project = made.project;
   }
@@ -51,13 +65,25 @@ export async function checkLive({ live, m, wallet, chain }) {
     const t = m.tokens.get(key);
     const account = await read(address);
     const mint = account ? parseMint(address, account.owner, account.data) : null;
-    if (!mint) throw new LiveMismatch(`The file says the setup made the token ${t.symbol ?? key} at ${address}, and there is no mint there.`);
-    if (mint.decimals !== (t.decimals ?? 0)) throw new LiveMismatch(`The mint ${address} the file names for ${t.symbol ?? key} has ${mint.decimals} decimals, not ${t.decimals ?? 0}.`);
+    if (!mint)
+      throw new LiveMismatch(
+        `The file says the setup made the token ${t.symbol ?? key} at ${address}, and there is no mint there.`,
+      );
+    if (mint.decimals !== (t.decimals ?? 0))
+      throw new LiveMismatch(
+        `The mint ${address} the file names for ${t.symbol ?? key} has ${mint.decimals} decimals, not ${t.decimals ?? 0}.`,
+      );
     // The setup hands a token's minting to the project, or turns it off for good (a fixed supply); it never keeps a
     // freeze authority.
     const minter = t.fixedSupply ? null : project;
-    if (mint.mintAuthority !== minter) throw new LiveMismatch(`The mint ${address} the file names for ${t.symbol ?? key} is minted by ${mint.mintAuthority ?? 'nobody'}, not ${minter ?? 'nobody'} as the setup leaves it.`);
-    if (mint.freezeAuthority) throw new LiveMismatch(`The mint ${address} the file names for ${t.symbol ?? key} can be frozen by ${mint.freezeAuthority}; the setup makes none that can.`);
+    if (mint.mintAuthority !== minter)
+      throw new LiveMismatch(
+        `The mint ${address} the file names for ${t.symbol ?? key} is minted by ${mint.mintAuthority ?? 'nobody'}, not ${minter ?? 'nobody'} as the setup leaves it.`,
+      );
+    if (mint.freezeAuthority)
+      throw new LiveMismatch(
+        `The mint ${address} the file names for ${t.symbol ?? key} can be frozen by ${mint.freezeAuthority}; the setup makes none that can.`,
+      );
   }
 
   if (made.collection) {
@@ -68,14 +94,24 @@ export async function checkLive({ live, m, wallet, chain }) {
     } catch {
       collection = null;
     }
-    if (!collection) throw new LiveMismatch(`The file names the collection ${made.collection}, and there is no Core collection there.`);
-    if (collection.updateAuthority !== owner) throw new LiveMismatch(`The collection ${made.collection} the file names belongs to ${collection.updateAuthority}, not to the project's owner ${owner}.`);
+    if (!collection)
+      throw new LiveMismatch(
+        `The file names the collection ${made.collection}, and there is no Core collection there.`,
+      );
+    if (collection.updateAuthority !== owner)
+      throw new LiveMismatch(
+        `The collection ${made.collection} the file names belongs to ${collection.updateAuthority}, not to the project's owner ${owner}.`,
+      );
   }
 
   if (made.tree) {
     const config = await read(pda.treeConfig(made.tree));
-    const creator = config?.owner === BUBBLEGUM_PROGRAM && config.data.length >= 40 ? encodeBase58(config.data.subarray(8, 40)) : null;
-    if (creator !== project) throw new LiveMismatch(`The file names the tree ${made.tree}, which is not a tree of the project ${project}.`);
+    const creator =
+      config?.owner === BUBBLEGUM_PROGRAM && config.data.length >= 40
+        ? encodeBase58(config.data.subarray(8, 40))
+        : null;
+    if (creator !== project)
+      throw new LiveMismatch(`The file names the tree ${made.tree}, which is not a tree of the project ${project}.`);
   }
   return { owner, project };
 }
@@ -91,28 +127,45 @@ export class MintMismatch extends Error {}
  * decimals, and is not read. Throws MintMismatch.
  */
 export async function checkMints({ m, chain }) {
-  const named = [...m.tokens.values()].filter((t) => t.mint && !t.mint.startsWith('@'));
+  const named = [...m.tokens.values()].filter(t => t.mint && !t.mint.startsWith('@'));
   // The routes that read a mint's default account state once, as they open, and refuse one that can start frozen.
   const once = new Map();
   const reads = (key, what) => key && !once.has(key) && once.set(key, what);
-  for (const l of m.lotteries) reads(l.currency ?? m.currencyKey, `the lottery ${l.name ?? l.key}`), reads(l.ticketCurrency, `the lottery ${l.name ?? l.key}`);
+  for (const l of m.lotteries)
+    (reads(l.currency ?? m.currencyKey, `the lottery ${l.name ?? l.key}`),
+      reads(l.ticketCurrency, `the lottery ${l.name ?? l.key}`));
   for (const c of m.contests) reads(c.currency ?? m.currencyKey, `the contest ${c.name ?? c.key}`);
   for (const a of m.auctions) reads(a.currency ?? m.currencyKey, `the auction ${a.name ?? a.key}`);
-  for (const s of m.schedules.filter((x) => x.sealed)) reads(s.currency ?? m.currencyKey, `the sealed schedule ${s.name ?? s.key}`);
+  for (const s of m.schedules.filter(x => x.sealed))
+    reads(s.currency ?? m.currencyKey, `the sealed schedule ${s.name ?? s.key}`);
   for (const t of named) {
     const what = `the token ${t.symbol ?? t.key} (“${t.key}”)`;
     if (t.wsol) {
-      if (t.decimals !== 9) throw new MintMismatch(`The spec gives ${what} ${t.decimals} decimals; its mint ${t.mint} is wrapped SOL, which has 9. Write "decimals": 9.`);
+      if (t.decimals !== 9)
+        throw new MintMismatch(
+          `The spec gives ${what} ${t.decimals} decimals; its mint ${t.mint} is wrapped SOL, which has 9. Write "decimals": 9.`,
+        );
       continue;
     }
-    if (typeof chain.account !== 'function') throw new MintMismatch(`This connection cannot read the chain, so the decimals of ${what} at ${t.mint} cannot be checked.`);
+    if (typeof chain.account !== 'function')
+      throw new MintMismatch(
+        `This connection cannot read the chain, so the decimals of ${what} at ${t.mint} cannot be checked.`,
+      );
     const account = await chain.account(t.mint);
     const mint = account ? parseMint(t.mint, account.owner, account.data) : null;
     if (!mint) throw new MintMismatch(`The spec names ${what} at ${t.mint}, and there is no token mint there.`);
-    if (mint.decimals !== t.decimals) throw new MintMismatch(`The spec gives ${what} ${t.decimals ?? 'no'} decimals; its mint ${t.mint} has ${mint.decimals}, so every amount in it would be ${scale(t.decimals ?? 0, mint.decimals)} what the page shows. Write "decimals": ${mint.decimals}.`);
-    if (mint.program !== t.program) throw new MintMismatch(`The spec says ${what} is a ${t.program} token; its mint ${t.mint} is ${mint.program}. Write "program": "${mint.program}".`);
+    if (mint.decimals !== t.decimals)
+      throw new MintMismatch(
+        `The spec gives ${what} ${t.decimals ?? 'no'} decimals; its mint ${t.mint} has ${mint.decimals}, so every amount in it would be ${scale(t.decimals ?? 0, mint.decimals)} what the page shows. Write "decimals": ${mint.decimals}.`,
+      );
+    if (mint.program !== t.program)
+      throw new MintMismatch(
+        `The spec says ${what} is a ${t.program} token; its mint ${t.mint} is ${mint.program}. Write "program": "${mint.program}".`,
+      );
     if (once.has(t.key) && mayStartFrozen(account))
-      throw new MintMismatch(`The mint ${t.mint} of ${what} has a default account state that starts new accounts frozen, or that its freeze authority can switch to frozen, so ${once.get(t.key)} would be refused as it opens (the program refuses such a mint wherever a refund or a payout goes into an account opened for it). Use another token there.`);
+      throw new MintMismatch(
+        `The mint ${t.mint} of ${what} has a default account state that starts new accounts frozen, or that its freeze authority can switch to frozen, so ${once.get(t.key)} would be refused as it opens (the program refuses such a mint wherever a refund or a payout goes into an account opened for it). Use another token there.`,
+      );
   }
   await checkTreasury({ m, chain });
 }
@@ -136,9 +189,13 @@ export async function checkTreasury({ m, chain }) {
   if (!treasury || typeof chain.account !== 'function') return;
   const account = await chain.account(treasury);
   if (!account || (account.owner === SYSTEM_PROGRAM && !account.executable)) return;
-  const what = HOLDS_A_VAULT[account.owner] ?? (account.executable ? 'a program' : `an account of the program ${account.owner}`);
-  throw new MintMismatch(`The spec’s treasury ${treasury} is ${what}: nobody can sign for what it would be paid, so every split’s rest would be stuck there. Name the wallet that signs (for a Squads multisig, its vault address; for a Realms DAO, its treasury).`);
+  const what =
+    HOLDS_A_VAULT[account.owner] ?? (account.executable ? 'a program' : `an account of the program ${account.owner}`);
+  throw new MintMismatch(
+    `The spec’s treasury ${treasury} is ${what}: nobody can sign for what it would be paid, so every split’s rest would be stuck there. Name the wallet that signs (for a Squads multisig, its vault address; for a Realms DAO, its treasury).`,
+  );
 }
 
 /** How much an amount written with `said` decimals is, on a mint of `real` decimals, against what it says. */
-const scale = (said, real) => (said > real ? `${10n ** BigInt(said - real)} times` : `1/${10n ** BigInt(real - said)} of`);
+const scale = (said, real) =>
+  said > real ? `${10n ** BigInt(said - real)} times` : `1/${10n ** BigInt(real - said)} of`;

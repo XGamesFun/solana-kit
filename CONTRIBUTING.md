@@ -28,7 +28,7 @@ Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM
   a `node:` import, `Buffer`, `process` or `require` there.
 - Formatting is Prettier's (`.prettierrc.json`, the same settings as xcore's): `npm run format`, and your editor can
   follow `.editorconfig`. The code was reformatted in one commit; `git config blame.ignoreRevsFile
-  .git-blame-ignore-revs` makes `git blame` look past it (GitHub does on its own).
+.git-blame-ignore-revs` makes `git blame` look past it (GitHub does on its own).
 
 ## Rules that don't bend
 

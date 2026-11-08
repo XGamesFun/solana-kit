@@ -10,22 +10,47 @@ import { explainEconomy } from '../economy/explain.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 
 const NOW = 1_000_000_000;
-const exampleSpec = (name) => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
+const exampleSpec = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
 /** Checks `spec` (it must pass) and simulates it. */
-const sim = (spec) => {
+const sim = spec => {
   const v = check(spec, { now: NOW });
-  assert.ok(v.ok, v.refusals.map((r) => `${r.code} ${r.message}`).join('\n'));
+  assert.ok(v.ok, v.refusals.map(r => `${r.code} ${r.message}`).join('\n'));
   return simulate(spec, { now: NOW });
 };
-const solSpec = (more) => ({ version: 2, network: 'devnet', name: 'T', currency: 'sol', tokens: [{ key: 'sol', source: 'sol' }], collection: { name: 'T' }, ...more });
-const gold = { version: 2, network: 'devnet', name: 'G', currency: 'gold', tokens: [{ key: 'gold', source: 'game', name: 'Gold', symbol: 'GLD', decimals: 0 }], collection: false };
+const solSpec = more => ({
+  version: 2,
+  network: 'devnet',
+  name: 'T',
+  currency: 'sol',
+  tokens: [{ key: 'sol', source: 'sol' }],
+  collection: { name: 'T' },
+  ...more,
+});
+const gold = {
+  version: 2,
+  network: 'devnet',
+  name: 'G',
+  currency: 'gold',
+  tokens: [{ key: 'gold', source: 'game', name: 'Gold', symbol: 'GLD', decimals: 0 }],
+  collection: false,
+};
 
 test('a recipe’s pay line to the treasury lands in the treasury, and one to a lottery in its pot', () => {
   const spec = solSpec({
     items: [{ key: 'sword', name: 'Sword', value: 0.1 }],
     recipes: [
-      { key: 'fee', name: 'Fee', in: [{ takes: 'pay', amount: 1, currency: 'sol', to: 'treasury' }], out: [{ gives: 'item', item: 'sword' }] },
-      { key: 'entry', name: 'Entry', in: [{ takes: 'pay', amount: 0.5, currency: 'sol', to: 'lottery:draw' }], out: [{ gives: 'item', item: 'sword' }] },
+      {
+        key: 'fee',
+        name: 'Fee',
+        in: [{ takes: 'pay', amount: 1, currency: 'sol', to: 'treasury' }],
+        out: [{ gives: 'item', item: 'sword' }],
+      },
+      {
+        key: 'entry',
+        name: 'Entry',
+        in: [{ takes: 'pay', amount: 0.5, currency: 'sol', to: 'lottery:draw' }],
+        out: [{ gives: 'item', item: 'sword' }],
+      },
     ],
     lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }],
     scenario: { days: 30, perDay: { 'recipe:fee': 10, 'recipe:entry': 4, 'lottery:draw': 0 } },
@@ -33,7 +58,7 @@ test('a recipe’s pay line to the treasury lands in the treasury, and one to a 
   const s = sim(spec);
   assert.equal(s.perDay.creator.treasury.sol, 10);
   assert.deepEqual(s.perDay.accounts, {});
-  const pot = s.pools.find((p) => p.key === 'lottery:draw');
+  const pot = s.pools.find(p => p.key === 'lottery:draw');
   assert.equal(pot.inPerDay, 2);
   assert.deepEqual(pot.ins, [{ by: 'recipe:entry', perDay: 2 }]);
 });
@@ -45,33 +70,67 @@ test('a schedule that pays a lottery fills its pot, by a fixed amount or by a sh
     lotteries: [{ key: 'draw', name: 'Draw', price: 10, places: [100], every: '1d', noLoss: true }],
     scenario: { days: 30, perDay: { 'lottery:draw': 10 } },
   };
-  const fixed = sim({ ...base, schedules: [{ key: 'mint', name: 'Mint', does: 'issue', pool: 'bank', amount: 1000, every: '1d' }, { key: 'feed', name: 'Feed', does: 'pay', from: 'bank', to: 'lottery:draw', amount: 100, every: '1d' }] });
-  assert.equal(fixed.pools.find((p) => p.key === 'lottery:draw').inPerDay, 100);
+  const fixed = sim({
+    ...base,
+    schedules: [
+      { key: 'mint', name: 'Mint', does: 'issue', pool: 'bank', amount: 1000, every: '1d' },
+      { key: 'feed', name: 'Feed', does: 'pay', from: 'bank', to: 'lottery:draw', amount: 100, every: '1d' },
+    ],
+  });
+  assert.equal(fixed.pools.find(p => p.key === 'lottery:draw').inPerDay, 100);
   assert.deepEqual(fixed.perDay.accounts, {});
   const draw = fixed.lotteries[0];
   assert.equal(draw.potBeforeDraw, 100);
   assert.equal(draw.expectedPerTicket, 10, 'ten tickets share the 100 a round');
-  const share = sim({ ...base, schedules: [{ key: 'feed', name: 'Feed', does: 'pay', from: 'bank', to: 'lottery:draw', percent: 10, every: '1d' }] });
-  const pot = share.pools.find((p) => p.key === 'lottery:draw');
+  const share = sim({
+    ...base,
+    schedules: [{ key: 'feed', name: 'Feed', does: 'pay', from: 'bank', to: 'lottery:draw', percent: 10, every: '1d' }],
+  });
+  const pot = share.pools.find(p => p.key === 'lottery:draw');
   assert.ok(pot.inPerDay > 0, JSON.stringify(pot));
   assert.deepEqual(share.perDay.accounts, {});
 });
 
 test('a ticket’s “in all” counts its entry’s bytes, which never come back, and leaves out a no-loss ticket’s price', () => {
   // A lottery that holds SOL for its rounds (`roundRent`, on by default) pays each entry: the buyer pays none.
-  const funded = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }] })).lotteries[0];
+  const funded = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d' }] }))
+    .lotteries[0];
   assert.equal(funded.realCost.rentSol, 0);
   assert.ok(funded.roundRentSol > 0);
-  const plain = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d', roundRent: 0 }] })).lotteries[0].realCost;
+  const plain = sim(
+    solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.01, places: [100], every: '1d', roundRent: 0 }] }),
+  ).lotteries[0].realCost;
   // An entry of 40 bytes in the round (its buyer and its tickets' end), at 5,080 lamports a byte.
   assert.equal(plain.rentSol, 0.0002032);
   assert.equal(plain.totalSol, 0.0122082, 'the price, the player fee, the network and the entry');
-  const noLoss = sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] })).lotteries[0].realCost;
+  const noLoss = sim(
+    solSpec({
+      lotteries: [
+        { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+      ],
+    }),
+  ).lotteries[0].realCost;
   assert.equal(noLoss.priceBack, true);
   assert.equal(noLoss.totalSol, 0.0022082, 'only the player fee, the network and the entry leave for good');
   assert.ok(noLoss.holdSol > 0.5);
-  const text = explain(sim(solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] })), solSpec({ lotteries: [{ key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 }] }));
-  assert.match(text, /about 0\.002208 SOL in all \(the player fee, the network, the purchase’s entry in the round, which never comes back\); the wallet needs about [\d.]+ SOL when it signs, and the rest comes back/);
+  const text = explain(
+    sim(
+      solSpec({
+        lotteries: [
+          { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+        ],
+      }),
+    ),
+    solSpec({
+      lotteries: [
+        { key: 'draw', name: 'Draw', price: 0.5, places: [100], every: '1d', noLoss: true, seed: 1, roundRent: 0 },
+      ],
+    }),
+  );
+  assert.match(
+    text,
+    /about 0\.002208 SOL in all \(the player fee, the network, the purchase’s entry in the round, which never comes back\); the wallet needs about [\d.]+ SOL when it signs, and the rest comes back/,
+  );
 });
 
 test('an auction of NFT bids moves no money', () => {
@@ -90,14 +149,17 @@ test('an auction of NFT bids moves no money', () => {
 });
 
 test('a price that falls on a shared clock keeps falling however often it sells', () => {
-  const run = (clock) => {
+  const run = clock => {
     const spec = exampleSpec('falling-drop');
     spec.items[0].fall = { step: 0.05, every: '10m', floor: 0.2, start: 'publish', ...(clock ? { clock } : {}) };
     spec.scenario.perDay[`item:${spec.items[0].key}`] = 1000;
     spec.scenario.days = 1;
     delete spec.items[0].supply;
     const s = sim(spec);
-    return { price: s.items[0].averagePrice ?? s.items[0].price, note: s.notes.find((n) => n.includes(spec.items[0].name)) };
+    return {
+      price: s.items[0].averagePrice ?? s.items[0].price,
+      note: s.notes.find(n => n.includes(spec.items[0].name)),
+    };
   };
   const sale = run();
   const shared = run('shared');
@@ -136,9 +198,19 @@ test('a scenario of no days gives numbers, never Infinity', () => {
 });
 
 test('an item nobody buys has no sold-out day', () => {
-  const s = sim(solSpec({ items: [{ key: 'sword', name: 'Sword', price: 0.1, supply: 50 }], scenario: { perDay: { 'item:sword': 0 } } }));
+  const s = sim(
+    solSpec({
+      items: [{ key: 'sword', name: 'Sword', price: 0.1, supply: 50 }],
+      scenario: { perDay: { 'item:sword': 0 } },
+    }),
+  );
   assert.equal('soldOutInDays' in s.items[0], false);
-  const sold = sim(solSpec({ items: [{ key: 'sword', name: 'Sword', price: 0.1, supply: 50 }], scenario: { perDay: { 'item:sword': 10 } } }));
+  const sold = sim(
+    solSpec({
+      items: [{ key: 'sword', name: 'Sword', price: 0.1, supply: 50 }],
+      scenario: { perDay: { 'item:sword': 10 } },
+    }),
+  );
   assert.equal(sold.items[0].soldOutInDays, 5);
 });
 
@@ -147,5 +219,8 @@ test('what the scenario assumes for what it doesn’t name is said as it is coun
   delete spec.scenario;
   const s = sim(spec);
   assert.match(explain(s, spec), /anything not named: 100 a day \(auction bids 10 a day\)/);
-  assert.match(explainEconomy(spec, { now: NOW }).text, /Each day, if 100 of each thing happen \(auction bids 10 a day\)/);
+  assert.match(
+    explainEconomy(spec, { now: NOW }).text,
+    /Each day, if 100 of each thing happen \(auction bids 10 a day\)/,
+  );
 });

@@ -19,9 +19,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "items"
-        ],
+        "parts": ["items"],
         "intent": [
           {
             "type": "chosenShare"
@@ -43,16 +41,10 @@
         "houses": "no limit"
       },
       "beats": [],
-      "app": [
-        "Connect your wallet",
-        "Buy a Plot",
-        "Buy a House on your plot"
-      ],
+      "app": ["Connect your wallet", "Buy a Plot", "Buy a House on your plot"],
       "checks": {
         "expect": "build",
-        "parts": [
-          "items"
-        ],
+        "parts": ["items"],
         "intent": [
           {
             "type": "chosenShare"
@@ -117,10 +109,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "farms",
-          "items"
-        ],
+        "parts": ["farms", "items"],
         "intent": [
           {
             "type": "stakedGate"
@@ -151,9 +140,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "lotteries"
-        ],
+        "parts": ["lotteries"],
         "intent": [
           {
             "type": "noLoss"
@@ -188,13 +175,8 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "items",
-          "boxes"
-        ],
-        "flags": [
-          "chance"
-        ],
+        "parts": ["items", "boxes"],
+        "flags": ["chance"],
         "intent": [
           {
             "type": "chosenShare"
@@ -217,17 +199,10 @@
         "testing": "make the hatch take 5 minutes for the test"
       },
       "beats": [],
-      "app": [
-        "Connect your wallet",
-        "Buy a dragon",
-        "Stake it and check the page shows what it earns"
-      ],
+      "app": ["Connect your wallet", "Buy a dragon", "Stake it and check the page shows what it earns"],
       "checks": {
         "expect": "build",
-        "parts": [
-          "farms",
-          "recipes"
-        ]
+        "parts": ["farms", "recipes"]
       },
       "judge": {
         "compose": "A farm at a 7/day rate; a recipe of two dragons + 972 BOKU burned giving an egg with `readyAfter`; a hatch recipe."
@@ -245,20 +220,11 @@
         "testing": "give my tester's wallet {PLAYER} 1,000 PUFF"
       },
       "beats": [],
-      "app": [
-        "Connect your wallet",
-        "Buy an ape",
-        "Send your ape on a 333 PUFF retreat and report the result"
-      ],
+      "app": ["Connect your wallet", "Buy an ape", "Send your ape on a 333 PUFF retreat and report the result"],
       "checks": {
         "expect": "build",
-        "parts": [
-          "farms",
-          "boxes"
-        ],
-        "flags": [
-          "chance"
-        ],
+        "parts": ["farms", "boxes"],
+        "flags": ["chance"],
         "intent": [
           {
             "type": "farmBoost"
@@ -288,9 +254,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "grants"
-        ],
+        "parts": ["grants"],
         "serverKeyOk": true
       },
       "judge": {
@@ -318,11 +282,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "boxes",
-          "grants",
-          "items"
-        ],
+        "parts": ["boxes", "grants", "items"],
         "intent": [
           {
             "type": "grantList",
@@ -355,10 +315,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "boxes",
-          "recipes"
-        ],
+        "parts": ["boxes", "recipes"],
         "intent": [
           {
             "type": "hasRecipe"
@@ -391,11 +348,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "recipes",
-          "farms",
-          "items"
-        ],
+        "parts": ["recipes", "farms", "items"],
         "intent": [
           {
             "type": "hasRecipe"
@@ -431,10 +384,7 @@
       ],
       "checks": {
         "expect": "build",
-        "parts": [
-          "farms",
-          "lotteries"
-        ],
+        "parts": ["farms", "lotteries"],
         "intent": [
           {
             "type": "farmOfCollectibles"

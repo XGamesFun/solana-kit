@@ -3,13 +3,16 @@
 // them. It never sees the kit's documentation. Its answer is JSON, so the orchestrator can tell a reply from an action.
 import { askClaude, jsonOf, LIMIT } from './agents.mjs';
 
-const SYSTEM = (card, wallet) => `You are role-playing a real person talking to an AI coding assistant in a terminal. Stay in character.
+const SYSTEM = (
+  card,
+  wallet,
+) => `You are role-playing a real person talking to an AI coding assistant in a terminal. Stay in character.
 
 WHO YOU ARE: ${card.persona}
 WHAT YOU WANT: ${card.opening}
 FACTS YOU KNOW (say one only when the assistant asks for it, in your own words): ${JSON.stringify(card.facts ?? {})}
 YOUR WALLET: a browser wallet on Solana devnet, address ${wallet}, with about 0.5 devnet SOL. You don't know any private keys except where a line below says to paste one.
-${(card.beats ?? []).length ? `THINGS YOU MUST SAY, each once, at the moment given (say it close to word for word):\n${card.beats.map((b) => `- ${b.when}: "${b.say}"`).join('\n')}` : ''}
+${(card.beats ?? []).length ? `THINGS YOU MUST SAY, each once, at the moment given (say it close to word for word):\n${card.beats.map(b => `- ${b.when}: "${b.say}"`).join('\n')}` : ''}
 
 HOW THE SESSION GOES
 1. You describe what you want and answer the assistant's questions briefly, like a real person (one to four sentences, no lists unless you pasted something). Don't design the economy for them; react to what they propose. Agree when it sounds right, ask a short question when it doesn't.
@@ -17,8 +20,12 @@ HOW THE SESSION GOES
 3. Once it is live, ask for a simple web page your players can use for it, if the assistant hasn't made one.
 4. When the assistant tells you how to open the page (a file to open, or a command that starts it), try it: action "open_app" with the command or the file. A tester will use the page and you'll get their report. If something didn't work, tell the assistant plainly what the tester said and ask them to fix it (at most twice).
 5. When the page works (or after two fixes, or if what you want can't be built and the assistant offered something you accept or refuse), end with action "done".
-6. If the assistant gives you a page that you, the owner, use with your own wallet (to sign a message, name a result, pay winners, or buy something yourself as the owner), use action "open_owner_page" with the command or the file, and put in "message" what you are meant to do there. You'll be told what happened.${card.checks?.scripts ? `
-7. Your game's server runs on this computer. When the assistant gives you a \`node …\` command your server would run (for example to report who won a match), you may run it with run_command.` : ''}
+6. If the assistant gives you a page that you, the owner, use with your own wallet (to sign a message, name a result, pay winners, or buy something yourself as the owner), use action "open_owner_page" with the command or the file, and put in "message" what you are meant to do there. You'll be told what happened.${
+  card.checks?.scripts
+    ? `
+7. Your game's server runs on this computer. When the assistant gives you a \`node …\` command your server would run (for example to report who won a match), you may run it with run_command.`
+    : ''
+}
 Never invent technical details. Never run anything that deletes files, sends money elsewhere, or that the assistant didn't give you.
 
 STAY THE PERSON YOU ARE
@@ -36,12 +43,14 @@ ANSWER WITH ONLY A JSON OBJECT:
 
 /** The person's next move. `history`: [{ from: 'user' | 'assistant' | 'system', text }]. */
 export async function nextMove({ card, wallet, history, cwd, env, model = 'sonnet' }) {
-  const transcript = history.map((h) => `${h.from === 'user' ? 'YOU' : h.from === 'assistant' ? 'ASSISTANT' : 'WHAT HAPPENED'}: ${h.text}`).join('\n\n');
+  const transcript = history
+    .map(h => `${h.from === 'user' ? 'YOU' : h.from === 'assistant' ? 'ASSISTANT' : 'WHAT HAPPENED'}: ${h.text}`)
+    .join('\n\n');
   const prompt = `${transcript}\n\n(The time now is ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC.)\nYour move (JSON only):`;
   let text = '';
   for (let attempt = 0; attempt < 3; attempt++) {
     // A hung or empty answer (an outage) gets a short pause and another try.
-    if (attempt) await new Promise((r) => setTimeout(r, attempt * 30_000));
+    if (attempt) await new Promise(r => setTimeout(r, attempt * 30_000));
     text = await askClaude({ system: SYSTEM(card, wallet), prompt, model, cwd, env, timeoutMs: 3 * 60_000 });
     const move = jsonOf(text);
     if (move?.action) return move;

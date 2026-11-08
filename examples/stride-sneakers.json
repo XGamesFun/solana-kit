@@ -139,9 +139,7 @@
         "currency": "stride",
         "from": "mint"
       },
-      "vouchers": [
-        "B8CrCHTMi223kknNgaJXXp8QGqNR9pwD1bfZVYvr5fmJ"
-      ],
+      "vouchers": ["B8CrCHTMi223kknNgaJXXp8QGqNR9pwD1bfZVYvr5fmJ"],
       "limits": {
         "perWalletEach": {
           "count": 1,

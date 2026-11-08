@@ -16,13 +16,13 @@ export const BUBBLEGUM_PROGRAM = 'BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY';
 export const COMPRESSION_PROGRAM = 'mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW';
 export const NOOP_PROGRAM = 'mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3';
 
-const seed = (s) => utf8(s);
-const key = (a) => addressBytes(a);
-const u8 = (n) => uintLE(n, 1);
-const u16 = (n) => uintLE(n, 2);
-const u32 = (n) => uintLE(n, 4);
-const u64 = (n) => uintLE(n, 8);
-const i64 = (n) => intLE(n, 8);
+const seed = s => utf8(s);
+const key = a => addressBytes(a);
+const u8 = n => uintLE(n, 1);
+const u16 = n => uintLE(n, 2);
+const u32 = n => uintLE(n, 4);
+const u64 = n => uintLE(n, 8);
+const i64 = n => intLE(n, 8);
 
 /** The PDA of these seeds under the loot program, with its bump. */
 export const lootAddress = (seeds, program = LOOT_PROGRAM) => findProgramAddress(seeds, program);
@@ -34,7 +34,7 @@ export const pda = {
    * new owner keeps the address. */
   project: (creator, id = 0) => at(seed('project'), key(creator), u64(id)),
   /** The project's fee box: where the platform's fees on its transactions wait. */
-  fees: (project) => at(seed('fees'), key(project)),
+  fees: project => at(seed('fees'), key(project)),
   pool: (project, index) => at(seed('pool'), key(project), u16(index)),
   item: (project, id) => at(seed('item'), key(project), u32(id)),
   box: (project, id) => at(seed('box'), key(project), u32(id)),
@@ -57,7 +57,7 @@ export const pda = {
    * names its item and its serial, minted once at most. */
   itemAsset: (item, serial) => at(seed('asset'), key(item), u32(serial)),
   /** A contest's pot, or a lottery's: `["pot", contest or lottery]`. */
-  pot: (record) => at(seed('pot'), key(record)),
+  pot: record => at(seed('pot'), key(record)),
   /** One round of a lottery: its record, opened by the round's first purchase (`["round", lottery, incarnation, round]`). */
   round: (lottery, incarnation, round) => at(seed('round'), key(lottery), u64(incarnation), u32(round)),
   /** A lottery round's own token account of `mint`, which the round's record owns. */
@@ -69,27 +69,27 @@ export const pda = {
   /** An offer: an id is its maker's own. Its money waits in the project's vault for its mint (`vault`). */
   offer: (project, maker, id) => at(seed('offer'), key(project), key(maker), u32(id)),
   /** A lottery's own stash: the NFTs its places promise (`Prize::Held`), which leave only as its prizes. */
-  lotteryStash: (lottery) => at(seed('lottery_stash'), key(lottery)),
+  lotteryStash: lottery => at(seed('lottery_stash'), key(lottery)),
   /** A contest's prize split by stake, set aside when it is decided: `["prize", contest]`. */
-  prizeVault: (contest) => at(seed('prize'), key(contest)),
+  prizeVault: contest => at(seed('prize'), key(contest)),
   /** A sealed schedule's own vault, which only its runs pay out of: `["vest", schedule]`. */
-  vest: (schedule) => at(seed('vest'), key(schedule)),
+  vest: schedule => at(seed('vest'), key(schedule)),
   /** A listing of an NFT for sale or for rent: one per NFT a project holds, so its address names the NFT. */
   listing: (project, asset) => at(seed('listing'), key(project), key(asset)),
-  staked: (farm) => at(seed('staked'), key(farm)),
-  rewards: (farm) => at(seed('rewards'), key(farm)),
+  staked: farm => at(seed('staked'), key(farm)),
+  rewards: farm => at(seed('rewards'), key(farm)),
   /** A farm's record of when its seats stop earning, for a farm that keeps one (`Farm.keeps_ends`). */
-  ends: (farm) => at(seed('ends'), key(farm)),
+  ends: farm => at(seed('ends'), key(farm)),
   /** A seat: a player's in a farm of tokens, a collectible's (its asset) in a farm of collectibles. */
   seat: (farm, by) => at(seed('seat'), key(farm), key(by)),
   /** What the project writes about an NFT it has no authority over (its Sheet): `nft` is a Core asset, a Token Metadata mint or a compressed NFT's asset id. */
   sheet: (project, nft) => at(seed('sheet'), key(project), key(nft)),
   /** A compressed NFT as last proven (`prove_leaf`), read while the leaf is unchanged and its root is still in the tree's change log. */
-  leaf: (asset) => at(seed('leaf'), key(asset)),
+  leaf: asset => at(seed('leaf'), key(asset)),
   /** The root of the traits the project vouches for, under its own `key` (a collection's address, by convention). */
   traits: (project, key_) => at(seed('traits'), key(project), key(key_)),
   /** Bubblegum's config of a tree: `[tree]`. */
-  treeConfig: (tree) => findProgramAddress([key(tree)], BUBBLEGUM_PROGRAM)[0],
+  treeConfig: tree => findProgramAddress([key(tree)], BUBBLEGUM_PROGRAM)[0],
   /** A compressed NFT's asset id: Bubblegum's `["asset", tree, nonce]`, `nonce` the count minted before it. */
   compressedAsset: (tree, nonce) => findProgramAddress([seed('asset'), key(tree), u64(nonce)], BUBBLEGUM_PROGRAM)[0],
   /** A wallet's counts in a project: how many times it bought from each box, crafted each recipe or held tickets in

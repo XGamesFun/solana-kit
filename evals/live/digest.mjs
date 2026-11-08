@@ -16,23 +16,28 @@ if (!out || !runs.length) {
 mkdirSync(out, { recursive: true });
 const BASE_CARDS = JSON.parse(readFileSync(new URL('./cards.json', import.meta.url), 'utf8')).cards;
 // A round run with --cards keeps its own copy of the cards beside it.
-const cardsOf = (runDir) => (existsSync(path.join(runDir, 'cards.json')) ? JSON.parse(readFileSync(path.join(runDir, 'cards.json'), 'utf8')).cards : BASE_CARDS);
+const cardsOf = runDir =>
+  existsSync(path.join(runDir, 'cards.json'))
+    ? JSON.parse(readFileSync(path.join(runDir, 'cards.json'), 'utf8')).cards
+    : BASE_CARDS;
 let written = 0;
 for (const run of runs) {
   const [label, runDir] = run.includes('=') ? run.split('=') : [path.basename(run), run];
   const cards = cardsOf(runDir);
-  for (const harness of readdirSync(runDir).filter((d) => ['claude', 'codex'].includes(d)))
+  for (const harness of readdirSync(runDir).filter(d => ['claude', 'codex'].includes(d)))
     for (const id of readdirSync(path.join(runDir, harness))) {
       const where = path.join(runDir, harness, id);
       if (!existsSync(path.join(where, 'conversation.json'))) continue;
       const conversation = JSON.parse(readFileSync(path.join(where, 'conversation.json'), 'utf8'));
-      const grade = existsSync(path.join(where, 'grade.json')) ? readFileSync(path.join(where, 'grade.json'), 'utf8') : '{}';
+      const grade = existsSync(path.join(where, 'grade.json'))
+        ? readFileSync(path.join(where, 'grade.json'), 'utf8')
+        : '{}';
       const text = [
         `# ${label} ${harness} ${id}`,
-        `CARD: ${JSON.stringify(cards.find((c) => c.id === id) ?? null)}`,
+        `CARD: ${JSON.stringify(cards.find(c => c.id === id) ?? null)}`,
         `GRADE: ${JSON.stringify(JSON.parse(grade))}`,
         '',
-        ...conversation.map((m) => `## ${String(m.from).toUpperCase()}\n\n${m.text}\n`),
+        ...conversation.map(m => `## ${String(m.from).toUpperCase()}\n\n${m.text}\n`),
       ].join('\n');
       writeFileSync(path.join(out, `${label}-${harness}-${id}.md`), text);
       written++;

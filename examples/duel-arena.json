@@ -59,10 +59,7 @@
       "name": "Duel",
       "currency": "usdc",
       "sides": 2,
-      "sideNames": [
-        "Red",
-        "Blue"
-      ],
+      "sideNames": ["Red", "Blue"],
       "entriesClose": "10m",
       "resultDue": "1h",
       "every": "1h",

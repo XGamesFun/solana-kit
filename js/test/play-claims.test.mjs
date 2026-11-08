@@ -10,7 +10,7 @@ import { solanaApp } from '../play/index.js';
 import { cannotRun, collectible, PRICE, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
-const asWallet = (kp) => ({
+const asWallet = kp => ({
   address: kp.address,
   async signTransaction(wire) {
     const t = readTransaction(wire);
@@ -26,15 +26,30 @@ test('a lender sees their overdue loan in claims() and takes its NFT', { skip },
   const [lender, borrower] = [freshKeypair(), freshKeypair()];
   for (const k of [lender, borrower]) w.chain.airdrop(k.address, 100_000_000_000n);
   w.fund(lender.address, w.mint, 10n * PRICE);
-  w.chain.send(lender.address, [loot.openOfferIx({ maker: lender.address, project: w.project, id: 1, mint: w.mint, args: { rule: { of: { Item: [1] }, key: '', test: 'Any' }, deal: { Lend: { amount: PRICE, repay: 2n * PRICE, lasts: 3600 } }, left: 1 } })]);
+  w.chain.send(lender.address, [
+    loot.openOfferIx({
+      maker: lender.address,
+      project: w.project,
+      id: 1,
+      mint: w.mint,
+      args: {
+        rule: { of: { Item: [1] }, key: '', test: 'Any' },
+        deal: { Lend: { amount: PRICE, repay: 2n * PRICE, lasts: 3600 } },
+        left: 1,
+      },
+    }),
+  ]);
   const spec = { version: 2, tokens: [], live: { project: w.project, collection: w.collection } };
-  const app = (kp) => solanaApp({ spec, rpc: w.chain.rpc, wallet: asWallet(kp), now: () => w.chain.now() });
+  const app = kp => solanaApp({ spec, rpc: w.chain.rpc, wallet: asWallet(kp), now: () => w.chain.now() });
   const nft = w.make(1, borrower.address);
   await app(borrower).borrow(lender.address, 1, nft);
   assert.deepEqual(await app(lender).claims(), [], 'not due yet');
   w.chain.warp(w.chain.now() + 3_700);
   const claims = await app(lender).claims();
-  assert.deepEqual(claims.map((c) => c.kind), ['release']);
+  assert.deepEqual(
+    claims.map(c => c.kind),
+    ['release'],
+  );
   assert.match(claims[0].says, /loan you made is overdue/);
   await app(lender).claim(claims[0]);
   assert.equal(parseCoreAsset(w.chain.get(nft).data).owner, lender.address, 'the NFT is the lender’s');

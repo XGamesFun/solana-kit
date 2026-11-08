@@ -20,7 +20,9 @@ function option(data, at) {
 function paddedString(data, at) {
   const length = Number(readUintLE(data, at, 4));
   if (at + 4 + length > data.length) throw new RangeError('string past the end');
-  const value = fromUtf8(data.subarray(at + 4, at + 4 + length)).replaceAll('\0', '').trim();
+  const value = fromUtf8(data.subarray(at + 4, at + 4 + length))
+    .replaceAll('\0', '')
+    .trim();
   return { value, next: at + 4 + length };
 }
 
@@ -62,7 +64,9 @@ function token2022Metadata(data) {
 export function parseMint(address, owner, data, metadataData = null) {
   const program = owner === TOKEN_PROGRAM ? 'spl-token' : owner === TOKEN_2022_PROGRAM ? 'token-2022' : null;
   if (!program) return null;
-  const mintLayout = data.length === MINT_BYTES || (program === 'token-2022' && data.length > ACCOUNT_TYPE_OFFSET && data[ACCOUNT_TYPE_OFFSET] === ACCOUNT_TYPE_MINT);
+  const mintLayout =
+    data.length === MINT_BYTES ||
+    (program === 'token-2022' && data.length > ACCOUNT_TYPE_OFFSET && data[ACCOUNT_TYPE_OFFSET] === ACCOUNT_TYPE_MINT);
   if (!mintLayout || data[45] !== 1) return null;
   let meta = null;
   if (metadataData) {

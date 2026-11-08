@@ -6,15 +6,22 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { check } from '../economy/check.mjs';
 
-const example = (name) => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url)));
-const codes = (spec) => check(spec).warnings.map((w) => w.code);
+const example = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url)));
+const codes = spec => check(spec).warnings.map(w => w.code);
 /** The spec as if it went live as it is: `live.published` is what is on chain. */
-const live = (spec) => {
+const live = spec => {
   const { live: _, ...published } = structuredClone(spec);
-  return { ...spec, live: { program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ', project: 'So11111111111111111111111111111111111111112', published } };
+  return {
+    ...spec,
+    live: {
+      program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ',
+      project: 'So11111111111111111111111111111111111111112',
+      published,
+    },
+  };
 };
 
-test('changing a live box\'s roll warns that a purchase waiting fails for its refund, and that one won elsewhere rolls on', () => {
+test("changing a live box's roll warns that a purchase waiting fails for its refund, and that one won elsewhere rolls on", () => {
   const spec = live(example('expedition-guild'));
   assert.ok(!codes(spec).includes('W-LIVE-ROLLS'), 'nothing changed');
   const price = structuredClone(spec);
@@ -23,28 +30,32 @@ test('changing a live box\'s roll warns that a purchase waiting fails for its re
   const odds = structuredClone(spec);
   odds.boxes[0].outcomes[0].chance = 30;
   odds.boxes[0].outcomes[1].chance = 70;
-  const bought = check(odds).warnings.find((x) => x.code === 'W-LIVE-ROLLS');
+  const bought = check(odds).warnings.find(x => x.code === 'W-LIVE-ROLLS');
   assert.ok(bought, 'its outcomes changed');
   assert.match(bought.message, /payment back/);
   // A box a grant and a mission give as a roll: those rolls hold no payment, and aren't lost.
   const vault = live(example('partner-vault'));
-  const chest = vault.boxes.find((b) => b.key === 'daily-chest');
+  const chest = vault.boxes.find(b => b.key === 'daily-chest');
   chest.outcomes[0].chance += 1;
   chest.outcomes[1].chance -= 1;
-  const won = check(vault).warnings.find((x) => x.code === 'W-LIVE-ROLLS' && x.where === 'economy.boxes.daily-chest');
+  const won = check(vault).warnings.find(x => x.code === 'W-LIVE-ROLLS' && x.where === 'economy.boxes.daily-chest');
   assert.ok(won);
   assert.match(won.message, /grant:daily, farm:expedition\) holds no payment and rolls on the box as it is then/);
 });
 
-test('a price on a set\'s only way out warns that a suspend keeps the pieces locked', () => {
+test("a price on a set's only way out warns that a suspend keeps the pieces locked", () => {
   const spec = example('elements-set');
-  assert.ok(!codes(spec).includes('W-UNBIND-PAY'), 'the example\'s unbind takes no payment');
+  assert.ok(!codes(spec).includes('W-UNBIND-PAY'), "the example's unbind takes no payment");
   const priced = structuredClone(spec);
-  const unbind = priced.recipes.find((r) => r.key === 'unbind');
+  const unbind = priced.recipes.find(r => r.key === 'unbind');
   unbind.in.push({ takes: 'pay', amount: 1, currency: priced.currency, to: 'burn' });
   assert.ok(codes(priced).includes('W-UNBIND-PAY'));
   // A free way out besides it: the priced one is a choice, not the only door.
   const both = structuredClone(priced);
-  both.recipes.push({ ...structuredClone(spec.recipes.find((r) => r.key === 'unbind')), key: 'unbind-free', name: 'Unbind for free' });
+  both.recipes.push({
+    ...structuredClone(spec.recipes.find(r => r.key === 'unbind')),
+    key: 'unbind-free',
+    name: 'Unbind for free',
+  });
   assert.ok(!codes(both).includes('W-UNBIND-PAY'));
 });

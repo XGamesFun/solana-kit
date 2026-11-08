@@ -23,8 +23,8 @@ export async function reclaim(rpc, owner, dir, { keepLotteries = false } = {}) {
   if (!project || live.authority !== owner.address) return null;
   const wsol = ata(owner.address, NATIVE_MINT);
   const published = live.published ?? {};
-  const sol = new Set((published.tokens ?? []).filter((t) => t.source === 'sol').map((t) => t.key));
-  const pots = new Set(keepLotteries ? (published.lotteries ?? []).map((l) => l.pot).filter(Boolean) : []);
+  const sol = new Set((published.tokens ?? []).filter(t => t.source === 'sol').map(t => t.key));
+  const pots = new Set(keepLotteries ? (published.lotteries ?? []).map(l => l.pot).filter(Boolean) : []);
   let total = 0n;
   for (const p of published.pools ?? []) {
     if (!sol.has(p.currency ?? published.currency) || pots.has(p.key)) continue;
@@ -35,13 +35,22 @@ export async function reclaim(rpc, owner, dir, { keepLotteries = false } = {}) {
     if (!(BigInt(amount) > 0n)) continue;
     await send(rpc, owner, [
       createAssociatedTokenAccountIdempotent(owner.address, owner.address, NATIVE_MINT),
-      moveTokensIx({ authority: owner.address, project, mint: NATIVE_MINT, from: { Pool: [index] }, to: { Account: [wsol] }, amount: { Fixed: [BigInt(amount)] }, reference: null }),
+      moveTokensIx({
+        authority: owner.address,
+        project,
+        mint: NATIVE_MINT,
+        from: { Pool: [index] },
+        to: { Account: [wsol] },
+        amount: { Fixed: [BigInt(amount)] },
+        reference: null,
+      }),
     ]);
     total += BigInt(amount);
   }
   // The owner's wrapped SOL (the pools just moved, and a treasury kept as wrapped SOL) back to plain SOL.
   // This also closes the game's treasury when it is that account (the default): the run is over, and the SOL comes
   // back. Anyone reading the chain after a run sees a treasury the agent didn't close.
-  if (await rpc.account(wsol).catch(() => null)) await send(rpc, owner, [closeTokenAccount(wsol, owner.address, owner.address)]).catch(() => {});
+  if (await rpc.account(wsol).catch(() => null))
+    await send(rpc, owner, [closeTokenAccount(wsol, owner.address, owner.address)]).catch(() => {});
   return Number(total);
 }

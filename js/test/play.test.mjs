@@ -18,7 +18,7 @@ const NOW = 1_790_000_000;
 const skip = cannotRun();
 
 /** A wallet: the signer signs its own slot of whatever it is handed. */
-const asWallet = (kp) => ({
+const asWallet = kp => ({
   address: kp.address,
   async signTransaction(wire) {
     const t = readTransaction(wire);
@@ -50,11 +50,40 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
     ],
     auctions: [{ key: 'sunset', name: 'Sunset', lot: { item: 'art' }, reserve: 0.01, runs: '1h', extendBy: '5m' }],
     pools: [{ key: 'house', currency: 'sol', seed: 1 }],
-    boxes: [{ key: 'chest', name: 'Chest', price: 0.02, split: [{ to: 'pool:house', percent: 90 }], outcomes: [{ gives: 'item', item: 'gem', chance: 50 }, { gives: 'pay', pool: 'house', amount: 0.03, chance: 50 }] }],
+    boxes: [
+      {
+        key: 'chest',
+        name: 'Chest',
+        price: 0.02,
+        split: [{ to: 'pool:house', percent: 90 }],
+        outcomes: [
+          { gives: 'item', item: 'gem', chance: 50 },
+          { gives: 'pay', pool: 'house', amount: 0.03, chance: 50 },
+        ],
+      },
+    ],
     payments: [{ key: 'entry', name: 'Entry', amount: 0.005, split: [{ to: 'lottery:weekly', percent: 100 }] }],
     lotteries: [{ key: 'weekly', name: 'Weekly', price: 0.001, every: '7d' }],
-    farms: [{ key: 'stake', name: 'Stake SOL', stakes: 'sol', rewards: 'sol', seed: 0.5, tiers: [{ lock: '1h', multiplier: 1 }] }],
-    grants: [{ key: 'welcome', name: 'Welcome', gives: { item: 'starter' }, list: [player.address], limits: { perWallet: 1 }, fund: 0.05 }],
+    farms: [
+      {
+        key: 'stake',
+        name: 'Stake SOL',
+        stakes: 'sol',
+        rewards: 'sol',
+        seed: 0.5,
+        tiers: [{ lock: '1h', multiplier: 1 }],
+      },
+    ],
+    grants: [
+      {
+        key: 'welcome',
+        name: 'Welcome',
+        gives: { item: 'starter' },
+        list: [player.address],
+        limits: { perWallet: 1 },
+        fund: 0.05,
+      },
+    ],
   };
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-play-'));
   const file = path.join(dir, 'xsolana.json');
@@ -63,21 +92,40 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
   const session = await createApproval({ file, chain, now: () => NOW });
   for (let i = 0; i < 6 && !session.state().done; i++) {
     const batch = await session.prepare(owner.address);
-    await session.complete(owner.address, batch.id, batch.transactions.map((b64) => toBase64(wireTransaction(readTransaction(fromBase64(b64)).message, (() => { const t = readTransaction(fromBase64(b64)); const s = [...t.signatures]; s[t.signers.indexOf(owner.address)] = owner.sign(t.message); return s; })()))));
+    await session.complete(
+      owner.address,
+      batch.id,
+      batch.transactions.map(b64 =>
+        toBase64(
+          wireTransaction(
+            readTransaction(fromBase64(b64)).message,
+            (() => {
+              const t = readTransaction(fromBase64(b64));
+              const s = [...t.signatures];
+              s[t.signers.indexOf(owner.address)] = owner.sign(t.message);
+              return s;
+            })(),
+          ),
+        ),
+      ),
+    );
   }
   const live = JSON.parse(readFileSync(file, 'utf8'));
-  assert.ok((live.live?.project ?? live.live?.game));
+  assert.ok(live.live?.project ?? live.live?.game);
 
   const app = solanaApp({ spec: live, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
   const shop = await app.shop();
-  assert.deepEqual(shop.map((s) => [s.key, s.price, s.left]), [['badge', '0.01', 10]]);
-  const bought = await app.buy('badge', { listing: (await app.shop()).find((l) => l.key === 'badge') });
+  assert.deepEqual(
+    shop.map(s => [s.key, s.price, s.left]),
+    [['badge', '0.01', 10]],
+  );
+  const bought = await app.buy('badge', { listing: (await app.shop()).find(l => l.key === 'badge') });
   assert.ok(bought.asset, 'the badge was minted');
-  const opened = await app.openBox('chest', { listing: (await app.boxes()).find((l) => l.key === 'chest') });
+  const opened = await app.openBox('chest', { listing: (await app.boxes()).find(l => l.key === 'chest') });
   assert.ok(opened.settled);
   await app.pay('entry');
   w.chain.nextSlot();
-  await app.buyTickets('weekly', 3, { listing: (await app.lotteries()).find((l) => l.key === 'weekly') });
+  await app.buyTickets('weekly', 3, { listing: (await app.lotteries()).find(l => l.key === 'weekly') });
   await app.stake('stake', '0.1');
   w.chain.warp(NOW + 60);
   await app.harvest('stake');
@@ -85,8 +133,11 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
   assert.equal(await w.chain.rpc.account(associatedTokenAddress(player.address, NATIVE_MINT)), null);
   await app.claimGrant('welcome');
   const mine = await app.collectibles();
-  assert.ok(mine.some((c) => c.name.startsWith('Badge')), JSON.stringify(mine.map((c) => c.name)));
-  assert.ok(mine.some((c) => c.name.startsWith('Starter pet')));
+  assert.ok(
+    mine.some(c => c.name.startsWith('Badge')),
+    JSON.stringify(mine.map(c => c.name)),
+  );
+  assert.ok(mine.some(c => c.name.startsWith('Starter pet')));
   const boxes = await app.boxes();
   assert.equal(boxes[0].outcomes[0].chancePercent, 50);
 
@@ -109,6 +160,9 @@ test('a player uses a live economy through js/play', { skip: skip ?? false }, as
   w.chain.warp(w.chain.now() + 3_700);
   const ended = await theirs.endAuction('sunset');
   assert.equal(ended.winner, rival.address);
-  assert.ok((await theirs.collectibles()).some((c) => c.name.startsWith('Sunset')));
-  assert.deepEqual((await app.auctions()).map((x) => x.ended), [true]);
+  assert.ok((await theirs.collectibles()).some(c => c.name.startsWith('Sunset')));
+  assert.deepEqual(
+    (await app.auctions()).map(x => x.ended),
+    [true],
+  );
 });

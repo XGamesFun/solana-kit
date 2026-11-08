@@ -16,7 +16,10 @@ export default [
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.node } },
     linterOptions: { reportUnusedDisableDirectives: 'error' },
     rules: {
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }],
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true },
+      ],
     },
   },
   // runs in a browser page as it is: browser globals only, and nothing of Node's
@@ -24,7 +27,14 @@ export default [
     files: BROWSER_SAFE,
     languageOptions: { globals: { ...globals.browser } },
     rules: {
-      'no-restricted-imports': ['error', { patterns: [{ group: ['node:*'], message: 'This module runs in a browser page: no Node imports (AGENTS.md).' }] }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['node:*'], message: 'This module runs in a browser page: no Node imports (AGENTS.md).' },
+          ],
+        },
+      ],
       'no-restricted-globals': [
         'error',
         { name: 'Buffer', message: 'This module runs in a browser page: use Uint8Array (js/chain/bytes.js).' },

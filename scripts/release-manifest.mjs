@@ -13,14 +13,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 async function files(dir, base = root) {
   const entries = await readdir(path.join(base, dir), { withFileTypes: true });
-  return (await Promise.all(entries.map((entry) => entry.isDirectory() ? files(`${dir}/${entry.name}`, base) : [`${dir}/${entry.name}`]))).flat();
+  return (
+    await Promise.all(
+      entries.map(entry => (entry.isDirectory() ? files(`${dir}/${entry.name}`, base) : [`${dir}/${entry.name}`])),
+    )
+  ).flat();
 }
 const client = createHash('sha256');
-for (const name of [...await files('js/client'), ...await files('js/chain')].sort()) {
-  client.update(name).update('\0').update(await readFile(path.join(root, name)));
+for (const name of [...(await files('js/client')), ...(await files('js/chain'))].sort()) {
+  client
+    .update(name)
+    .update('\0')
+    .update(await readFile(path.join(root, name)));
 }
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const idlBytes = await readFile(path.join(root, 'js/client/idl/loot.json'));
@@ -31,23 +38,46 @@ const sbfFile = process.env.XSOLANA_PROGRAM_DIR
 const checking = process.argv.includes('--check');
 const target = path.join(root, 'release.json');
 if (pkg.version !== idl.metadata.version) throw new Error('Package and IDL versions differ. Rebuild and sync the IDL.');
-const held = { version: pkg.version, programId: idl.address, idlSha256: sha(idlBytes), clientSha256: client.digest('hex') };
+const held = {
+  version: pkg.version,
+  programId: idl.address,
+  idlSha256: sha(idlBytes),
+  clientSha256: client.digest('hex'),
+};
 
 if (checking) {
   const release = JSON.parse(await readFile(target, 'utf8'));
-  const differ = Object.keys(held).filter((k) => release[k] !== held[k]);
-  if (differ.length) throw new Error(`release.json does not match this checkout (${differ.join(', ')}). Rebuild, test, then regenerate release.json.`);
+  const differ = Object.keys(held).filter(k => release[k] !== held[k]);
+  if (differ.length)
+    throw new Error(
+      `release.json does not match this checkout (${differ.join(', ')}). Rebuild, test, then regenerate release.json.`,
+    );
   if (existsSync(sbfFile)) {
     const sbf = await readFile(sbfFile);
-    if (release.sbfBytes !== sbf.length || release.sbfSha256 !== sha(sbf)) throw new Error(`release.json does not match the program build at ${sbfFile}. Rebuild, test, then regenerate release.json.`);
+    if (release.sbfBytes !== sbf.length || release.sbfSha256 !== sha(sbf))
+      throw new Error(
+        `release.json does not match the program build at ${sbfFile}. Rebuild, test, then regenerate release.json.`,
+      );
     console.log(`Verified loot ${held.version} release: version, IDL, client and program build.`);
   } else {
-    console.log(`Verified loot ${held.version} release: version, IDL and client. The program build was not checked: there is none at ${sbfFile}.`);
+    console.log(
+      `Verified loot ${held.version} release: version, IDL and client. The program build was not checked: there is none at ${sbfFile}.`,
+    );
   }
 } else {
-  if (!existsSync(sbfFile)) throw new Error(`No program build at ${sbfFile}: release.json binds one. Run npm run fixtures, or set XSOLANA_PROGRAM_DIR to a program build, then run this again.`);
+  if (!existsSync(sbfFile))
+    throw new Error(
+      `No program build at ${sbfFile}: release.json binds one. Run npm run fixtures, or set XSOLANA_PROGRAM_DIR to a program build, then run this again.`,
+    );
   const sbf = await readFile(sbfFile);
-  const manifest = { version: held.version, programId: held.programId, sbfBytes: sbf.length, sbfSha256: sha(sbf), idlSha256: held.idlSha256, clientSha256: held.clientSha256 };
+  const manifest = {
+    version: held.version,
+    programId: held.programId,
+    sbfBytes: sbf.length,
+    sbfSha256: sha(sbf),
+    idlSha256: held.idlSha256,
+    clientSha256: held.clientSha256,
+  };
   await writeFile(target, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Wrote loot ${manifest.version} release manifest (${manifest.sbfBytes} program bytes).`);
 }

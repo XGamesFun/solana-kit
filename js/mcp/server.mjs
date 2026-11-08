@@ -23,15 +23,18 @@ export const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'
 /** Every way `input` does not fit a tool's input schema, in words; [] when it fits. */
 export function inputProblems(schema, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return ['arguments must be an object'];
-  return validate(input, schema, schema, 'arguments').map((e) => `${e.path} ${e.message}`);
+  return validate(input, schema, schema, 'arguments').map(e => `${e.path} ${e.message}`);
 }
 
 /** Runs one tool by name: the same checks and answer on the server and in the terminal. */
 export async function runTool(name, input = {}, ctx = {}) {
-  const tool = tools.find((t) => t.name === name);
+  const tool = tools.find(t => t.name === name);
   if (!tool) {
-    const near = tools.filter((t) => t.name.includes(String(name).replace(/^xsolana_/, ''))).map((t) => t.name);
-    return { isError: true, text: `No tool ${name}.${near.length ? ` Did you mean ${near.join(', ')}?` : ''} Tools: ${tools.map((t) => t.name).join(', ')}.` };
+    const near = tools.filter(t => t.name.includes(String(name).replace(/^xsolana_/, ''))).map(t => t.name);
+    return {
+      isError: true,
+      text: `No tool ${name}.${near.length ? ` Did you mean ${near.join(', ')}?` : ''} Tools: ${tools.map(t => t.name).join(', ')}.`,
+    };
   }
   const bad = inputProblems(tool.inputSchema, input);
   if (bad.length) return { isError: true, text: bad.join('; ') };
@@ -42,27 +45,48 @@ export async function runTool(name, input = {}, ctx = {}) {
   }
 }
 
-const jsonable = (value) => JSON.parse(JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v)));
+const jsonable = value =>
+  JSON.parse(
+    JSON.stringify(value, (_, v) =>
+      typeof v === 'bigint' ? v.toString() : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v,
+    ),
+  );
 
 /** The answer to one JSON-RPC request, or null for a notification. */
 export async function handle(message, ctx = {}) {
   const { id, method, params } = message ?? {};
-  const reply = (result) => (id === undefined ? null : { jsonrpc: '2.0', id, result });
+  const reply = result => (id === undefined ? null : { jsonrpc: '2.0', id, result });
   const fail = (code, text) => (id === undefined ? null : { jsonrpc: '2.0', id, error: { code, message: text } });
   switch (method) {
     case 'initialize': {
       const asked = params?.protocolVersion;
-      return reply({ protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0], capabilities: { tools: {} }, serverInfo: { name: 'xsolana', version: VERSION }, instructions: INSTRUCTIONS });
+      return reply({
+        protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
+        capabilities: { tools: {} },
+        serverInfo: { name: 'xsolana', version: VERSION },
+        instructions: INSTRUCTIONS,
+      });
     }
     case 'ping':
       return reply({});
     case 'tools/list':
-      return reply({ tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations })) });
+      return reply({
+        tools: tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+          annotations: t.annotations,
+        })),
+      });
     case 'tools/call': {
       const result = await runTool(params?.name, params?.arguments ?? {}, { ...ctx, cwd: ctx.cwd ?? process.cwd() });
       // A tool that failed says so (isError), and keeps whatever it found (a save's refusals, say) as structuredContent.
       const { text, isError, ...data } = jsonable(result);
-      return reply({ ...(isError ? { isError: true } : {}), content: [{ type: 'text', text }], structuredContent: { text, ...data } });
+      return reply({
+        ...(isError ? { isError: true } : {}),
+        content: [{ type: 'text', text }],
+        structuredContent: { text, ...data },
+      });
     }
     default:
       if (method?.startsWith('notifications/')) return null;
@@ -74,15 +98,19 @@ export async function handle(message, ctx = {}) {
  * Serves the tools over stdio until stdin closes. Once it closes, every request already read is answered before
  * `exit` runs, so a client that sends its last request and closes still gets the reply.
  */
-export async function serveStdio({ input = process.stdin, output = process.stdout, exit = () => process.exit(0) } = {}) {
+export async function serveStdio({
+  input = process.stdin,
+  output = process.stdout,
+  exit = () => process.exit(0),
+} = {}) {
   console.log = (...a) => console.error(...a);
   console.info = (...a) => console.error(...a);
   let buffer = '';
-  const write = (m) => m && output.write(`${JSON.stringify(m)}\n`);
+  const write = m => m && output.write(`${JSON.stringify(m)}\n`);
   // The requests read and not yet answered.
   const pending = new Set();
   input.setEncoding('utf8');
-  input.on('data', (chunk) => {
+  input.on('data', chunk => {
     buffer += chunk;
     let at;
     while ((at = buffer.indexOf('\n')) >= 0) {
@@ -98,7 +126,7 @@ export async function serveStdio({ input = process.stdin, output = process.stdou
       }
       for (const m of Array.isArray(message) ? message : [message]) {
         const done = handle(m)
-          .then(write, (e) => write({ jsonrpc: '2.0', id: m?.id ?? null, error: { code: -32603, message: e.message } }))
+          .then(write, e => write({ jsonrpc: '2.0', id: m?.id ?? null, error: { code: -32603, message: e.message } }))
           .finally(() => pending.delete(done));
         pending.add(done);
       }
@@ -109,5 +137,5 @@ export async function serveStdio({ input = process.stdin, output = process.stdou
     // (the last reply is written out before the process goes)
     output.write('', () => exit());
   });
-  console.error(`xsolana MCP server ${VERSION}: ${tools.length} tools (${tools.map((t) => t.name).join(', ')})`);
+  console.error(`xsolana MCP server ${VERSION}: ${tools.length} tools (${tools.map(t => t.name).join(', ')})`);
 }

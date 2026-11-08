@@ -30,7 +30,13 @@ export function encodeBase58(bytes) {
     if (byte !== 0) break;
     zeros += '1';
   }
-  return zeros + digits.reverse().map((d) => ALPHABET[d]).join('');
+  return (
+    zeros +
+    digits
+      .reverse()
+      .map(d => ALPHABET[d])
+      .join('')
+  );
 }
 
 export function decodeBase58(text) {

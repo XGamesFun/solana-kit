@@ -20,7 +20,7 @@ import { encodeBase58 } from '../js/chain/base58.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dir = path.join(root, 'js/test/fixtures');
-const shown = (file) => `js/test/fixtures/${file}`;
+const shown = file => `js/test/fixtures/${file}`;
 
 const mode = process.argv[2] ?? 'fetch';
 if (!['fetch', '--check'].includes(mode) || process.argv.length > 3) {
@@ -37,14 +37,14 @@ const RPC = { mainnet: 'https://api.mainnet-beta.solana.com', devnet };
 /** The upgradeable loader's ProgramData header: a 4-byte tag, the 8-byte slot, then an optional 32-byte authority. */
 const PROGRAM_DATA_HEADER = 45;
 
-const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /** The rows of pinned.txt: { file, address, cluster, loader, sha256, bytes }. */
 function rows() {
   return readFileSync(path.join(dir, 'pinned.txt'), 'utf8')
     .split('\n')
-    .filter((l) => l.trim() && !l.trimStart().startsWith('#'))
-    .map((l) => {
+    .filter(l => l.trim() && !l.trimStart().startsWith('#'))
+    .map(l => {
       const [file, address, cluster, loader, sha, bytes] = l.trim().split(/\s+/);
       return { file, address, cluster, loader, sha256: sha, bytes: Number(bytes) };
     });
@@ -65,7 +65,8 @@ async function call(cluster, method, params) {
         if (error) throw Object.assign(new Error(`${cluster} ${method}: ${error.message}`), { final: true });
         return text;
       }
-      if (res.status !== 429 && res.status < 500) throw Object.assign(new Error(`${cluster} ${method}: HTTP ${res.status}`), { final: true });
+      if (res.status !== 429 && res.status < 500)
+        throw Object.assign(new Error(`${cluster} ${method}: HTTP ${res.status}`), { final: true });
       retry = `HTTP ${res.status}`;
       const after = Number(res.headers.get('retry-after'));
       if (after > 0) wait = Math.max(wait, after * 1000);
@@ -75,7 +76,7 @@ async function call(cluster, method, params) {
     }
     if (attempt >= 6) throw new Error(`${cluster} ${method}: ${retry}, still after ${attempt + 1} tries`);
     console.error(`  ${cluster}: ${retry}, trying again in ${Math.round(wait / 1000)} s`);
-    await new Promise((r) => setTimeout(r, wait));
+    await new Promise(r => setTimeout(r, wait));
   }
 }
 
@@ -94,7 +95,8 @@ async function download({ address, cluster, loader, bytes }) {
     // The program account holds a 4-byte tag and its ProgramData's address; the ELF follows ProgramData's header, padded
     // to the space it was given, so take the pinned length.
     const program = (await account(cluster, address)).data;
-    if (program.length < 36 || program.readUInt32LE(0) !== 2) throw new Error(`${address} on ${cluster} is not an upgradeable program`);
+    if (program.length < 36 || program.readUInt32LE(0) !== 2)
+      throw new Error(`${address} on ${cluster} is not an upgradeable program`);
     const data = (await account(cluster, encodeBase58(program.subarray(4, 36)))).data;
     return data.subarray(PROGRAM_DATA_HEADER, PROGRAM_DATA_HEADER + bytes);
   }
@@ -111,7 +113,7 @@ async function download({ address, cluster, loader, bytes }) {
 
 /** Problems with the loot.so row against release.json, which pins the build this client is for. */
 function releaseMismatch(all) {
-  const row = all.find((r) => r.file === 'loot.so');
+  const row = all.find(r => r.file === 'loot.so');
   const release = JSON.parse(readFileSync(path.join(root, 'release.json'), 'utf8'));
   if (!row) return 'pinned.txt has no loot.so row';
   if (row.address !== release.programId || row.sha256 !== release.sbfSha256 || row.bytes !== release.sbfBytes) {
@@ -133,7 +135,8 @@ for (const row of all) {
   if (have === row.sha256) continue;
   const what = have ? `sha256 ${have}, pinned ${row.sha256}` : 'missing';
   if (mode === '--check' || row.loader === 'local' || (row.loader === 'account' && have)) {
-    const hint = row.loader === 'local' || row.loader === 'account' ? ` (committed: git checkout -- ${shown(row.file)})` : '';
+    const hint =
+      row.loader === 'local' || row.loader === 'account' ? ` (committed: git checkout -- ${shown(row.file)})` : '';
     console.error(`${shown(row.file)}: ${what}${hint}`);
     bad++;
     continue;
@@ -155,15 +158,24 @@ for (const row of all) {
     continue;
   }
   writeFileSync(`${at}.download`, bytes);
-  console.error(`  ${row.cluster} now has another ${row.loader === 'account' ? 'state of this account' : 'build of this program'} (sha256 ${got}, ${bytes.length} bytes; pinned ${row.sha256}, ${row.bytes} bytes).`);
-  console.error(`  Kept as ${shown(row.file)}.download. To test against it, pin it in pinned.txt and rerun every suite.`);
+  console.error(
+    `  ${row.cluster} now has another ${row.loader === 'account' ? 'state of this account' : 'build of this program'} (sha256 ${got}, ${bytes.length} bytes; pinned ${row.sha256}, ${row.bytes} bytes).`,
+  );
+  console.error(
+    `  Kept as ${shown(row.file)}.download. To test against it, pin it in pinned.txt and rerun every suite.`,
+  );
   if (row.loader === 'account') console.error(`  The pinned one is committed: git checkout -- ${shown(row.file)}`);
   bad++;
 }
 if (bad) {
-  if (mode === '--check') console.error('run `npm run fixtures` (node scripts/fetch-fixtures.mjs) to download the pinned programs');
+  if (mode === '--check')
+    console.error('run `npm run fixtures` (node scripts/fetch-fixtures.mjs) to download the pinned programs');
   process.exit(1);
 }
 // A stale download from an earlier run is no longer needed once its file matches.
 for (const row of all) rmSync(path.join(dir, `${row.file}.download`), { force: true });
-console.log(mode === '--check' ? 'every pinned fixture matches js/test/fixtures/pinned.txt' : 'the fixtures in js/test/fixtures match pinned.txt');
+console.log(
+  mode === '--check'
+    ? 'every pinned fixture matches js/test/fixtures/pinned.txt'
+    : 'the fixtures in js/test/fixtures match pinned.txt',
+);

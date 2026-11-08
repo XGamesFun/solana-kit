@@ -13,23 +13,50 @@ test('a full per-round ticket allowance does not exhaust future rounds', { skip 
   const cap = 4_294_967_295;
   const id = 712;
   const address = loot.pda.lottery(w.project, id);
-  w.upsert({ Lottery: { id, args: {
-    price: 1n, mint: w.mint, shares: [], places: [], ticket_mint: SYSTEM_PROGRAM,
-    every: 3600n, draws_at: BigInt(w.chain.now() + 3600), gate: null, per_wallet: cap,
-  } } });
+  w.upsert({
+    Lottery: {
+      id,
+      args: {
+        price: 1n,
+        mint: w.mint,
+        shares: [],
+        places: [],
+        ticket_mint: SYSTEM_PROGRAM,
+        every: 3600n,
+        draws_at: BigInt(w.chain.now() + 3600),
+        gate: null,
+        per_wallet: cap,
+      },
+    },
+  });
   w.fund(w.player, w.mint, BigInt(cap));
   let lottery = w.read('Lottery', address);
   // The tickets of a round are counted in a window that is the round, in the wallet's counts. Its count in all (a u32)
   // counts every round's too: 2^32 tickets in all would refuse the wallet's next purchase (Overflow).
-  w.chain.send(w.player, [loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: BigInt(cap - 1) })]);
-  const count = () => loot.readLimit(loot.readListAccount(w.chain.get(loot.pda.counts(w.project, w.player))), loot.countKey(address, lottery.incarnation));
+  w.chain.send(w.player, [
+    loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, count: BigInt(cap - 1) }),
+  ]);
+  const count = () =>
+    loot.readLimit(
+      loot.readListAccount(w.chain.get(loot.pda.counts(w.project, w.player))),
+      loot.countKey(address, lottery.incarnation),
+    );
   assert.deepEqual(count(), { count: cap - 1, window: 1, inWindow: cap - 1 });
   w.chain.warp(Number(lottery.terms.draws_at));
   w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]); // the oracle never answers
   w.chain.warp(w.chain.now() + Number(loot.LOTTERY_TIMEOUT_SECONDS) + 1);
-    w.chain.nextSlot();
+  w.chain.nextSlot();
   // The next ask after the timeout cancels the round its first ask moved past.
-  w.chain.sendRaw(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery, round: w.round(id).round, roundAddress: loot.pda.round(address, lottery.incarnation, 0) })]);
+  w.chain.sendRaw(w.cranker, [
+    loot.drawLotteryIx({
+      payer: w.cranker,
+      project: w.project,
+      id,
+      lottery,
+      round: w.round(id).round,
+      roundAddress: loot.pda.round(address, lottery.incarnation, 0),
+    }),
+  ]);
   w.finishRound(id);
   lottery = w.read('Lottery', address);
   assert.equal(lottery.round, 1);
@@ -55,28 +82,72 @@ test('an unbid auction ends at its configured time even with a large extension',
   w.upsert({ Item: { id, args: collectible('Review', 1, { kind: 'Normal' }) } });
   const now = w.chain.now();
   // the largest extension the program takes: five years (it refuses more, BadAuction)
-  const args = { lot: { Item: [id] }, reserve: 1n, min_raise_bps: 0,
-    starts_at: BigInt(now), ends_at: BigInt(now + 60), extend: 157_680_000, shares: [], gate: null };
-  assert.throws(() => w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project,
-    collection: w.collection, id, mint: w.mint, args: { ...args, extend: 4_294_967_295 } })]), /BadAuction/);
-  w.chain.send(w.authority, [loot.openAuctionIx({ seller: w.authority, project: w.project,
-    collection: w.collection, id, mint: w.mint, args })]);
+  const args = {
+    lot: { Item: [id] },
+    reserve: 1n,
+    min_raise_bps: 0,
+    starts_at: BigInt(now),
+    ends_at: BigInt(now + 60),
+    extend: 157_680_000,
+    shares: [],
+    gate: null,
+  };
+  assert.throws(
+    () =>
+      w.chain.send(w.authority, [
+        loot.openAuctionIx({
+          seller: w.authority,
+          project: w.project,
+          collection: w.collection,
+          id,
+          mint: w.mint,
+          args: { ...args, extend: 4_294_967_295 },
+        }),
+      ]),
+    /BadAuction/,
+  );
+  w.chain.send(w.authority, [
+    loot.openAuctionIx({ seller: w.authority, project: w.project, collection: w.collection, id, mint: w.mint, args }),
+  ]);
   const address = loot.pda.auction(w.project, w.authority, id);
   const auction = w.read('Auction', address);
   assert.equal(loot.auctionEnds(auction), BigInt(now + 60));
   w.chain.warp(now + 61);
-  w.chain.send(w.cranker, [loot.endAuctionIx({ signer: w.cranker, project: w.project,
-    projectState: w.projectState(), id, auction, now: now + 61 })]);
+  w.chain.send(w.cranker, [
+    loot.endAuctionIx({
+      signer: w.cranker,
+      project: w.project,
+      projectState: w.projectState(),
+      id,
+      auction,
+      now: now + 61,
+    }),
+  ]);
   assert.equal(w.chain.get(address), null);
 });
 
 test('an open grant gated by an NFT counts a compressed NFT shown, as it does any other', () => {
-  const [project, wallet, nft, tree] = ['So11111111111111111111111111111111111111112', 'Vote111111111111111111111111111111111111111', 'Stake11111111111111111111111111111111111111', 'Config1111111111111111111111111111111111111'];
-  const grant = { incarnation: 3n, shard_bits: 8, open: true, gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } }, limits: { per_person: 0, per_key: 0 }, gives: { Item: [1] } };
+  const [project, wallet, nft, tree] = [
+    'So11111111111111111111111111111111111111112',
+    'Vote111111111111111111111111111111111111111',
+    'Stake11111111111111111111111111111111111111',
+    'Config1111111111111111111111111111111111111',
+  ];
+  const grant = {
+    incarnation: 3n,
+    shard_bits: 8,
+    open: true,
+    gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } },
+    limits: { per_person: 0, per_key: 0 },
+    gives: { Item: [1] },
+  };
   // The badge's record is in its own shard of the grant's claims, beside the wallet's.
   const shard = loot.pda.claims(loot.pda.grant(project, 1), 3n, loot.shardOf(loot.limitKey('badge', nft), 8));
   for (const shown of [{ asset: nft }, { compressed: nft, tree }]) {
     const ix = loot.claimGrantIx({ project, id: 1, grant, wallet, signer: wallet, shown, item: null });
-    assert.ok(ix.keys.some((k) => k.pubkey === shard), `the badge's shard is passed for ${Object.keys(shown)[0]}`);
+    assert.ok(
+      ix.keys.some(k => k.pubkey === shard),
+      `the badge's shard is passed for ${Object.keys(shown)[0]}`,
+    );
   }
 });

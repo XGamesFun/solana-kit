@@ -14,14 +14,24 @@ const posix = process.platform !== 'win32';
 
 /** Runs `xsolana …` in `cwd`: { code, out, err }. */
 const xsolana = (args, { cwd = tmpdir(), env = {} } = {}) =>
-  new Promise((resolve) => execFile(process.execPath, [bin, ...args], { cwd, env: { ...process.env, XSOLANA_NO_OPEN: '1', ...env }, timeout: 30_000 }, (error, out, err) => resolve({ code: error ? error.code : 0, out, err })));
+  new Promise(resolve =>
+    execFile(
+      process.execPath,
+      [bin, ...args],
+      { cwd, env: { ...process.env, XSOLANA_NO_OPEN: '1', ...env }, timeout: 30_000 },
+      (error, out, err) => resolve({ code: error ? error.code : 0, out, err }),
+    ),
+  );
 
 /** A folder of stand-in `claude` and `codex` commands that write each call into `log` and succeed. */
 function fakeAgents() {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-agents-'));
   const log = path.join(dir, 'calls.log');
   for (const name of ['claude', 'codex']) {
-    writeFileSync(path.join(dir, name), `#!/bin/sh\necho "${name} $*" >> "${log}"\n[ "$1 $2" = "mcp get" ] && exit 1\nexit 0\n`);
+    writeFileSync(
+      path.join(dir, name),
+      `#!/bin/sh\necho "${name} $*" >> "${log}"\n[ "$1 $2" = "mcp get" ] && exit 1\nexit 0\n`,
+    );
     chmodSync(path.join(dir, name), 0o755);
   }
   return { dir, calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []) };
@@ -65,31 +75,40 @@ describe('xsolana (the command line)', () => {
     assert.equal(fromFile.out, inline.out);
   });
 
-  test('--agent=claude connects Claude Code only, as --agent claude does', { skip: !posix && 'stand-in agents are shell scripts' }, async () => {
-    for (const form of [['--agent=claude'], ['--agent', 'claude']]) {
-      const agents = fakeAgents();
-      const home = mkdtempSync(path.join(tmpdir(), 'xsolana-home-'));
-      const r = await xsolana(['connect', ...form, '--dry-run'], { env: { PATH: `${agents.dir}${path.delimiter}${process.env.PATH}`, HOME: home } });
-      assert.equal(r.code, 0, r.err + r.out);
-      const calls = agents.calls();
-      assert.ok(calls.length && calls.every((c) => c.startsWith('claude ')), `${form.join(' ')}: ${calls.join(' | ')}`);
-      assert.match(r.out, /claude mcp add --transport stdio --scope user xsolana/);
-      assert.ok(!existsSync(path.join(home, '.claude')), 'a dry run writes nothing');
-    }
-  });
+  test(
+    '--agent=claude connects Claude Code only, as --agent claude does',
+    { skip: !posix && 'stand-in agents are shell scripts' },
+    async () => {
+      for (const form of [['--agent=claude'], ['--agent', 'claude']]) {
+        const agents = fakeAgents();
+        const home = mkdtempSync(path.join(tmpdir(), 'xsolana-home-'));
+        const r = await xsolana(['connect', ...form, '--dry-run'], {
+          env: { PATH: `${agents.dir}${path.delimiter}${process.env.PATH}`, HOME: home },
+        });
+        assert.equal(r.code, 0, r.err + r.out);
+        const calls = agents.calls();
+        assert.ok(calls.length && calls.every(c => c.startsWith('claude ')), `${form.join(' ')}: ${calls.join(' | ')}`);
+        assert.match(r.out, /claude mcp add --transport stdio --scope user xsolana/);
+        assert.ok(!existsSync(path.join(home, '.claude')), 'a dry run writes nothing');
+      }
+    },
+  );
 });
 
 describe('xsolana connect', () => {
   /** Stand-in agents for connect's `run`: every call recorded, `mcp get` finds nothing. */
   const recorder = () => {
     const calls = [];
-    return { calls, run: async (bin, args) => (calls.push([bin, ...args].join(' ')), { code: args[1] === 'get' ? 1 : 0, out: '' }) };
+    return {
+      calls,
+      run: async (bin, args) => (calls.push([bin, ...args].join(' ')), { code: args[1] === 'get' ? 1 : 0, out: '' }),
+    };
   };
 
   test('an unknown scope is refused before anything runs', async () => {
     const { calls, run } = recorder();
     const said = [];
-    assert.equal(await connect({ scope: 'everywhere', run, log: (l) => said.push(l) }), 1);
+    assert.equal(await connect({ scope: 'everywhere', run, log: l => said.push(l) }), 1);
     assert.deepEqual(calls, []);
     assert.match(said.join('\n'), /No scope called “everywhere” \(user, project\)/);
   });
@@ -98,8 +117,15 @@ describe('xsolana connect', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'xsolana-project-'));
     const { calls, run } = recorder();
     const said = [];
-    assert.equal(await connect({ agent: 'claude', scope: 'project', cwd, run, log: (l) => said.push(l) }), 0, said.join('\n'));
-    assert.ok(calls.some((c) => c.startsWith('claude mcp add --transport stdio --scope project xsolana')), calls.join('\n'));
+    assert.equal(
+      await connect({ agent: 'claude', scope: 'project', cwd, run, log: l => said.push(l) }),
+      0,
+      said.join('\n'),
+    );
+    assert.ok(
+      calls.some(c => c.startsWith('claude mcp add --transport stdio --scope project xsolana')),
+      calls.join('\n'),
+    );
     assert.equal(await skillFolder(path.join(cwd, '.claude', 'skills', 'xsolana-economy')), 'ours');
     // and --remove takes it out of the same project, not the user's folder
     assert.equal(await connect({ agent: 'claude', scope: 'project', cwd, remove: true, run, log: () => {} }), 0);
@@ -110,8 +136,8 @@ describe('xsolana connect', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'xsolana-project-'));
     const { calls, run } = recorder();
     const said = [];
-    assert.equal(await connect({ agent: 'codex', scope: 'project', cwd, run, log: (l) => said.push(l) }), 1);
-    assert.ok(!calls.some((c) => c.includes('mcp add')));
+    assert.equal(await connect({ agent: 'codex', scope: 'project', cwd, run, log: l => said.push(l) }), 1);
+    assert.ok(!calls.some(c => c.includes('mcp add')));
     assert.match(said.join('\n'), /only for the whole user/);
     assert.equal(await skillFolder(path.join(cwd, '.agents', 'skills', 'xsolana-economy')), 'none');
   });
@@ -123,13 +149,23 @@ describe('xsolana connect', () => {
     writeFileSync(path.join(mine, 'SKILL.md'), '---\nname: my-own-skill\n---\nmine\n');
     for (const remove of [false, true]) {
       const said = [];
-      assert.equal(await connect({ agent: 'claude', scope: 'project', cwd, remove, run: recorder().run, log: (l) => said.push(l) }), 1);
+      assert.equal(
+        await connect({ agent: 'claude', scope: 'project', cwd, remove, run: recorder().run, log: l => said.push(l) }),
+        1,
+      );
       assert.match(said.join('\n'), /is not xsolana's xsolana-economy skill/);
       assert.equal(readFileSync(path.join(mine, 'SKILL.md'), 'utf8'), '---\nname: my-own-skill\n---\nmine\n');
     }
     // the dry run says the same, and what it would do with xsolana's own
     const said = [];
-    await connect({ agent: 'claude', scope: 'project', cwd, dryRun: true, run: recorder().run, log: (l) => said.push(l) });
+    await connect({
+      agent: 'claude',
+      scope: 'project',
+      cwd,
+      dryRun: true,
+      run: recorder().run,
+      log: l => said.push(l),
+    });
     assert.match(said.join('\n'), /not xsolana's xsolana-economy skill/);
   });
 
@@ -140,7 +176,14 @@ describe('xsolana connect', () => {
     writeFileSync(path.join(skill, 'SKILL.md'), '---\nname: xsolana-economy\ndescription: an older copy\n---\nold\n');
     writeFileSync(path.join(skill, 'stale.md'), 'gone after');
     const said = [];
-    await connect({ agent: 'claude', scope: 'project', cwd, dryRun: true, run: recorder().run, log: (l) => said.push(l) });
+    await connect({
+      agent: 'claude',
+      scope: 'project',
+      cwd,
+      dryRun: true,
+      run: recorder().run,
+      log: l => said.push(l),
+    });
     assert.match(said.join('\n'), /replace the xsolana skill at/);
     assert.ok(existsSync(path.join(skill, 'stale.md')), 'a dry run changes nothing');
     assert.equal(await connect({ agent: 'claude', scope: 'project', cwd, run: recorder().run, log: () => {} }), 0);

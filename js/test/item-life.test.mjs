@@ -23,11 +23,24 @@ const spec = {
   currency: 'sol',
   tokens: [{ key: 'sol', source: 'sol' }],
   items: [
-    { key: 'tool', name: 'Tool', uri: 'https://example.invalid/t.json', life: { readyAfter: '1h', lasts: '10d', uses: 2, cooldown: '1h' } },
+    {
+      key: 'tool',
+      name: 'Tool',
+      uri: 'https://example.invalid/t.json',
+      life: { readyAfter: '1h', lasts: '10d', uses: 2, cooldown: '1h' },
+    },
     { key: 'ore', name: 'Ore', uri: 'https://example.invalid/o.json', life: { readyAfter: '1h' } },
   ],
   recipes: [
-    { key: 'work', name: 'Work', in: [{ takes: 'burn', item: 'ore' }, { takes: 'use', item: 'tool' }], out: [] },
+    {
+      key: 'work',
+      name: 'Work',
+      in: [
+        { takes: 'burn', item: 'ore' },
+        { takes: 'use', item: 'tool' },
+      ],
+      out: [],
+    },
     { key: 'fix', name: 'Fix', in: [{ takes: 'renew', item: 'tool' }], out: [] },
   ],
 };
@@ -54,10 +67,24 @@ test('a life is written as needs and raises at each collectible’s place in the
 
 test('a staked line of an item with uses must move its farm’s lock too: the life’s raise is a raise on it', () => {
   const staked = structuredClone(spec);
-  staked.farms = [{ key: 'yard', name: 'Yard', stakes: 'collectibles', item: 'tool', custody: 'escrow', rewards: 'sol', lockAttribute: 'free_at', tiers: [{ lock: '1d' }] }];
+  staked.farms = [
+    {
+      key: 'yard',
+      name: 'Yard',
+      stakes: 'collectibles',
+      item: 'tool',
+      custody: 'escrow',
+      rewards: 'sol',
+      lockAttribute: 'free_at',
+      tiers: [{ lock: '1d' }],
+    },
+  ];
   staked.recipes = [{ key: 'work', name: 'Work', in: [{ takes: 'staked', item: 'tool', farm: 'yard' }], out: [] }];
   const r = check(staked, { now: NOW });
-  assert.ok(r.refusals.some((x) => x.code === 'E-RECIPE' && /“used”/.test(x.message) && /BadRecipe/.test(x.message)), r.refusals.map((x) => x.message).join('\n'));
+  assert.ok(
+    r.refusals.some(x => x.code === 'E-RECIPE' && /“used”/.test(x.message) && /BadRecipe/.test(x.message)),
+    r.refusals.map(x => x.message).join('\n'),
+  );
 });
 
 test('on chain: ready after an hour, two uses with an hour between them, then renewed', { skip }, () => {
@@ -67,9 +94,22 @@ test('on chain: ready after an hour, two uses with an hour between them, then re
   w.upsert({ Item: { id, args: collectible('Tool') } });
   const work = recipeArgs({ ...spec.recipes[0], in: [spec.recipes[0].in[1]] }, m);
   w.upsert({ Recipe: { id: 1, args: { ...work, window: undefined, per_wallet: undefined } } });
-  w.upsert({ Recipe: { id: 2, args: { ...recipeArgs(spec.recipes[1], m), window: undefined, per_wallet: undefined } } });
+  w.upsert({
+    Recipe: { id: 2, args: { ...recipeArgs(spec.recipes[1], m), window: undefined, per_wallet: undefined } },
+  });
   const tool = w.make(id, w.player);
-  const craft = (recipe) => w.chain.send(w.player, [computeUnitLimit(1_000_000), loot.craftIx({ player: w.player, project: w.project, collection: w.collection, id: recipe, recipe: w.read('Recipe', pda.recipe(w.project, recipe)), assets: [tool] })]);
+  const craft = recipe =>
+    w.chain.send(w.player, [
+      computeUnitLimit(1_000_000),
+      loot.craftIx({
+        player: w.player,
+        project: w.project,
+        collection: w.collection,
+        id: recipe,
+        recipe: w.read('Recipe', pda.recipe(w.project, recipe)),
+        assets: [tool],
+      }),
+    ]);
   const used = () => Number(parseCoreAsset(w.chain.get(tool).data).attributes.used ?? 0);
   assert.throws(() => craft(1), /NeedNotMet/, 'not ready yet');
   w.chain.warp(w.chain.now() + HOUR);

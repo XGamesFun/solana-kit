@@ -9,12 +9,12 @@ The project has authority over the NFTs of its collection: the Core collection n
 project is the collection's update delegate. It mints them (an item's units) and writes their attributes on them. Every other
 NFT, a Core asset of any other collection, a Token Metadata NFT or a compressed NFT, it can read but not write.
 
-| NFT | Shown to a rule as | Read | Staked, held or auctioned |
-| --- | --- | --- | --- |
-| A Core asset the project has authority over | the asset | its attributes | yes |
-| Any other Core asset | the asset, then its Sheet's address | its attributes, then its Sheet's over them | yes, by Core's own transfer and freeze |
-| A Token Metadata NFT (legacy or pNFT) | its mint, its metadata, the holder's token account of it, its Sheet's address | the collection it is verified in, and its Sheet | yes, by Token Metadata: locked in the wallet (the project its delegate), or moved to the project's token account under its rule set |
-| A compressed NFT (Bubblegum v2) | its asset id, its record (`prove_leaf`), its tree, its Sheet's address | the Core collection its leaf names, and its Sheet | yes, by Bubblegum: frozen with the project its delegate, or transferred to the project |
+| NFT                                         | Shown to a rule as                                                            | Read                                              | Staked, held or auctioned                                                                                                           |
+| ------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| A Core asset the project has authority over | the asset                                                                     | its attributes                                    | yes                                                                                                                                 |
+| Any other Core asset                        | the asset, then its Sheet's address                                           | its attributes, then its Sheet's over them        | yes, by Core's own transfer and freeze                                                                                              |
+| A Token Metadata NFT (legacy or pNFT)       | its mint, its metadata, the holder's token account of it, its Sheet's address | the collection it is verified in, and its Sheet   | yes, by Token Metadata: locked in the wallet (the project its delegate), or moved to the project's token account under its rule set |
+| A compressed NFT (Bubblegum v2)             | its asset id, its record (`prove_leaf`), its tree, its Sheet's address        | the Core collection its leaf names, and its Sheet | yes, by Bubblegum: frozen with the project its delegate, or transferred to the project                                              |
 
 A route that stakes, holds or auctions an NFT takes its accounts as a `Piece`; the client builds one for any kind (`loot.piece`). A compressed NFT's leaf comes from an indexer (DAS `getAsset` and
 `getAssetProof`, read into shape by `loot.compressedFromDas`) and is proven in the same transaction

@@ -25,11 +25,24 @@ export const AGENTS = {
     name: 'Claude Code',
     bin: 'claude',
     scopes: ['user', 'project'],
-    add: (command, args, scope) => ['mcp', 'add', '--transport', 'stdio', '--scope', scope, NAME, '--', command, ...args],
-    remove: (scope) => ['mcp', 'remove', '--scope', scope, NAME],
+    add: (command, args, scope) => [
+      'mcp',
+      'add',
+      '--transport',
+      'stdio',
+      '--scope',
+      scope,
+      NAME,
+      '--',
+      command,
+      ...args,
+    ],
+    remove: scope => ['mcp', 'remove', '--scope', scope, NAME],
     get: ['mcp', 'get', NAME],
-    skills: (scope, cwd) => (scope === 'project' ? path.join(cwd, '.claude', 'skills') : path.join(os.homedir(), '.claude', 'skills')),
-    plugin: 'Or install the plugin: /plugin marketplace add XGamesFun/solana-kit, then /plugin install xsolana@xgamesfun.',
+    skills: (scope, cwd) =>
+      scope === 'project' ? path.join(cwd, '.claude', 'skills') : path.join(os.homedir(), '.claude', 'skills'),
+    plugin:
+      'Or install the plugin: /plugin marketplace add XGamesFun/solana-kit, then /plugin install xsolana@xgamesfun.',
     next: 'Start a new Claude Code session (or /mcp) to load the xsolana tools.',
   },
   codex: {
@@ -39,23 +52,30 @@ export const AGENTS = {
     add: (command, args) => ['mcp', 'add', NAME, '--', command, ...args],
     remove: () => ['mcp', 'remove', NAME],
     get: ['mcp', 'get', NAME],
-    skills: (scope, cwd) => (scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(os.homedir(), '.agents', 'skills')),
-    plugin: 'Or install the plugin: codex plugin marketplace add XGamesFun/solana-kit, then codex plugin add xsolana@xgamesfun.',
+    skills: (scope, cwd) =>
+      scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(os.homedir(), '.agents', 'skills'),
+    plugin:
+      'Or install the plugin: codex plugin marketplace add XGamesFun/solana-kit, then codex plugin add xsolana@xgamesfun.',
     next: 'Start a new Codex session so it picks up the xsolana tools.',
   },
 };
 
 /** One word for cmd.exe: as it is when it is plain, else in double quotes (a quote inside doubled). */
-const winWord = (a) => (/^[\w@+=:,./\\-]+$/.test(a) ? a : `"${String(a).replace(/"/g, '""')}"`);
+const winWord = a => (/^[\w@+=:,./\\-]+$/.test(a) ? a : `"${String(a).replace(/"/g, '""')}"`);
 
 /**
  * Runs an agent's command and answers { code, out }. On Windows the agents are installed as .cmd shims, which only a
  * shell can start: there the command goes to cmd.exe as one line, each word quoted as it needs.
  */
 export function runAgent(bin, args, { platform = process.platform, execFileImpl = execFile, execImpl = exec } = {}) {
-  return new Promise((resolve) => {
-    const done = (error, stdout, stderr) => resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, out: `${stdout ?? ''}${stderr ?? ''}`.trim() });
-    if (platform === 'win32') execImpl([bin, ...args].map(winWord).join(' '), { timeout: 60_000, windowsHide: true }, done);
+  return new Promise(resolve => {
+    const done = (error, stdout, stderr) =>
+      resolve({
+        code: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
+        out: `${stdout ?? ''}${stderr ?? ''}`.trim(),
+      });
+    if (platform === 'win32')
+      execImpl([bin, ...args].map(winWord).join(' '), { timeout: 60_000, windowsHide: true }, done);
     else execFileImpl(bin, args, { timeout: 60_000 }, done);
   });
 }
@@ -91,7 +111,16 @@ export async function skillFolder(dir) {
 }
 
 /** Connects (or with `remove`, disconnects) each agent found. Returns an exit code. */
-export async function connect({ agent, local = false, remove = false, dryRun = false, scope = 'user', cwd = process.cwd(), log = (...a) => console.log(...a), run = runAgent } = {}) {
+export async function connect({
+  agent,
+  local = false,
+  remove = false,
+  dryRun = false,
+  scope = 'user',
+  cwd = process.cwd(),
+  log = (...a) => console.log(...a),
+  run = runAgent,
+} = {}) {
   if (!SCOPES.includes(scope)) {
     log(`No scope called “${scope}” (${SCOPES.join(', ')}).`);
     return 1;
@@ -113,7 +142,9 @@ export async function connect({ agent, local = false, remove = false, dryRun = f
     }
     found++;
     if (!a.scopes.includes(scope)) {
-      log(`${a.name}: adds MCP servers only for the whole user (--scope ${a.scopes.join(' or ')}), so it was left as it is. Run \`xsolana connect --agent ${id}\` for that.`);
+      log(
+        `${a.name}: adds MCP servers only for the whole user (--scope ${a.scopes.join(' or ')}), so it was left as it is. Run \`xsolana connect --agent ${id}\` for that.`,
+      );
       if (agent) failed++;
       continue;
     }
@@ -146,7 +177,9 @@ export async function connect({ agent, local = false, remove = false, dryRun = f
     const there = await skillFolder(skillDir);
     let skillSaid;
     if (there === 'other') {
-      log(`${a.name}: ${skillDir} is there already and is not xsolana's ${SKILL} skill, so it was left as it is${remove ? '' : ' and the skill was not copied'}. Move it away, then run \`xsolana connect\` again.`);
+      log(
+        `${a.name}: ${skillDir} is there already and is not xsolana's ${SKILL} skill, so it was left as it is${remove ? '' : ' and the skill was not copied'}. Move it away, then run \`xsolana connect\` again.`,
+      );
       failed++;
       ok = false;
     } else if (remove) {
@@ -154,7 +187,8 @@ export async function connect({ agent, local = false, remove = false, dryRun = f
       else if (there === 'ours') await rm(skillDir, { recursive: true, force: true });
       skillSaid = there === 'ours' ? `; the ${SKILL} skill removed from ${skillDir}` : '';
     } else {
-      if (dryRun) log(`${there === 'ours' ? 'replace the xsolana skill at' : 'copy skills/xsolana-economy to'} ${skillDir}`);
+      if (dryRun)
+        log(`${there === 'ours' ? 'replace the xsolana skill at' : 'copy skills/xsolana-economy to'} ${skillDir}`);
       else {
         await mkdir(skills, { recursive: true });
         if (there === 'ours') await rm(skillDir, { recursive: true, force: true });
@@ -167,15 +201,23 @@ export async function connect({ agent, local = false, remove = false, dryRun = f
       // Registered, but not at this scope: it is still there, and the person asked for it gone.
       const stays = had.code === 0 && !removed;
       if (stays) failed++;
-      const server = removed ? 'xsolana removed' : stays ? `xsolana’s server was not found at the ${scope} scope, so it was left where it is (\`${a.bin} mcp get ${NAME}\` shows where)` : 'xsolana’s server was not registered';
+      const server = removed
+        ? 'xsolana removed'
+        : stays
+          ? `xsolana’s server was not found at the ${scope} scope, so it was left where it is (\`${a.bin} mcp get ${NAME}\` shows where)`
+          : 'xsolana’s server was not registered';
       log(`${a.name}: ${server}${skillSaid ?? ''}.`);
     } else if (ok) {
-      log(`${a.name}: xsolana tools added (${local ? 'from this checkout' : 'from npm'}, ${scope === 'project' ? `for ${cwd} only` : 'for every project'})${skillSaid}. ${a.next}`);
+      log(
+        `${a.name}: xsolana tools added (${local ? 'from this checkout' : 'from npm'}, ${scope === 'project' ? `for ${cwd} only` : 'for every project'})${skillSaid}. ${a.next}`,
+      );
       log(`  ${a.plugin}`);
     }
   }
   if (!found) {
-    log('No coding agent found (Claude Code: npm install -g @anthropic-ai/claude-code; Codex: npm install -g @openai/codex).');
+    log(
+      'No coding agent found (Claude Code: npm install -g @anthropic-ai/claude-code; Codex: npm install -g @openai/codex).',
+    );
     return 1;
   }
   return failed ? 1 : 0;

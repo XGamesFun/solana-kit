@@ -2,10 +2,10 @@
 
 ## Status
 
-| Piece | Version | Where | Review |
-| --- | --- | --- | --- |
-| The loot program | 0.24.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ` | devnet only, since slot 519,723,738 (2026-11-07) | Internal reviews only. **Not independently audited** |
-| These tools (`@xgamesfun/solana`) | 0.24.0 | npm | Internal reviews only |
+| Piece                             | Version                                                          | Where                                            | Review                                               |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| The loot program                  | 0.24.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ` | devnet only, since slot 519,723,738 (2026-11-07) | Internal reviews only. **Not independently audited** |
+| These tools (`@xgamesfun/solana`) | 0.24.0                                                           | npm                                              | Internal reviews only                                |
 
 `release.json` pins the exact program binary, IDL and client this package is built for. Nothing runs on mainnet.
 Mainnet waits for an independent audit of the exact code to be deployed.

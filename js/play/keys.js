@@ -13,18 +13,33 @@ import { concat, fromBase64, randomBytes, toBase64, toHex, utf8 } from '../chain
 import { sha256 } from '../chain/sha256.js';
 
 /** The PKCS #8 header of a raw 32-byte Ed25519 seed (RFC 8410). */
-const PKCS8_ED25519 = Uint8Array.from([0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]);
+const PKCS8_ED25519 = Uint8Array.from([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
 
 const DERIVED = 'derived';
-const fromBase64Url = (text) => fromBase64(text.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(text.length / 4) * 4, '='));
+const fromBase64Url = text =>
+  fromBase64(
+    text
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(text.length / 4) * 4, '='),
+  );
 
 /** An Ed25519 key from its 32-byte seed: { address, sign(message) }. */
 export async function keyFromSeed(seed, name = null) {
   const subtle = globalThis.crypto.subtle;
   const pkcs8 = concat(PKCS8_ED25519, seed);
-  const jwk = await subtle.exportKey('jwk', await subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']));
+  const jwk = await subtle.exportKey(
+    'jwk',
+    await subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']),
+  );
   const signer = await subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']);
-  return { address: encodeBase58(fromBase64Url(jwk.x)), name, sign: async (message) => new Uint8Array(await subtle.sign('Ed25519', signer, message)) };
+  return {
+    address: encodeBase58(fromBase64Url(jwk.x)),
+    name,
+    sign: async message => new Uint8Array(await subtle.sign('Ed25519', signer, message)),
+  };
 }
 
 /** The text a wallet signs once a session for its settle keys. It moves nothing and says so. */
@@ -40,9 +55,9 @@ export function browserStore() {
   if (!ls || !globalThis.indexedDB) return null;
   let device = null;
   return {
-    get: (k) => ls.getItem(k),
+    get: k => ls.getItem(k),
     set: (k, v) => ls.setItem(k, v),
-    remove: (k) => ls.removeItem(k),
+    remove: k => ls.removeItem(k),
     keys: () => Array.from({ length: ls.length }, (_, i) => ls.key(i)).filter(Boolean),
     cryptoKey: () => (device ??= deviceKey().catch(() => null)),
   };
@@ -61,7 +76,10 @@ async function deviceKey() {
     r.onerror = () => reject(r.error);
   });
   if (found) return found;
-  const key = await globalThis.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const key = await globalThis.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
   await new Promise((resolve, reject) => {
     const tx = db.transaction('keys', 'readwrite');
     tx.objectStore('keys').put(key, 'device');
@@ -120,7 +138,13 @@ export function keyring({ wallet, project, store = null }) {
     const device = await store?.cryptoKey?.();
     if (!device || !text) return null;
     const bytes = fromBase64(text);
-    return new Uint8Array(await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, device, bytes.subarray(12)));
+    return new Uint8Array(
+      await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: bytes.subarray(0, 12) },
+        device,
+        bytes.subarray(12),
+      ),
+    );
   }
 
   return {
@@ -157,7 +181,9 @@ export function keyring({ wallet, project, store = null }) {
     stored() {
       if (!store) return [];
       const p = prefix();
-      return safe(() => store.keys(), []).filter((k) => k.startsWith(p)).map((k) => k.slice(p.length));
+      return safe(() => store.keys(), [])
+        .filter(k => k.startsWith(p))
+        .map(k => k.slice(p.length));
     },
 
     forget(name) {

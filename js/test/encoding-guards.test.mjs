@@ -14,7 +14,7 @@ import { withSolWrap } from '../chain/programs.js';
 import { compileMessage, readMessage } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 
-const address = (n) => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i === 0 ? n : i + 1)));
+const address = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i === 0 ? n : i + 1)));
 const A = address(1);
 const B = address(2);
 const C = address(3);
@@ -63,8 +63,17 @@ test('signed integers that do not fit are refused, not wrapped', () => {
   assert.throws(() => intLE(-(2n ** 63n) - 1n, 8), RangeError);
   assert.throws(() => loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: 2n ** 63n }), RangeError);
   // A verdict signs its body's sha256: expires -1 is eight bytes of 255 in the body.
-  const body = concat(addressBytes(loot.LOOT_PROGRAM), addressBytes(A), new Uint8Array(8), uintLE(0, 2), new Uint8Array(8).fill(255));
-  assert.deepEqual(loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: -1n }), concat(utf8('loot-verdict-v4'), sha256(body)));
+  const body = concat(
+    addressBytes(loot.LOOT_PROGRAM),
+    addressBytes(A),
+    new Uint8Array(8),
+    uintLE(0, 2),
+    new Uint8Array(8).fill(255),
+  );
+  assert.deepEqual(
+    loot.verdictBytes({ contest: A, incarnation: 0n, side: 0, expires: -1n }),
+    concat(utf8('loot-verdict-v4'), sha256(body)),
+  );
   assert.throws(() => loot.pda.hold(A, -(2n ** 64n)), RangeError);
   assert.throws(() => loot.pda.hold(A, 2n ** 63n), RangeError);
   assert.equal(loot.pda.hold(A, -1n), loot.pda.hold(A, -1));
@@ -80,13 +89,24 @@ test('a number past 2^53 is refused before it becomes a bigint', () => {
   assert.equal(withSolWrap(A, NATIVE_MINT, 5, []).length, 4);
   assert.throws(() => tableAddress(A, unsafe), /not a safe integer/);
   assert.throws(() => loot.prizeRollNonce(unsafe), /not a safe integer/);
-  assert.throws(() => loot.holdIx({ player: A, project: B, collection: C, asset: address(4), freeAt: unsafe }), /not a safe integer/);
+  assert.throws(
+    () => loot.holdIx({ player: A, project: B, collection: C, asset: address(4), freeAt: unsafe }),
+    /not a safe integer/,
+  );
 });
 
 test('readMessage and readCompactU16 refuse data cut short or out of range', () => {
-  const message = compileMessage({ payer: A, blockhash: B, instructions: [{ programId: C, keys: [], data: new Uint8Array(10) }] });
+  const message = compileMessage({
+    payer: A,
+    blockhash: B,
+    instructions: [{ programId: C, keys: [], data: new Uint8Array(10) }],
+  });
   assert.equal(readMessage(message).instructions[0].data.length, 10);
-  for (let cut = 1; cut <= message.length; cut++) assert.throws(() => readMessage(message.slice(0, message.length - cut)), /Truncated message|truncated length prefix/);
+  for (let cut = 1; cut <= message.length; cut++)
+    assert.throws(
+      () => readMessage(message.slice(0, message.length - cut)),
+      /Truncated message|truncated length prefix/,
+    );
   assert.throws(() => readMessage(new Uint8Array(0)), /Truncated message/);
   assert.deepEqual(readCompactU16(Uint8Array.of(0xff, 0xff, 0x03), 0), { value: 0xffff, size: 3 });
   assert.throws(() => readCompactU16(Uint8Array.of(0xff, 0xff, 0x7f), 0), /past 0xffff/);
@@ -110,10 +130,14 @@ test('decodeProven refuses an account too short for its asset data hash', () => 
 });
 
 test('constants come from the IDL, and missing arguments are named', () => {
-  const constant = (name) => BigInt(IDL.constants.find((c) => c.name === name).value);
+  const constant = name => BigInt(IDL.constants.find(c => c.name === name).value);
   // A constant the program dropped is gone from the client too: the order holds no reserve, and settle's last part
   // is past the end (`SETTLE_LAST`).
-  for (const gone of ['ESCROW_LAMPORTS', 'SETTLE_SPLIT']) assert.equal(IDL.constants.find((c) => c.name === gone), undefined);
+  for (const gone of ['ESCROW_LAMPORTS', 'SETTLE_SPLIT'])
+    assert.equal(
+      IDL.constants.find(c => c.name === gone),
+      undefined,
+    );
   assert.equal(loot.SETTLE_LAST, 4_294_967_295);
   assert.equal(loot.dayOf(constant('DAY_SECONDS') * 3n + 1n), 3);
   assert.throws(() => loot.withDefaults({ Box: { id: 1, args: { currency: A } } }), /entries/);

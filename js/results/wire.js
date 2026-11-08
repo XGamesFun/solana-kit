@@ -11,7 +11,10 @@ export const CLUSTERS = Object.freeze({ devnet: 0, mainnet: 1 });
 export const CERT_KINDS = Object.freeze({
   host: { title: 'loot host key', fields: ['cluster', 'game', 'host', 'until'] },
   revoke: { title: 'loot revoke host key', fields: ['cluster', 'game', 'host'] },
-  draw: { title: 'loot draw', fields: ['cluster', 'game', 'draw', 'engine', 'winners', 'prizes', 'payout', 'identity', 'slug', 'rates'] },
+  draw: {
+    title: 'loot draw',
+    fields: ['cluster', 'game', 'draw', 'engine', 'winners', 'prizes', 'payout', 'identity', 'slug', 'rates'],
+  },
   lock: { title: 'loot draw lock', fields: ['cluster', 'game', 'draw', 'roster', 'players', 'beacon'] },
   entry: { title: 'loot entry', fields: ['cluster', 'game', 'draw'] },
   giveaway: { title: 'loot giveaway host', fields: ['cluster', 'game', 'who', 'slug', 'grant', 'until'] },
@@ -20,13 +23,16 @@ export const CERT_KINDS = Object.freeze({
 
 /** One field's value, on its own line: a value with a line break in it (which would read as another field) is refused. */
 const field = (name, value) => {
-  if (/[\r\n]/.test(String(value))) throw new RangeError(`A certificate's ${name} is one line: ${JSON.stringify(String(value))} has a line break.`);
+  if (/[\r\n]/.test(String(value)))
+    throw new RangeError(`A certificate's ${name} is one line: ${JSON.stringify(String(value))} has a line break.`);
   return value;
 };
-const write = (kind, values) => [CERT_KINDS[kind].title, ...CERT_KINDS[kind].fields.map((f) => `${f}: ${field(f, values[f])}`)].join('\n');
+const write = (kind, values) =>
+  [CERT_KINDS[kind].title, ...CERT_KINDS[kind].fields.map(f => `${f}: ${field(f, values[f])}`)].join('\n');
 
 /** The text the owner signs to let `host` report `game`'s results until `until` (unix seconds). */
-export const hostCertText = ({ cluster = 'devnet', game, host, until }) => write('host', { cluster, game, host, until });
+export const hostCertText = ({ cluster = 'devnet', game, host, until }) =>
+  write('host', { cluster, game, host, until });
 /** The text the owner signs to take `host` back. */
 export const revokeText = ({ cluster = 'devnet', game, host }) => write('revoke', { cluster, game, host });
 
@@ -38,10 +44,33 @@ export const revokeText = ({ cluster = 'devnet', game, host }) => write('revoke'
  * `slug`: the game's play-host name (its tokens' audience), or '-'; `rates`: the sha256 of the engine's rates (canonical
  * JSON), or 'default'.
  */
-export const drawText = ({ cluster = 'devnet', game, draw, engine, winners, prizes = [], payout = 'vouchers', identity = 'linked', slug = '-', rates = 'default' }) =>
-  write('draw', { cluster, game, draw, engine, winners, prizes: prizes.length ? prizes.map((p) => `${p.place}:${p.grant}`).join(' ') : 'none', payout, identity, slug, rates });
+export const drawText = ({
+  cluster = 'devnet',
+  game,
+  draw,
+  engine,
+  winners,
+  prizes = [],
+  payout = 'vouchers',
+  identity = 'linked',
+  slug = '-',
+  rates = 'default',
+}) =>
+  write('draw', {
+    cluster,
+    game,
+    draw,
+    engine,
+    winners,
+    prizes: prizes.length ? prizes.map(p => `${p.place}:${p.grant}`).join(' ') : 'none',
+    payout,
+    identity,
+    slug,
+    rates,
+  });
 /** The text the organizer signs to lock a draw's players (`roster`: rosterHash) to a beacon round still to come. */
-export const lockText = ({ cluster = 'devnet', game, draw, roster, players, beacon, net = 'quicknet' }) => write('lock', { cluster, game, draw, roster, players, beacon: `${net} ${beacon}` });
+export const lockText = ({ cluster = 'devnet', game, draw, roster, players, beacon, net = 'quicknet' }) =>
+  write('lock', { cluster, game, draw, roster, players, beacon: `${net} ${beacon}` });
 /** The text a player's wallet signs to enter a draw (identity 'wallet'). */
 export const entryText = ({ cluster = 'devnet', game, draw }) => write('entry', { cluster, game, draw });
 
@@ -49,20 +78,31 @@ export const entryText = ({ cluster = 'devnet', game, draw }) => write('entry', 
  * The text the owner (or authority) signs to appoint a giveaway host: `who` is "x:<X account id>" (the host signs in
  * with that X account through the play host) or a wallet address; their giveaways pay from grant `grant` alone.
  */
-export const giveawayHostText = ({ cluster = 'devnet', game, who, slug, grant, until }) => write('giveaway', { cluster, game, who, slug, grant, until });
+export const giveawayHostText = ({ cluster = 'devnet', game, who, slug, grant, until }) =>
+  write('giveaway', { cluster, game, who, slug, grant, until });
 /** The text the owner (or authority) signs to take a giveaway host back. */
-export const revokeGiveawayText = ({ cluster = 'devnet', game, who }) => write('revokeGiveaway', { cluster, game, who });
+export const revokeGiveawayText = ({ cluster = 'devnet', game, who }) =>
+  write('revokeGiveaway', { cluster, game, who });
 
 /** A draw's players, as one hash: each `id<TAB>wallet`, sorted by id, one a line; sha256, hex. */
 export async function rosterHash(entries) {
-  const text = [...entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((e) => `${e.id}\t${e.wallet}`).join('\n');
-  return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', utf8(text))), (b) => b.toString(16).padStart(2, '0')).join('');
+  const text = [...entries]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map(e => `${e.id}\t${e.wallet}`)
+    .join('\n');
+  return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', utf8(text))), b =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 /** JSON with every object's keys sorted: one text for one value, so its hash means one thing. */
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value)
+      .sort()
+      .map(k => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .join(',')}}`;
   return JSON.stringify(value);
 }
 
@@ -74,9 +114,17 @@ export function canonicalJson(value) {
  * place past 255 and more than 255 winners are refused, never written as something else.
  */
 export function resultBytes({ cluster = 'devnet', game, round, endedAt, winners }) {
-  if (!Object.hasOwn(CLUSTERS, cluster)) throw new RangeError(`Unknown cluster ${JSON.stringify(cluster)}: a result names ${Object.keys(CLUSTERS).join(' or ')}.`);
-  const roundAt = typeof round === 'string' && /^[0-9a-f]{32}$/i.test(round) ? fromHex(round) : round instanceof Uint8Array && round.length === 16 ? round : null;
-  if (!roundAt) throw new RangeError('A result\'s round is 16 bytes (32 hex characters).');
+  if (!Object.hasOwn(CLUSTERS, cluster))
+    throw new RangeError(
+      `Unknown cluster ${JSON.stringify(cluster)}: a result names ${Object.keys(CLUSTERS).join(' or ')}.`,
+    );
+  const roundAt =
+    typeof round === 'string' && /^[0-9a-f]{32}$/i.test(round)
+      ? fromHex(round)
+      : round instanceof Uint8Array && round.length === 16
+        ? round
+        : null;
+  if (!roundAt) throw new RangeError("A result's round is 16 bytes (32 hex characters).");
   if (!Array.isArray(winners) || winners.length > 255) throw new RangeError('A result names at most 255 winners.');
   return concat(
     utf8(RESULT_DOMAIN),
@@ -85,6 +133,6 @@ export function resultBytes({ cluster = 'devnet', game, round, endedAt, winners 
     roundAt,
     uintLE(BigInt(endedAt), 8),
     Uint8Array.of(winners.length),
-    ...winners.map((w) => concat(addressBytes(w.wallet), uintLE(w.place, 1), uintLE(w.grant ?? NO_GRANT, 2))),
+    ...winners.map(w => concat(addressBytes(w.wallet), uintLE(w.place, 1), uintLE(w.grant ?? NO_GRANT, 2))),
   );
 }

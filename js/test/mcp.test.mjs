@@ -17,19 +17,36 @@ let client;
 
 before(async () => {
   client = new Client({ name: 'xsolana-test', version: '0' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [bin, 'mcp'], cwd, stderr: 'ignore' }));
+  await client.connect(
+    new StdioClientTransport({ command: process.execPath, args: [bin, 'mcp'], cwd, stderr: 'ignore' }),
+  );
 });
 after(async () => client?.close());
 
-const text = (r) => r.content.map((c) => c.text).join('\n');
+const text = r => r.content.map(c => c.text).join('\n');
 
 describe('the xsolana MCP server', () => {
   test('lists every tool with all four hints and an object input schema', async () => {
     const { tools } = await client.listTools();
-    const names = tools.map((t) => t.name).sort();
-    assert.deepEqual(names, ['xsolana_check', 'xsolana_client', 'xsolana_cost', 'xsolana_examples', 'xsolana_explain', 'xsolana_guide', 'xsolana_publish', 'xsolana_save', 'xsolana_simulate', 'xsolana_status'].sort());
+    const names = tools.map(t => t.name).sort();
+    assert.deepEqual(
+      names,
+      [
+        'xsolana_check',
+        'xsolana_client',
+        'xsolana_cost',
+        'xsolana_examples',
+        'xsolana_explain',
+        'xsolana_guide',
+        'xsolana_publish',
+        'xsolana_save',
+        'xsolana_simulate',
+        'xsolana_status',
+      ].sort(),
+    );
     for (const t of tools) {
-      for (const h of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) assert.equal(typeof t.annotations?.[h], 'boolean', `${t.name} ${h}`);
+      for (const h of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'])
+        assert.equal(typeof t.annotations?.[h], 'boolean', `${t.name} ${h}`);
       assert.equal(t.inputSchema.type, 'object');
     }
     assert.ok(client.getInstructions()?.includes('never write Anchor'));
@@ -40,7 +57,7 @@ describe('the xsolana MCP server', () => {
     assert.match(text(guide), /What no part of loot does/);
     assert.equal(guide.structuredContent.program, '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ');
     const ex = await client.callTool({ name: 'xsolana_examples', arguments: { query: 'coin flip with staking' } });
-    assert.ok(ex.structuredContent.examples.some((e) => e.name === 'coin-flip-arena'));
+    assert.ok(ex.structuredContent.examples.some(e => e.name === 'coin-flip-arena'));
     for (const name of ['xsolana_check', 'xsolana_simulate', 'xsolana_explain', 'xsolana_cost', 'xsolana_publish']) {
       const r = await client.callTool({ name, arguments: { example: 'coin-flip-arena' } });
       assert.ok(!r.isError, `${name}: ${text(r)}`);
@@ -56,13 +73,26 @@ describe('the xsolana MCP server', () => {
   test('every npx command in the tools, the skill and the docs is pinned to this package’s version', () => {
     const root = new URL('../../', import.meta.url);
     const { version } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-    const files = ['README.md', 'docs/harnesses.md', 'skills/xsolana-economy/SKILL.md', 'js/mcp/tools.mjs', 'js/mcp/server.mjs', 'js/connect/connect.mjs', 'evals/run.mjs', 'plugin/.mcp.json', 'plugin/mcp.json'];
+    const files = [
+      'README.md',
+      'docs/harnesses.md',
+      'skills/xsolana-economy/SKILL.md',
+      'js/mcp/tools.mjs',
+      'js/mcp/server.mjs',
+      'js/connect/connect.mjs',
+      'evals/run.mjs',
+      'plugin/.mcp.json',
+      'plugin/mcp.json',
+    ];
     for (const file of files) {
       const text = readFileSync(new URL(file, root), 'utf8');
-      for (const line of text.split('\n').filter((l) => /npx/.test(l))) {
+      for (const line of text.split('\n').filter(l => /npx/.test(l))) {
         for (const [, pin] of line.matchAll(/(?:npx (?:-y )?|--package=)@xgamesfun\/solana(@[^\s`'",\]]*)?/g)) {
           assert.ok(pin, `${file}: an unpinned @xgamesfun/solana in “${line.trim()}”`);
-          assert.ok([`@${version}`, '@<version>', '@${version}', '@${PACKAGE_VERSION}'].includes(pin), `${file}: pinned to ${pin}, not ${version}, in “${line.trim()}”`);
+          assert.ok(
+            [`@${version}`, '@<version>', '@${version}', '@${PACKAGE_VERSION}'].includes(pin),
+            `${file}: pinned to ${pin}, not ${version}, in “${line.trim()}”`,
+          );
         }
       }
     }
@@ -73,12 +103,19 @@ describe('the xsolana MCP server', () => {
     const root = new URL('../../', import.meta.url);
     const { name, version, mcpName } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
     for (const file of ['plugin/plugin.json', 'plugin/.claude-plugin/plugin.json', 'release.json', 'server.json']) {
-      assert.equal(JSON.parse(readFileSync(new URL(file, root), 'utf8')).version, version, `${file} names another version`);
+      assert.equal(
+        JSON.parse(readFileSync(new URL(file, root), 'utf8')).version,
+        version,
+        `${file} names another version`,
+      );
     }
     const server = JSON.parse(readFileSync(new URL('server.json', root), 'utf8'));
     assert.equal(server.name, mcpName);
     assert.ok(server.description.length <= 100, 'the registry takes a description of at most 100 characters');
-    assert.deepEqual(server.packages.map((p) => [p.identifier, p.version]), [[name, version]]);
+    assert.deepEqual(
+      server.packages.map(p => [p.identifier, p.version]),
+      [[name, version]],
+    );
   });
 
   test('save writes only a spec that checks, and refuses a key', async () => {
@@ -88,11 +125,17 @@ describe('the xsolana MCP server', () => {
     assert.ok(JSON.parse(readFileSync(path.join(cwd, 'xsolana.json'), 'utf8')).name);
     assert.ok(!ok.isError);
     // a save that fails is a tool error, and still says why in structuredContent
-    const bad = await client.callTool({ name: 'xsolana_save', arguments: { spec: { ...spec, pools: [{ key: 'x', currency: 'nope' }] } } });
+    const bad = await client.callTool({
+      name: 'xsolana_save',
+      arguments: { spec: { ...spec, pools: [{ key: 'x', currency: 'nope' }] } },
+    });
     assert.equal(bad.isError, true);
     assert.equal(bad.structuredContent.ok, false);
     assert.ok(bad.structuredContent.refusals.length);
-    const secret = await client.callTool({ name: 'xsolana_save', arguments: { spec: { ...spec, name: 'api_key: abc' } } });
+    const secret = await client.callTool({
+      name: 'xsolana_save',
+      arguments: { spec: { ...spec, name: 'api_key: abc' } },
+    });
     assert.equal(secret.isError, true);
     assert.equal(secret.structuredContent.ok, false);
     const outside = await client.callTool({ name: 'xsolana_save', arguments: { spec, file: '../elsewhere.json' } });
@@ -111,7 +154,15 @@ describe('the xsolana MCP server', () => {
 
 describe('the MCP protocol', () => {
   test('initialize answers the version the client asks for when it speaks it, else its newest', async () => {
-    const init = async (protocolVersion) => (await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: 't', version: '0' } } })).result.protocolVersion;
+    const init = async protocolVersion =>
+      (
+        await handle({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion, capabilities: {}, clientInfo: { name: 't', version: '0' } },
+        })
+      ).result.protocolVersion;
     assert.equal(PROTOCOLS[0], '2025-11-25');
     for (const v of ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']) assert.equal(await init(v), v);
     assert.equal(await init('2099-01-01'), '2025-11-25');
@@ -121,14 +172,23 @@ describe('the MCP protocol', () => {
   test('a request sent just before stdin closes is still answered', async () => {
     // the spec is read from a file, so the reply waits on the disk and comes after stdin has closed
     const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-mcp-end-'));
-    writeFileSync(path.join(dir, 'xsolana.json'), readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url)));
+    writeFileSync(
+      path.join(dir, 'xsolana.json'),
+      readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url)),
+    );
     const child = spawn(process.execPath, [bin, 'mcp'], { cwd: dir, stdio: ['pipe', 'pipe', 'ignore'] });
     let out = '';
-    child.stdout.on('data', (c) => (out += c));
-    const exited = new Promise((resolve) => child.on('exit', resolve));
-    child.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'xsolana_simulate', arguments: {} } })}\n`);
+    child.stdout.on('data', c => (out += c));
+    const exited = new Promise(resolve => child.on('exit', resolve));
+    child.stdin.end(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'xsolana_simulate', arguments: {} } })}\n`,
+    );
     assert.equal(await exited, 0);
-    const reply = out.trim().split('\n').map((l) => JSON.parse(l)).find((m) => m.id === 7);
+    const reply = out
+      .trim()
+      .split('\n')
+      .map(l => JSON.parse(l))
+      .find(m => m.id === 7);
     assert.ok(reply?.result?.content?.[0]?.text, `a reply to the last request: ${out.slice(0, 200)}`);
   });
 });

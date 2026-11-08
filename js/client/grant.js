@@ -33,9 +33,9 @@ export const CLAIM_COMPUTE_UNITS = 400_000;
 export const ZERO_HASH = new Uint8Array(32);
 export const ED25519_PROGRAM = 'Ed25519SigVerify111111111111111111111111111';
 /** The seconds of a UTC day (the IDL's `DAY_SECONDS`): a limit's window of a day (`PerWallet.window`). */
-const DAY_SECONDS = Number(IDL.constants.find((c) => c.name === 'DAY_SECONDS').value);
+const DAY_SECONDS = Number(IDL.constants.find(c => c.name === 'DAY_SECONDS').value);
 /** The day a window of `DAY_SECONDS` counts in, from the unix epoch. */
-export const dayOf = (unixSeconds) => Math.floor(Number(unixSeconds) / DAY_SECONDS);
+export const dayOf = unixSeconds => Math.floor(Number(unixSeconds) / DAY_SECONDS);
 
 /** 32 bytes from a base58 address, 32 bytes or 64 hex characters. */
 function bytes32(value, what) {
@@ -48,24 +48,53 @@ function bytes32(value, what) {
   throw new TypeError(`${what} must be an address or 32 bytes`);
 }
 
-const personBytes = (value) => (value === null || value === undefined || value === '' ? ZERO_HASH : bytes32(value, 'person_hash'));
+const personBytes = value =>
+  value === null || value === undefined || value === '' ? ZERO_HASH : bytes32(value, 'person_hash');
 
 function roundBytes(value) {
-  const out = value instanceof Uint8Array ? value : typeof value === 'string' && /^[0-9a-f]{32}$/i.test(value) ? fromHex(value) : null;
+  const out =
+    value instanceof Uint8Array
+      ? value
+      : typeof value === 'string' && /^[0-9a-f]{32}$/i.test(value)
+        ? fromHex(value)
+        : null;
   if (!out || out.length !== 16) throw new RangeError('round must be 16 bytes (32 hex characters)');
   return out;
 }
 
 /** An i64 little-endian (two's complement), as the program reads `expires`. */
-export const i64LE = (value) => intLE(value, 8);
+export const i64LE = value => intLE(value, 8);
 
 /** A claim's rounds: [{ id (16 bytes or 32 hex characters), amount }], or one `round` and its `amount`. */
-const roundsOf = (rounds, round, amount) => (rounds ?? [{ id: round, amount }]).map((r) => ({ id: roundBytes(r.id ?? r.round ?? new Uint8Array(16)), amount: toBigInt(r.amount ?? 0) }));
+const roundsOf = (rounds, round, amount) =>
+  (rounds ?? [{ id: round, amount }]).map(r => ({
+    id: roundBytes(r.id ?? r.round ?? new Uint8Array(16)),
+    amount: toBigInt(r.amount ?? 0),
+  }));
 
 /** A voucher's body, which its key signs the sha256 of (`voucherBytes`). */
-export function voucherBody({ program = LOOT_PROGRAM, grant, incarnation, wallet, personHash, expires, rounds, round, amount = 0n }) {
+export function voucherBody({
+  program = LOOT_PROGRAM,
+  grant,
+  incarnation,
+  wallet,
+  personHash,
+  expires,
+  rounds,
+  round,
+  amount = 0n,
+}) {
   const list = roundsOf(rounds, round, amount);
-  return concat(bytes32(program, 'program'), bytes32(grant, 'grant'), uintLE(incarnation, 8), bytes32(wallet, 'wallet'), personBytes(personHash), i64LE(expires), uintLE(list.length, 4), ...list.flatMap((r) => [r.id, uintLE(r.amount, 8)]));
+  return concat(
+    bytes32(program, 'program'),
+    bytes32(grant, 'grant'),
+    uintLE(incarnation, 8),
+    bytes32(wallet, 'wallet'),
+    personBytes(personHash),
+    i64LE(expires),
+    uintLE(list.length, 4),
+    ...list.flatMap(r => [r.id, uintLE(r.amount, 8)]),
+  );
 }
 
 /**
@@ -74,7 +103,7 @@ export function voucherBody({ program = LOOT_PROGRAM, grant, incarnation, wallet
  * ([{ id, amount }], or one `round` and its `amount`) names the wins (the project round, draw or giveaway each was won
  * in): the program pays a wallet each round once per grant incarnation.
  */
-export const voucherBytes = (fields) => concat(utf8(VOUCHER_DOMAIN), sha256(voucherBody(fields)));
+export const voucherBytes = fields => concat(utf8(VOUCHER_DOMAIN), sha256(voucherBody(fields)));
 
 /** The fields back from a voucher's body (`voucherBody`; addresses as bytes, rounds as [{ id, amount }]). */
 export function readVoucher(body) {
@@ -84,12 +113,23 @@ export function readVoucher(body) {
   if (expires >= 1n << 63n) expires -= 1n << 64n;
   const count = Number(readUintLE(body, 144, 4));
   if (body.length !== 148 + 24 * count) throw new RangeError('a voucher body holds 24 bytes a round');
-  const rounds = Array.from({ length: count }, (_, i) => ({ id: at(148 + 24 * i, 16), amount: readUintLE(body, 164 + 24 * i, 8) }));
-  return { program: at(0, 32), grant: at(32, 32), incarnation: readUintLE(body, 64, 8), wallet: at(72, 32), personHash: at(104, 32), expires, rounds };
+  const rounds = Array.from({ length: count }, (_, i) => ({
+    id: at(148 + 24 * i, 16),
+    amount: readUintLE(body, 164 + 24 * i, 8),
+  }));
+  return {
+    program: at(0, 32),
+    grant: at(32, 32),
+    incarnation: readUintLE(body, 64, 8),
+    wallet: at(72, 32),
+    personHash: at(104, 32),
+    expires,
+    rounds,
+  };
 }
 
 /** A voucher key's leaf under a grant's `key_root`. */
-export const keyLeaf = (key) => sha256(concat(utf8(KEY_DOMAIN), bytes32(key, 'key')));
+export const keyLeaf = key => sha256(concat(utf8(KEY_DOMAIN), bytes32(key, 'key')));
 
 /** A list entry's round as the leaf names it: a number (a spec's `round`) in the first 8 of 16 bytes; 0 is zeros. */
 export const listRound = (n = 0) => {
@@ -103,31 +143,41 @@ export const listRound = (n = 0) => {
  * paid once, so a list can name the winners of many rounds, and a wallet's earlier wins stay claimable when a new
  * list adds later ones.
  */
-export const listLeaf = (wallet, personHash, round, amount = 0n) => sha256(concat(utf8(LIST_DOMAIN), bytes32(wallet, 'wallet'), personBytes(personHash), roundBytes(round ?? new Uint8Array(16)), uintLE(amount, 8)));
+export const listLeaf = (wallet, personHash, round, amount = 0n) =>
+  sha256(
+    concat(
+      utf8(LIST_DOMAIN),
+      bytes32(wallet, 'wallet'),
+      personBytes(personHash),
+      roundBytes(round ?? new Uint8Array(16)),
+      uintLE(amount, 8),
+    ),
+  );
 
 /** The prefix of a wallet's leaf in a list gate (`gateListLeaf`). */
 export const GATE_LIST_DOMAIN = 'loot-list-v1';
 /** A wallet's leaf in a list gate (`Gate::List`): sha256("loot-list-v1" | wallet). Its tree is a list's
  * (`merkleRoot`, `merkleProof`), and its proof's nodes go where an NFT shown would (`gateAccounts`'s `listProof`). */
-export const gateListLeaf = (wallet) => sha256(concat(utf8(GATE_LIST_DOMAIN), bytes32(wallet, 'wallet')));
+export const gateListLeaf = wallet => sha256(concat(utf8(GATE_LIST_DOMAIN), bytes32(wallet, 'wallet')));
 
 /** The parent of two nodes: sha256 of the smaller then the larger. */
 export const parentOf = (a, b) => (compareBytes(a, b) <= 0 ? sha256(concat(a, b)) : sha256(concat(b, a)));
 
 function levelsOf(leaves) {
   if (!leaves.length) throw new RangeError('a list needs at least one wallet');
-  const levels = [leaves.map((l) => bytes32(l, 'leaf'))];
+  const levels = [leaves.map(l => bytes32(l, 'leaf'))];
   while (levels.at(-1).length > 1) {
     const level = levels.at(-1);
     const next = [];
-    for (let i = 0; i < level.length; i += 2) next.push(i + 1 < level.length ? parentOf(level[i], level[i + 1]) : level[i]);
+    for (let i = 0; i < level.length; i += 2)
+      next.push(i + 1 < level.length ? parentOf(level[i], level[i + 1]) : level[i]);
     levels.push(next);
   }
   return levels;
 }
 
 /** The root of the leaves, in the order given. Whoever builds the list keeps that order. */
-export const merkleRoot = (leaves) => levelsOf(leaves).at(-1)[0];
+export const merkleRoot = leaves => levelsOf(leaves).at(-1)[0];
 
 /** The siblings of leaf `index`, from the bottom up. */
 export function merkleProof(leaves, index) {
@@ -150,7 +200,7 @@ export function merkleProof(leaves, index) {
  */
 export function gateList(wallets) {
   if (!wallets.length) throw new RangeError('a list needs at least one wallet');
-  const leaves = wallets.map((w) => gateListLeaf(w));
+  const leaves = wallets.map(w => gateListLeaf(w));
   let size = 1;
   while (size < leaves.length) size *= 2;
   // Filled with a leaf no wallet has (all zeros): a wallet's leaf is a hash, so nobody can prove a filler.
@@ -158,7 +208,7 @@ export function gateList(wallets) {
   return {
     root: merkleRoot(leaves),
     depth: Math.log2(size),
-    proofOf: (wallet) => {
+    proofOf: wallet => {
       const at = wallets.indexOf(wallet);
       if (at < 0) throw new RangeError(`${wallet} is not on the list`);
       return merkleProof(leaves, at);
@@ -184,9 +234,21 @@ export function ed25519Ix({ publicKey, signature, message }) {
   const keyAt = 16;
   const signatureAt = keyAt + 32;
   const messageAt = signatureAt + 64;
-  const u16 = (n) => uintLE(n, 2);
+  const u16 = n => uintLE(n, 2);
   const THIS = 0xffff;
-  const data = concat(Uint8Array.of(1, 0), u16(signatureAt), u16(THIS), u16(keyAt), u16(THIS), u16(messageAt), u16(message.length), u16(THIS), key, signature, message);
+  const data = concat(
+    Uint8Array.of(1, 0),
+    u16(signatureAt),
+    u16(THIS),
+    u16(keyAt),
+    u16(THIS),
+    u16(messageAt),
+    u16(message.length),
+    u16(THIS),
+    key,
+    signature,
+    message,
+  );
   return { programId: ED25519_PROGRAM, keys: [], data };
 }
 
@@ -207,7 +269,8 @@ export const shardOf = (key, bits) => (Number(bits) ? key[0] >> (8 - Number(bits
 export const walletShard = (grant, wallet) => shardOf(limitKey('wallet', wallet), grant.shard_bits);
 
 /** Whether a grant paid `wallet` for `round`, from the wallet's decoded rounds shard (`decodeList`, null for none). */
-export const roundPaid = (list, wallet, round) => Boolean(list?.records.some((r) => compareBytes(r, roundKey(round, wallet)) === 0));
+export const roundPaid = (list, wallet, round) =>
+  Boolean(list?.records.some(r => compareBytes(r, roundKey(round, wallet)) === 0));
 
 /**
  * The fewest shard bits (0 to 8) that keep each of a grant's lists under ~100,000 records over its life: `wallets` ×
@@ -237,14 +300,38 @@ export function shardBitsFor(wallets, rounds = 1) {
  * order only (`askRollIx` then asks for it, in the same transaction when it fits). Send it with a compute limit of
  * `CLAIM_COMPUTE_UNITS`.
  */
-export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, rounds, round, expires, personHash, amount = 0n, proofs, proof = [], paidRounds = null, poolMint, item, nft, shown, listProof, programs, voucherKey, nonce, extra = [] }) {
+export function claimGrantIx({
+  project,
+  id,
+  grant,
+  wallet,
+  signer,
+  count = 0,
+  rounds,
+  round,
+  expires,
+  personHash,
+  amount = 0n,
+  proofs,
+  proof = [],
+  paidRounds = null,
+  poolMint,
+  item,
+  nft,
+  shown,
+  listProof,
+  programs,
+  voucherKey,
+  nonce,
+  extra = [],
+}) {
   if (!signer) throw new Error('A claim needs its signer: whoever sends it');
   // Every claim is its winning wallet's own: the wallet signs it, whatever proves it (a voucher, a list, an open
   // grant), so nobody claims for a player (WalletMustSign). `signer` pays the fees and what the claim opens: the
   // wallet itself, or anyone who pays for it.
   const address = pda.grant(project, id);
   const person = personBytes(personHash);
-  const listed = Uint8Array.from(grant.list_root ?? []).some((b) => b !== 0);
+  const listed = Uint8Array.from(grant.list_root ?? []).some(b => b !== 0);
   // A claim by voucher or list names its rounds; an open one names none.
   const named = Boolean(voucherKey) || listed || rounds != null || round != null;
   const list = named ? roundsOf(rounds, round ?? new Uint8Array(16), amount) : [];
@@ -252,40 +339,74 @@ export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, ro
   // gated by one shows (a badge), a voucher key's; each shard of the grant's claims once, by shard number.
   const bits = Number(grant.shard_bits ?? 0);
   const keys = [limitKey('wallet', wallet)];
-  if (person.some((b) => b !== 0) && Number(grant.limits?.per_person ?? 0) > 0) keys.push(limitKey('person', person));
-  const badge = typeof shown === 'string' ? shown : shown?.asset ?? shown?.mint ?? shown?.compressed;
+  if (person.some(b => b !== 0) && Number(grant.limits?.per_person ?? 0) > 0) keys.push(limitKey('person', person));
+  const badge = typeof shown === 'string' ? shown : (shown?.asset ?? shown?.mint ?? shown?.compressed);
   if (!named && grant.open && grant.gate?.Holds && badge) keys.push(limitKey('badge', badge));
   if (voucherKey && Number(grant.limits?.per_key ?? 0) > 0) keys.push(limitKey('code', voucherKey));
-  const shards = [...new Set(keys.map((k) => shardOf(k, bits)))].sort((x, y) => x - y).map((shard) => meta(pda.claims(address, grant.incarnation, shard), false, true));
-  nonce = toBigInt(nonce ?? (named ? prizeNonce(address, wallet, ...list.map((r) => r.id)) : prizeNonce(address, wallet, toBigInt(count))));
+  const shards = [...new Set(keys.map(k => shardOf(k, bits)))]
+    .sort((x, y) => x - y)
+    .map(shard => meta(pda.claims(address, grant.incarnation, shard), false, true));
+  nonce = toBigInt(
+    nonce ??
+      (named ? prizeNonce(address, wallet, ...list.map(r => r.id)) : prizeNonce(address, wallet, toBigInt(count))),
+  );
   // Each round not paid yet gives the grant's prize, or the amount of its tokens the round names, in order; collectibles
   // of one item each at its next serial.
   const gives = grant.gives;
   const pool = gives.Tokens?.from.Pool?.[0];
   const itemId = gives.Item?.[0] ?? gives.Compressed?.item;
-  if (pool !== undefined && !poolMint) throw new Error('A payout claim needs its pool’s mint (poolMint), read from the pool');
+  if (pool !== undefined && !poolMint)
+    throw new Error('A payout claim needs its pool’s mint (poolMint), read from the pool');
   const seen = new Set();
-  const owed = (named ? list.map((r, i) => ({ ...r, i })) : [{ amount: 0n, i: 0 }]).filter((r) => {
+  const owed = (named ? list.map((r, i) => ({ ...r, i })) : [{ amount: 0n, i: 0 }]).filter(r => {
     if (!named) return true;
-    const hex = Array.from(r.id, (b) => b.toString(16).padStart(2, '0')).join('');
+    const hex = Array.from(r.id, b => b.toString(16).padStart(2, '0')).join('');
     if (seen.has(hex) || roundPaid(paidRounds, wallet, r.id)) return false;
     seen.add(hex);
     return true;
   });
-  const prizes = owed.flatMap((r, made) => prizeMetas({
-    project, prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: r.amount } } : gives, winner: wallet, nonce: BigInt.asUintN(64, nonce + BigInt(r.i)), programs,
-    poolMints: pool !== undefined ? { [pool]: poolMint } : {}, items: itemId !== undefined ? { [itemId]: item } : {}, nft, made,
-  }));
+  const prizes = owed.flatMap((r, made) =>
+    prizeMetas({
+      project,
+      prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: r.amount } } : gives,
+      winner: wallet,
+      nonce: BigInt.asUintN(64, nonce + BigInt(r.i)),
+      programs,
+      poolMints: pool !== undefined ? { [pool]: poolMint } : {},
+      items: itemId !== undefined ? { [itemId]: item } : {},
+      nft,
+      made,
+    }),
+  );
   proofs ??= listed && !voucherKey ? [proof] : proof.length ? [proof] : [];
   return lootIx(
     'claim_grant',
-    { rounds: list, expires: toBigInt(expires ?? 0), person_hash: person, proofs: proofs.map((p) => p.map((x) => bytes32(x, 'proof'))), nonce },
     {
-      project, grant: address, signer, wallet,
-      rounds: named ? pda.rounds(address, grant.incarnation, shardOf(keys[0], bits)) : null,
-      token_program: undefined, token_2022_program: undefined, associated_token_program: ASSOCIATED_TOKEN_PROGRAM,
+      rounds: list,
+      expires: toBigInt(expires ?? 0),
+      person_hash: person,
+      proofs: proofs.map(p => p.map(x => bytes32(x, 'proof'))),
+      nonce,
     },
-    { remaining: [...gateAccounts(project, { gate: grant.gate, wallet, shown, listProof }), ...shards, ...prizes, ...tailOf(extra)], signer: ['wallet'] },
+    {
+      project,
+      grant: address,
+      signer,
+      wallet,
+      rounds: named ? pda.rounds(address, grant.incarnation, shardOf(keys[0], bits)) : null,
+      token_program: undefined,
+      token_2022_program: undefined,
+      associated_token_program: ASSOCIATED_TOKEN_PROGRAM,
+    },
+    {
+      remaining: [
+        ...gateAccounts(project, { gate: grant.gate, wallet, shown, listProof }),
+        ...shards,
+        ...prizes,
+        ...tailOf(extra),
+      ],
+      signer: ['wallet'],
+    },
   );
 }
 
@@ -295,5 +416,9 @@ export function claimGrantIx({ project, id, grant, wallet, signer, count = 0, ro
  */
 export const closeShardIx = ({ project, id, incarnation, rounds = false, shard, owner }) => {
   const grant = pda.grant(project, id);
-  return lootIx('close_shard', { id, incarnation: toBigInt(incarnation), rounds, shard }, { project, grant, shard: (rounds ? pda.rounds : pda.claims)(grant, incarnation, shard), owner });
+  return lootIx(
+    'close_shard',
+    { id, incarnation: toBigInt(incarnation), rounds, shard },
+    { project, grant, shard: (rounds ? pda.rounds : pda.claims)(grant, incarnation, shard), owner },
+  );
 };

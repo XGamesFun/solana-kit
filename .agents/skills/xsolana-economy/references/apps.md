@@ -12,58 +12,69 @@ npm install @xgamesfun/solana
 ```js
 import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 
-const spec = await (await fetch('./xsolana.json')).json();        // the live spec, served with the page
+const spec = await (await fetch('./xsolana.json')).json(); // the live spec, served with the page
 
 // Connect a wallet (Phantom, Solflare, Backpack all register through the Wallet Standard).
 const wallets = [];
-const api = { register: (...w) => { wallets.push(...w); return () => {}; } };
+const api = {
+  register: (...w) => {
+    wallets.push(...w);
+    return () => {};
+  },
+};
 window.addEventListener('wallet-standard:register-wallet', ({ detail }) => detail(api));
 window.dispatchEvent(Object.assign(new Event('wallet-standard:app-ready'), { detail: api }));
-const wallet = wallets.find((w) => w.chains.some((c) => c.startsWith('solana:')));
-const { accounts: [account] } = await wallet.features['standard:connect'].connect();
+const wallet = wallets.find(w => w.chains.some(c => c.startsWith('solana:')));
+const {
+  accounts: [account],
+} = await wallet.features['standard:connect'].connect();
 
 const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: walletStandardSigner(wallet, account) });
 
-const shop = await app.shop();            // [{ key, name, price, priceUnits, currency, active, left }]
-await app.buy('badge', { listing: shop.find((l) => l.key === 'badge') });  // the price shown is the most it pays
-const boxes = await app.boxes();          // each box's price, outcome chances and whenOut (show it: stops selling, or draws among what is left)
-await app.openBox('chest', { listing: boxes.find((l) => l.key === 'chest') }); // pays, waits for the roll, settles
-await app.pay('entry');                   // a payment of the spec
+const shop = await app.shop(); // [{ key, name, price, priceUnits, currency, active, left }]
+await app.buy('badge', { listing: shop.find(l => l.key === 'badge') }); // the price shown is the most it pays
+const boxes = await app.boxes(); // each box's price, outcome chances and whenOut (show it: stops selling, or draws among what is left)
+await app.openBox('chest', { listing: boxes.find(l => l.key === 'chest') }); // pays, waits for the roll, settles
+await app.pay('entry'); // a payment of the spec
 const lotteries = await app.lotteries(); // [{ key, name, price, currency, status, round, sold, drawsAt, nftTicket, … }]
-await app.buyTickets('weekly', 2, { listing: lotteries.find((l) => l.key === 'weekly') }); // an NFT ticket: { nft: asset, listing }
+await app.buyTickets('weekly', 2, { listing: lotteries.find(l => l.key === 'weekly') }); // an NFT ticket: { nft: asset, listing }
 await app.payNft(asset, { to, reference }); // pay with an NFT (burned, or given to `to`): admit the player by the receipt
-await app.stake('farm', '10', 0);         // tokens, at lock tier 0;  app.stakeNft('farm', asset) for a collectible
-await app.harvest('farm');                // rewards;  app.unstake('farm', '10') once the lock has run
-await app.staked('farm');                 // the player's seats: [{ asset, amount, freeAt, boostPercent, waiting, rewards }]
-await app.refresh('guild', asset);        // a farm with growth: writes the NFT's points and level now (anyone may)
-const recipes = await app.recipes();      // [{ key, name, active, version }]
-await app.craft('merge', [assetA, assetB], 1, { listing: recipes.find((r) => r.key === 'merge') });  // a changed recipe is refused
-await app.auctions();                     // each auction: high, nextBid, leading, secondsLeft, open, over, waiting (SOL)
-await app.bid('comet', '0.6');           // the bid it tops goes back to its bidder in the same transaction
-await app.endAuction('comet');           // once it is over, anyone: the lot to the winner { winner, asset?, rolled? }
-await app.unwrap();                       // SOL back from a bid that was topped, from wrapped SOL to plain SOL
-await app.claimGrant('welcome');          // a wallet on the grant's list (or { voucher } from your server)
-await app.claimWins({ server, token });   // every prize a results server vouched for or listed, claimed by the winner; [{ round, signature | error }]
-                                          // (`token`: the player's sign-in with that server, when it asks for one: a stash drop's NFT is given only at a signed-in claim)
+await app.stake('farm', '10', 0); // tokens, at lock tier 0;  app.stakeNft('farm', asset) for a collectible
+await app.harvest('farm'); // rewards;  app.unstake('farm', '10') once the lock has run
+await app.staked('farm'); // the player's seats: [{ asset, amount, freeAt, boostPercent, waiting, rewards }]
+await app.refresh('guild', asset); // a farm with growth: writes the NFT's points and level now (anyone may)
+const recipes = await app.recipes(); // [{ key, name, active, version }]
+await app.craft('merge', [assetA, assetB], 1, { listing: recipes.find(r => r.key === 'merge') }); // a changed recipe is refused
+await app.auctions(); // each auction: high, nextBid, leading, secondsLeft, open, over, waiting (SOL)
+await app.bid('comet', '0.6'); // the bid it tops goes back to its bidder in the same transaction
+await app.endAuction('comet'); // once it is over, anyone: the lot to the winner { winner, asset?, rolled? }
+await app.unwrap(); // SOL back from a bid that was topped, from wrapped SOL to plain SOL
+await app.claimGrant('welcome'); // a wallet on the grant's list (or { voucher } from your server)
+await app.claimWins({ server, token }); // every prize a results server vouched for or listed, claimed by the winner; [{ round, signature | error }]
+// (`token`: the player's sign-in with that server, when it asks for one: a stash drop's NFT is given only at a signed-in claim)
 const loan = await app.loanOffer(lender, 1); // a lender's offer: { amount, repay, lasts, risks }: show every risk's `says`
 await app.borrow(lender, 1, asset, { acceptRisks: true }); // only once the player saw the risks (refused without it)
-for (const c of await app.claims()) await app.claim(c);   // what this player can finish: a roll to collect, a refund,
-                                          // a contest payout, a due draw, an auction to end
-await app.runSchedule('drip');            // a schedule that is due (the project's keys or who it pays); null when not yet. A run missed is missed: only a sealed fixed amount pays every run due
-await app.farmWalk('guild');              // { ends, needsWalk, parts }: end times the farm has passed; a move refuses (FarmNeedsWalk) past what it can walk
-await app.walkFarm('guild');              // walks it in parts (anyone, free); claims() lists it when it is needed
-await app.collectibles();                 // what the player owns: [{ asset, item, name, uri, attributes }] (`item`: its key)
-await app.balances();                     // what they hold of each of the economy's tokens
+for (const c of await app.claims()) await app.claim(c); // what this player can finish: a roll to collect, a refund,
+// a contest payout, a due draw, an auction to end
+await app.runSchedule('drip'); // a schedule that is due (the project's keys or who it pays); null when not yet. A run missed is missed: only a sealed fixed amount pays every run due
+await app.farmWalk('guild'); // { ends, needsWalk, parts }: end times the farm has passed; a move refuses (FarmNeedsWalk) past what it can walk
+await app.walkFarm('guild'); // walks it in parts (anyone, free); claims() lists it when it is needed
+await app.collectibles(); // what the player owns: [{ asset, item, name, uri, attributes }] (`item`: its key)
+await app.balances(); // what they hold of each of the economy's tokens
 ```
 
 - **Serving it**: a plain `index.html` with a `<script type="module">` can't import a bare `@xgamesfun/solana/play` by
   itself. Either use a bundler (Vite: `npm create vite@latest`, then `npm install @xgamesfun/solana`), or put this import
   map before the module script and serve the folder (`npx serve .`):
   ```html
-  <script type="importmap">{ "imports": {
-    "@xgamesfun/solana/play": "./node_modules/@xgamesfun/solana/js/play/index.js",
-    "@xgamesfun/solana/client": "./node_modules/@xgamesfun/solana/js/client/index.js"
-  } }</script>
+  <script type="importmap">
+    {
+      "imports": {
+        "@xgamesfun/solana/play": "./node_modules/@xgamesfun/solana/js/play/index.js",
+        "@xgamesfun/solana/client": "./node_modules/@xgamesfun/solana/js/client/index.js"
+      }
+    }
+  </script>
   ```
   Tell the person the one command that starts it, and that it serves on devnet.
 - **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
@@ -95,14 +106,14 @@ await app.balances();                     // what they hold of each of the econo
   on the seller's page until an end (`app.endAuction`, anyone's) pays and closes it. Don't treat it as closed at its end.
 - **NFTs the project has no authority over**: a gate or odds that name a collection find the player's Core NFTs of it
   themselves; for a Token Metadata NFT pass `shown: { mint, owner }`, for a compressed one `shown: { compressed:
-  assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeNft`, `app.unstakeNft`, `app.refresh`,
+assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeNft`, `app.unstakeNft`, `app.refresh`,
   `app.harvest`, `app.hold` and `app.endAuction` take any NFT: a Core asset, a Token Metadata mint (legacy or pNFT),
   or a compressed NFT's asset id; the page finds its kind itself, and proves a compressed one first (its RPC must
   offer DAS: `getAsset`, `getAssetProof`). In a farm that watches, `app.harvest` shows the NFT is still the player's,
   and `app.stakeNft` of an NFT someone else staked and sold takes their seat over. What the project wrote about one is in
   its Sheet (`loot.decodeSheet`).
 - **Off-chain traits** (the spec's `traits`): the project builds the tree with `loot.traitsTree([{ nft, attributes
-  }])` from its NFTs' metadata and publishes each NFT's `attributes` and `proof` with the page; a player (or the page,
+}])` from its NFTs' metadata and publishes each NFT's `attributes` and `proof` with the page; a player (or the page,
   before a stake) calls `app.proveTraits(nft, attributes, proof)` once per NFT, and its boosts and gates read them.
 - **Rolls on an NFT**: `app.openBox(boxKey, { on: asset })` for a box that rolls on one (an enchant). Leaving a
   mission that rolls, `app.unstakeNft` returns `{ signature, roll, rolled }`; a recipe that rolls, `app.craft` returns

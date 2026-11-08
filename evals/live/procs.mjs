@@ -21,7 +21,7 @@ export function stopWithin(dir) {
   let stopped = 0;
   let pids;
   try {
-    pids = readdirSync('/proc').filter((p) => /^\d+$/.test(p) && Number(p) !== process.pid);
+    pids = readdirSync('/proc').filter(p => /^\d+$/.test(p) && Number(p) !== process.pid);
   } catch {
     return 0;
   }

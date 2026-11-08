@@ -16,7 +16,15 @@ const spec = example('coin-flip-arena').spec;
 
 test('xsolana_save refuses a file name the shell would read as code', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-r5-names-'));
-  for (const file of ['$(touch PWNED).json', '`touch PWNED`.json', 'a;touch PWNED.json', 'my spec.json', "it's.json", '-rf.json', 'specs/-x.json']) {
+  for (const file of [
+    '$(touch PWNED).json',
+    '`touch PWNED`.json',
+    'a;touch PWNED.json',
+    'my spec.json',
+    "it's.json",
+    '-rf.json',
+    'specs/-x.json',
+  ]) {
     const r = await runTool('xsolana_save', { spec, file }, { cwd: dir, now: NOW });
     assert.equal(r.ok, false, file);
     assert.match(r.text, /is not a plain file name/);
@@ -25,15 +33,27 @@ test('xsolana_save refuses a file name the shell would read as code', async () =
   for (const file of ['xsolana.json', 'economy/shop_v2.json', 'my-game.xsolana.json']) {
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     assert.equal((await runTool('xsolana_save', { spec, file }, { cwd: dir, now: NOW })).ok, true, file);
-    assert.match((await runTool('xsolana_publish', { file }, { cwd: dir, now: NOW })).command, new RegExp(` approve ${file.replace(/\./g, '\\.')}$`));
+    assert.match(
+      (await runTool('xsolana_publish', { file }, { cwd: dir, now: NOW })).command,
+      new RegExp(` approve ${file.replace(/\./g, '\\.')}$`),
+    );
   }
   // a name already on disk (written by hand, not by xsolana_save) is refused by xsolana_publish too: see below
 });
 
 test('xsolana_save overwrites a spec, never a JSON file that only has a version', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-r5-overwrite-'));
-  const pkg = JSON.stringify({ name: 'my-game', version: '1.0.0', scripts: { dev: 'vite' }, dependencies: { three: '^0.170.0' } }, null, 2);
-  for (const [file, body] of [['package.json', pkg], ['app.json', '{"version": 2, "expo": {"name": "game"}}'], ['list.json', '[2]'], ['v1.json', '{"version": 1, "name": "old"}']]) {
+  const pkg = JSON.stringify(
+    { name: 'my-game', version: '1.0.0', scripts: { dev: 'vite' }, dependencies: { three: '^0.170.0' } },
+    null,
+    2,
+  );
+  for (const [file, body] of [
+    ['package.json', pkg],
+    ['app.json', '{"version": 2, "expo": {"name": "game"}}'],
+    ['list.json', '[2]'],
+    ['v1.json', '{"version": 1, "name": "old"}'],
+  ]) {
     writeFileSync(path.join(dir, file), body);
     const r = await runTool('xsolana_save', { spec, file }, { cwd: dir, now: NOW });
     assert.equal(r.ok, false, file);
@@ -42,7 +62,16 @@ test('xsolana_save overwrites a spec, never a JSON file that only has a version'
   }
   // a spec (as it is, or under `economy`) is saved over
   writeFileSync(path.join(dir, 'xsolana.json'), JSON.stringify(spec));
-  assert.equal((await runTool('xsolana_save', { spec: { ...spec, name: 'Renamed' }, file: 'xsolana.json' }, { cwd: dir, now: NOW })).ok, true);
+  assert.equal(
+    (
+      await runTool(
+        'xsolana_save',
+        { spec: { ...spec, name: 'Renamed' }, file: 'xsolana.json' },
+        { cwd: dir, now: NOW },
+      )
+    ).ok,
+    true,
+  );
   assert.equal(JSON.parse(readFileSync(path.join(dir, 'xsolana.json'), 'utf8')).name, 'Renamed');
   writeFileSync(path.join(dir, 'wrapped.json'), JSON.stringify({ economy: spec }));
   assert.equal((await runTool('xsolana_save', { spec, file: 'wrapped.json' }, { cwd: dir, now: NOW })).ok, true);
@@ -55,7 +84,15 @@ test('xsolana_save overwrites a spec, never a JSON file that only has a version'
 test('xsolana_publish refuses a file name that is not plain, whatever shell the person pastes the command into', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-plain-name-'));
   // names a person may have on disk already (a cloned repository), each running code in PowerShell, cmd.exe or fish
-  for (const name of ["x';calc;'.json", 'a&calc&.json', "x\\';touch PWNED;#.json", '$(touch PWNED).json', 'my spec.json', '-rf.json', 'a\\b.json']) {
+  for (const name of [
+    "x';calc;'.json",
+    'a&calc&.json',
+    "x\\';touch PWNED;#.json",
+    '$(touch PWNED).json',
+    'my spec.json',
+    '-rf.json',
+    'a\\b.json',
+  ]) {
     writeFileSync(path.join(dir, name), JSON.stringify(spec));
     const r = await runTool('xsolana_publish', { file: name }, { cwd: dir, now: NOW });
     assert.equal(r.ok, false, name);
@@ -67,7 +104,11 @@ test('xsolana_publish refuses a file name that is not plain, whatever shell the 
   // a plain name, in a folder or not, is the command's word as it is
   mkdirSync(path.join(dir, 'economy'));
   writeFileSync(path.join(dir, 'economy/shop_v2.json'), JSON.stringify(spec));
-  assert.ok((await runTool('xsolana_publish', { file: 'economy/shop_v2.json' }, { cwd: dir, now: NOW })).command.endsWith(' approve economy/shop_v2.json'));
+  assert.ok(
+    (await runTool('xsolana_publish', { file: 'economy/shop_v2.json' }, { cwd: dir, now: NOW })).command.endsWith(
+      ' approve economy/shop_v2.json',
+    ),
+  );
 });
 
 test('a spec in a folder on Windows is written with / in the approve command, never quoted', () => {
@@ -108,7 +149,11 @@ test('saving over a spec wrapped under `economy` keeps its live section and prog
   assert.equal(r.ok, true, r.text);
   const after = JSON.parse(readFileSync(path.join(dir, 'wrapped.json'), 'utf8'));
   assert.deepEqual(after.live, live, 'the live section is kept');
-  assert.deepEqual((after.pools ?? []).map((p) => p.index), pools.map((p) => p.index), 'and the program numbers');
+  assert.deepEqual(
+    (after.pools ?? []).map(p => p.index),
+    pools.map(p => p.index),
+    'and the program numbers',
+  );
 });
 
 // A refuel paid in anything waits while the project is paused or suspended, the
@@ -117,27 +162,89 @@ test('W-FARM-REFUEL for a farm whose mission brings a prize and whose every refu
   const { check } = await import('../economy/check.mjs');
   const fleet = (change = () => {}) => {
     const s = {
-      version: 2, network: 'devnet', name: 'Fleet', currency: 'sol',
-      tokens: [{ key: 'sol', source: 'sol' }, { key: 'fuel', source: 'game', name: 'Fuel', symbol: 'FUEL', decimals: 0 }, { key: 'ore', source: 'game', name: 'Ore', symbol: 'ORE', decimals: 0 }, { key: 'ticket', source: 'game', name: 'Ticket', symbol: 'TIX', decimals: 0 }],
+      version: 2,
+      network: 'devnet',
+      name: 'Fleet',
+      currency: 'sol',
+      tokens: [
+        { key: 'sol', source: 'sol' },
+        { key: 'fuel', source: 'game', name: 'Fuel', symbol: 'FUEL', decimals: 0 },
+        { key: 'ore', source: 'game', name: 'Ore', symbol: 'ORE', decimals: 0 },
+        { key: 'ticket', source: 'game', name: 'Ticket', symbol: 'TIX', decimals: 0 },
+      ],
       collection: { name: 'Fleet' },
       items: [{ key: 'ship', name: 'Ship', price: 0.05 }],
-      farms: [{ key: 'mine', name: 'Mine', stakes: 'collectibles', item: 'ship', rewards: 'ore', rate: { perDay: 10, minted: true }, tiers: [{ lock: '3d', prize: { gives: 'tokens', amount: 50, currency: 'ticket', from: 'mint' } }], upkeepAttribute: 'fuel_until' }],
-      recipes: [{ key: 'refuel', name: 'Refuel', in: [{ takes: 'use', item: 'ship' }, { takes: 'pay', currency: 'fuel', amount: 10, to: 'burn' }], raises: [{ place: 0, key: 'fuel_until', by: '1d', upTo: '1d', fromNow: true }] }],
+      farms: [
+        {
+          key: 'mine',
+          name: 'Mine',
+          stakes: 'collectibles',
+          item: 'ship',
+          rewards: 'ore',
+          rate: { perDay: 10, minted: true },
+          tiers: [{ lock: '3d', prize: { gives: 'tokens', amount: 50, currency: 'ticket', from: 'mint' } }],
+          upkeepAttribute: 'fuel_until',
+        },
+      ],
+      recipes: [
+        {
+          key: 'refuel',
+          name: 'Refuel',
+          in: [
+            { takes: 'use', item: 'ship' },
+            { takes: 'pay', currency: 'fuel', amount: 10, to: 'burn' },
+          ],
+          raises: [{ place: 0, key: 'fuel_until', by: '1d', upTo: '1d', fromNow: true }],
+        },
+      ],
     };
     change(s);
     return check(s, { now: NOW });
   };
-  const warned = (r) => r.warnings.filter((w) => w.code === 'W-FARM-REFUEL');
+  const warned = r => r.warnings.filter(w => w.code === 'W-FARM-REFUEL');
   const base = fleet();
   assert.ok(base.ok, JSON.stringify(base.refusals));
   assert.equal(warned(base).length, 1);
   assert.match(warned(base)[0].message, /waits while the project is paused or suspended.*prize is lost for good/s);
   assert.match(warned(base)[0].fix, /no "pay" line.*"upTo" of at least 3d/s);
   // fits: a refuel paid in nothing beside it, fuel a whole mission ahead, no cap, no mission prize
-  assert.deepEqual(warned(fleet((s) => s.recipes.push({ key: 'free-refuel', name: 'Free refuel', in: [{ takes: 'use', item: 'ship' }], raises: [{ place: 0, key: 'fuel_until', by: '1h', upTo: '1d', fromNow: true }] }))), []);
-  assert.deepEqual(warned(fleet((s) => { s.recipes[0].raises[0].upTo = '3d'; })), []);
-  assert.deepEqual(warned(fleet((s) => { delete s.recipes[0].raises[0].upTo; })), []);
-  assert.deepEqual(warned(fleet((s) => { delete s.farms[0].tiers[0].prize; })), []);
+  assert.deepEqual(
+    warned(
+      fleet(s =>
+        s.recipes.push({
+          key: 'free-refuel',
+          name: 'Free refuel',
+          in: [{ takes: 'use', item: 'ship' }],
+          raises: [{ place: 0, key: 'fuel_until', by: '1h', upTo: '1d', fromNow: true }],
+        }),
+      ),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    warned(
+      fleet(s => {
+        s.recipes[0].raises[0].upTo = '3d';
+      }),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    warned(
+      fleet(s => {
+        delete s.recipes[0].raises[0].upTo;
+      }),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    warned(
+      fleet(s => {
+        delete s.farms[0].tiers[0].prize;
+      }),
+    ),
+    [],
+  );
 });
 
 // The program's known limits on a box's settle (64 accounts, and its heap) name a checker's warning that counts the
@@ -147,28 +254,91 @@ test('W-BOX-ACCOUNTS counts a settle past 64 accounts (or at 64 with a payee who
   const { check, settleAccounts } = await import('../economy/check.mjs');
   const { model } = await import('../economy/model.mjs');
   const { encodeBase58 } = await import('../chain/base58.js');
-  const A = (n) => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + n * 13 + 1) % 256));
-  const shape = ({ tokens = 0, items = 0, core = 0, compressed = 0, holders = 0, hooked = false, shifts = false, own = false }) => ({
-    version: 2, network: 'devnet', name: 'Shapes', currency: 'coin',
-    tokens: [{ key: 'coin', source: 'existing', mint: A(1), decimals: 6, ...(hooked ? { program: 'token-2022', powers: { transferHook: true } } : { powers: {} }) },
-      ...Array.from({ length: tokens }, (_, i) => ({ key: `t${i}`, source: 'existing', mint: A(10 + i), decimals: 0, powers: {} }))],
+  const A = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + n * 13 + 1) % 256));
+  const shape = ({
+    tokens = 0,
+    items = 0,
+    core = 0,
+    compressed = 0,
+    holders = 0,
+    hooked = false,
+    shifts = false,
+    own = false,
+  }) => ({
+    version: 2,
+    network: 'devnet',
+    name: 'Shapes',
+    currency: 'coin',
+    tokens: [
+      {
+        key: 'coin',
+        source: 'existing',
+        mint: A(1),
+        decimals: 6,
+        ...(hooked ? { program: 'token-2022', powers: { transferHook: true } } : { powers: {} }),
+      },
+      ...Array.from({ length: tokens }, (_, i) => ({
+        key: `t${i}`,
+        source: 'existing',
+        mint: A(10 + i),
+        decimals: 0,
+        powers: {},
+      })),
+    ],
     collection: { name: 'Shapes' },
-    items: [{ key: 'hero', name: 'Hero' }, ...Array.from({ length: items }, (_, i) => ({ key: `prize${i}`, name: `Prize ${i}` }))],
+    items: [
+      { key: 'hero', name: 'Hero' },
+      ...Array.from({ length: items }, (_, i) => ({ key: `prize${i}`, name: `Prize ${i}` })),
+    ],
     pools: Array.from({ length: tokens }, (_, i) => ({ key: `p${i}`, currency: `t${i}`, seed: 100 })),
-    stashes: [...Array.from({ length: core }, (_, i) => ({ key: `c${i}`, name: `Core ${i}`, collection: A(30 + i), nfts: [A(40 + i)] })),
-      ...Array.from({ length: compressed }, (_, i) => ({ key: `z${i}`, name: `Compressed ${i}`, nfts: [{ compressed: A(50 + i) }] }))],
-    boxes: [{
-      key: 'roll', name: 'Roll', price: 1, rollsOn: own ? { item: 'hero' } : { collection: A(2) }, then: { giveTo: A(3) },
-      split: Array.from({ length: holders }, (_, i) => ({ to: `holder:${A(60 + i)}`, percent: 10 })),
-      outcomes: [{ gives: 'bundle', weight: 1000, ...(shifts ? { shifts: [{ attribute: 'level', by: 1 }] } : {}),
-        prizes: [...Array.from({ length: tokens }, (_, i) => ({ gives: 'pay', pool: `p${i}`, amount: 7 })), ...Array.from({ length: items }, (_, i) => ({ gives: 'item', item: `prize${i}` })),
-          ...Array.from({ length: core }, (_, i) => ({ gives: 'stash', stash: `c${i}` })), ...Array.from({ length: compressed }, (_, i) => ({ gives: 'stash', stash: `z${i}` }))] },
-      { gives: 'nothing', weight: 1 }],
-    }],
+    stashes: [
+      ...Array.from({ length: core }, (_, i) => ({
+        key: `c${i}`,
+        name: `Core ${i}`,
+        collection: A(30 + i),
+        nfts: [A(40 + i)],
+      })),
+      ...Array.from({ length: compressed }, (_, i) => ({
+        key: `z${i}`,
+        name: `Compressed ${i}`,
+        nfts: [{ compressed: A(50 + i) }],
+      })),
+    ],
+    boxes: [
+      {
+        key: 'roll',
+        name: 'Roll',
+        price: 1,
+        rollsOn: own ? { item: 'hero' } : { collection: A(2) },
+        then: { giveTo: A(3) },
+        split: Array.from({ length: holders }, (_, i) => ({ to: `holder:${A(60 + i)}`, percent: 10 })),
+        outcomes: [
+          {
+            gives: 'bundle',
+            weight: 1000,
+            ...(shifts ? { shifts: [{ attribute: 'level', by: 1 }] } : {}),
+            prizes: [
+              ...Array.from({ length: tokens }, (_, i) => ({ gives: 'pay', pool: `p${i}`, amount: 7 })),
+              ...Array.from({ length: items }, (_, i) => ({ gives: 'item', item: `prize${i}` })),
+              ...Array.from({ length: core }, (_, i) => ({ gives: 'stash', stash: `c${i}` })),
+              ...Array.from({ length: compressed }, (_, i) => ({ gives: 'stash', stash: `z${i}` })),
+            ],
+          },
+          { gives: 'nothing', weight: 1 },
+        ],
+      },
+    ],
   });
-  const counted = (s) => { const m = model(s); return settleAccounts(m.boxes[0], m.boxes[0].outcomes[0], m); };
-  const warned = (s) => check(s, { now: NOW }).warnings.filter((w) => w.code === 'W-BOX-ACCOUNTS' || w.code === 'W-BOX-HEAP').map((w) => `${w.code} ${w.where}`);
-  const ACCOUNTS = 'W-BOX-ACCOUNTS economy.boxes.roll.outcomes[0]', HEAP = 'W-BOX-HEAP economy.boxes.roll.rollsOn';
+  const counted = s => {
+    const m = model(s);
+    return settleAccounts(m.boxes[0], m.boxes[0].outcomes[0], m);
+  };
+  const warned = s =>
+    check(s, { now: NOW })
+      .warnings.filter(w => w.code === 'W-BOX-ACCOUNTS' || w.code === 'W-BOX-HEAP')
+      .map(w => `${w.code} ${w.where}`);
+  const ACCOUNTS = 'W-BOX-ACCOUNTS economy.boxes.roll.outcomes[0]',
+    HEAP = 'W-BOX-HEAP economy.boxes.roll.rollsOn';
   // the program's measured counts, and what each shape is warned of
   const shapes = [
     // three token prizes, four holders' shares, a hooked coin: 65 (66 with a fate that moves a number)
@@ -195,9 +365,16 @@ test('W-BOX-ACCOUNTS counts a settle past 64 accounts (or at 64 with a payee who
     assert.deepEqual(warned(s), codes, JSON.stringify(args));
   }
   const m = model(shape({ tokens: 3 }));
-  assert.equal(settleAccounts(m.boxes[0], { gives: 'nothing' }, m).count, 41, 'a roll on a compressed NFT, nothing won');
-  const words = (args) => check(shape(args), { now: NOW }).warnings.find((w) => w.code === 'W-BOX-ACCOUNTS').message;
-  assert.match(words({ items: 3, holders: 4, hooked: true }), /takes 64 accounts.*memo program is one more.*lookup table and the table’s program are two more: 67\. A transaction locks at most 64/s);
+  assert.equal(
+    settleAccounts(m.boxes[0], { gives: 'nothing' }, m).count,
+    41,
+    'a roll on a compressed NFT, nothing won',
+  );
+  const words = args => check(shape(args), { now: NOW }).warnings.find(w => w.code === 'W-BOX-ACCOUNTS').message;
+  assert.match(
+    words({ items: 3, holders: 4, hooked: true }),
+    /takes 64 accounts.*memo program is one more.*lookup table and the table’s program are two more: 67\. A transaction locks at most 64/s,
+  );
   assert.match(words({ tokens: 3, holders: 4, hooked: true }), /takes 65 accounts.*can’t be put back/s);
   assert.match(words({ compressed: 1, holders: 1 }), /takes 66 accounts.*putting every NFT won back/s);
 });

@@ -6,14 +6,14 @@
 import { fromBase64, toBase64 } from '/js/chain/bytes.js';
 
 const CHAIN = 'solana:devnet';
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 function walletRegistry() {
   const wallets = new Set();
   const api = Object.freeze({
     register: (...ws) => {
       for (const w of ws) if (w?.features) wallets.add(w);
-      return () => ws.forEach((w) => wallets.delete(w));
+      return () => ws.forEach(w => wallets.delete(w));
     },
   });
   window.addEventListener('wallet-standard:register-wallet', ({ detail }) => {
@@ -24,7 +24,13 @@ function walletRegistry() {
     }
   });
   window.dispatchEvent(Object.assign(new Event('wallet-standard:app-ready'), { detail: api }));
-  return () => [...wallets].filter((w) => (w.chains ?? []).some((c) => String(c).startsWith('solana:')) && w.features['standard:connect'] && w.features['solana:signTransaction']);
+  return () =>
+    [...wallets].filter(
+      w =>
+        (w.chains ?? []).some(c => String(c).startsWith('solana:')) &&
+        w.features['standard:connect'] &&
+        w.features['solana:signTransaction'],
+    );
 }
 
 export function approvalPage(token) {
@@ -36,7 +42,11 @@ export function approvalPage(token) {
   // While a batch is out for signing or sending, nothing re-enables Approve (a state refresh landing mid-way did).
   let busy = false;
   const api = async (path, body) => {
-    const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'x-xsolana-token': token, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const r = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'x-xsolana-token': token, 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
     return data;
@@ -59,7 +69,7 @@ export function approvalPage(token) {
     $('cost').textContent = state.setupSol !== null && state.mode === 'new' ? `about ${state.setupSol} SOL` : '';
     const steps = $('steps');
     steps.replaceChildren(
-      ...[...state.landed.map((l) => ({ ...l, done: true })), ...state.steps].map((s) => {
+      ...[...state.landed.map(l => ({ ...l, done: true })), ...state.steps].map(s => {
         const li = document.createElement('li');
         li.textContent = s.says;
         if (s.done) li.className = 'done';
@@ -73,7 +83,7 @@ export function approvalPage(token) {
         if (s.details?.length) {
           const ul = document.createElement('ul');
           ul.className = 'details';
-          ul.append(...s.details.map((d) => Object.assign(document.createElement('li'), { textContent: d })));
+          ul.append(...s.details.map(d => Object.assign(document.createElement('li'), { textContent: d })));
           li.append(ul);
         }
         return li;
@@ -81,17 +91,27 @@ export function approvalPage(token) {
     );
     const warnings = state.warnings ?? [];
     $('warnbox').hidden = !warnings.length || state.done;
-    $('warnings').replaceChildren(...warnings.map((w) => Object.assign(document.createElement('li'), { textContent: w })));
+    $('warnings').replaceChildren(
+      ...warnings.map(w => Object.assign(document.createElement('li'), { textContent: w })),
+    );
     // The notice (no warranty, at the owner's own risk, legal where it runs) and this economy's legal flags, in a
     // block of their own whatever the agent said: Approve waits until the owner ticks that they read them.
     const legal = state.legal ?? [];
     $('legalbox').hidden = Boolean(state.done);
     $('legal').hidden = !legal.length;
-    $('legal').replaceChildren(...legal.map((f) => Object.assign(document.createElement('li'), { textContent: f.says })));
+    $('legal').replaceChildren(...legal.map(f => Object.assign(document.createElement('li'), { textContent: f.says })));
     const unread = !$('legalok').checked;
     // A live section the chain does not bear out: nothing can be approved.
     $('approve').disabled = state.done || !account || busy || Boolean(state.refused) || unread;
-    $('status').textContent = state.done ? 'Done.' : state.refused ? 'Nothing can be approved: see above.' : !account ? 'Connect a wallet first.' : unread ? 'Read the notice above and tick that you have.' : `${state.remaining} transaction${state.remaining === 1 ? '' : 's'} to go.`;
+    $('status').textContent = state.done
+      ? 'Done.'
+      : state.refused
+        ? 'Nothing can be approved: see above.'
+        : !account
+          ? 'Connect a wallet first.'
+          : unread
+            ? 'Read the notice above and tick that you have.'
+            : `${state.remaining} transaction${state.remaining === 1 ? '' : 's'} to go.`;
   }
 
   async function refresh() {
@@ -147,7 +167,10 @@ export function approvalPage(token) {
     if (busy) return;
     const found = list();
     if (!found.length) {
-      log('No Solana wallet in this browser. Install one (Phantom, Solflare, Backpack), set it to devnet, then reload.', 'bad');
+      log(
+        'No Solana wallet in this browser. Install one (Phantom, Solflare, Backpack), set it to devnet, then reload.',
+        'bad',
+      );
       return;
     }
     if (found.length === 1) {
@@ -157,8 +180,11 @@ export function approvalPage(token) {
     const box = $('wallets');
     box.replaceChildren(
       Object.assign(document.createElement('span'), { className: 'muted', textContent: 'Pick a wallet:' }),
-      ...found.map((w) => {
-        const button = Object.assign(document.createElement('button'), { className: 'ghost', textContent: w === wallet ? `${w.name} (connected)` : w.name });
+      ...found.map(w => {
+        const button = Object.assign(document.createElement('button'), {
+          className: 'ghost',
+          textContent: w === wallet ? `${w.name} (connected)` : w.name,
+        });
         button.addEventListener('click', () => connectTo(w));
         return button;
       }),
@@ -177,11 +203,13 @@ export function approvalPage(token) {
     try {
       const batch = await api('/api/prepare', { wallet: signer.address });
       const details = (batch.details ?? []).flat();
-      log(`Asking your wallet to approve ${batch.transactions.length} transaction${batch.transactions.length === 1 ? '' : 's'} in the project ${batch.project}: ${batch.says.join(' | ')}${details.length ? `. ${details.join('. ')}` : ''}`);
+      log(
+        `Asking your wallet to approve ${batch.transactions.length} transaction${batch.transactions.length === 1 ? '' : 's'} in the project ${batch.project}: ${batch.says.join(' | ')}${details.length ? `. ${details.join('. ')}` : ''}`,
+      );
       const sign = signingWallet.features['solana:signTransaction'];
-      const inputs = batch.transactions.map((t) => ({ account: signer, transaction: fromBase64(t), chain: CHAIN }));
+      const inputs = batch.transactions.map(t => ({ account: signer, transaction: fromBase64(t), chain: CHAIN }));
       const outputs = await sign.signTransaction(...inputs);
-      const signed = outputs.map((o) => toBase64(o.signedTransaction));
+      const signed = outputs.map(o => toBase64(o.signedTransaction));
       $('status').textContent = 'Sending and confirming…';
       const state = await api('/api/complete', { wallet: signer.address, id: batch.id, transactions: signed });
       log(`Landed: ${state.signatures.slice(-batch.transactions.length).join(', ')}`, 'ok');

@@ -15,10 +15,13 @@ const NOW = 1_790_000_000;
 
 test('each legal flag once, in plain words, and none for an economy that raises none', () => {
   const flags = legalFlags(check(example('coin-flip-arena').spec, { now: NOW }));
-  assert.deepEqual(flags.map((f) => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
+  assert.deepEqual(flags.map(f => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
   for (const f of flags) assert.equal(f.says, LEGAL[f.code]);
   assert.deepEqual(legalFlags(check(example('fair-presale').spec, { now: NOW })), []);
-  assert.deepEqual(legalFlags({ warnings: [{ code: 'W-CHANCE-PRIZE' }, { code: 'W-CHANCE-PRIZE' }, { code: 'toString' }] }), [{ code: 'W-CHANCE-PRIZE', says: LEGAL['W-CHANCE-PRIZE'] }]);
+  assert.deepEqual(
+    legalFlags({ warnings: [{ code: 'W-CHANCE-PRIZE' }, { code: 'W-CHANCE-PRIZE' }, { code: 'toString' }] }),
+    [{ code: 'W-CHANCE-PRIZE', says: LEGAL['W-CHANCE-PRIZE'] }],
+  );
 });
 
 test('xsolana_publish leads its answer with the legal flags, to say once if they were not said yet', async () => {
@@ -32,18 +35,27 @@ test('xsolana_publish leads its answer with the legal flags, to say once if they
   const plain = (await runTool('xsolana_publish', { example: 'fair-presale' }, { now: NOW })).text;
   assert.match(plain, /^Going live: /);
   // and with or without, it says the program is unaudited, as is, at their own risk, and the law is theirs
-  for (const text of [r.text, plain]) assert.match(text, /not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal/);
+  for (const text of [r.text, plain])
+    assert.match(
+      text,
+      /not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal/,
+    );
 });
 
 test('the approval state carries the legal flags apart from the other warnings', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-legal-'));
   const file = path.join(dir, 'xsolana.json');
-  const chain = { latestBlockhash: async () => ({}), rent: async () => 0, send: async () => '', confirm: async () => true };
+  const chain = {
+    latestBlockhash: async () => ({}),
+    rent: async () => 0,
+    send: async () => '',
+    confirm: async () => true,
+  };
   writeFileSync(file, JSON.stringify(example('coin-flip-arena').spec));
   const flagged = (await createApproval({ file, chain, now: () => NOW })).state();
-  assert.deepEqual(flagged.legal.map((f) => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
-  for (const f of flagged.legal) assert.ok(!flagged.warnings.some((w) => w.includes(f.says)), 'not said twice');
-  assert.ok(!flagged.warnings.some((w) => /gambling|security/.test(w)), flagged.warnings.join('\n'));
+  assert.deepEqual(flagged.legal.map(f => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
+  for (const f of flagged.legal) assert.ok(!flagged.warnings.some(w => w.includes(f.says)), 'not said twice');
+  assert.ok(!flagged.warnings.some(w => /gambling|security/.test(w)), flagged.warnings.join('\n'));
   writeFileSync(file, JSON.stringify(example('fair-presale').spec));
   assert.deepEqual((await createApproval({ file, chain, now: () => NOW })).state().legal, []);
 });

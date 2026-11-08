@@ -69,10 +69,7 @@
       "price": 0.01,
       "noLoss": true,
       "seed": 0.1,
-      "places": [
-        60,
-        40
-      ],
+      "places": [60, 40],
       "every": "7d",
       "perWallet": 20,
       "gate": {
@@ -93,9 +90,7 @@
         "currency": "gem",
         "from": "mint"
       },
-      "vouchers": [
-        "AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9"
-      ],
+      "vouchers": ["AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9"],
       "limits": {
         "perWallet": 52,
         "perDay": 10

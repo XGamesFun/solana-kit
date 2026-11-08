@@ -29,7 +29,7 @@ export class RpcError extends Error {
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** The first block of each public Solana cluster: it names the cluster whatever URL reaches it. */
 export const GENESIS = Object.freeze({
@@ -38,7 +38,8 @@ export const GENESIS = Object.freeze({
   testnet: '4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY',
 });
 
-const DEVNET_ONLY = 'loot runs on devnet only: mainnet waits for an audit. Unset XSOLANA_RPC_URL, or point it at a devnet RPC.';
+const DEVNET_ONLY =
+  'loot runs on devnet only: mainnet waits for an audit. Unset XSOLANA_RPC_URL, or point it at a devnet RPC.';
 
 /** Refuses an RPC URL that names mainnet. Returns the URL. */
 export function notMainnet(url) {
@@ -56,17 +57,17 @@ export async function checkCluster(rpc) {
   if (genesis === GENESIS.testnet) throw new RpcError(`${rpc.url ?? 'This RPC'} is on testnet. ${DEVNET_ONLY}`);
   return genesis;
 }
-const decodeAccount = (raw) =>
+const decodeAccount = raw =>
   raw ? { owner: raw.owner, lamports: raw.lamports, data: fromBase64(raw.data[0]), executable: raw.executable } : null;
 
 /** The program's own words for a failed run (`AnchorError … Error Message: …`), else the last error log line. A program
  * built without its errors' text logs the error's name as its message: then the name alone (the client's IDL has
  * the sentence: `loot.lootError`). */
 export function programError(err, logs) {
-  const anchor = logs?.find((line) => line.includes('AnchorError'));
+  const anchor = logs?.find(line => line.includes('AnchorError'));
   const said = anchor ? /Error Message: (.+?)\.?$/.exec(anchor)?.[1] : undefined;
   const code = anchor ? /Error Code: (\w+)/.exec(anchor)?.[1] : undefined;
-  const last = logs?.filter((l) => /error|failed|insufficient/i.test(l)).at(-1);
+  const last = logs?.filter(l => /error|failed|insufficient/i.test(l)).at(-1);
   if (said) return code && code !== said ? `${said} (${code})` : said;
   return last ?? (typeof err === 'string' ? err : JSON.stringify(err));
 }
@@ -117,7 +118,9 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
         // A send whose preflight failed ("Transaction simulation failed: … custom program error: 0x17b5") carries the
         // logs, where the program says why in words.
         const logs = body?.error?.data?.logs;
-        const said = logs?.length ? `The network refused this in a dry run: ${programError(body.error.data.err, logs)}` : message;
+        const said = logs?.length
+          ? `The network refused this in a dry run: ${programError(body.error.data.err, logs)}`
+          : message;
         throw new RpcError(said, { code: body?.error?.code, logs });
       }
       return body.result;
@@ -128,7 +131,14 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
     const out = [];
     for (let i = 0; i < addresses.length; i += ACCOUNTS_PER_CALL) {
       const batch = addresses.slice(i, i + ACCOUNTS_PER_CALL);
-      const r = await call('getMultipleAccounts', [batch, { encoding: 'base64', commitment, ...(minContextSlot != null ? { minContextSlot: Number(minContextSlot) } : {}) }]);
+      const r = await call('getMultipleAccounts', [
+        batch,
+        {
+          encoding: 'base64',
+          commitment,
+          ...(minContextSlot != null ? { minContextSlot: Number(minContextSlot) } : {}),
+        },
+      ]);
       out.push(...r.value.map(decodeAccount));
     }
     return out;
@@ -172,7 +182,7 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
     },
     async programAccounts(program, filters) {
       const r = await call('getProgramAccounts', [program, { encoding: 'base64', commitment: 'confirmed', filters }]);
-      return r.map((x) => ({ pubkey: x.pubkey, account: decodeAccount(x.account) }));
+      return r.map(x => ({ pubkey: x.pubkey, account: decodeAccount(x.account) }));
     },
     /**
      * Dry-run a wire transaction (empty signature slots are fine). Throws with the program's reason when it fails.
@@ -190,11 +200,21 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
         },
       ]);
       const value = r.value;
-      if (value.err) throw new RpcError(`The network refused this in a dry run: ${programError(value.err, value.logs)}`, { logs: value.logs });
-      return { unitsConsumed: value.unitsConsumed ?? null, logs: value.logs ?? [], accounts: (value.accounts ?? []).map(decodeAccount) };
+      if (value.err)
+        throw new RpcError(`The network refused this in a dry run: ${programError(value.err, value.logs)}`, {
+          logs: value.logs,
+        });
+      return {
+        unitsConsumed: value.unitsConsumed ?? null,
+        logs: value.logs ?? [],
+        accounts: (value.accounts ?? []).map(decodeAccount),
+      };
     },
     async send(wire) {
-      return call('sendTransaction', [toBase64(wire), { encoding: 'base64', preflightCommitment: 'confirmed', maxRetries: 3 }]);
+      return call('sendTransaction', [
+        toBase64(wire),
+        { encoding: 'base64', preflightCommitment: 'confirmed', maxRetries: 3 },
+      ]);
     },
     signatureStatus,
     /** Wait until a sent transaction is confirmed; throws with the program's reason when it failed. */
@@ -203,13 +223,19 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
       for (let poll = 0; Date.now() < deadline; poll++) {
         const status = await signatureStatus(signature);
         if (status?.err) {
-          const tx = await call('getTransaction', [signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 }]).catch(() => null);
-          throw new RpcError(`Transaction ${signature} failed: ${programError(status.err, tx?.meta?.logMessages)}`, { logs: tx?.meta?.logMessages });
+          const tx = await call('getTransaction', [
+            signature,
+            { commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
+          ]).catch(() => null);
+          throw new RpcError(`Transaction ${signature} failed: ${programError(status.err, tx?.meta?.logMessages)}`, {
+            logs: tx?.meta?.logMessages,
+          });
         }
         if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return signature;
         if (lastValidBlockHeight !== null && poll % 5 === 4) {
           const height = await call('getBlockHeight', [{ commitment: 'confirmed' }]).catch(() => 0);
-          if (height > lastValidBlockHeight) throw new RpcError(`Transaction ${signature} expired before it landed. Try again.`);
+          if (height > lastValidBlockHeight)
+            throw new RpcError(`Transaction ${signature} expired before it landed. Try again.`);
         }
         await sleepImpl(CONFIRM_POLL_MS);
       }

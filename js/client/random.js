@@ -15,7 +15,7 @@ const PREFIX = new TextEncoder().encode('loot-roll-v1');
 /** A stream of the oracle's 32-byte `answer` at `path` (whole numbers): seed = sha256("loot-roll-v1" | answer | path as
  * u32 little-endian words); its nth number the first 8 bytes, little-endian, of sha256(seed | n as u64 little-endian). */
 export function stream(answer, path = []) {
-  const words = path.slice(0, MAX_PATH).map((w) => uintLE(w, 4));
+  const words = path.slice(0, MAX_PATH).map(w => uintLE(w, 4));
   const seed = sha256(concat(PREFIX, Uint8Array.from(answer), ...words));
   let counter = 0n;
   return {

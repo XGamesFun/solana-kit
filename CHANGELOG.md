@@ -138,7 +138,7 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - **A lottery round is its own record** (`["round", lottery, incarnation, round]`, `decodeRound`), holding its money in
   accounts of its own: `pull` pays one part (`partsOwed`, `commonOwed`), the last closes it. Places are runs (`times`); `Prize::Raffled` draws an NFT of the lottery's own
   stash at random. `finish_lottery_contribution` is gone. A lottery's terms are one `LotteryTerms` (`LotteryArgs {
-  terms, every, gate, per_wallet }`), which the round copies (`round.terms`, `paymentMint(terms)`); `buy_tickets`
+terms, every, gate, per_wallet }`), which the round copies (`round.terms`, `paymentMint(terms)`); `buy_tickets`
   names no incarnation (its round's address does); `LotteryPulled` carries the `amount` settled, and `LotteryPaid` is
   gone. A grant's tag is 27, a profile's 24.
   A Token Metadata NFT's Sheet closes naming its edition (`closeSheetIx({ tokenMetadata })`).
@@ -147,7 +147,7 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
 - **The tail**: every route's extra accounts (hook accounts, Core's checks) come from the Memo program's account on
   (`tailOf`).
 - **Several a call**: `stake_nft`, `unstake_nft`, `harvest`, `stash` (`weights`), `hold`, `release` and `Make { item,
-  tree, attributes }` (`makeIx`) take several NFTs, seats or owners (`more`).
+tree, attributes }` (`makeIx`) take several NFTs, seats or owners (`more`).
 - **Smaller**: u16 pool indexes; a hold names `payer` and `rent_to`; a burn names the holder, who gets its rent; anyone
   closes a burned NFT's Sheet (`closeSheetIx`); `run_schedule(upto)` catches up in one call, sealed schedules up to
   100,000 runs; a token exit that would lose its seat's growth refreshes first (`refreshFirst`); a watched farm refuses
@@ -163,7 +163,7 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   opens or mints (`settleRent`, what js/play funds its settle key with). settle's `upto`: 0 the split alone, past the
   end (`SETTLE_LAST`) the last part; no `rows`. No committed tables. A box burns its price with a `Burn` share (no
   entry `burns`), gives a roll only when it doesn't roll (`Won::Roll` and `Won::Fresh` are gone: `Won::Item { drawn
-  }`), and a roll lot's winning bid stays in the vault as its order's payment (`Auction.pin`). An item's life is its
+}`), and a roll lot's winning bid stays in the vault as its order's payment (`Auction.pin`). An item's life is its
   recipes' needs and raises (`Need { test }`, `Raise { place, shift }`, `rules::Test::Older`; no `Item.life`, no
   `Renew`). Grants count with `Limits.all` and `Grant.counted` (`OverDay` is gone; codes after it moved). `Debt.paid` is
   gone (a repaid loan is a plain hold that is over). `Fate.then` is `Option<Spend>`. A seat earns until a time
@@ -255,7 +255,7 @@ For loot 0.23.0. The IDL, the client, the spec and the docs follow it; no accoun
   treasury; the project's address is refused. A compressed prize of a collection without Bubblegum's plugin shifts the
   next one's Sheet (`unminted`; `parseCoreCollection` reads the plugin).
 - `repay` names the debt its payer was shown (`repayIx({ repay })`); js/play's `loan()` reads it and `repay(asset, due,
-  { repay })` passes it. js/play reads a hooked mint's accounts (`resolveTransfers`) for ticket purchases, a round's
+{ repay })` passes it. js/play reads a hooked mint's accounts (`resolveTransfers`) for ticket purchases, a round's
   ask and its pulls: a hooked lottery runs from the page. A box's order size counts its stored shares.
 - An NFT lot and a bid's winning NFTs can become holds released after (`endAuctionIx({ hold })`, true or a list of
   assets; js/play's `endAuction` does so when the end doesn't fit). A claim of a split pool prize names its pool (`prize_pool`).
@@ -296,8 +296,7 @@ carries over.
 - **Fresh items** (`Item.traits`): each unit's traits drawn from a table or a range, its name and URI taking the
   values (`{key}`); given only by a box's roll (`NeedsRoll`).
 - **Compressed items as box prizes** (`Prize::Compressed` in an entry), minted at the settle.
-- **Stashes are tables of NFTs**, each with a weight (`stash`'s `weight`), drawn by weight; the `Stash` account (tag
-  21) is gone.
+- **Stashes are tables of NFTs**, each with a weight (`stash`'s `weight`), drawn by weight; the `Stash` account (tag 21) is gone.
 - **Player profiles** (`["profile", project, wallet]`, tag 24): `Of::Profile` rules, `Change::Profile`, growth on the
   profile, a recipe's need or raise at `PROFILE_PLACE`.
 - New errors `WrongProfile`, `WrongTable`, `BadTable`, `BadItem`, `NeedsRoll`, `WrongRow`; `ReceiptFull` and

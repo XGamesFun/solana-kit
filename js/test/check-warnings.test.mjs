@@ -11,11 +11,15 @@ import { pda } from '../client/pda.js';
 import * as loot from '../client/index.js';
 
 const NOW = 1_790_000_000;
-const example = (name) => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
+const example = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
 const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-const codes = (spec) => {
+const codes = spec => {
   const r = check(spec, { now: NOW });
-  return { refused: r.refusals.map((x) => `${x.code} ${x.where}`), warned: r.warnings.map((x) => `${x.code} ${x.where}`), ok: r.ok };
+  return {
+    refused: r.refusals.map(x => `${x.code} ${x.where}`),
+    warned: r.warnings.map(x => `${x.code} ${x.where}`),
+    ok: r.ok,
+  };
 };
 const edit = (spec, fn) => {
   const copy = structuredClone(spec);
@@ -31,100 +35,203 @@ const changed = (spec, fn) => {
 
 test('a raffle whose ticket money all goes elsewhere leaves nothing in its pot: no places warning; one that keeps some is told it stays for good', () => {
   const raffle = example('nft-raffle');
-  assert.ok(!codes(raffle).warned.some((w) => w.startsWith('W-LOTTERY economy.lotteries.art.places')), 'the split sends all ticket money to the treasury');
-  const keeps = edit(raffle, (s) => (s.lotteries[0].split[0].percent = 60));
+  assert.ok(
+    !codes(raffle).warned.some(w => w.startsWith('W-LOTTERY economy.lotteries.art.places')),
+    'the split sends all ticket money to the treasury',
+  );
+  const keeps = edit(raffle, s => (s.lotteries[0].split[0].percent = 60));
   assert.ok(keeps.warned.includes('W-LOTTERY economy.lotteries.art.places'), keeps.warned.join());
-  const said = check(changed(raffle, (s) => (s.lotteries[0].split[0].percent = 60)), { now: NOW }).warnings.find((w) => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
-  assert.match(said.message, /draws once: the other 100% of its pot, and any place nobody won, stays in the pot for good/);
+  const said = check(
+    changed(raffle, s => (s.lotteries[0].split[0].percent = 60)),
+    { now: NOW },
+  ).warnings.find(w => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
+  assert.match(
+    said.message,
+    /draws once: the other 100% of its pot, and any place nobody won, stays in the pot for good/,
+  );
   // A lottery that draws again keeps the old words: what is left rolls into the next round.
-  const again = check(changed(example('stakers-draw'), (s) => (s.lotteries[0].places = [50])), { now: NOW }).warnings.find((w) => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
+  const again = check(
+    changed(example('stakers-draw'), s => (s.lotteries[0].places = [50])),
+    { now: NOW },
+  ).warnings.find(w => w.code === 'W-LOTTERY' && w.where.endsWith('.places'));
   assert.match(again.message, /stays in it for the next round/);
 });
 
 test('what the program takes is a warning: free tickets, a faucet, a tier below x1, a fall to 0, an empty gate', () => {
   const raffle = example('nft-raffle');
-  const free = edit(raffle, (s) => delete s.lotteries[0].price);
+  const free = edit(raffle, s => delete s.lotteries[0].price);
   assert.ok(free.ok && free.warned.includes('W-LOTTERY economy.lotteries.art.price'), free.refused.join());
   const farm = example('paper-hands-farm');
-  const slow = edit(farm, (s) => (s.farms[0].tiers[0].multiplier = 0.5));
+  const slow = edit(farm, s => (s.farms[0].tiers[0].multiplier = 0.5));
   assert.ok(slow.ok && slow.warned.includes('W-FARM economy.farms.farm.tiers[0].multiplier'), slow.refused.join());
   const vesting = example('team-vesting');
-  const faucet = edit(vesting, (s) => s.grants.push({ key: 'faucet', name: 'Faucet', prize: { gives: 'tokens', amount: 1, from: 'mint', currency: 'share' }, limits: { total: 100 } }));
+  const faucet = edit(vesting, s =>
+    s.grants.push({
+      key: 'faucet',
+      name: 'Faucet',
+      prize: { gives: 'tokens', amount: 1, from: 'mint', currency: 'share' },
+      limits: { total: 100 },
+    }),
+  );
   assert.ok(faucet.ok && faucet.warned.includes('W-GRANT economy.grants.faucet'), faucet.refused.join());
-  const gate = edit(vesting, (s) => (s.grants[0].gate = { wallets: [] }));
-  assert.ok(gate.ok && gate.warned.some((w) => w.startsWith('W-GATE')), gate.refused.join());
+  const gate = edit(vesting, s => (s.grants[0].gate = { wallets: [] }));
+  assert.ok(gate.ok && gate.warned.some(w => w.startsWith('W-GATE')), gate.refused.join());
 });
 
 test('a raffle’s NFT is held in its lottery only; a split prize is a contest’s; exits are a farm of tokens’', () => {
   const raffle = example('nft-raffle');
-  assert.ok(edit(raffle, (s) => (s.lotteries[0].every = '1d')).refused.includes('E-LOTTERY economy.lotteries.art.every'), 'a held prize draws once');
+  assert.ok(
+    edit(raffle, s => (s.lotteries[0].every = '1d')).refused.includes('E-LOTTERY economy.lotteries.art.every'),
+    'a held prize draws once',
+  );
   const vesting = example('team-vesting');
-  const held = edit(vesting, (s) => (s.grants[0].prize = { gives: 'nft', nft: WALLET, held: true }));
-  assert.ok(held.refused.some((r) => r.startsWith('E-GRANT') && r.endsWith('.held')), held.refused.join());
-  const split = edit(vesting, (s) => (s.grants[0].prize.split = true));
-  assert.ok(split.refused.some((r) => r.endsWith('.split')), split.refused.join());
+  const held = edit(vesting, s => (s.grants[0].prize = { gives: 'nft', nft: WALLET, held: true }));
+  assert.ok(
+    held.refused.some(r => r.startsWith('E-GRANT') && r.endsWith('.held')),
+    held.refused.join(),
+  );
+  const split = edit(vesting, s => (s.grants[0].prize.split = true));
+  assert.ok(
+    split.refused.some(r => r.endsWith('.split')),
+    split.refused.join(),
+  );
   const farm = example('paper-hands-farm');
-  assert.ok(edit(farm, (s) => delete s.farms[0].exitFeeTo).refused.includes('E-FARM economy.farms.farm.exitFeeTo'));
-  const nfts = edit(farm, (s) => {
+  assert.ok(edit(farm, s => delete s.farms[0].exitFeeTo).refused.includes('E-FARM economy.farms.farm.exitFeeTo'));
+  const nfts = edit(farm, s => {
     s.farms[0].stakes = 'collectibles';
     s.items = [{ key: 'hero', name: 'Hero', price: 1 }];
     s.collection = { name: 'Heroes' };
   });
   assert.ok(nfts.refused.includes('E-FARM economy.farms.farm.tiers'), nfts.refused.join());
   // No unbonding wait and no toll any more: the schema refuses a spec that still names one.
-  const old = edit(farm, (s) => Object.assign(s.farms[0], { unbond: '7d', toll: { percent: 2, to: 'burn' } }));
-  assert.ok(old.refused.includes('E-SCHEMA economy.farms[0].unbond') && old.refused.includes('E-SCHEMA economy.farms[0].toll'), old.refused.join());
+  const old = edit(farm, s => Object.assign(s.farms[0], { unbond: '7d', toll: { percent: 2, to: 'burn' } }));
+  assert.ok(
+    old.refused.includes('E-SCHEMA economy.farms[0].unbond') && old.refused.includes('E-SCHEMA economy.farms[0].toll'),
+    old.refused.join(),
+  );
 });
 
 test('a sealed schedule has an end and pays no holder; a list names amounts up to the grant’s', () => {
   const vesting = example('team-vesting');
-  assert.ok(edit(vesting, (s) => delete s.schedules[0].maxRuns).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'));
-  assert.ok(edit(vesting, (s) => (s.schedules[0].to = `holder:${WALLET}`)).refused.includes('E-SCHEDULE economy.schedules.lead.to'));
-  assert.ok(edit(vesting, (s) => (s.grants[0].list[0].amount = 30_000)).refused.includes('E-GRANT economy.grants.advisors.list[0].amount'));
+  assert.ok(
+    edit(vesting, s => delete s.schedules[0].maxRuns).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'),
+  );
+  assert.ok(
+    edit(vesting, s => (s.schedules[0].to = `holder:${WALLET}`)).refused.includes(
+      'E-SCHEDULE economy.schedules.lead.to',
+    ),
+  );
+  assert.ok(
+    edit(vesting, s => (s.grants[0].list[0].amount = 30_000)).refused.includes(
+      'E-GRANT economy.grants.advisors.list[0].amount',
+    ),
+  );
 });
 
 test('a schedule pays a lottery’s pot or a farm’s rewards; a farm nothing funds is said to pay nothing', () => {
   const raffle = example('nft-raffle');
-  const sponsored = edit(raffle, (s) => (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }], s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }]));
+  const sponsored = edit(
+    raffle,
+    s => (
+      (s.schedules = [{ key: 'sponsor', does: 'pay', from: 'prizes', to: 'lottery:art', amount: 1, every: '1d' }]),
+      (s.pools = [{ key: 'prizes', currency: 'sol', seed: 1 }])
+    ),
+  );
   assert.ok(sponsored.ok, sponsored.refused.join());
   const farm = example('paper-hands-farm');
   const spec = structuredClone(farm);
   spec.farms.push({ key: 'qualify', name: 'Qualify', stakes: 'gem', tiers: [{ lock: '7d' }] });
   const r = codes(spec);
-  assert.ok(r.ok && r.warned.includes('W-FARM-DRY economy.farms.qualify') && !r.warned.includes('W-FARM-DRY economy.farms.farm'), r.warned.join());
+  assert.ok(
+    r.ok &&
+      r.warned.includes('W-FARM-DRY economy.farms.qualify') &&
+      !r.warned.includes('W-FARM-DRY economy.farms.farm'),
+    r.warned.join(),
+  );
   assert.equal(model(spec).farm.get('qualify').rewardsToken, 'gem', 'its rewards are its staked token');
   assert.ok(plan(spec, { now: NOW }).ok);
   // A farm's rewards are a token: one that names a pool is told where its rewards land now.
-  const pooled = edit(farm, (s) => (s.pools = [{ key: 'old', currency: 'gem' }], s.farms[0].rewards = 'old'));
+  const pooled = edit(farm, s => ((s.pools = [{ key: 'old', currency: 'gem' }]), (s.farms[0].rewards = 'old')));
   assert.ok(pooled.refused.includes('E-FARM economy.farms.farm.rewards'), pooled.refused.join());
 });
 
 test('a sealed schedule pays a key someone holds, its last run within 10 years; a draw within 5 years', () => {
   const vesting = example('team-vesting');
-  const toPda = edit(vesting, (s) => (s.schedules[0].to = `wallet:${pda.platform()}`));
-  assert.ok(toPda.refused.includes('E-SCHEDULE economy.schedules.lead.to'), 'a program’s address is not a wallet anyone can spend from');
-  assert.ok(edit(vesting, (s) => (s.schedules[0].maxRuns = 200)).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'), '200 runs of 30 days pass 10 years');
+  const toPda = edit(vesting, s => (s.schedules[0].to = `wallet:${pda.platform()}`));
+  assert.ok(
+    toPda.refused.includes('E-SCHEDULE economy.schedules.lead.to'),
+    'a program’s address is not a wallet anyone can spend from',
+  );
+  assert.ok(
+    edit(vesting, s => (s.schedules[0].maxRuns = 200)).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'),
+    '200 runs of 30 days pass 10 years',
+  );
   const raffle = example('nft-raffle');
-  assert.ok(edit(raffle, (s) => (s.lotteries[0].firstDraw = 'publish+2000d')).refused.includes('E-LOTTERY economy.lotteries.art.firstDraw'));
+  assert.ok(
+    edit(raffle, s => (s.lotteries[0].firstDraw = 'publish+2000d')).refused.includes(
+      'E-LOTTERY economy.lotteries.art.firstDraw',
+    ),
+  );
 });
 
 test('sealed runs capped, a contest in a default-frozen mint refused, warnings for outside NFT bids, a heavy box that fits', () => {
   const vesting = example('team-vesting');
-  assert.ok(edit(vesting, (s) => Object.assign(s.schedules[0], { maxRuns: 100_001, every: '1h' })).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'));
-  assert.ok(!edit(vesting, (s) => Object.assign(s.schedules[0], { maxRuns: 35_040, every: '1h' })).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'), 'four years of hourly runs');
+  assert.ok(
+    edit(vesting, s => Object.assign(s.schedules[0], { maxRuns: 100_001, every: '1h' })).refused.includes(
+      'E-SCHEDULE economy.schedules.lead.maxRuns',
+    ),
+  );
+  assert.ok(
+    !edit(vesting, s => Object.assign(s.schedules[0], { maxRuns: 35_040, every: '1h' })).refused.includes(
+      'E-SCHEDULE economy.schedules.lead.maxRuns',
+    ),
+    'four years of hourly runs',
+  );
   const presale = example('fair-presale');
-  const frozen = edit(presale, (s) => (s.tokens[0] = { key: 'sol', source: 'existing', mint: WALLET, decimals: 9, powers: { defaultFrozen: true } }));
+  const frozen = edit(
+    presale,
+    s => (s.tokens[0] = { key: 'sol', source: 'existing', mint: WALLET, decimals: 9, powers: { defaultFrozen: true } }),
+  );
   assert.ok(frozen.refused.includes('E-CONTEST economy.contests.raise.currency'), frozen.refused.join());
-  const auction = edit(presale, (s) => (s.auctions = [{ key: 'swap', name: 'Swap', lot: { item: 'gem' }, runs: '1d', bidNfts: { collection: WALLET, attribute: 'level', atLeast: 3 } }], s.items = [{ key: 'gem', name: 'Gem', price: 1 }], s.collection = { name: 'Gems' }));
+  const auction = edit(
+    presale,
+    s => (
+      (s.auctions = [
+        {
+          key: 'swap',
+          name: 'Swap',
+          lot: { item: 'gem' },
+          runs: '1d',
+          bidNfts: { collection: WALLET, attribute: 'level', atLeast: 3 },
+        },
+      ]),
+      (s.items = [{ key: 'gem', name: 'Gem', price: 1 }]),
+      (s.collection = { name: 'Gems' })
+    ),
+  );
   assert.ok(auction.warned.includes('W-RULE-OUTSIDE economy.auctions.swap.bidNfts'), auction.warned.join());
-  const heavy = edit(presale, (s) => {
+  const heavy = edit(presale, s => {
     s.collection = { name: 'Heavy' };
-    s.stashes = ['a', 'b', 'c'].map((k) => ({ key: k, name: k, nfts: [] }));
-    s.boxes = [{ key: 'triple', name: 'Triple', price: 1, split: [1, 2, 3].map(() => ({ to: `holder:${WALLET}`, percent: 1 })), outcomes: [{ gives: 'bundle', prizes: ['a', 'b', 'c'].map((st) => ({ gives: 'stash', stash: st })), chance: 50 }, { gives: 'nothing', chance: 50 }] }];
+    s.stashes = ['a', 'b', 'c'].map(k => ({ key: k, name: k, nfts: [] }));
+    s.boxes = [
+      {
+        key: 'triple',
+        name: 'Triple',
+        price: 1,
+        split: [1, 2, 3].map(() => ({ to: `holder:${WALLET}`, percent: 1 })),
+        outcomes: [
+          { gives: 'bundle', prizes: ['a', 'b', 'c'].map(st => ({ gives: 'stash', stash: st })), chance: 50 },
+          { gives: 'nothing', chance: 50 },
+        ],
+      },
+    ];
   });
   // (three NFTs and three holders' shares in a coin with no transfer hook fit the heap, memos or not, as measured on the
   // program; the shapes that don't are in settle-heap.test.mjs)
-  assert.ok(!heavy.warned.includes('W-BOX-HEAP economy.boxes.triple.outcomes'), heavy.warned.join() + heavy.refused.join());
+  assert.ok(
+    !heavy.warned.includes('W-BOX-HEAP economy.boxes.triple.outcomes'),
+    heavy.warned.join() + heavy.refused.join(),
+  );
 });
 
 test('a Token Metadata mint is taken only as an NFT; a compressed rental passes its record and tree', () => {
@@ -140,52 +247,133 @@ test('a Token Metadata mint is taken only as an NFT; a compressed rental passes 
   const minting = Uint8Array.from(data);
   minting.set([1, 0, 0, 0], 0);
   assert.equal(loot.isNftMint(mint, minting), false, 'a mint authority that is not its edition');
-  const listing = { project: pda.platform(), maker: WALLET, asset: WALLET, mint: WALLET, user: WALLET, until: 0n, stopped: false, deal: { Rent: { price: 1n, lasts: 60, max_periods: 1 } }, shares: [] };
-  const compressed = { id: WALLET, tree: pda.platform(), proof: [pda.identity()], owner: WALLET, delegate: WALLET, collection: null };
+  const listing = {
+    project: pda.platform(),
+    maker: WALLET,
+    asset: WALLET,
+    mint: WALLET,
+    user: WALLET,
+    until: 0n,
+    stopped: false,
+    deal: { Rent: { price: 1n, lasts: 60, max_periods: 1 } },
+    shares: [],
+  };
+  const compressed = {
+    id: WALLET,
+    tree: pda.platform(),
+    proof: [pda.identity()],
+    owner: WALLET,
+    delegate: WALLET,
+    collection: null,
+  };
   const ix = loot.takeListingIx({ taker: WALLET, project: pda.platform(), listing, compressed });
-  const keys = ix.keys.map((k) => k.pubkey);
+  const keys = ix.keys.map(k => k.pubkey);
   assert.ok(keys.includes(pda.leaf(WALLET)) && keys.includes(pda.platform()), 'the record and the tree');
   assert.ok(!keys.includes(pda.identity()), 'no proof: a rental moves nothing');
 });
 
 /** A round's record as `decodeRound` reads it, for the parts it owes. */
 const round = ({ returns = false, ...more } = {}) => ({
-  status: 'Drawn', terms: { returns, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 10_000, prize: null, times: 1 }] }, sold: 2n, first: 0n, pot_total: 100n, pot_sent: 100n, pot_arrived: 100n, pot_owed: 0n,
-  common: [], paid: new Uint8Array(1), prizes: [], nfts: [], assigned: 0, entries: [{ buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }, { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' }],
+  status: 'Drawn',
+  terms: {
+    returns,
+    ticket_mint: '11111111111111111111111111111111',
+    shares: [],
+    places: [{ bps: 10_000, prize: null, times: 1 }],
+  },
+  sold: 2n,
+  first: 0n,
+  pot_total: 100n,
+  pot_sent: 100n,
+  pot_arrived: 100n,
+  pot_owed: 0n,
+  common: [],
+  paid: new Uint8Array(1),
+  prizes: [],
+  nfts: [],
+  assigned: 0,
+  entries: [
+    { buyer: WALLET, start: 0n, end: 1n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' },
+    { buyer: WALLET, start: 1n, end: 2n, paid: 0n, amount: 50n, nft: '11111111111111111111111111111111' },
+  ],
   ...more,
 });
 
 test('a drawn round’s places are pulled from its answer, in any order, each place once', () => {
   assert.deepEqual(loot.partsOwed(round({ status: 'Drawing' }), 0), [], 'drawing: nothing yet');
-  assert.deepEqual(loot.partsOwed(round(), 0), [{ Pot: [0] }], 'first place\'s part of the pot');
+  assert.deepEqual(loot.partsOwed(round(), 0), [{ Pot: [0] }], "first place's part of the pot");
   assert.deepEqual(loot.partsOwed(round(), 1), [], 'the other ticket won nothing');
   assert.deepEqual(loot.partsOwed(round({ paid: Uint8Array.of(1) }), 0), [], 'paid once');
 });
 
 test('in a lottery that returns its tickets, a ticket goes back from the draw', () => {
   assert.deepEqual(loot.partsOwed(round({ returns: true }), 1, { places: false }), ['Own']);
-  assert.deepEqual(loot.partsOwed(round({ returns: true, status: 'Cancelled' }), 0), ['Own'], 'a cancelled round refunds every ticket');
-  assert.deepEqual(loot.partsOwed(round({ returns: true }), 0), ['Own', { Pot: [0] }], 'and its winner\'s place');
+  assert.deepEqual(
+    loot.partsOwed(round({ returns: true, status: 'Cancelled' }), 0),
+    ['Own'],
+    'a cancelled round refunds every ticket',
+  );
+  assert.deepEqual(loot.partsOwed(round({ returns: true }), 0), ['Own', { Pot: [0] }], "and its winner's place");
 });
 
 test('parts owed in common: a share once drawn, the pot’s, a pool’s prize back after a cancel', () => {
-  const terms = { returns: false, ticket_mint: '11111111111111111111111111111111', shares: [{ to: 'Treasury', bps: 100 }, { to: 'Burn', bps: 100 }], places: [] };
+  const terms = {
+    returns: false,
+    ticket_mint: '11111111111111111111111111111111',
+    shares: [
+      { to: 'Treasury', bps: 100 },
+      { to: 'Burn', bps: 100 },
+    ],
+    places: [],
+  };
   const prizes = [{ run: 0, mint: WALLET, each: 5n, sent: 5n, arrived: 5n, minted: false }];
-  assert.deepEqual(loot.commonOwed(round({ status: 'Drawing', terms, common: [7n, 7n], pot_owed: 3n })), [], 'drawing: nothing moves');
-  assert.deepEqual(loot.commonOwed(round({ terms, common: [7n, 7n], pot_owed: 3n, prizes })), [{ Common: [0] }, { Common: [2] }], 'a share that burns is burned at the close');
-  assert.deepEqual(loot.commonOwed(round({ status: 'Cancelled', terms, common: [7n, 7n], pot_owed: 3n, prizes })), [{ Common: [2] }, { Common: [3] }], 'a cancel owes what the ask moved in');
+  assert.deepEqual(
+    loot.commonOwed(round({ status: 'Drawing', terms, common: [7n, 7n], pot_owed: 3n })),
+    [],
+    'drawing: nothing moves',
+  );
+  assert.deepEqual(
+    loot.commonOwed(round({ terms, common: [7n, 7n], pot_owed: 3n, prizes })),
+    [{ Common: [0] }, { Common: [2] }],
+    'a share that burns is burned at the close',
+  );
+  assert.deepEqual(
+    loot.commonOwed(round({ status: 'Cancelled', terms, common: [7n, 7n], pot_owed: 3n, prizes })),
+    [{ Common: [2] }, { Common: [3] }],
+    'a cancel owes what the ask moved in',
+  );
 });
 
 test('every claim is signed by its winning wallet, whatever proves it; anyone may pay its fees', () => {
   const project = pda.platform();
   const other = pda.identity();
   const limits = { per_person: 0, per_key: 0 };
-  const fixed = { incarnation: 1n, limits, open: false, gate: null, gives: { Tokens: { from: { Pool: [0] }, amount: 5n } } };
+  const fixed = {
+    incarnation: 1n,
+    limits,
+    open: false,
+    gate: null,
+    gives: { Tokens: { from: { Pool: [0] }, amount: 5n } },
+  };
   const open = { ...fixed, open: true };
   for (const grant of [fixed, open]) {
-    const ix = loot.claimGrantIx({ project, id: 1, wallet: WALLET, expires: grant.open ? 0n : 9_999_999_999n, poolMint: other, grant, signer: other });
-    assert.ok(ix.keys.some((k) => k.pubkey === WALLET && k.isSigner), 'the wallet signs');
-    assert.ok(ix.keys.some((k) => k.pubkey === other && k.isSigner), 'the payer signs and pays');
+    const ix = loot.claimGrantIx({
+      project,
+      id: 1,
+      wallet: WALLET,
+      expires: grant.open ? 0n : 9_999_999_999n,
+      poolMint: other,
+      grant,
+      signer: other,
+    });
+    assert.ok(
+      ix.keys.some(k => k.pubkey === WALLET && k.isSigner),
+      'the wallet signs',
+    );
+    assert.ok(
+      ix.keys.some(k => k.pubkey === other && k.isSigner),
+      'the payer signs and pays',
+    );
   }
 });
 
@@ -195,29 +383,80 @@ test('a lottery’s places as runs and a raffle of many NFTs are checked as the 
   // Its own NFT (`raffle`) left out: a raffle names its NFTs or draws them, never both.
   const many = (s, more = {}) => {
     delete s.lotteries[0].raffle;
-    return Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'raffled' }, times: 3 }], nfts }, more);
+    return Object.assign(
+      s.lotteries[0],
+      { places: [{ percent: 0, prize: { gives: 'raffled' }, times: 3 }], nfts },
+      more,
+    );
   };
-  const ok = edit(raffle, (s) => many(s));
-  assert.ok(!ok.refused.some((r) => r.startsWith('E-LOTTERY')), ok.refused.join());
-  assert.ok(edit(raffle, (s) => many(s, { nfts: nfts.slice(0, 2) })).refused.includes('E-LOTTERY economy.lotteries.art.nfts'), 'fewer NFTs than raffled places');
-  assert.ok(edit(raffle, (s) => many(s, { every: '1d' })).refused.includes('E-LOTTERY economy.lotteries.art.every'), 'a raffle draws once');
-  const runs = edit(raffle, (s) => Object.assign(s.lotteries[0], { places: [{ percent: 1, times: 101 }] }));
-  assert.ok(runs.refused.includes('E-LOTTERY economy.lotteries.art.places'), 'a run of 101 places at 1% is more than the pot');
-  assert.ok(edit(raffle, (s) => Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'roll', box: 'x' }, times: 2 }] })).refused.includes('E-LOTTERY economy.lotteries.art.places[1].times'), 'a roll is one place’s (after the raffle’s own NFT)');
+  const ok = edit(raffle, s => many(s));
+  assert.ok(!ok.refused.some(r => r.startsWith('E-LOTTERY')), ok.refused.join());
+  assert.ok(
+    edit(raffle, s => many(s, { nfts: nfts.slice(0, 2) })).refused.includes('E-LOTTERY economy.lotteries.art.nfts'),
+    'fewer NFTs than raffled places',
+  );
+  assert.ok(
+    edit(raffle, s => many(s, { every: '1d' })).refused.includes('E-LOTTERY economy.lotteries.art.every'),
+    'a raffle draws once',
+  );
+  const runs = edit(raffle, s => Object.assign(s.lotteries[0], { places: [{ percent: 1, times: 101 }] }));
+  assert.ok(
+    runs.refused.includes('E-LOTTERY economy.lotteries.art.places'),
+    'a run of 101 places at 1% is more than the pot',
+  );
+  assert.ok(
+    edit(raffle, s =>
+      Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'roll', box: 'x' }, times: 2 }] }),
+    ).refused.includes('E-LOTTERY economy.lotteries.art.places[1].times'),
+    'a roll is one place’s (after the raffle’s own NFT)',
+  );
 });
 
 test('a run of places whose token prize in all passes a u64 is refused (BadLottery)', () => {
   const arena = example('coin-flip-arena');
-  const run = (amount) => edit(arena, (s) => Object.assign(s.lotteries[0], { places: [50, { percent: 0, prize: { gives: 'tokens', from: 'mint', currency: 'arena', amount }, times: 2 }] })).refused;
-  assert.ok(run(10_000_000_000_000).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'), 'ten trillion tokens of 6 decimals, twice');
+  const run = amount =>
+    edit(arena, s =>
+      Object.assign(s.lotteries[0], {
+        places: [50, { percent: 0, prize: { gives: 'tokens', from: 'mint', currency: 'arena', amount }, times: 2 }],
+      }),
+    ).refused;
+  assert.ok(
+    run(10_000_000_000_000).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'),
+    'ten trillion tokens of 6 decimals, twice',
+  );
   assert.ok(!run(1).includes('E-LOTTERY economy.lotteries.weekly.places[1].times'));
 });
 
 test('one pull pays all of an entry’s places in a run; it closes the round only when they are the last parts owed', () => {
-  const r = round({ terms: { returns: false, mint: WALLET, ticket_mint: '11111111111111111111111111111111', shares: [], places: [{ bps: 20, prize: null, times: 400 }] }, sold: 400n, pot_total: 1_000_000n, pot_sent: 800_000n, pot_arrived: 800_000n, paid: new Uint8Array(100), entries: [{ buyer: WALLET, start: 0n, end: 400n, paid: 0n, amount: 400n, nft: '11111111111111111111111111111111' }] });
+  const r = round({
+    terms: {
+      returns: false,
+      mint: WALLET,
+      ticket_mint: '11111111111111111111111111111111',
+      shares: [],
+      places: [{ bps: 20, prize: null, times: 400 }],
+    },
+    sold: 400n,
+    pot_total: 1_000_000n,
+    pot_sent: 800_000n,
+    pot_arrived: 800_000n,
+    paid: new Uint8Array(100),
+    entries: [{ buyer: WALLET, start: 0n, end: 400n, paid: 0n, amount: 400n, nft: '11111111111111111111111111111111' }],
+  });
   assert.equal(loot.placesPulled(r, 0, 0, false), 400);
   const opener = pda.platform();
-  const pull = (owed) => loot.pullIx({ payer: WALLET, project: WALLET, roundAddress: WALLET, round: { ...r, owed, accounts: [], opener }, entry: 0, part: { Pot: [0] }, projectState: { treasury: WALLET } }).keys.map((k) => k.pubkey);
+  const pull = owed =>
+    loot
+      .pullIx({
+        payer: WALLET,
+        project: WALLET,
+        roundAddress: WALLET,
+        round: { ...r, owed, accounts: [], opener },
+        entry: 0,
+        part: { Pot: [0] },
+        projectState: { treasury: WALLET },
+      })
+      .keys.map(k => k.pubkey);
   assert.ok(pull(400).includes(opener), 'the last 400 owed: it closes the round, naming its opener');
   assert.ok(!pull(401).includes(opener), 'one more owed: a later pull closes it');
 });
@@ -242,47 +481,99 @@ test('a bid of NFTs holds at most three: past a high bid of three, nothing tops 
 
 test('a box whose open’s order would pass 10,240 bytes is refused (BadEntries)', () => {
   const arena = example('coin-flip-arena');
-  const box = arena.boxes.find((b) => (b.outcomes ?? []).length);
+  const box = arena.boxes.find(b => (b.outcomes ?? []).length);
   const spec = structuredClone(arena);
-  Object.assign(spec.boxes.find((b) => b.key === box.key), { slots: [{ count: 300 }] });
+  Object.assign(
+    spec.boxes.find(b => b.key === box.key),
+    { slots: [{ count: 300 }] },
+  );
   const r = check(spec, { now: NOW });
-  assert.ok(r.refusals.some((x) => x.where === `economy.boxes.${box.key}.slots` && /order would be/.test(x.message)), r.refusals.map((x) => x.message).join('\n'));
+  assert.ok(
+    r.refusals.some(x => x.where === `economy.boxes.${box.key}.slots` && /order would be/.test(x.message)),
+    r.refusals.map(x => x.message).join('\n'),
+  );
   assert.equal(loot.MAX_ORDER_BYTES, 10_240);
 });
 
 test('a compressed prize of a collection without Bubblegum’s plugin mints nothing: the next one’s Sheet takes its place', () => {
   const [plain, plugged] = [pda.platform(), pda.identity()];
   const tree = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
-  const order = { project: WALLET, player: WALLET, won: [{ Compressed: { item: 1, serial: 1, drawn: 0 } }, { Compressed: { item: 2, serial: 1, drawn: 0 } }] };
+  const order = {
+    project: WALLET,
+    player: WALLET,
+    won: [{ Compressed: { item: 1, serial: 1, drawn: 0 } }, { Compressed: { item: 2, serial: 1, drawn: 0 } }],
+  };
   const items = { 1: { collection: plain, traits: [] }, 2: { collection: plugged, traits: [] } };
-  const sheets = (unminted) => loot.wonAccounts({ orderAddress: WALLET, order, items, tree, treeMinted: 5n, unminted }).filter((m) => m.isWritable).map((m) => m.pubkey);
-  assert.ok(sheets([]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))), 'both minted: the second is the tree’s 7th');
-  assert.ok(sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 5n))), 'the first skipped: the second is the 6th');
+  const sheets = unminted =>
+    loot
+      .wonAccounts({ orderAddress: WALLET, order, items, tree, treeMinted: 5n, unminted })
+      .filter(m => m.isWritable)
+      .map(m => m.pubkey);
+  assert.ok(
+    sheets([]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))),
+    'both minted: the second is the tree’s 7th',
+  );
+  assert.ok(
+    sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 5n))),
+    'the first skipped: the second is the 6th',
+  );
   assert.ok(!sheets([plain]).includes(pda.sheet(WALLET, pda.compressedAsset(tree, 6n))));
 });
 
 test('a prize a roll can’t move (a mint with confidential transfers) is warned of as out of stock; sold in one step it is not', () => {
   const arena = example('coin-flip-arena');
   const spec = structuredClone(arena);
-  spec.tokens.push({ key: 'veil', source: 'game', symbol: 'VEIL', decimals: 0, powers: { confidentialTransfers: true } });
-  spec.boxes.push({ key: 'veiled', name: 'Veiled pack', price: 0.01, slots: [{ count: 2 }], outcomes: [{ gives: 'tokens', currency: 'veil', amount: 1 }] });
+  spec.tokens.push({
+    key: 'veil',
+    source: 'game',
+    symbol: 'VEIL',
+    decimals: 0,
+    powers: { confidentialTransfers: true },
+  });
+  spec.boxes.push({
+    key: 'veiled',
+    name: 'Veiled pack',
+    price: 0.01,
+    slots: [{ count: 2 }],
+    outcomes: [{ gives: 'tokens', currency: 'veil', amount: 1 }],
+  });
   // A fixed pack is bought in one step, its prize given in the purchase: nothing to warn of.
-  const stock = (r) => r.warnings.some((x) => x.code === 'W-OUT-OF-STOCK' && x.where === 'economy.boxes.veiled.outcomes[0]');
+  const stock = r =>
+    r.warnings.some(x => x.code === 'W-OUT-OF-STOCK' && x.where === 'economy.boxes.veiled.outcomes[0]');
   assert.ok(!stock(check(spec, { now: NOW })));
   // Given as a prize's roll, it is rolled: its one outcome is out of stock, and every roll of it refused (SoldOut).
   spec.grants = [{ key: 'gift', name: 'Gift', prize: { gives: 'roll', box: 'veiled' }, limits: { perWallet: 1 } }];
   spec.boxes.at(-1).active = false;
   const r = check(spec, { now: NOW });
-  assert.ok(stock(r) && r.warnings.some((x) => /SoldOut/.test(x.message)), r.warnings.map((x) => `${x.where} ${x.message}`).join('\n'));
+  assert.ok(
+    stock(r) && r.warnings.some(x => /SoldOut/.test(x.message)),
+    r.warnings.map(x => `${x.where} ${x.message}`).join('\n'),
+  );
 });
 
 test('a settle’s first call splits the payment with its shares; upto 0 does only that; later calls carry no shares', () => {
-  const k = (n) => pda.stash(WALLET, n);
-  const shares = [{ to: { Wallet: [k(1)] }, bps: 500 }, { to: { Wallet: [k(2)] }, bps: 500 }];
-  const order = { project: WALLET, player: WALLET, mint: k(3), won: [{ Tokens: { mint: k(4), amount: 1n } }], shares, subject: null, held: false, fate: null, settled: 0, drew: 1, undrawn: 0 };
-  const build = (o, upto) => loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
-  const has = (ix, a) => ix.keys.some((m) => m.pubkey === a);
-  const upto = (ix) => [...ix.data.subarray(1, 5)];
+  const k = n => pda.stash(WALLET, n);
+  const shares = [
+    { to: { Wallet: [k(1)] }, bps: 500 },
+    { to: { Wallet: [k(2)] }, bps: 500 },
+  ];
+  const order = {
+    project: WALLET,
+    player: WALLET,
+    mint: k(3),
+    won: [{ Tokens: { mint: k(4), amount: 1n } }],
+    shares,
+    subject: null,
+    held: false,
+    fate: null,
+    settled: 0,
+    drew: 1,
+    undrawn: 0,
+  };
+  const build = (o, upto) =>
+    loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
+  const has = (ix, a) => ix.keys.some(m => m.pubkey === a);
+  const upto = ix => [...ix.data.subarray(1, 5)];
   const split = build(order, 0);
   assert.ok(has(split, k(1)) && has(split, k(2)), 'the split carries the shares');
   assert.ok(!has(split, k(4)), 'and no prize');
@@ -295,10 +586,23 @@ test('a settle’s first call splits the payment with its shares; upto 0 does on
 });
 
 test('a settle’s last part names the player’s account whenever part of the payment comes back', () => {
-  const k = (n) => pda.stash(WALLET, n);
-  const order = { project: WALLET, player: k(7), mint: k(3), won: [], shares: [], subject: null, held: false, fate: null, settled: 0, drew: 0, undrawn: 0 };
-  const build = (o, upto) => loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
-  const names = (ix) => ix.keys.some((m) => m.pubkey === loot.ata(k(7), k(3)));
+  const k = n => pda.stash(WALLET, n);
+  const order = {
+    project: WALLET,
+    player: k(7),
+    mint: k(3),
+    won: [],
+    shares: [],
+    subject: null,
+    held: false,
+    fate: null,
+    settled: 0,
+    drew: 0,
+    undrawn: 0,
+  };
+  const build = (o, upto) =>
+    loot.settleIx({ signer: WALLET, orderAddress: k(5), order: o, projectState: { treasury: k(6) }, upto });
+  const names = ix => ix.keys.some(m => m.pubkey === loot.ata(k(7), k(3)));
   assert.ok(names(build({ ...order, back: 100n })), 'a draw left part given: every draw made, the price back');
   assert.ok(!names(build({ ...order, back: 0n })), 'nothing back');
   assert.ok(!names(build({ ...order, back: 100n }, 0)), 'only the last part gives it back');
@@ -307,30 +611,69 @@ test('a settle’s last part names the player’s account whenever part of the p
 test('go-live writes a box before a box that names it to roll, which passes that box alone', () => {
   const arena = example('coin-flip-arena');
   const spec = structuredClone(arena);
-  const inner = spec.boxes.find((b) => (b.outcomes ?? []).length);
+  const inner = spec.boxes.find(b => (b.outcomes ?? []).length);
   // A box that gives a roll of the arena's box (one outcome: only a box sold in one step gives a roll), listed before it.
-  spec.boxes.unshift({ key: 'mystery', name: 'Mystery', price: 0.01, outcomes: [{ gives: 'roll', box: inner.key, chance: 100 }] });
+  spec.boxes.unshift({
+    key: 'mystery',
+    name: 'Mystery',
+    price: 0.01,
+    outcomes: [{ gives: 'roll', box: inner.key, chance: 100 }],
+  });
   const p = plan(spec, { now: NOW });
   assert.ok(p.ok, JSON.stringify(p.refusals));
-  const ids = p.steps.map((s) => s.id);
+  const ids = p.steps.map(s => s.id);
   assert.ok(ids.indexOf(`box:${inner.key}:LootBox`) < ids.indexOf('box:mystery:LootBox'), ids.join(' '));
   // Its write passes the box it names after its own accounts, one account, and nothing of what that box gives.
-  const write = (id) => p.transactions.flatMap((x) => x.steps.map((st, i) => [st.id, x.built[i]])).find(([at]) => at === id)[1].find((ix) => loot.instructionOf(ix.data)?.name === 'upsert');
-  assert.equal(write('box:mystery:LootBox').keys.length - write(`box:${inner.key}:LootBox`).keys.length, 1, 'the naming write is one account longer: the box it names');
+  const write = id =>
+    p.transactions
+      .flatMap(x => x.steps.map((st, i) => [st.id, x.built[i]]))
+      .find(([at]) => at === id)[1]
+      .find(ix => loot.instructionOf(ix.data)?.name === 'upsert');
+  assert.equal(
+    write('box:mystery:LootBox').keys.length - write(`box:${inner.key}:LootBox`).keys.length,
+    1,
+    'the naming write is one account longer: the box it names',
+  );
   // A roll a box gives is a box that doesn't roll: refused in one that does (BadEntries).
-  spec.boxes[0].outcomes = [{ gives: 'roll', box: inner.key, chance: 50 }, { gives: 'nothing', chance: 50 }];
-  assert.ok(check(spec, { now: NOW }).refusals.some((x) => x.where === 'economy.boxes.mystery.outcomes' && /BadEntries/.test(x.message)));
+  spec.boxes[0].outcomes = [
+    { gives: 'roll', box: inner.key, chance: 50 },
+    { gives: 'nothing', chance: 50 },
+  ];
+  assert.ok(
+    check(spec, { now: NOW }).refusals.some(
+      x => x.where === 'economy.boxes.mystery.outcomes' && /BadEntries/.test(x.message),
+    ),
+  );
 });
 
 test('a compressed NFT’s record closes in the transaction that proves it, its prover signing; once a record', () => {
-  const compressed = { id: WALLET, tree: pda.platform(), proof: [pda.identity()], owner: WALLET, delegate: WALLET, collection: null, root: new Uint8Array(32), dataHash: new Uint8Array(32), creatorHash: new Uint8Array(32), flags: 0, nonce: 0n };
+  const compressed = {
+    id: WALLET,
+    tree: pda.platform(),
+    proof: [pda.identity()],
+    owner: WALLET,
+    delegate: WALLET,
+    collection: null,
+    root: new Uint8Array(32),
+    dataHash: new Uint8Array(32),
+    creatorHash: new Uint8Array(32),
+    flags: 0,
+    nonce: 0n,
+  };
   const prove = loot.proveLeafIx({ signer: pda.identity(), compressed });
   const other = loot.setSuspendedIx({ admin: WALLET, project: pda.platform(), suspended: false });
   const out = loot.withLeafCloses([prove, other, prove]);
   assert.equal(out.length, 4, 'one close for the record, after the rest');
   const close = out[3];
   assert.equal(loot.instructionOf(close.data).name, 'close_leaf');
-  assert.deepEqual(close.keys.slice(0, 3).map((k) => [k.pubkey, k.isSigner]), [[pda.leaf(WALLET), false], [pda.platform(), false], [pda.identity(), true]]);
+  assert.deepEqual(
+    close.keys.slice(0, 3).map(k => [k.pubkey, k.isSigner]),
+    [
+      [pda.leaf(WALLET), false],
+      [pda.platform(), false],
+      [pda.identity(), true],
+    ],
+  );
   assert.equal(loot.withLeafCloses(out).length, 4, 'a record closed already is left alone');
   assert.equal(loot.withLeafCloses([other]).length, 1);
 });
@@ -341,24 +684,35 @@ test('a lottery holds SOL for its rounds’ rent (`roundRent`): one step sends i
   const raffle = example('nft-raffle');
   const off = structuredClone(raffle);
   off.lotteries[0].roundRent = 0;
-  assert.ok(!plan(off, { now: NOW }).steps.some((s) => s.id === 'rent:lottery:art'), '0 turns it off');
+  assert.ok(!plan(off, { now: NOW }).steps.some(s => s.id === 'rent:lottery:art'), '0 turns it off');
   const spec = structuredClone(raffle);
   spec.lotteries[0].roundRent = 0.05;
   assert.ok(codes(spec).ok);
   const p = plan(spec, { now: NOW });
-  const step = p.steps.find((s) => s.id === 'rent:lottery:art');
-  assert.ok(step, p.steps.map((s) => s.id).join());
+  const step = p.steps.find(s => s.id === 'rent:lottery:art');
+  assert.ok(step, p.steps.map(s => s.id).join());
   const [before, after] = [cost(off, { now: NOW }), cost(spec, { now: NOW })];
-  assert.ok(Math.abs(Number(after.setup.totalSol) - Number(before.setup.totalSol) - 0.05) < 1e-6, `${before.setup.totalSol} → ${after.setup.totalSol}`);
+  assert.ok(
+    Math.abs(Number(after.setup.totalSol) - Number(before.setup.totalSol) - 0.05) < 1e-6,
+    `${before.setup.totalSol} → ${after.setup.totalSol}`,
+  );
   // On by default: sized for the rounds at once and a round's purchases (`expect`), counted in the setup's SOL.
   const m = model(raffle, { now: NOW });
   const byDefault = roundRentOf(m.lotteries[0], m);
-  assert.ok(byDefault > 0n && plan(raffle, { now: NOW }).steps.some((s) => s.id === 'rent:lottery:art'));
-  assert.ok(Math.abs(Number(cost(raffle, { now: NOW }).setup.totalSol) - Number(before.setup.totalSol) - Number(byDefault) / 1e9) < 1e-6);
+  assert.ok(byDefault > 0n && plan(raffle, { now: NOW }).steps.some(s => s.id === 'rent:lottery:art'));
+  assert.ok(
+    Math.abs(
+      Number(cost(raffle, { now: NOW }).setup.totalSol) - Number(before.setup.totalSol) - Number(byDefault) / 1e9,
+    ) < 1e-6,
+  );
   const busier = structuredClone(raffle);
   busier.lotteries[0].expect = { rounds: 1, entries: 1000 };
   const mb = model(busier, { now: NOW });
   assert.ok(roundRentOf(mb.lotteries[0], mb) > byDefault, 'more purchases a round, more SOL');
-  assert.ok(edit(raffle, (s) => (s.lotteries[0].expect = { rounds: 0 })).refused.some((r) => r.startsWith('E-SCHEMA')));
-  assert.ok(edit(raffle, (s) => (s.lotteries[0].roundRent = '0.0000000001')).refused.includes('E-AMOUNT economy.lotteries.art.roundRent'));
+  assert.ok(edit(raffle, s => (s.lotteries[0].expect = { rounds: 0 })).refused.some(r => r.startsWith('E-SCHEMA')));
+  assert.ok(
+    edit(raffle, s => (s.lotteries[0].roundRent = '0.0000000001')).refused.includes(
+      'E-AMOUNT economy.lotteries.art.roundRent',
+    ),
+  );
 });

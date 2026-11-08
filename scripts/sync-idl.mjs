@@ -26,7 +26,9 @@ if (process.argv.includes('--check')) {
     console.error('js/client/idl is out of date: run `node scripts/sync-idl.mjs` after `anchor build`.');
     process.exit(1);
   }
-  console.log(`js/client/idl matches the build (loot ${idl.metadata.version}, ${idl.instructions.length} instructions).`);
+  console.log(
+    `js/client/idl matches the build (loot ${idl.metadata.version}, ${idl.instructions.length} instructions).`,
+  );
 } else {
   await writeFile(json, text);
   await writeFile(mjs, module);

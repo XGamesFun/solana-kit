@@ -7,10 +7,10 @@ const decoder = new TextDecoder();
 const BASE64_CHUNK = 0x8000;
 
 /** UTF-8 bytes of a string. */
-export const utf8 = (text) => encoder.encode(text);
+export const utf8 = text => encoder.encode(text);
 
 /** A string from UTF-8 bytes. */
-export const fromUtf8 = (bytes) => decoder.decode(bytes);
+export const fromUtf8 = bytes => decoder.decode(bytes);
 
 /** The parts, one after another. */
 export function concat(...parts) {
@@ -39,17 +39,18 @@ export function equalBytes(a, b) {
 
 export function toBase64(bytes) {
   let text = '';
-  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) text += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK));
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK)
+    text += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK));
   return btoa(text);
 }
 
 /** Standard base64 to bytes; throws on anything that is not base64. */
 export function fromBase64(text) {
   if (typeof text !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw new Error('Not base64');
-  return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+  return Uint8Array.from(atob(text), c => c.charCodeAt(0));
 }
 
-export const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+export const toHex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 
 export function fromHex(text) {
   if (typeof text !== 'string' || text.length % 2 || /[^0-9a-f]/i.test(text)) throw new Error('Not hex');
@@ -81,7 +82,8 @@ export function uintLE(value, size) {
 export function intLE(value, size) {
   const v = toBigInt(value);
   const bits = BigInt(size * 8);
-  if (v < -(1n << (bits - 1n)) || v >= 1n << (bits - 1n)) throw new RangeError(`${value} does not fit in a signed ${size}-byte integer`);
+  if (v < -(1n << (bits - 1n)) || v >= 1n << (bits - 1n))
+    throw new RangeError(`${value} does not fit in a signed ${size}-byte integer`);
   return uintLE(v < 0n ? v + (1n << bits) : v, size);
 }
 
@@ -90,7 +92,8 @@ export function intLE(value, size) {
  * lost its low digits, so it is refused rather than turned into some other value.
  */
 export function toBigInt(value) {
-  if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new RangeError(`${value} is not a safe integer: pass it as a bigint`);
+  if (typeof value === 'number' && !Number.isSafeInteger(value))
+    throw new RangeError(`${value} is not a safe integer: pass it as a bigint`);
   return BigInt(value);
 }
 
@@ -138,4 +141,4 @@ export function readCompactU16(bytes, offset) {
 }
 
 /** Random bytes from the platform's CSPRNG (WebCrypto in browsers and Node 24). */
-export const randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+export const randomBytes = n => globalThis.crypto.getRandomValues(new Uint8Array(n));

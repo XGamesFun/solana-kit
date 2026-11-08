@@ -77,11 +77,7 @@
         },
         {
           "count": 1,
-          "from": [
-            1,
-            2,
-            3
-          ],
+          "from": [1, 2, 3],
           "share": 30
         }
       ]
@@ -92,11 +88,7 @@
       "key": "league",
       "name": "Weekly League",
       "price": 0.001,
-      "places": [
-        50,
-        30,
-        20
-      ],
+      "places": [50, 30, 20],
       "every": "7d",
       "firstDraw": "publish+7d",
       "gate": {

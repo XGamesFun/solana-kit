@@ -8,14 +8,17 @@ import { auctionSeller, plan, setupContext } from './plan.mjs';
 
 /** A key for each fresh account the plan creates. Their secret halves are made by whoever signs (the page). */
 export function freshAddresses(names, random = randomBytes) {
-  return Object.fromEntries(names.map((n) => [n, encodeBase58(random(32))]));
+  return Object.fromEntries(names.map(n => [n, encodeBase58(random(32))]));
 }
 
 /**
  * The transactions that put `economy` live for `owner`, with `keys` the addresses of the fresh accounts (each signs
  * the transaction that creates it). `live`: what is already live (a change publishes only what differs).
  */
-export function prepare(economy, { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null }) {
+export function prepare(
+  economy,
+  { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null },
+) {
   const m = model(economy, { now });
   // `slot`: a recent slot (in the slot hashes now), which the project's standing lookup table is made at.
   const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent }), slot };
@@ -24,12 +27,19 @@ export function prepare(economy, { owner, keys, live = null, now = Math.floor(Da
   // Going live always makes the project's standing lookup table (the plan's "table" step). Without a recent slot it
   // can't be made: refused when a part's widest transaction needs it (`wideParts`), so no player is left with a
   // transaction only a table carries in one approval.
-  const wide = p.steps.some((s) => s.id === 'table') && slot == null ? wideParts(m, p.warnings) : [];
+  const wide = p.steps.some(s => s.id === 'table') && slot == null ? wideParts(m, p.warnings) : [];
   if (wide.length)
     return {
       ok: false,
       warnings: p.warnings,
-      refusals: [{ code: 'E-NO-TABLE', where: wide[0].where, message: `Going live makes the project’s standing lookup table, and no recent slot was read to make it at: ${wide.map((x) => x.why).join('; ')}. Without the table each of those is a wallet’s own table first (more approvals), or can’t be sent at all by a wallet that sends legacy transactions only.`, fix: 'Try again once the cluster answers (the approval page reads a recent slot from its slot hashes).' }],
+      refusals: [
+        {
+          code: 'E-NO-TABLE',
+          where: wide[0].where,
+          message: `Going live makes the project’s standing lookup table, and no recent slot was read to make it at: ${wide.map(x => x.why).join('; ')}. Without the table each of those is a wallet’s own table first (more approvals), or can’t be sent at all by a wallet that sends legacy transactions only.`,
+          fix: 'Try again once the cluster answers (the approval page reads a recent slot from its slot hashes).',
+        },
+      ],
     };
   return { ...p, ctx };
 }
@@ -41,9 +51,20 @@ export function prepare(economy, { owner, keys, live = null, now = Math.floor(Da
  * collection's NFTs (a pNFT's stake and exit carry its token record and rule set). [{ where, why }]
  */
 export function wideParts(m, warnings = []) {
-  const out = warnings.filter((w) => w.code === 'W-TX-V0' || w.code === 'W-SETTLE-V0').map((w) => ({ where: w.where, why: `${w.where} (${w.code === 'W-TX-V0' ? 'its open, buy or craft' : 'its settle'} passes a legacy transaction)` }));
-  for (const a of m.auctions) if (a.bidNfts) out.push({ where: `economy.auctions.${a.key}`, why: `the auction “${a.name}” (its bids are NFTs)` });
-  for (const f of m.farms) if (f.stakes === 'collectibles' && listOf(f.gate).some((g) => g?.collection)) out.push({ where: `economy.farms.${f.key}`, why: `the farm “${f.name}” (it stakes another collection’s NFTs, a pNFT’s stake and exit pass a legacy transaction)` });
+  const out = warnings
+    .filter(w => w.code === 'W-TX-V0' || w.code === 'W-SETTLE-V0')
+    .map(w => ({
+      where: w.where,
+      why: `${w.where} (${w.code === 'W-TX-V0' ? 'its open, buy or craft' : 'its settle'} passes a legacy transaction)`,
+    }));
+  for (const a of m.auctions)
+    if (a.bidNfts) out.push({ where: `economy.auctions.${a.key}`, why: `the auction “${a.name}” (its bids are NFTs)` });
+  for (const f of m.farms)
+    if (f.stakes === 'collectibles' && listOf(f.gate).some(g => g?.collection))
+      out.push({
+        where: `economy.farms.${f.key}`,
+        why: `the farm “${f.name}” (it stakes another collection’s NFTs, a pNFT’s stake and exit pass a legacy transaction)`,
+      });
   return out;
 }
 
@@ -53,20 +74,25 @@ export function wideParts(m, warnings = []) {
  */
 export function recordLanded(economy, { ctx, signatures = [], at = new Date().toISOString(), now }) {
   const m = model(economy, { now });
-  const ids = (list, field = 'id') => list.map((x) => x[field]);
-  const withIds = (key, list, field = 'id') => (economy[key] ?? []).map((part, i) => ({ ...part, [field]: ids(list, field)[i] }));
+  const ids = (list, field = 'id') => list.map(x => x[field]);
+  const withIds = (key, list, field = 'id') =>
+    (economy[key] ?? []).map((part, i) => ({ ...part, [field]: ids(list, field)[i] }));
   const out = { ...economy };
   out.items = (economy.items ?? []).map((it, i) => {
-    const shop = m.shop.find((b) => b.shopOf === it.key);
+    const shop = m.shop.find(b => b.shopOf === it.key);
     return { ...it, id: m.items[i].id, ...(shop ? { shopBox: shop.id } : {}) };
   });
   out.pools = withIds('pools', m.pools, 'index');
   out.boxes = withIds('boxes', m.boxes);
-  for (const k of ['stashes', 'tables', 'recipes', 'schedules', 'lotteries', 'farms', 'grants', 'auctions']) if (economy[k]) out[k] = withIds(k, m[k]);
+  for (const k of ['stashes', 'tables', 'recipes', 'schedules', 'lotteries', 'farms', 'grants', 'auctions'])
+    if (economy[k]) out[k] = withIds(k, m[k]);
   // An auction's address names its seller: the page finds it by both.
-  if (economy.auctions) out.auctions = out.auctions.map((a) => ({ ...a, seller: a.seller ?? auctionSeller(a, ctx) }));
+  if (economy.auctions) out.auctions = out.auctions.map(a => ({ ...a, seller: a.seller ?? auctionSeller(a, ctx) }));
   for (const k of ['items', 'pools', 'boxes']) if (!economy[k]) delete out[k];
-  const mints = { ...(economy.live?.mints ?? {}), ...Object.fromEntries([...m.tokens.values()].filter((t) => t.source === 'game').map((t) => [t.key, ctx.mints[t.key]])) };
+  const mints = {
+    ...(economy.live?.mints ?? {}),
+    ...Object.fromEntries([...m.tokens.values()].filter(t => t.source === 'game').map(t => [t.key, ctx.mints[t.key]])),
+  };
   const { live: _, previous: __, ...published } = out;
   out.live = {
     program: LOOT_PROGRAM,
@@ -80,12 +106,23 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
     ...(Object.keys(mints).length ? { mints } : {}),
     at,
     published,
-    transactions: [...(economy.live?.transactions ?? []), ...signatures.map((signature) => ({ signature }))].slice(-60),
+    transactions: [...(economy.live?.transactions ?? []), ...signatures.map(signature => ({ signature }))].slice(-60),
   };
   return out;
 }
 
-const PART_LISTS = { items: 'item', pools: 'pool', stashes: 'stash', boxes: 'box', recipes: 'recipe', schedules: 'schedule', lotteries: 'lottery', farms: 'farm', grants: 'grant', auctions: 'auction' };
+const PART_LISTS = {
+  items: 'item',
+  pools: 'pool',
+  stashes: 'stash',
+  boxes: 'box',
+  recipes: 'recipe',
+  schedules: 'schedule',
+  lotteries: 'lottery',
+  farms: 'farm',
+  grants: 'grant',
+  auctions: 'auction',
+};
 /** Parts that never change once live: a farm and an auction are never edited, a pool's token is fixed. */
 const FIXED = new Set(['farm', 'pool', 'auction']);
 
@@ -102,7 +139,7 @@ export function changedParts(economy) {
   const removed = [];
   const strip = ({ id, index, shopBox, seller, ...rest }) => JSON.stringify(rest);
   for (const [list, kind] of Object.entries(PART_LISTS)) {
-    const before = new Map((published[list] ?? []).map((p) => [p.key, p]));
+    const before = new Map((published[list] ?? []).map(p => [p.key, p]));
     for (const part of economy[list] ?? []) {
       const was = before.get(part.key);
       if (!was) {
@@ -117,14 +154,18 @@ export function changedParts(economy) {
     }
     for (const key of before.keys()) removed.push(`${kind}:${key}`);
   }
-  for (const t of economy.tokens ?? []) if (!(published.tokens ?? []).some((x) => x.key === t.key)) only.add(`token:${t.key}`);
+  for (const t of economy.tokens ?? [])
+    if (!(published.tokens ?? []).some(x => x.key === t.key)) only.add(`token:${t.key}`);
   // The first compressed prize opens the project's tree.
   if (!economy.live.tree && compressedTree(model(economy))) only.add('tree');
   // A traits root set again replaces the last.
-  for (const t of economy.traits ?? []) if (!(published.traits ?? []).some((x) => x.collection === t.collection && x.root === t.root)) only.add(`traits:${t.collection}`);
+  for (const t of economy.traits ?? [])
+    if (!(published.traits ?? []).some(x => x.collection === t.collection && x.root === t.root))
+      only.add(`traits:${t.collection}`);
   const settings = [];
   if ((published.keys?.authority ?? 'owner') !== (economy.keys?.authority ?? 'owner')) settings.push('its authority');
   if ((published.treasury ?? null) !== (economy.treasury ?? null)) settings.push('its treasury');
-  if (JSON.stringify(published.collections ?? []) !== JSON.stringify(economy.collections ?? [])) settings.push('the collections it takes');
+  if (JSON.stringify(published.collections ?? []) !== JSON.stringify(economy.collections ?? []))
+    settings.push('the collections it takes');
   return { only, fixed, removed, settings };
 }

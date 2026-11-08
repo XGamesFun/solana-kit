@@ -16,8 +16,19 @@ if (/mainnet/i.test(RPC)) throw new Error('Live evals run on devnet only.');
 const rpc = rpcClient(RPC);
 const to = funder().address;
 
-const left = process.argv.length > 2 ? null : readdirSync(os.tmpdir()).filter((d) => d.startsWith('xsolana-eval-keys-')).map((d) => path.join(os.tmpdir(), d));
-const files = left ? left.flatMap((d) => readdirSync(d).filter((f) => f.endsWith('.key.json')).map((f) => path.join(d, f))) : process.argv.slice(2);
+const left =
+  process.argv.length > 2
+    ? null
+    : readdirSync(os.tmpdir())
+        .filter(d => d.startsWith('xsolana-eval-keys-'))
+        .map(d => path.join(os.tmpdir(), d));
+const files = left
+  ? left.flatMap(d =>
+      readdirSync(d)
+        .filter(f => f.endsWith('.key.json'))
+        .map(f => path.join(d, f)),
+    )
+  : process.argv.slice(2);
 for (const file of files) {
   const who = keypairFromSecret(Uint8Array.from(JSON.parse(readFileSync(file, 'utf8'))));
   const had = await rpc.balance(who.address);
@@ -26,4 +37,6 @@ for (const file of files) {
 }
 // A folder goes only once its wallets are empty: a sweep that failed above has stopped the script before this.
 for (const d of left ?? []) rmSync(d, { recursive: true, force: true });
-console.log(`${files.length} wallet${files.length === 1 ? '' : 's'}; the funder ${to} holds ${Number(await rpc.balance(to)) / 1e9} SOL`);
+console.log(
+  `${files.length} wallet${files.length === 1 ? '' : 's'}; the funder ${to} holds ${Number(await rpc.balance(to)) / 1e9} SOL`,
+);

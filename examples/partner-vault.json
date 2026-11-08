@@ -18,7 +18,11 @@
       "key": "vault",
       "name": "Partner vault",
       "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw",
-      "nfts": ["4vd1uA3jK28MwhufZnbtQpyJkVMXEVpKHzDRPUH9DT3v", "E53iEjsuDnz1jP6MJbnhecvTBRWCs5MsmjusfhYNDjD4", "B53EzSitDoQ4usvMN4nKhQRUVb7BhNh9PZPwgyQobpsV"],
+      "nfts": [
+        "4vd1uA3jK28MwhufZnbtQpyJkVMXEVpKHzDRPUH9DT3v",
+        "E53iEjsuDnz1jP6MJbnhecvTBRWCs5MsmjusfhYNDjD4",
+        "B53EzSitDoQ4usvMN4nKhQRUVb7BhNh9PZPwgyQobpsV"
+      ],
       "about": "Given by the paid crate and the mystery lot."
     },
     {
@@ -31,7 +35,12 @@
     {
       "key": "rare",
       "name": "The rare one",
-      "nfts": [{ "asset": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4", "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw" }],
+      "nfts": [
+        {
+          "asset": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4",
+          "collection": "5q8LtcGwYhYRq5M8dQ79wkeLvo8N993a7aoE6DLDBXaw"
+        }
+      ],
       "about": "The raffle's first prize, named by it and given when its place is paid: kept apart so no roll can take it."
     }
   ],
@@ -81,7 +90,13 @@
       "key": "raffle",
       "name": "Rare NFT raffle",
       "price": 0.01,
-      "places": [{ "percent": 0, "prize": { "gives": "nft", "stash": "rare", "nft": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4" } }, 90],
+      "places": [
+        {
+          "percent": 0,
+          "prize": { "gives": "nft", "stash": "rare", "nft": "BQqnw2mh6xEAhAxC8WrA2uqPg9ShsT13AqriUa9x4ab4" }
+        },
+        90
+      ],
       "firstDraw": "publish+7d"
     }
   ],

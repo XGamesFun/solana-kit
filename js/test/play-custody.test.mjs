@@ -11,12 +11,40 @@ import { newAddress } from '../sim/chain.mjs';
 import { cannotRun, collectible, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
-const str = (s) => concat(uintLE(utf8(s).length, 4), utf8(s));
+const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
 /** A Core collection made by someone else, and one NFT of it for the player. */
 function otherNft(w) {
-  const maker = w.who(), collection = newAddress(w.random), asset = newAddress(w.random);
-  w.chain.send(maker, [{ programId: loot.MPL_CORE_PROGRAM, keys: [meta(collection, true, true), meta(maker, false, false), meta(maker, true, true), meta(SYSTEM_PROGRAM, false, false)], data: concat(Uint8Array.of(21), str('Elsewhere'), str(''), Uint8Array.of(0, 0)) }]);
-  w.chain.send(maker, [{ programId: loot.MPL_CORE_PROGRAM, keys: [meta(asset, true, true), meta(collection, false, true), meta(maker, true, false), meta(maker, true, true), meta(w.player, false, false), meta(loot.MPL_CORE_PROGRAM, false, false), meta(SYSTEM_PROGRAM, false, false), meta(loot.MPL_CORE_PROGRAM, false, false)], data: concat(Uint8Array.of(20, 0), str('Theirs'), str(''), Uint8Array.of(0, 0)) }]);
+  const maker = w.who(),
+    collection = newAddress(w.random),
+    asset = newAddress(w.random);
+  w.chain.send(maker, [
+    {
+      programId: loot.MPL_CORE_PROGRAM,
+      keys: [
+        meta(collection, true, true),
+        meta(maker, false, false),
+        meta(maker, true, true),
+        meta(SYSTEM_PROGRAM, false, false),
+      ],
+      data: concat(Uint8Array.of(21), str('Elsewhere'), str(''), Uint8Array.of(0, 0)),
+    },
+  ]);
+  w.chain.send(maker, [
+    {
+      programId: loot.MPL_CORE_PROGRAM,
+      keys: [
+        meta(asset, true, true),
+        meta(collection, false, true),
+        meta(maker, true, false),
+        meta(maker, true, true),
+        meta(w.player, false, false),
+        meta(loot.MPL_CORE_PROGRAM, false, false),
+        meta(SYSTEM_PROGRAM, false, false),
+        meta(loot.MPL_CORE_PROGRAM, false, false),
+      ],
+      data: concat(Uint8Array.of(20, 0), str('Theirs'), str(''), Uint8Array.of(0, 0)),
+    },
+  ]);
   return { asset, collection };
 }
 function fixture() {
@@ -26,18 +54,58 @@ function fixture() {
   const other = otherNft(w);
   for (const id of [1, 2, 3]) {
     const gates = id === 3 ? [{ of: { Collection: [other.collection] }, key: '', test: 'Any' }] : [];
-    const args = { custody: 'Freeze', tiers: [{ lock: 60, bps: 10_000 }, { lock: 600, bps: 20_000 }], boosts: [], max_boost_bps: 0, gates };
-    w.chain.send(w.creator, [loot.openFarmIx({ owner: w.creator, project: w.project, id, args, rewardsMint: w.mint, stakedMint: id === 2 ? w.mint : null })]);
+    const args = {
+      custody: 'Freeze',
+      tiers: [
+        { lock: 60, bps: 10_000 },
+        { lock: 600, bps: 20_000 },
+      ],
+      boosts: [],
+      max_boost_bps: 0,
+      gates,
+    };
+    w.chain.send(w.creator, [
+      loot.openFarmIx({
+        owner: w.creator,
+        project: w.project,
+        id,
+        args,
+        rewardsMint: w.mint,
+        stakedMint: id === 2 ? w.mint : null,
+      }),
+    ]);
   }
   const calls = { sign: 0, send: 0 };
-  const wallet = { address: w.player, async signTransaction(wire) { calls.sign++; return wire; } };
-  const rpc = { ...w.chain.rpc, async send(wire) { calls.send++; return w.chain.rpc.send(wire); } };
-  const spec = { version: 2, currency: 'coin', tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }], live: { project: w.project, collection: w.collection }, farms: [{ key: 'nfts', id: 1, stakes: 'collectibles' }, { key: 'tokens', id: 2, stakes: 'coin' }, { key: 'club', id: 3, stakes: 'collectibles' }] };
+  const wallet = {
+    address: w.player,
+    async signTransaction(wire) {
+      calls.sign++;
+      return wire;
+    },
+  };
+  const rpc = {
+    ...w.chain.rpc,
+    async send(wire) {
+      calls.send++;
+      return w.chain.rpc.send(wire);
+    },
+  };
+  const spec = {
+    version: 2,
+    currency: 'coin',
+    tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
+    live: { project: w.project, collection: w.collection },
+    farms: [
+      { key: 'nfts', id: 1, stakes: 'collectibles' },
+      { key: 'tokens', id: 2, stakes: 'coin' },
+      { key: 'club', id: 3, stakes: 'collectibles' },
+    ],
+  };
   const app = solanaApp({ spec, rpc, wallet, now: () => w.chain.now() });
   return { w, app, calls, other };
 }
 
-test('a Core NFT of another collection and one of the game\'s each stake with one signature', { skip }, async () => {
+test("a Core NFT of another collection and one of the game's each stake with one signature", { skip }, async () => {
   const { w, app, calls, other } = fixture();
   await app.stakeNft('club', other.asset);
   assert.equal(w.read('Seat', loot.pda.seat(loot.pda.farm(w.project, 3), other.asset)).asset, other.asset);
@@ -48,26 +116,28 @@ test('a Core NFT of another collection and one of the game\'s each stake with on
   assert.equal(w.read('Seat', loot.pda.seat(loot.pda.farm(w.project, 1), native)).asset, native);
 });
 
-for (const kind of ['tokens', 'nfts']) test(`the browser ${kind} exit can forfeit rewards when their vault is frozen`, { skip }, async () => {
-  const { w, app } = fixture();
-  if (kind === 'nfts') w.upsert({ Item: { id: 1, args: collectible('Native') } });
-  const imported = kind === 'nfts' ? { asset: w.make(1, w.player) } : null;
-  // Funded into the farm's rewards vault before the stake: the stake counts it, and the farm releases it over a day.
-  const vault = loot.pda.rewards(loot.pda.farm(w.project, imported ? 1 : 2));
-  w.fund(w.creator, w.mint, 10n);
-  w.payIn(w.creator, w.mint, 10n, [{ to: { Account: [vault] }, bps: 10_000 }]);
-  if (imported) await app.stakeNft('nfts', imported.asset, 0);
-  else await app.stake('tokens', '1', 0);
-  const account = w.chain.get(vault);
-  const data = Uint8Array.from(account.data);
-  data[108] = 2; // SPL token AccountState::Frozen: model an issuer freezing the rewards after admission.
-  w.chain.put(vault, { ...account, data });
-  w.chain.warp(w.chain.now() + 86_401);
-  const exit = (options) => imported ? app.unstakeNft('nfts', imported.asset, options) : app.unstake('tokens', '1', options);
-  const address = loot.pda.seat(loot.pda.farm(w.project, imported ? 1 : 2), imported?.asset ?? w.player);
-  await assert.rejects(exit(), /frozen|0x11|Custom\(17\)/i);
-  assert.ok(w.chain.get(address), 'failed reward credit leaves the stake intact');
-  await exit({ forfeit: true });
-  assert.equal(w.chain.get(address), null);
-  if (!imported) assert.equal(w.balance(w.player), 100_000_000n, 'principal returned despite frozen rewards');
-});
+for (const kind of ['tokens', 'nfts'])
+  test(`the browser ${kind} exit can forfeit rewards when their vault is frozen`, { skip }, async () => {
+    const { w, app } = fixture();
+    if (kind === 'nfts') w.upsert({ Item: { id: 1, args: collectible('Native') } });
+    const imported = kind === 'nfts' ? { asset: w.make(1, w.player) } : null;
+    // Funded into the farm's rewards vault before the stake: the stake counts it, and the farm releases it over a day.
+    const vault = loot.pda.rewards(loot.pda.farm(w.project, imported ? 1 : 2));
+    w.fund(w.creator, w.mint, 10n);
+    w.payIn(w.creator, w.mint, 10n, [{ to: { Account: [vault] }, bps: 10_000 }]);
+    if (imported) await app.stakeNft('nfts', imported.asset, 0);
+    else await app.stake('tokens', '1', 0);
+    const account = w.chain.get(vault);
+    const data = Uint8Array.from(account.data);
+    data[108] = 2; // SPL token AccountState::Frozen: model an issuer freezing the rewards after admission.
+    w.chain.put(vault, { ...account, data });
+    w.chain.warp(w.chain.now() + 86_401);
+    const exit = options =>
+      imported ? app.unstakeNft('nfts', imported.asset, options) : app.unstake('tokens', '1', options);
+    const address = loot.pda.seat(loot.pda.farm(w.project, imported ? 1 : 2), imported?.asset ?? w.player);
+    await assert.rejects(exit(), /frozen|0x11|Custom\(17\)/i);
+    assert.ok(w.chain.get(address), 'failed reward credit leaves the stake intact');
+    await exit({ forfeit: true });
+    assert.equal(w.chain.get(address), null);
+    if (!imported) assert.equal(w.balance(w.player), 100_000_000n, 'principal returned despite frozen rewards');
+  });

@@ -18,9 +18,22 @@ test('the generated type declarations compile under strict', () => {
   const out = mkdtempSync(path.join(tmpdir(), 'xsolana-types-'));
   try {
     execFileSync(process.execPath, [tsc, '-p', path.join(root, 'tsconfig.types.json'), '--outDir', out], { cwd: root });
-    const files = readdirSync(out, { recursive: true }).filter((f) => /\.d\.m?ts$/.test(f)).map((f) => path.join(out, f));
+    const files = readdirSync(out, { recursive: true })
+      .filter(f => /\.d\.m?ts$/.test(f))
+      .map(f => path.join(out, f));
     assert.ok(files.length > 20, `only ${files.length} declaration files`);
-    const options = ['--strict', '--noEmit', '--skipLibCheck', 'false', '--target', 'es2022', '--module', 'nodenext', '--moduleResolution', 'nodenext'];
+    const options = [
+      '--strict',
+      '--noEmit',
+      '--skipLibCheck',
+      'false',
+      '--target',
+      'es2022',
+      '--module',
+      'nodenext',
+      '--moduleResolution',
+      'nodenext',
+    ];
     try {
       execFileSync(process.execPath, [tsc, ...options, ...files], { cwd: out, encoding: 'utf8' });
     } catch (err) {

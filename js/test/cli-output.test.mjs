@@ -18,13 +18,27 @@ const spec = JSON.parse(readFileSync(new URL('../../examples/coin-flip-arena.jso
 
 /** Runs `xsolana …` in `cwd` with a scratch HOME: { code, out, err }. */
 const xsolana = (args, { cwd = tmpdir(), env = {} } = {}) =>
-  new Promise((resolve) => execFile(process.execPath, [bin, ...args], { cwd, env: { ...process.env, HOME: mkdtempSync(path.join(tmpdir(), 'xsolana-home-')), XSOLANA_NO_OPEN: '1', ...env }, timeout: 30_000 }, (error, out, err) => resolve({ code: error ? error.code : 0, out, err })));
+  new Promise(resolve =>
+    execFile(
+      process.execPath,
+      [bin, ...args],
+      {
+        cwd,
+        env: { ...process.env, HOME: mkdtempSync(path.join(tmpdir(), 'xsolana-home-')), XSOLANA_NO_OPEN: '1', ...env },
+        timeout: 30_000,
+      },
+      (error, out, err) => resolve({ code: error ? error.code : 0, out, err }),
+    ),
+  );
 
 /** Stand-in `claude` and `codex` commands: `mcp get` answers `getCode`, `mcp remove` answers `removeCode`, the rest 0. */
 function fakeAgents({ getCode, removeCode }) {
   const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-agents-'));
   for (const name of ['claude', 'codex']) {
-    writeFileSync(path.join(dir, name), `#!/bin/sh\n[ "$1 $2" = "mcp get" ] && exit ${getCode}\n[ "$1 $2" = "mcp remove" ] && exit ${removeCode}\nexit 0\n`);
+    writeFileSync(
+      path.join(dir, name),
+      `#!/bin/sh\n[ "$1 $2" = "mcp get" ] && exit ${getCode}\n[ "$1 $2" = "mcp remove" ] && exit ${removeCode}\nexit 0\n`,
+    );
     chmodSync(path.join(dir, name), 0o755);
   }
   return { PATH: `${dir}${path.delimiter}${process.env.PATH}` };
@@ -67,17 +81,23 @@ describe('xsolana (what the command line says)', () => {
 
 describe('xsolana connect (what it says)', { skip: !posix && 'stand-in agents are shell scripts' }, () => {
   test('--remove of a server registered at another scope says it was not found there, and exits 1', async () => {
-    const r = await xsolana(['connect', '--agent', 'claude', '--remove'], { env: fakeAgents({ getCode: 0, removeCode: 1 }) });
+    const r = await xsolana(['connect', '--agent', 'claude', '--remove'], {
+      env: fakeAgents({ getCode: 0, removeCode: 1 }),
+    });
     assert.equal(r.code, 1, r.out + r.err);
     assert.match(r.out, /Claude Code: xsolana’s server was not found at the user scope/);
     assert.doesNotMatch(r.out, /xsolana removed/);
   });
 
   test('--remove says what it removed, and that nothing was registered when nothing was', async () => {
-    const removed = await xsolana(['connect', '--agent', 'claude', '--remove'], { env: fakeAgents({ getCode: 0, removeCode: 0 }) });
+    const removed = await xsolana(['connect', '--agent', 'claude', '--remove'], {
+      env: fakeAgents({ getCode: 0, removeCode: 0 }),
+    });
     assert.equal(removed.code, 0, removed.out + removed.err);
     assert.match(removed.out, /Claude Code: xsolana removed\./);
-    const none = await xsolana(['connect', '--agent', 'claude', '--remove'], { env: fakeAgents({ getCode: 1, removeCode: 0 }) });
+    const none = await xsolana(['connect', '--agent', 'claude', '--remove'], {
+      env: fakeAgents({ getCode: 1, removeCode: 0 }),
+    });
     assert.equal(none.code, 0, none.out + none.err);
     assert.match(none.out, /Claude Code: xsolana’s server was not registered\./);
   });

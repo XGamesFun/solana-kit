@@ -15,7 +15,7 @@ const NOBODY = '11111111111111111111111111111111';
 const CHEST = 5;
 
 /** A wallet that counts its prompts. */
-const asWallet = (kp) => ({
+const asWallet = kp => ({
   address: kp.address,
   prompts: 0,
   async signTransaction(wire) {
@@ -27,69 +27,139 @@ const asWallet = (kp) => ({
   },
 });
 
-test('a player claims a grant and wins an auction that each give a roll, and takes the stash’s NFT from both', { skip }, async () => {
-  const w = world({ seed: 'play-prizes' });
-  w.upsert({ Item: { id: 1, args: collectible('Relic') } });
-  const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
-  for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
-  w.upsert({ Box: { id: CHEST, args: chest } });
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
-  w.upsert({ Grant: { id: 1, args: { gives: { Roll: [CHEST] }, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true } } });
-  const now = w.chain.now();
-  const lot = { lot: { Roll: [CHEST] }, reserve: 10n, min_raise_bps: 500, starts_at: BigInt(now), ends_at: BigInt(now + 600), extend: 0, shares: [] };
-  w.chain.send(w.authority, [computeUnitLimit(1_400_000), loot.openAuctionIx({ seller: w.authority, project: w.project, id: 1, mint: w.mint, args: lot, rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []) })]);
+test(
+  'a player claims a grant and wins an auction that each give a roll, and takes the stash’s NFT from both',
+  { skip },
+  async () => {
+    const w = world({ seed: 'play-prizes' });
+    w.upsert({ Item: { id: 1, args: collectible('Relic') } });
+    const nfts = [0, 1, 2].map(() => w.make(1, w.authority));
+    for (const asset of nfts)
+      w.chain.send(w.authority, [
+        loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection }),
+      ]);
+    const chest = {
+      price: 0n,
+      currency: null,
+      rise: null,
+      fall: null,
+      stock_odds: false,
+      active: false,
+      shares: [],
+      entries: [{ prizes: [{ Stash: [1] }], weight: 1 }],
+      odds: [],
+    };
+    w.upsert({ Box: { id: CHEST, args: chest } });
+    const limits = {
+      wallet: { total: 1, per_window: 0, window: 0 },
+      per_person: 0,
+      per_key: 0,
+      all: { total: 0, per_window: 0, window: 0 },
+      window: { opens_at: 0n, closes_at: 0n },
+    };
+    w.upsert({
+      Grant: {
+        id: 1,
+        args: {
+          gives: { Roll: [CHEST] },
+          vouchers: [NOBODY, NOBODY, NOBODY],
+          list_root: new Uint8Array(32),
+          limits,
+          active: true,
+          gate: null,
+          open: true,
+        },
+      },
+    });
+    const now = w.chain.now();
+    const lot = {
+      lot: { Roll: [CHEST] },
+      reserve: 10n,
+      min_raise_bps: 500,
+      starts_at: BigInt(now),
+      ends_at: BigInt(now + 600),
+      extend: 0,
+      shares: [],
+    };
+    w.chain.send(w.authority, [
+      computeUnitLimit(1_400_000),
+      loot.openAuctionIx({
+        seller: w.authority,
+        project: w.project,
+        id: 1,
+        mint: w.mint,
+        args: lot,
+        rolls: w.rolls(lot.lot.Roll ? [lot.lot.Roll[0]] : []),
+      }),
+    ]);
 
-  const player = freshKeypair();
-  w.chain.airdrop(player.address, 10_000_000_000n);
-  w.fund(player.address, w.mint, 10n * PRICE);
-  const spec = {
-    version: 2,
-    name: 'Prizes',
-    currency: 'gold',
-    tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-    grants: [{ key: 'chest', id: 1 }],
-    auctions: [{ key: 'mystery', id: 1, seller: w.authority, name: 'Mystery lot' }],
-    live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
-  };
-  const wallet = asWallet(player);
-  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
-  const owner = (asset) => parseCoreAsset(w.chain.get(asset).data).owner;
+    const player = freshKeypair();
+    w.chain.airdrop(player.address, 10_000_000_000n);
+    w.fund(player.address, w.mint, 10n * PRICE);
+    const spec = {
+      version: 2,
+      name: 'Prizes',
+      currency: 'gold',
+      tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
+      grants: [{ key: 'chest', id: 1 }],
+      auctions: [{ key: 'mystery', id: 1, seller: w.authority, name: 'Mystery lot' }],
+      live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
+    };
+    const wallet = asWallet(player);
+    const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+    const owner = asset => parseCoreAsset(w.chain.get(asset).data).owner;
 
-  // The grant's roll: asked for in the claim's own transaction, then settled by a key the claim funded. One prompt.
-  const prompted = () => wallet.prompts;
-  const claimed = await app.claimGrant('chest');
-  assert.equal(prompted(), 1, 'one prompt: the key settles');
-  assert.equal(claimed.rolls.length, 1);
-  assert.equal((await app.claims()).filter((c) => c.kind === 'settle').length, 0, 'nothing left waiting');
-  const won = nfts.filter((nft) => owner(nft) === player.address);
-  assert.equal(won.length, 1);
-  assert.equal(claimed.rolls[0].asset, won[0]);
+    // The grant's roll: asked for in the claim's own transaction, then settled by a key the claim funded. One prompt.
+    const prompted = () => wallet.prompts;
+    const claimed = await app.claimGrant('chest');
+    assert.equal(prompted(), 1, 'one prompt: the key settles');
+    assert.equal(claimed.rolls.length, 1);
+    assert.equal((await app.claims()).filter(c => c.kind === 'settle').length, 0, 'nothing left waiting');
+    const won = nfts.filter(nft => owner(nft) === player.address);
+    assert.equal(won.length, 1);
+    assert.equal(claimed.rolls[0].asset, won[0]);
 
-  // The auction's roll: the winner ending it asks for it in the same transaction; a key settles it.
-  await app.bid('mystery', 1);
-  w.chain.warp(now + 601);
-  const before = prompted();
-  const ended = await app.endAuction('mystery');
-  assert.equal(prompted(), before + 1);
-  assert.equal(ended.winner, player.address);
-  assert.ok(ended.order);
-  assert.equal(w.chain.get(ended.order), null, 'settled: the order closed');
-  const got = ended.rolled;
-  assert.equal(got.won.length, 1);
-  assert.equal(got.won[0].Nft.stash, 1);
-  assert.ok(nfts.includes(got.asset) && !won.includes(got.asset));
-  assert.equal(owner(got.asset), player.address);
-});
+    // The auction's roll: the winner ending it asks for it in the same transaction; a key settles it.
+    await app.bid('mystery', 1);
+    w.chain.warp(now + 601);
+    const before = prompted();
+    const ended = await app.endAuction('mystery');
+    assert.equal(prompted(), before + 1);
+    assert.equal(ended.winner, player.address);
+    assert.ok(ended.order);
+    assert.equal(w.chain.get(ended.order), null, 'settled: the order closed');
+    const got = ended.rolled;
+    assert.equal(got.won.length, 1);
+    assert.equal(got.won[0].Nft.stash, 1);
+    assert.ok(nfts.includes(got.asset) && !won.includes(got.asset));
+    assert.equal(owner(got.asset), player.address);
+  },
+);
 
 test('a player claims grants that give an NFT and a collectible at once, through js/play', { skip }, async () => {
   const w = world({ seed: 'play-direct' });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   w.upsert({ Item: { id: 2, args: collectible('Trophy') } });
   const trophy = w.make(1, w.authority);
-  w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: trophy, collection: w.collection })]);
-  const limits = { wallet: { total: 1, per_window: 0, window: 0 }, per_person: 0, per_key: 0, all: { total: 0, per_window: 0, window: 0 }, window: { opens_at: 0n, closes_at: 0n } };
-  const open = (gives) => ({ gives, vouchers: [NOBODY, NOBODY, NOBODY], list_root: new Uint8Array(32), limits, active: true, gate: null, open: true });
+  w.chain.send(w.authority, [
+    loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: trophy, collection: w.collection }),
+  ]);
+  const limits = {
+    wallet: { total: 1, per_window: 0, window: 0 },
+    per_person: 0,
+    per_key: 0,
+    all: { total: 0, per_window: 0, window: 0 },
+    window: { opens_at: 0n, closes_at: 0n },
+  };
+  const open = gives => ({
+    gives,
+    vouchers: [NOBODY, NOBODY, NOBODY],
+    list_root: new Uint8Array(32),
+    limits,
+    active: true,
+    gate: null,
+    open: true,
+  });
   w.upsert({ Grant: { id: 1, args: open({ Nft: { stash: 1, nft: trophy } }) } });
   w.upsert({ Grant: { id: 2, args: open({ Item: [2] }) } });
   const player = freshKeypair();
@@ -99,7 +169,10 @@ test('a player claims grants that give an NFT and a collectible at once, through
     name: 'Prizes',
     currency: 'gold',
     tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-    grants: [{ key: 'trophy', id: 1 }, { key: 'badge', id: 2 }],
+    grants: [
+      { key: 'trophy', id: 1 },
+      { key: 'badge', id: 2 },
+    ],
     live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
   };
   const app = solanaApp({ spec, rpc: w.chain.rpc, wallet: asWallet(player), now: () => w.chain.now() });
@@ -108,37 +181,87 @@ test('a player claims grants that give an NFT and a collectible at once, through
   await app.claimGrant('badge');
   const badge = loot.pda.itemAsset(loot.pda.item(w.project, 2), 1);
   assert.equal(parseCoreAsset(w.chain.get(badge).data).owner, player.address);
-  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'settle'), [], 'nothing left to finish');
+  assert.deepEqual(
+    (await app.claims()).filter(c => c.kind === 'settle'),
+    [],
+    'nothing left to finish',
+  );
 });
 
-test('a lottery place that gives a roll: its winner’s pull asks for it in the same transaction, and a key settles it', { skip }, async () => {
-  const w = world({ seed: 'play-lottery-roll' });
-  w.upsert({ Item: { id: 1, args: collectible('Relic') } });
-  const nfts = [0, 1].map(() => w.make(1, w.authority));
-  for (const asset of nfts) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection })]);
-  const chest = { price: 0n, currency: null, rise: null, fall: null, stock_odds: false, active: false, shares: [], entries: [{ prizes: [{ Stash: [1] }], weight: 1 }], odds: [] };
-  w.upsert({ Box: { id: CHEST, args: chest } });
-  const places = [{ bps: 10_000, prize: { Roll: [CHEST] }, times: 1 }];
-  w.upsert({ Lottery: { id: 1, args: { price: 1000n, mint: w.mint, shares: [], places, ticket_mint: NOBODY, every: 0n, draws_at: BigInt(w.chain.now() + 3600), gate: null } } });
-  const player = freshKeypair();
-  w.chain.airdrop(player.address, 10_000_000_000n);
-  w.fund(player.address, w.mint, 10n * PRICE);
-  const spec = {
-    version: 2, name: 'Draw', currency: 'gold', tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-    lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
-    live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
-  };
-  const wallet = asWallet(player);
-  const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
-  await app.buyTickets('draw', 2, { listing: (await app.lotteries()).find((l) => l.key === 'draw') });
-  w.chain.warp(w.chain.now() + 3601);
-  await app.claim((await app.claims()).find((c) => c.kind === 'reveal'));
-  const pull = (await app.claims()).find((c) => c.kind === 'pull');
-  assert.deepEqual(pull.pulls, [{ entry: 0, parts: [{ Pot: [0] }, { Prize: [0] }] }], 'its place: the pot and the roll');
-  const before = wallet.prompts;
-  await app.claim(pull);
-  assert.equal(wallet.prompts, before + 1, 'one prompt: the roll asked for in the pull, settled by a key');
-  assert.equal(nfts.filter((n) => parseCoreAsset(w.chain.get(n).data).owner === player.address).length, 1, 'the stash’s NFT is theirs');
-  assert.deepEqual((await app.claims()).filter((c) => c.kind === 'settle'), [], 'nothing left waiting');
-  assert.equal(w.round(1), null, 'every part pulled: the round closed');
-});
+test(
+  'a lottery place that gives a roll: its winner’s pull asks for it in the same transaction, and a key settles it',
+  { skip },
+  async () => {
+    const w = world({ seed: 'play-lottery-roll' });
+    w.upsert({ Item: { id: 1, args: collectible('Relic') } });
+    const nfts = [0, 1].map(() => w.make(1, w.authority));
+    for (const asset of nfts)
+      w.chain.send(w.authority, [
+        loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset, collection: w.collection }),
+      ]);
+    const chest = {
+      price: 0n,
+      currency: null,
+      rise: null,
+      fall: null,
+      stock_odds: false,
+      active: false,
+      shares: [],
+      entries: [{ prizes: [{ Stash: [1] }], weight: 1 }],
+      odds: [],
+    };
+    w.upsert({ Box: { id: CHEST, args: chest } });
+    const places = [{ bps: 10_000, prize: { Roll: [CHEST] }, times: 1 }];
+    w.upsert({
+      Lottery: {
+        id: 1,
+        args: {
+          price: 1000n,
+          mint: w.mint,
+          shares: [],
+          places,
+          ticket_mint: NOBODY,
+          every: 0n,
+          draws_at: BigInt(w.chain.now() + 3600),
+          gate: null,
+        },
+      },
+    });
+    const player = freshKeypair();
+    w.chain.airdrop(player.address, 10_000_000_000n);
+    w.fund(player.address, w.mint, 10n * PRICE);
+    const spec = {
+      version: 2,
+      name: 'Draw',
+      currency: 'gold',
+      tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
+      lotteries: [{ key: 'draw', name: 'Draw', id: 1 }],
+      live: { project: w.project, collection: w.collection, mints: { gold: w.mint } },
+    };
+    const wallet = asWallet(player);
+    const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+    await app.buyTickets('draw', 2, { listing: (await app.lotteries()).find(l => l.key === 'draw') });
+    w.chain.warp(w.chain.now() + 3601);
+    await app.claim((await app.claims()).find(c => c.kind === 'reveal'));
+    const pull = (await app.claims()).find(c => c.kind === 'pull');
+    assert.deepEqual(
+      pull.pulls,
+      [{ entry: 0, parts: [{ Pot: [0] }, { Prize: [0] }] }],
+      'its place: the pot and the roll',
+    );
+    const before = wallet.prompts;
+    await app.claim(pull);
+    assert.equal(wallet.prompts, before + 1, 'one prompt: the roll asked for in the pull, settled by a key');
+    assert.equal(
+      nfts.filter(n => parseCoreAsset(w.chain.get(n).data).owner === player.address).length,
+      1,
+      'the stash’s NFT is theirs',
+    );
+    assert.deepEqual(
+      (await app.claims()).filter(c => c.kind === 'settle'),
+      [],
+      'nothing left waiting',
+    );
+    assert.equal(w.round(1), null, 'every part pulled: the round closed');
+  },
+);

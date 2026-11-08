@@ -8,7 +8,19 @@ import { describe, test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
-import { compileFitting, createTableIx, deactivateTableIx, extendTableIx, LOOKUP_TABLE_PROGRAM, planTable, readTable, slotHashes, tableAccounts, tableStep, TABLE_COOLDOWN_SLOTS } from '../chain/lookup.js';
+import {
+  compileFitting,
+  createTableIx,
+  deactivateTableIx,
+  extendTableIx,
+  LOOKUP_TABLE_PROGRAM,
+  planTable,
+  readTable,
+  slotHashes,
+  tableAccounts,
+  tableStep,
+  TABLE_COOLDOWN_SLOTS,
+} from '../chain/lookup.js';
 import { computeUnitLimit, meta, transferLamports } from '../chain/programs.js';
 import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
@@ -17,18 +29,26 @@ import { solanaApp } from '../play/index.js';
 import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
-const key = (n) => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 31 + n * 7 + 3) % 256));
+const key = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 31 + n * 7 + 3) % 256));
 const BLOCKHASH = key(999);
 
 /** An instruction of a made-up program naming `n` accounts of its own. */
-const wide = (payer, n, from = 0) => ({ programId: key(500), keys: [meta(payer, true, true), ...Array.from({ length: n }, (_, i) => meta(key(from + i), false, i % 2 === 0))], data: new Uint8Array(40) });
+const wide = (payer, n, from = 0) => ({
+  programId: key(500),
+  keys: [meta(payer, true, true), ...Array.from({ length: n }, (_, i) => meta(key(from + i), false, i % 2 === 0))],
+  data: new Uint8Array(40),
+});
 
 describe('lookup tables, planned (js/chain/lookup.js)', () => {
   const payer = key(1000);
   test('a transaction that fits stays legacy; one too big has no legacy message', () => {
     const small = compileFitting({ payer, blockhash: BLOCKHASH, instructions: [wide(payer, 20)] });
     assert.ok(small && small[0] < 0x80, 'legacy');
-    assert.equal(compileFitting({ payer, blockhash: BLOCKHASH, instructions: [wide(payer, 40)] }), null, 'no table given: nothing fits');
+    assert.equal(
+      compileFitting({ payer, blockhash: BLOCKHASH, instructions: [wide(payer, 40)] }),
+      null,
+      'no table given: nothing fits',
+    );
   });
 
   test('a table of 55 accounts is made in two steps that each fit, and the transaction fits as v0 with it, deactivating it', () => {
@@ -37,9 +57,17 @@ describe('lookup tables, planned (js/chain/lookup.js)', () => {
     assert.deepEqual(plan.table.addresses, tableAccounts(instructions));
     assert.equal(plan.table.addresses.length, 55, 'neither the payer nor a program the transaction calls');
     const first = key(9999);
-    assert.equal(planTable({ payer, blockhash: BLOCKHASH, slot: 1234n, instructions, first: [first] }).table.addresses[0], first, '`first` goes in the creation step');
+    assert.equal(
+      planTable({ payer, blockhash: BLOCKHASH, slot: 1234n, instructions, first: [first] }).table.addresses[0],
+      first,
+      '`first` goes in the creation step',
+    );
     assert.equal(plan.steps.length, 2);
-    for (const step of plan.steps) assert.ok(compileFitting({ payer, blockhash: BLOCKHASH, instructions: step })[0] < 0x80, 'each step is a legacy transaction');
+    for (const step of plan.steps)
+      assert.ok(
+        compileFitting({ payer, blockhash: BLOCKHASH, instructions: step })[0] < 0x80,
+        'each step is a legacy transaction',
+      );
     assert.deepEqual(plan.final.at(-1), deactivateTableIx({ table: plan.table.address, authority: payer }));
     const v0 = compileFitting({ payer, blockhash: BLOCKHASH, instructions: plan.final, tables: [plan.table] });
     assert.equal(v0[0], 0x80, 'v0');
@@ -48,9 +76,21 @@ describe('lookup tables, planned (js/chain/lookup.js)', () => {
 
   test('more accounts than a transaction locks or a table holds, or instructions too long even as v0, have no plan', () => {
     assert.equal(planTable({ payer, blockhash: BLOCKHASH, slot: 1n, instructions: [wide(payer, 257)] }), null);
-    assert.equal(planTable({ payer, blockhash: BLOCKHASH, slot: 1n, instructions: [wide(payer, 61)] }), null, '61 accounts, the payer, the program and the table’s: past 64 locks');
+    assert.equal(
+      planTable({ payer, blockhash: BLOCKHASH, slot: 1n, instructions: [wide(payer, 61)] }),
+      null,
+      '61 accounts, the payer, the program and the table’s: past 64 locks',
+    );
     assert.ok(planTable({ payer, blockhash: BLOCKHASH, slot: 1n, instructions: [wide(payer, 60)] }), 'exactly 64');
-    assert.equal(planTable({ payer, blockhash: BLOCKHASH, slot: 1n, instructions: [{ ...wide(payer, 10), data: new Uint8Array(1200) }] }), null);
+    assert.equal(
+      planTable({
+        payer,
+        blockhash: BLOCKHASH,
+        slot: 1n,
+        instructions: [{ ...wide(payer, 10), data: new Uint8Array(1200) }],
+      }),
+      null,
+    );
   });
 
   test('a table read back, and when it can be closed', () => {
@@ -67,7 +107,7 @@ describe('lookup tables, planned (js/chain/lookup.js)', () => {
     assert.equal(tableStep({ ...table, deactivationSlot: 100n }, 100n + TABLE_COOLDOWN_SLOTS), 'cooling');
     assert.equal(tableStep({ ...table, deactivationSlot: 100n }, 101n + TABLE_COOLDOWN_SLOTS), 'close');
     // By the SlotHashes read: closable only from a full read (512 slots) older than none of them.
-    const full = (from) => Array.from({ length: 512 }, (_, i) => from - BigInt(i));
+    const full = from => Array.from({ length: 512 }, (_, i) => from - BigInt(i));
     assert.equal(tableStep({ ...table, deactivationSlot: 100n }, 2000n, full(2000n)), 'close');
     assert.equal(tableStep({ ...table, deactivationSlot: 100n }, 2000n, [2000n, 1999n]), 'cooling', 'a short read');
     assert.equal(tableStep({ ...table, deactivationSlot: 100n }, 2000n, []), 'cooling', 'an empty read');
@@ -92,15 +132,33 @@ function bigBox(seed, { standing = null } = {}) {
   const w = world({ seed });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const relics = [0, 1, 2].map(() => w.make(1, w.authority));
-  for (const asset of relics) w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 4, asset, collection: w.collection })]);
+  for (const asset of relics)
+    w.chain.send(w.authority, [
+      loot.stashIx({ signer: w.authority, project: w.project, id: 4, asset, collection: w.collection }),
+    ]);
   const holders = [0, 1, 2, 3].map(() => {
     const owner = w.who();
     w.tokenAccount(owner, w.mint);
     return { owner, asset: w.make(1, owner) };
   });
-  const shares = holders.map((h) => ({ to: { Holder: [h.asset] }, bps: 500 }));
+  const shares = holders.map(h => ({ to: { Holder: [h.asset] }, bps: 500 }));
   // It draws among what is left (`DrawLeft`): a box that stops selling refuses an entry of several named NFTs of one stash.
-  w.upsert({ Box: { id: 1, args: boxArgs(PRICE, [drop(relics.map((nft) => ({ Nft: { stash: 4, nft } })), 1_000_000_000), drop([{ Nft: { stash: 4, nft: relics[0] } }])], { shares, when_out: 'DrawLeft' }) } });
+  w.upsert({
+    Box: {
+      id: 1,
+      args: boxArgs(
+        PRICE,
+        [
+          drop(
+            relics.map(nft => ({ Nft: { stash: 4, nft } })),
+            1_000_000_000,
+          ),
+          drop([{ Nft: { stash: 4, nft: relics[0] } }]),
+        ],
+        { shares, when_out: 'DrawLeft' },
+      ),
+    },
+  });
   w.upsert({ Box: { id: 2, args: boxArgs(PRICE, [drop([{ Stash: [5] }])]) } });
   const kp = freshKeypair();
   w.chain.airdrop(kp.address, 10_000_000_000n);
@@ -110,7 +168,10 @@ function bigBox(seed, { standing = null } = {}) {
     name: 'Big',
     currency: 'gold',
     tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
-    boxes: [{ key: 'chest', name: 'Chest', id: 1 }, { key: 'small', name: 'Small', id: 2 }],
+    boxes: [
+      { key: 'chest', name: 'Chest', id: 1 },
+      { key: 'small', name: 'Small', id: 2 },
+    ],
     live: { project: w.project, collections: [w.collection], mints: { gold: w.mint } },
   };
   // A project's standing lookup table (made at go-live; here by hand): the addresses its settles name most.
@@ -118,106 +179,183 @@ function bigBox(seed, { standing = null } = {}) {
     const [slot] = slotHashes(w.chain.get(SYSVAR_SLOT_HASHES).data);
     const { address, instruction } = createTableIx({ authority: w.creator, slot });
     const vault = loot.vault(w.project, w.mint);
-    const names = [w.project, loot.pda.fees(w.project), loot.pda.platform(), w.mint, vault, loot.ata(w.treasury, w.mint), loot.pda.stash(w.project, 4), w.collection, loot.MPL_CORE_PROGRAM, ...relics, ...holders.flatMap((h) => [h.asset, h.owner, loot.ata(h.owner, w.mint)])];
+    const names = [
+      w.project,
+      loot.pda.fees(w.project),
+      loot.pda.platform(),
+      w.mint,
+      vault,
+      loot.ata(w.treasury, w.mint),
+      loot.pda.stash(w.project, 4),
+      w.collection,
+      loot.MPL_CORE_PROGRAM,
+      ...relics,
+      ...holders.flatMap(h => [h.asset, h.owner, loot.ata(h.owner, w.mint)]),
+    ];
     w.chain.send(w.creator, [instruction, extendTableIx({ table: address, authority: w.creator, addresses: names })]);
-    if (standing === 'deactivated') w.chain.send(w.creator, [deactivateTableIx({ table: address, authority: w.creator })]);
+    if (standing === 'deactivated')
+      w.chain.send(w.creator, [deactivateTableIx({ table: address, authority: w.creator })]);
     w.chain.nextSlot();
     spec.live.tables = [address];
   }
   const signed = [];
   const sent = [];
-  const rpc = { ...w.chain.rpc, async send(wire) { sent.push(readTransaction(wire).message); return w.chain.rpc.send(wire); } };
+  const rpc = {
+    ...w.chain.rpc,
+    async send(wire) {
+      sent.push(readTransaction(wire).message);
+      return w.chain.rpc.send(wire);
+    },
+  };
   const app = solanaApp({ spec, rpc, wallet: asWallet(kp, signed), now: () => w.chain.now() });
   return { w, app, kp, me: kp.address, relics, holders, signed, sent };
 }
 
-const units = (message) => {
+const units = message => {
   const m = readMessage(message);
-  const ix = m.instructions.find((i) => m.keys[i.programIndex] === COMPUTE_BUDGET_PROGRAM && i.data[0] === 2);
+  const ix = m.instructions.find(i => m.keys[i.programIndex] === COMPUTE_BUDGET_PROGRAM && i.data[0] === 2);
   return ix ? Number(new DataView(ix.data.buffer, ix.data.byteOffset).getUint32(1, true)) : null;
 };
 
 describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
-  test('a settle of three NFTs and four holders’ shares that doesn’t fit one transaction goes in parts from the burner: one prompt', { skip }, async () => {
-    const { w, app, me, relics, holders, signed, sent } = bigBox('lookup-big');
-    const listing = (await app.boxes()).find((l) => l.key === 'chest');
-    const got = await app.openBox('chest', { listing });
-    assert.equal(w.chain.get(got.order), null, 'settled: the order closed');
-    assert.ok(relics.every((a) => parseCoreAsset(w.chain.get(a).data).owner === me), 'all three NFTs are the player’s');
-    assert.ok(holders.every((h) => w.balance(h.owner) === PRICE / 20n), 'each holder has its share');
-    // The open; a part of prizes only (no NFT rolled on, no shares); the last part with the shares, the burner's
-    // lamports back with it. Each legacy, the parts the burner's.
-    assert.deepEqual(sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 'legacy']);
-    assert.ok(sent.slice(1).every((m) => readMessage(m).keys[0] !== me), 'the burner sent both parts');
-    assert.equal(signed.length, 1, 'one prompt: the open');
-    assert.equal(got.parts?.length, 2);
-  });
+  test(
+    'a settle of three NFTs and four holders’ shares that doesn’t fit one transaction goes in parts from the burner: one prompt',
+    { skip },
+    async () => {
+      const { w, app, me, relics, holders, signed, sent } = bigBox('lookup-big');
+      const listing = (await app.boxes()).find(l => l.key === 'chest');
+      const got = await app.openBox('chest', { listing });
+      assert.equal(w.chain.get(got.order), null, 'settled: the order closed');
+      assert.ok(
+        relics.every(a => parseCoreAsset(w.chain.get(a).data).owner === me),
+        'all three NFTs are the player’s',
+      );
+      assert.ok(
+        holders.every(h => w.balance(h.owner) === PRICE / 20n),
+        'each holder has its share',
+      );
+      // The open; a part of prizes only (no NFT rolled on, no shares); the last part with the shares, the burner's
+      // lamports back with it. Each legacy, the parts the burner's.
+      assert.deepEqual(
+        sent.map(m => readMessage(m).version),
+        ['legacy', 'legacy', 'legacy'],
+      );
+      assert.ok(
+        sent.slice(1).every(m => readMessage(m).keys[0] !== me),
+        'the burner sent both parts',
+      );
+      assert.equal(signed.length, 1, 'one prompt: the open');
+      assert.equal(got.parts?.length, 2);
+    },
+  );
 
-  test('a lookup table a big transaction of the wallet’s made is listed in claims once cooled down, and its rent comes back', { skip }, async () => {
-    const { w, app, kp, me, signed } = bigBox('lookup-table-claim');
-    const { sendFitting } = await import('../chain/lookup.js');
-    // Forty payments to forty new wallets: too many accounts for a legacy transaction.
-    const instructions = Array.from({ length: 40 }, (_, i) => transferLamports(me, key(2000 + i), 1_000_000n));
-    const wallet = asWallet(kp, signed);
-    await sendFitting({ rpc: w.chain.rpc, payer: me, instructions, sign: (message) => wallet.signTransaction(wireTransaction(message)), first: [w.project], sleep: async () => w.chain.nextSlot() });
-    const [found] = await w.chain.rpc.programAccounts(LOOKUP_TABLE_PROGRAM, [{ memcmp: { offset: 22, bytes: me } }]);
-    const table = readTable(found.account);
-    assert.ok(table.deactivationSlot !== null, 'the transaction deactivated it');
-    assert.deepEqual((await app.claims()).filter((c) => c.kind === 'lookup-table'), [], 'not yet: it is cooling down');
-    w.chain.nextSlot(Number(TABLE_COOLDOWN_SLOTS) + 1);
-    const [claim] = (await app.claims()).filter((c) => c.kind === 'lookup-table');
-    assert.match(claim.says, /SOL of rent back/);
-    const before = await w.chain.rpc.balance(me);
-    await app.claim(claim);
-    assert.equal(w.chain.get(found.pubkey), null, 'closed');
-    assert.ok((await w.chain.rpc.balance(me)) > before, 'its rent is the player’s again');
-  });
+  test(
+    'a lookup table a big transaction of the wallet’s made is listed in claims once cooled down, and its rent comes back',
+    { skip },
+    async () => {
+      const { w, app, kp, me, signed } = bigBox('lookup-table-claim');
+      const { sendFitting } = await import('../chain/lookup.js');
+      // Forty payments to forty new wallets: too many accounts for a legacy transaction.
+      const instructions = Array.from({ length: 40 }, (_, i) => transferLamports(me, key(2000 + i), 1_000_000n));
+      const wallet = asWallet(kp, signed);
+      await sendFitting({
+        rpc: w.chain.rpc,
+        payer: me,
+        instructions,
+        sign: message => wallet.signTransaction(wireTransaction(message)),
+        first: [w.project],
+        sleep: async () => w.chain.nextSlot(),
+      });
+      const [found] = await w.chain.rpc.programAccounts(LOOKUP_TABLE_PROGRAM, [{ memcmp: { offset: 22, bytes: me } }]);
+      const table = readTable(found.account);
+      assert.ok(table.deactivationSlot !== null, 'the transaction deactivated it');
+      assert.deepEqual(
+        (await app.claims()).filter(c => c.kind === 'lookup-table'),
+        [],
+        'not yet: it is cooling down',
+      );
+      w.chain.nextSlot(Number(TABLE_COOLDOWN_SLOTS) + 1);
+      const [claim] = (await app.claims()).filter(c => c.kind === 'lookup-table');
+      assert.match(claim.says, /SOL of rent back/);
+      const before = await w.chain.rpc.balance(me);
+      await app.claim(claim);
+      assert.equal(w.chain.get(found.pubkey), null, 'closed');
+      assert.ok((await w.chain.rpc.balance(me)) > before, 'its rent is the player’s again');
+    },
+  );
 
-  test('with the project’s standing lookup table the same settle is one v0 transaction, one prompt; a deactivated table is passed by', { skip }, async () => {
-    const { w, app, relics, signed, sent, me } = bigBox('lookup-standing', { standing: 'active' });
-    const got = await app.openBox('chest', { listing: (await app.boxes()).find((l) => l.key === 'chest') });
-    assert.equal(w.chain.get(got.order), null, 'settled');
-    assert.ok(relics.every((a) => parseCoreAsset(w.chain.get(a).data).owner === me));
-    assert.deepEqual(sent.map((m) => readMessage(m).version), ['legacy', 0, 'legacy'], 'the open, the settle with the standing table, the burner’s lamports back');
-    assert.equal(signed.length, 2, 'two prompts: the open and the settle; no table of its own');
-    const off = bigBox('lookup-standing-off', { standing: 'deactivated' });
-    await off.app.openBox('chest', { listing: (await off.app.boxes()).find((l) => l.key === 'chest') });
-    assert.deepEqual(off.sent.map((m) => readMessage(m).version), ['legacy', 'legacy', 'legacy'], 'in parts, as with none');
-  });
+  test(
+    'with the project’s standing lookup table the same settle is one v0 transaction, one prompt; a deactivated table is passed by',
+    { skip },
+    async () => {
+      const { w, app, relics, signed, sent, me } = bigBox('lookup-standing', { standing: 'active' });
+      const got = await app.openBox('chest', { listing: (await app.boxes()).find(l => l.key === 'chest') });
+      assert.equal(w.chain.get(got.order), null, 'settled');
+      assert.ok(relics.every(a => parseCoreAsset(w.chain.get(a).data).owner === me));
+      assert.deepEqual(
+        sent.map(m => readMessage(m).version),
+        ['legacy', 0, 'legacy'],
+        'the open, the settle with the standing table, the burner’s lamports back',
+      );
+      assert.equal(signed.length, 2, 'two prompts: the open and the settle; no table of its own');
+      const off = bigBox('lookup-standing-off', { standing: 'deactivated' });
+      await off.app.openBox('chest', { listing: (await off.app.boxes()).find(l => l.key === 'chest') });
+      assert.deepEqual(
+        off.sent.map(m => readMessage(m).version),
+        ['legacy', 'legacy', 'legacy'],
+        'in parts, as with none',
+      );
+    },
+  );
 
-  test('right after one’s own open, an order a lagging RPC node doesn’t show yet is read again, never “settled already”', { skip }, async () => {
-    const { w } = bigBox('lookup-lag');
-    const relic = w.make(1, w.authority);
-    w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 5, asset: relic, collection: w.collection })]);
-    // The first two reads of an order after the open answer nothing, as a node lagging behind did on devnet.
-    let hidden = 2;
-    const isOrder = (a) => a?.owner === loot.LOOT_PROGRAM && a.data[0] === loot.TAGS.Order;
-    const rpc = {
-      ...w.chain.rpc,
-      async accounts(addresses, ...rest) {
-        return (await w.chain.rpc.accounts(addresses, ...rest)).map((a) => (isOrder(a) && hidden-- > 0 ? null : a));
-      },
-      async account(address, ...rest) {
-        return (await this.accounts([address], ...rest))[0];
-      },
-    };
-    const spec = { version: 2, name: 'Lag', currency: 'gold', tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }], boxes: [{ key: 'small', name: 'Small', id: 2 }], live: { project: w.project, collections: [w.collection], mints: { gold: w.mint } } };
-    const kp = freshKeypair();
-    w.chain.airdrop(kp.address, 10_000_000_000n);
-    w.fund(kp.address, w.mint, 10n * PRICE);
-    const app = solanaApp({ spec, rpc, wallet: asWallet(kp, []), now: () => w.chain.now() });
-    const got = await app.openBox('small', { listing: (await app.boxes()).find((l) => l.key === 'small') });
-    assert.notEqual(got.settled, 'elsewhere', got.says);
-    assert.ok(got.settled, 'settled by the burner');
-    assert.equal(parseCoreAsset(w.chain.get(relic).data).owner, kp.address);
-    assert.ok(hidden <= 0, 'the order was hidden twice first');
-  });
+  test(
+    'right after one’s own open, an order a lagging RPC node doesn’t show yet is read again, never “settled already”',
+    { skip },
+    async () => {
+      const { w } = bigBox('lookup-lag');
+      const relic = w.make(1, w.authority);
+      w.chain.send(w.authority, [
+        loot.stashIx({ signer: w.authority, project: w.project, id: 5, asset: relic, collection: w.collection }),
+      ]);
+      // The first two reads of an order after the open answer nothing, as a node lagging behind did on devnet.
+      let hidden = 2;
+      const isOrder = a => a?.owner === loot.LOOT_PROGRAM && a.data[0] === loot.TAGS.Order;
+      const rpc = {
+        ...w.chain.rpc,
+        async accounts(addresses, ...rest) {
+          return (await w.chain.rpc.accounts(addresses, ...rest)).map(a => (isOrder(a) && hidden-- > 0 ? null : a));
+        },
+        async account(address, ...rest) {
+          return (await this.accounts([address], ...rest))[0];
+        },
+      };
+      const spec = {
+        version: 2,
+        name: 'Lag',
+        currency: 'gold',
+        tokens: [{ key: 'gold', mint: w.mint, decimals: 6 }],
+        boxes: [{ key: 'small', name: 'Small', id: 2 }],
+        live: { project: w.project, collections: [w.collection], mints: { gold: w.mint } },
+      };
+      const kp = freshKeypair();
+      w.chain.airdrop(kp.address, 10_000_000_000n);
+      w.fund(kp.address, w.mint, 10n * PRICE);
+      const app = solanaApp({ spec, rpc, wallet: asWallet(kp, []), now: () => w.chain.now() });
+      const got = await app.openBox('small', { listing: (await app.boxes()).find(l => l.key === 'small') });
+      assert.notEqual(got.settled, 'elsewhere', got.says);
+      assert.ok(got.settled, 'settled by the burner');
+      assert.equal(parseCoreAsset(w.chain.get(relic).data).owner, kp.address);
+      assert.ok(hidden <= 0, 'the order was hidden twice first');
+    },
+  );
 
   test('a settle that fits goes from the burner, legacy, with a compute limit', { skip }, async () => {
     const { w, app, me, sent, signed } = bigBox('lookup-small');
     const relic = w.make(1, w.authority);
-    w.chain.send(w.authority, [loot.stashIx({ signer: w.authority, project: w.project, id: 5, asset: relic, collection: w.collection })]);
-    const got = await app.openBox('small', { listing: (await app.boxes()).find((l) => l.key === 'small') });
+    w.chain.send(w.authority, [
+      loot.stashIx({ signer: w.authority, project: w.project, id: 5, asset: relic, collection: w.collection }),
+    ]);
+    const got = await app.openBox('small', { listing: (await app.boxes()).find(l => l.key === 'small') });
     assert.equal(w.chain.get(got.order), null);
     assert.equal(parseCoreAsset(w.chain.get(relic).data).owner, me);
     assert.equal(signed.length, 1, 'one prompt: the open');
@@ -231,8 +369,20 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
 test('a throwaway key’s transaction too big for a legacy one is refused in words, not sent', async () => {
   const { sendFitting } = await import('../chain/lookup.js');
   const payer = key(77);
-  const rpc = { latestBlockhash: async () => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 1 }), send: async () => assert.fail('sent') };
-  await assert.rejects(sendFitting({ rpc, payer, instructions: [wide(payer, 40), transferLamports(payer, key(3), 1n)], sign: async () => new Uint8Array(), table: false }), /holds no rent for a lookup table/);
+  const rpc = {
+    latestBlockhash: async () => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 1 }),
+    send: async () => assert.fail('sent'),
+  };
+  await assert.rejects(
+    sendFitting({
+      rpc,
+      payer,
+      instructions: [wide(payer, 40), transferLamports(payer, key(3), 1n)],
+      sign: async () => new Uint8Array(),
+      table: false,
+    }),
+    /holds no rent for a lookup table/,
+  );
 });
 
 describe('xsolana_check sizes every box’s settle', async () => {
@@ -241,49 +391,134 @@ describe('xsolana_check sizes every box’s settle', async () => {
   const { requestHeapFrame } = await import('../chain/programs.js');
   const { TOKEN_PROGRAM } = await import('../chain/pda.js');
   const { compileMessage } = await import('../chain/tx.js');
-  const A = (n) => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + n * 13 + 1) % 256));
+  const A = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + n * 13 + 1) % 256));
   const NOW = 1_790_000_000;
   const shape = ({ tokens = 0, core = 0, pnft = 0, holders = 0, wallets = 0, hooked = false, subject = false }) => ({
-    version: 2, network: 'devnet', name: 'Shapes', currency: 'coin',
-    tokens: [{ key: 'coin', source: 'existing', mint: A(1), decimals: 6, ...(hooked ? { program: 'token-2022', powers: { transferHook: true } } : { powers: {} }) },
-      ...Array.from({ length: tokens }, (_, i) => ({ key: `t${i}`, source: 'existing', mint: A(10 + i), decimals: 0, powers: {} }))],
+    version: 2,
+    network: 'devnet',
+    name: 'Shapes',
+    currency: 'coin',
+    tokens: [
+      {
+        key: 'coin',
+        source: 'existing',
+        mint: A(1),
+        decimals: 6,
+        ...(hooked ? { program: 'token-2022', powers: { transferHook: true } } : { powers: {} }),
+      },
+      ...Array.from({ length: tokens }, (_, i) => ({
+        key: `t${i}`,
+        source: 'existing',
+        mint: A(10 + i),
+        decimals: 0,
+        powers: {},
+      })),
+    ],
     collection: { name: 'Shapes' },
     items: [{ key: 'hero', name: 'Hero' }],
     pools: Array.from({ length: tokens }, (_, i) => ({ key: `p${i}`, currency: `t${i}`, seed: 100 })),
-    stashes: [{ key: 'c', name: 'Core', collection: A(30), nfts: [A(40), A(41), A(42)] },
-      { key: 'pn', name: 'P', nfts: [{ mint: A(70), programmable: true }, { mint: A(71), programmable: true }, { mint: A(72), programmable: true }] }],
-    boxes: [{
-      key: 'roll', name: 'Roll', price: 1, ...(subject ? { rollsOn: { item: 'hero' }, then: { giveTo: A(3) } } : {}),
-      split: [...Array.from({ length: holders }, (_, i) => ({ to: `holder:${A(60 + i)}`, percent: 5 })), ...Array.from({ length: wallets }, (_, i) => ({ to: A(80 + i), percent: 5 }))],
-      outcomes: [{ gives: 'bundle', weight: 1000,
-        prizes: [...Array.from({ length: tokens }, (_, i) => ({ gives: 'pay', pool: `p${i}`, amount: 7 })),
-          ...Array.from({ length: core }, () => ({ gives: 'stash', stash: 'c' })), ...Array.from({ length: pnft }, () => ({ gives: 'stash', stash: 'pn' }))] },
-      { gives: 'nothing', weight: 1 }],
-    }],
+    stashes: [
+      { key: 'c', name: 'Core', collection: A(30), nfts: [A(40), A(41), A(42)] },
+      {
+        key: 'pn',
+        name: 'P',
+        nfts: [
+          { mint: A(70), programmable: true },
+          { mint: A(71), programmable: true },
+          { mint: A(72), programmable: true },
+        ],
+      },
+    ],
+    boxes: [
+      {
+        key: 'roll',
+        name: 'Roll',
+        price: 1,
+        ...(subject ? { rollsOn: { item: 'hero' }, then: { giveTo: A(3) } } : {}),
+        split: [
+          ...Array.from({ length: holders }, (_, i) => ({ to: `holder:${A(60 + i)}`, percent: 5 })),
+          ...Array.from({ length: wallets }, (_, i) => ({ to: A(80 + i), percent: 5 })),
+        ],
+        outcomes: [
+          {
+            gives: 'bundle',
+            weight: 1000,
+            prizes: [
+              ...Array.from({ length: tokens }, (_, i) => ({ gives: 'pay', pool: `p${i}`, amount: 7 })),
+              ...Array.from({ length: core }, () => ({ gives: 'stash', stash: 'c' })),
+              ...Array.from({ length: pnft }, () => ({ gives: 'stash', stash: 'pn' })),
+            ],
+          },
+          { gives: 'nothing', weight: 1 },
+        ],
+      },
+    ],
   });
-  const verdict = (args) => {
+  const verdict = args => {
     const r = check(shape(args), { now: NOW });
-    return { refused: r.refusals.filter((x) => x.code === 'E-TX-SIZE'), v0: r.warnings.find((x) => x.code === 'W-SETTLE-V0') };
+    return {
+      refused: r.refusals.filter(x => x.code === 'E-TX-SIZE'),
+      v0: r.warnings.find(x => x.code === 'W-SETTLE-V0'),
+    };
   };
 
   test('the estimate is the settle the client builds, byte for byte: three Core NFTs of a stash and four holders’ shares, 1,271 bytes', () => {
     const m = model(shape({ core: 3, holders: 4 }));
     const est = settleSize(m.boxes[0], m.boxes[0].outcomes[0], m);
-    const k = (n) => key(2000 + n);
+    const k = n => key(2000 + n);
     const assets = [k(1), k(2), k(3), k(4)];
-    const order = { project: k(5), player: k(6), mint: k(7), loot_box: k(8), status: 'Rolled', won: [k(9), k(10), k(11)].map((nft) => ({ Nft: { stash: 0, nft } })), paid: 1n, fee: 0n,
-      shares: assets.map((a) => ({ to: { Holder: [a] }, bps: 500 })), subject: '11111111111111111111111111111111', held: false, fate: null, requested_slot: 1n, drew: 1 };
-    const ix = loot.settleIx({ signer: k(12), orderAddress: k(13), order, projectState: { treasury: k(14) }, items: {}, nfts: Object.fromEntries(order.won.map((w) => [w.Nft.nft, { collection: k(15) }])), putBack: [], subject: {}, holders: Object.fromEntries(assets.map((a, i) => [a, k(20 + i)])), programs: { [k(7)]: TOKEN_PROGRAM } });
-    const real = transactionSize(compileMessage({ payer: k(12), blockhash: BLOCKHASH, instructions: [computeUnitLimit(1_400_000), requestHeapFrame(loot.settleHeapFrame(order)), ix] }));
+    const order = {
+      project: k(5),
+      player: k(6),
+      mint: k(7),
+      loot_box: k(8),
+      status: 'Rolled',
+      won: [k(9), k(10), k(11)].map(nft => ({ Nft: { stash: 0, nft } })),
+      paid: 1n,
+      fee: 0n,
+      shares: assets.map(a => ({ to: { Holder: [a] }, bps: 500 })),
+      subject: '11111111111111111111111111111111',
+      held: false,
+      fate: null,
+      requested_slot: 1n,
+      drew: 1,
+    };
+    const ix = loot.settleIx({
+      signer: k(12),
+      orderAddress: k(13),
+      order,
+      projectState: { treasury: k(14) },
+      items: {},
+      nfts: Object.fromEntries(order.won.map(w => [w.Nft.nft, { collection: k(15) }])),
+      putBack: [],
+      subject: {},
+      holders: Object.fromEntries(assets.map((a, i) => [a, k(20 + i)])),
+      programs: { [k(7)]: TOKEN_PROGRAM },
+    });
+    const real = transactionSize(
+      compileMessage({
+        payer: k(12),
+        blockhash: BLOCKHASH,
+        instructions: [computeUnitLimit(1_400_000), requestHeapFrame(loot.settleHeapFrame(order)), ix],
+      }),
+    );
     assert.equal(est.legacy, real);
     assert.equal(real, 1271);
   });
 
   test('a settle too big for a legacy transaction, NFTs or not, is warned of as v0 with a table’s rent; one that fits is not', () => {
-    for (const args of [{ core: 3, holders: 4 }, { tokens: 3, holders: 4 }, { pnft: 3, holders: 4, subject: true }]) {
+    for (const args of [
+      { core: 3, holders: 4 },
+      { tokens: 3, holders: 4 },
+      { pnft: 3, holders: 4, subject: true },
+    ]) {
       const { refused, v0 } = verdict(args);
       assert.deepEqual(refused, [], JSON.stringify(args));
-      assert.match(v0?.message ?? '', /as a v0 transaction that loads its accounts from an address lookup table.*the project’s standing table, which going live makes.*SOL of rent back/s, JSON.stringify(args));
+      assert.match(
+        v0?.message ?? '',
+        /as a v0 transaction that loads its accounts from an address lookup table.*the project’s standing table, which going live makes.*SOL of rent back/s,
+        JSON.stringify(args),
+      );
     }
     assert.equal(verdict({ core: 3, holders: 3 }).v0, undefined);
   });
@@ -296,7 +531,12 @@ describe('xsolana_check sizes every box’s settle', async () => {
   });
 
   test('the heap warnings say xsolana’s senders land it as v0 with a lookup table', () => {
-    const heap = check(shape({ core: 0, pnft: 3, holders: 4, subject: true, hooked: true }), { now: NOW }).warnings.find((w) => w.code === 'W-BOX-HEAP');
-    assert.match(heap.message, /send a settle too big for a legacy transaction as a v0 one with a lookup table \(W-SETTLE-V0\): it lands/);
+    const heap = check(shape({ core: 0, pnft: 3, holders: 4, subject: true, hooked: true }), {
+      now: NOW,
+    }).warnings.find(w => w.code === 'W-BOX-HEAP');
+    assert.match(
+      heap.message,
+      /send a settle too big for a legacy transaction as a v0 one with a lookup table \(W-SETTLE-V0\): it lands/,
+    );
   });
 });

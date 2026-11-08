@@ -14,7 +14,7 @@ const INT = { i32: 4, i64: 8 };
 const ADDRESS_BYTES = 32;
 
 function typeDef(idl, name) {
-  const def = idl.types.find((t) => t.name === name);
+  const def = idl.types.find(t => t.name === name);
   if (!def) throw new Error(`Unknown IDL type ${name}`);
   return def;
 }
@@ -43,13 +43,13 @@ function encodeScalar(type, value, out) {
 }
 
 /** A variant's field list: named ({ name, type }) or tuple (bare types). */
-const isNamed = (fields) => typeof fields[0] === 'object' && fields[0] !== null && 'name' in fields[0];
+const isNamed = fields => typeof fields[0] === 'object' && fields[0] !== null && 'name' in fields[0];
 
 function encodeDefined(idl, name, value, out) {
   const def = typeDef(idl, name).type;
   if (def.kind === 'enum') {
     const variantName = typeof value === 'string' ? value : Object.keys(value ?? {})[0];
-    const index = def.variants.findIndex((v) => v.name === variantName);
+    const index = def.variants.findIndex(v => v.name === variantName);
     if (index < 0) throw new Error(`${name} has no variant ${String(variantName)}`);
     out.push(Uint8Array.of(index));
     const fields = def.variants[index].fields ?? [];
@@ -71,7 +71,9 @@ function encodeDefined(idl, name, value, out) {
  * a number past a byte) is refused rather than written as other bytes.
  */
 function byteArray(value, length) {
-  const bytes = value instanceof Uint8Array || (Array.isArray(value) && value.every((b) => Number.isInteger(b) && b >= 0 && b <= 255));
+  const bytes =
+    value instanceof Uint8Array ||
+    (Array.isArray(value) && value.every(b => Number.isInteger(b) && b >= 0 && b <= 255));
   if (!bytes) throw new TypeError(`Expected ${length} bytes: a Uint8Array or an array of integers from 0 to 255`);
   if (value.length !== length) throw new Error(`Expected ${length} bytes, got ${value.length}`);
   return Uint8Array.from(value);
@@ -114,7 +116,7 @@ export function encodeBorsh(idl, type, value) {
 
 /** An instruction's data: its discriminator, then each argument in IDL order. */
 export function encodeInstruction(idl, name, args) {
-  const ix = idl.instructions.find((i) => i.name === name);
+  const ix = idl.instructions.find(i => i.name === name);
   if (!ix) throw new Error(`Unknown instruction ${name}`);
   const out = [Uint8Array.from(ix.discriminator)];
   for (const arg of ix.args) {
@@ -126,7 +128,7 @@ export function encodeInstruction(idl, name, args) {
 
 /** An account's bytes as the program writes them: its discriminator, then its fields. */
 export function encodeAccount(idl, name, value) {
-  const account = idl.accounts.find((a) => a.name === name);
+  const account = idl.accounts.find(a => a.name === name);
   if (!account) throw new Error(`Unknown account type ${name}`);
   return concat(Uint8Array.from(account.discriminator), encodeBorsh(idl, { defined: { name } }, value));
 }
@@ -218,11 +220,12 @@ function decodeAt(idl, type, data, at) {
 /** One value of `type` at `offset`: [value, next offset]. */
 export const decodeBorsh = (idl, type, data, offset = 0) => decodeAt(idl, type, data, offset);
 
-const startsWith = (data, prefix) => data.length >= prefix.length && equalBytes(data.subarray(0, prefix.length), Uint8Array.from(prefix));
+const startsWith = (data, prefix) =>
+  data.length >= prefix.length && equalBytes(data.subarray(0, prefix.length), Uint8Array.from(prefix));
 
 /** An account of the named type, after checking its discriminator. Bytes after the fields are left alone. */
 export function decodeAccount(idl, name, data) {
-  const account = idl.accounts.find((a) => a.name === name);
+  const account = idl.accounts.find(a => a.name === name);
   if (!account) throw new Error(`Unknown account type ${name}`);
   if (!startsWith(data, account.discriminator)) throw new Error(`Not a ${name} account`);
   return decodeDefined(idl, name, data, account.discriminator.length)[0];
@@ -230,7 +233,7 @@ export function decodeAccount(idl, name, data) {
 
 /** Whether the data starts with the named account's discriminator. */
 export function isAccount(idl, name, data) {
-  const account = idl.accounts.find((a) => a.name === name);
+  const account = idl.accounts.find(a => a.name === name);
   return Boolean(account) && startsWith(data, account.discriminator);
 }
 
@@ -263,8 +266,9 @@ export function decodeEvents(idl, logs) {
     } catch {
       continue;
     }
-    const event = (idl.events ?? []).find((e) => startsWith(bytes, e.discriminator));
-    if (event) out.push({ name: event.name, data: decodeDefined(idl, event.name, bytes, event.discriminator.length)[0] });
+    const event = (idl.events ?? []).find(e => startsWith(bytes, e.discriminator));
+    if (event)
+      out.push({ name: event.name, data: decodeDefined(idl, event.name, bytes, event.discriminator.length)[0] });
   }
   return out;
 }

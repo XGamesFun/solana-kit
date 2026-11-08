@@ -35,19 +35,19 @@ export function transferLamports(from, to, lamports) {
 }
 
 /** Compute Budget `RequestHeapFrame`: the transaction's programs get a heap of `bytes` (a multiple of 1 KiB, 32 KiB to 256 KiB). */
-export const requestHeapFrame = (bytes) => ({
+export const requestHeapFrame = bytes => ({
   programId: COMPUTE_BUDGET_PROGRAM,
   keys: [],
   data: concat(Uint8Array.of(REQUEST_HEAP_FRAME), uintLE(bytes, 4)),
 });
 
-export const computeUnitLimit = (units) => ({
+export const computeUnitLimit = units => ({
   programId: COMPUTE_BUDGET_PROGRAM,
   keys: [],
   data: concat(Uint8Array.of(SET_COMPUTE_UNIT_LIMIT), uintLE(units, 4)),
 });
 
-export const computeUnitPrice = (microLamports) => ({
+export const computeUnitPrice = microLamports => ({
   programId: COMPUTE_BUDGET_PROGRAM,
   keys: [],
   data: concat(Uint8Array.of(SET_COMPUTE_UNIT_PRICE), uintLE(microLamports, 8)),
@@ -69,7 +69,7 @@ export function createAssociatedTokenAccountIdempotent(payer, owner, mint, token
   };
 }
 
-export const syncNative = (account) => ({
+export const syncNative = account => ({
   programId: TOKEN_PROGRAM,
   keys: [meta(account, false, true)],
   data: Uint8Array.of(TOKEN_SYNC_NATIVE),
@@ -89,8 +89,8 @@ export const closeTokenAccount = (account, destination, owner) => ({
 export function withSolWrap(player, mint, price, instructions) {
   if (mint !== NATIVE_MINT) return instructions;
   const wrapped = associatedTokenAddress(player, NATIVE_MINT);
-  const budget = instructions.filter((ix) => ix.programId === COMPUTE_BUDGET_PROGRAM);
-  const rest = instructions.filter((ix) => ix.programId !== COMPUTE_BUDGET_PROGRAM);
+  const budget = instructions.filter(ix => ix.programId === COMPUTE_BUDGET_PROGRAM);
+  const rest = instructions.filter(ix => ix.programId !== COMPUTE_BUDGET_PROGRAM);
   return [
     ...budget,
     createAssociatedTokenAccountIdempotent(player, player, NATIVE_MINT),

@@ -5,25 +5,34 @@ import { addressBytes } from '../chain/base58.js';
 import { compareBytes, concat, uintLE, utf8 } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
 
-const text = (s) => concat(uintLE(utf8(s).length, 4), utf8(s));
+const text = s => concat(uintLE(utf8(s).length, 4), utf8(s));
 
 /** A leaf: an NFT's address and its traits ([{ key, value }], in order). */
 export const traitsLeaf = (nft, attributes) =>
-  sha256(concat(Uint8Array.of(0), addressBytes(nft), uintLE(attributes.length, 4), ...attributes.map((a) => concat(text(a.key), text(a.value)))));
+  sha256(
+    concat(
+      Uint8Array.of(0),
+      addressBytes(nft),
+      uintLE(attributes.length, 4),
+      ...attributes.map(a => concat(text(a.key), text(a.value))),
+    ),
+  );
 
 /** Two nodes joined, the smaller first, so a proof needs no left or right. */
-export const traitsNode = (a, b) => (compareBytes(a, b) <= 0 ? sha256(concat(Uint8Array.of(1), a, b)) : sha256(concat(Uint8Array.of(1), b, a)));
+export const traitsNode = (a, b) =>
+  compareBytes(a, b) <= 0 ? sha256(concat(Uint8Array.of(1), a, b)) : sha256(concat(Uint8Array.of(1), b, a));
 
 /**
  * The tree of `entries` ([{ nft, attributes }]): { root, proof(nft) → [node, …] bottom up }. A node left without a pair
  * at a level goes up as it is.
  */
 export function traitsTree(entries) {
-  const levels = [entries.map((e) => traitsLeaf(e.nft, e.attributes))];
+  const levels = [entries.map(e => traitsLeaf(e.nft, e.attributes))];
   while (levels.at(-1).length > 1) {
     const below = levels.at(-1);
     const up = [];
-    for (let i = 0; i < below.length; i += 2) up.push(i + 1 < below.length ? traitsNode(below[i], below[i + 1]) : below[i]);
+    for (let i = 0; i < below.length; i += 2)
+      up.push(i + 1 < below.length ? traitsNode(below[i], below[i + 1]) : below[i]);
     levels.push(up);
   }
   const at = new Map(entries.map((e, i) => [e.nft, i]));

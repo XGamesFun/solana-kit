@@ -53,18 +53,18 @@ or `npx -y @xgamesfun/solana@0.24.0 tool <name> '<json>'` for any tool (always w
      table.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
-   (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`), keep token
-   rewards for results small, and have a server check what the page claims (`@xgamesfun/solana/results`:
-   `collectiblesOf`, `verifyProof`, `makeCodes`). The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`,
-   `W-FARM-MINT`); xsolana_guide's "Designing against farming" says why.
+    (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`), keep token
+    rewards for results small, and have a server check what the page claims (`@xgamesfun/solana/results`:
+    `collectiblesOf`, `verifyProof`, `makeCodes`). The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`,
+    `W-FARM-MINT`); xsolana_guide's "Designing against farming" says why.
 
 11. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
-   draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
-   win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
-   gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
-   grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
-   nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
-   the owner to fund: whoever signs pays.
+    draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
+    win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
+    gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
+    grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
+    nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
+    the owner to fund: whoever signs pays.
 
 ## The loop
 

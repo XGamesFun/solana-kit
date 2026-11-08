@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = path.join(root, 'skills');
-const MIRRORS = ['plugin/skills', '.claude/skills', '.agents/skills'].map((p) => path.join(root, p));
+const MIRRORS = ['plugin/skills', '.claude/skills', '.agents/skills'].map(p => path.join(root, p));
 const check = process.argv.includes('--check');
 
 async function files(dir, base = dir) {
@@ -30,7 +30,8 @@ for (const skill of await readdir(SOURCE)) {
   const name = /^name:\s*(.+)$/m.exec(front)?.[1]?.trim();
   const description = /^description:\s*(.+)$/m.exec(front)?.[1]?.trim() ?? '';
   if (name !== skill) problems.push(`${skill}: front matter name is "${name}", not the folder's`);
-  if (!description || description.length > 1024) problems.push(`${skill}: description must be 1 to 1,024 characters (it is ${description.length})`);
+  if (!description || description.length > 1024)
+    problems.push(`${skill}: description must be 1 to 1,024 characters (it is ${description.length})`);
 }
 const want = await files(SOURCE);
 for (const mirror of MIRRORS) {
@@ -45,7 +46,7 @@ for (const mirror of MIRRORS) {
       await cp(path.join(SOURCE, f), path.join(mirror, f));
     }
   }
-  for (const f of have.filter((x) => !want.includes(x))) {
+  for (const f of have.filter(x => !want.includes(x))) {
     if (check) problems.push(`${path.relative(root, mirror)}/${f} is not in skills/`);
     else await rm(path.join(mirror, f));
   }
@@ -55,4 +56,6 @@ if (problems.length) {
   if (check) console.error('Run `node scripts/sync-skills.mjs` to copy skills/ again.');
   process.exit(1);
 }
-console.log(check ? 'skills match their copies' : `copied skills/ to ${MIRRORS.map((m) => path.relative(root, m)).join(', ')}`);
+console.log(
+  check ? 'skills match their copies' : `copied skills/ to ${MIRRORS.map(m => path.relative(root, m)).join(', ')}`,
+);

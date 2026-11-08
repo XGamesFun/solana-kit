@@ -9,15 +9,18 @@ import { newAddress } from '../sim/chain.mjs';
 import { pinned, world } from './world.mjs';
 
 const TM = loot.TOKEN_METADATA_PROGRAM;
-const str = (s) => concat(uintLE(utf8(s).length, 4), utf8(s));
-const some = (bytes) => concat(Uint8Array.of(1), bytes);
+const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
+const some = bytes => concat(Uint8Array.of(1), bytes);
 const NONE = Uint8Array.of(0);
 
 /** Token Metadata's CreateV1 (42, 0) of a NonFungible: `collection` an unverified one it names, or a sized collection. */
 function createV1({ mint, maker, name, collection = null, sized = false }) {
   const data = concat(
     Uint8Array.of(42, 0),
-    str(name), str('OUT'), str('https://example.invalid/nft.json'), uintLE(500, 2),
+    str(name),
+    str('OUT'),
+    str('https://example.invalid/nft.json'),
+    uintLE(500, 2),
     some(concat(uintLE(1, 4), addressBytes(maker), Uint8Array.of(1, 100))), // one creator, verified (the maker signs)
     Uint8Array.of(0, 1), // primary sale not happened, mutable
     Uint8Array.of(0), // TokenStandard::NonFungible
@@ -31,9 +34,15 @@ function createV1({ mint, maker, name, collection = null, sized = false }) {
   return {
     programId: TM,
     keys: [
-      meta(loot.tokenMetadata.metadata(mint), false, true), meta(loot.tokenMetadata.edition(mint), false, true), meta(mint, true, true),
-      meta(maker, true, false), meta(maker, true, true), meta(maker, true, false),
-      meta(SYSTEM_PROGRAM, false, false), meta(SYSVAR_INSTRUCTIONS, false, false), meta(TOKEN_PROGRAM, false, false),
+      meta(loot.tokenMetadata.metadata(mint), false, true),
+      meta(loot.tokenMetadata.edition(mint), false, true),
+      meta(mint, true, true),
+      meta(maker, true, false),
+      meta(maker, true, true),
+      meta(maker, true, false),
+      meta(SYSTEM_PROGRAM, false, false),
+      meta(SYSVAR_INSTRUCTIONS, false, false),
+      meta(TOKEN_PROGRAM, false, false),
     ],
     data,
   };
@@ -44,10 +53,21 @@ function mintV1({ mint, maker, owner }) {
   return {
     programId: TM,
     keys: [
-      meta(loot.ata(owner, mint), false, true), meta(owner, false, false), meta(loot.tokenMetadata.metadata(mint), false, true),
-      meta(loot.tokenMetadata.edition(mint), false, true), meta(TM, false, false), meta(mint, false, true), meta(maker, true, false),
-      meta(TM, false, false), meta(maker, true, true), meta(SYSTEM_PROGRAM, false, false), meta(SYSVAR_INSTRUCTIONS, false, false),
-      meta(TOKEN_PROGRAM, false, false), meta(loot.ASSOCIATED_TOKEN_PROGRAM, false, false), meta(TM, false, false), meta(TM, false, false),
+      meta(loot.ata(owner, mint), false, true),
+      meta(owner, false, false),
+      meta(loot.tokenMetadata.metadata(mint), false, true),
+      meta(loot.tokenMetadata.edition(mint), false, true),
+      meta(TM, false, false),
+      meta(mint, false, true),
+      meta(maker, true, false),
+      meta(TM, false, false),
+      meta(maker, true, true),
+      meta(SYSTEM_PROGRAM, false, false),
+      meta(SYSVAR_INSTRUCTIONS, false, false),
+      meta(TOKEN_PROGRAM, false, false),
+      meta(loot.ASSOCIATED_TOKEN_PROGRAM, false, false),
+      meta(TM, false, false),
+      meta(TM, false, false),
     ],
     data: concat(Uint8Array.of(43, 0), uintLE(1, 8), NONE),
   };
@@ -58,9 +78,14 @@ function verifyCollectionV1({ mint, maker, collection }) {
   return {
     programId: TM,
     keys: [
-      meta(maker, true, false), meta(TM, false, false), meta(loot.tokenMetadata.metadata(mint), false, true), meta(collection, false, false),
-      meta(loot.tokenMetadata.metadata(collection), false, true), meta(loot.tokenMetadata.edition(collection), false, false),
-      meta(SYSTEM_PROGRAM, false, false), meta(SYSVAR_INSTRUCTIONS, false, false),
+      meta(maker, true, false),
+      meta(TM, false, false),
+      meta(loot.tokenMetadata.metadata(mint), false, true),
+      meta(collection, false, false),
+      meta(loot.tokenMetadata.metadata(collection), false, true),
+      meta(loot.tokenMetadata.edition(collection), false, false),
+      meta(SYSTEM_PROGRAM, false, false),
+      meta(SYSVAR_INSTRUCTIONS, false, false),
     ],
     data: Uint8Array.of(52, 1),
   };
@@ -69,7 +94,12 @@ function verifyCollectionV1({ mint, maker, collection }) {
 /** A legacy NFT of `maker`'s sized collection `collection`, verified in it, minted to `owner`. */
 export function nftOf(w, maker, owner, collection) {
   const mint = newAddress(w.random);
-  w.chain.send(maker, [computeUnitLimit(1_400_000), createV1({ mint, maker, name: 'Outside #7', collection }), mintV1({ mint, maker, owner }), verifyCollectionV1({ mint, maker, collection })]);
+  w.chain.send(maker, [
+    computeUnitLimit(1_400_000),
+    createV1({ mint, maker, name: 'Outside #7', collection }),
+    mintV1({ mint, maker, owner }),
+    verifyCollectionV1({ mint, maker, collection }),
+  ]);
   return mint;
 }
 
@@ -82,7 +112,10 @@ export function setup(seed) {
   w.chain.svm.addProgram(TM, pinned('token_metadata.so'));
   const maker = w.who();
   const club = newAddress(w.random);
-  w.chain.send(maker, [computeUnitLimit(1_400_000), createV1({ mint: club, maker, name: 'Outside Club', sized: true }), mintV1({ mint: club, maker, owner: maker })]);
+  w.chain.send(maker, [
+    computeUnitLimit(1_400_000),
+    createV1({ mint: club, maker, name: 'Outside Club', sized: true }),
+    mintV1({ mint: club, maker, owner: maker }),
+  ]);
   return { w, maker, club };
 }
-

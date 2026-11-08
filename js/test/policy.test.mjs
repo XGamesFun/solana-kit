@@ -4,7 +4,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { concat, uintLE } from '../chain/bytes.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { LOOT_PROGRAM, readListAccount, orderRefundAt, orderRefundable, rollAskable, lotteryDrawStuck, lotteryCancellable, STALE_SECONDS, LOTTERY_TIMEOUT_SECONDS, auctionEnds, leastBid } from '../client/index.js';
+import {
+  LOOT_PROGRAM,
+  readListAccount,
+  orderRefundAt,
+  orderRefundable,
+  rollAskable,
+  lotteryDrawStuck,
+  lotteryCancellable,
+  STALE_SECONDS,
+  LOTTERY_TIMEOUT_SECONDS,
+  auctionEnds,
+  leastBid,
+} from '../client/index.js';
 
 test('a list account agrees with the program opening a prefunded address, and foreign or malformed ones are refused', () => {
   assert.equal(readListAccount(null), null);
@@ -12,15 +24,24 @@ test('a list account agrees with the program opening a prefunded address, and fo
   const data = concat(Uint8Array.of(26), uintLE(16, 2), uintLE(1, 4), new Uint8Array(16).fill(7));
   assert.equal(readListAccount({ owner: LOOT_PROGRAM, data }).records.length, 1);
   for (const account of [
-    { owner: SYSTEM_PROGRAM, data }, { owner: 'foreign', data },
+    { owner: SYSTEM_PROGRAM, data },
+    { owner: 'foreign', data },
     { owner: LOOT_PROGRAM, data: new Uint8Array() },
     { owner: LOOT_PROGRAM, data, executable: true },
     { owner: SYSTEM_PROGRAM, data: new Uint8Array(), executable: true },
-  ]) assert.throws(() => readListAccount(account));
+  ])
+    assert.throws(() => readListAccount(account));
 });
 
 test('refund discovery: a failed roll from the next slot, a stale one by the clock, and never a rolled order', () => {
-  const base = { project: 'project', requested_slot: 100n, asked_at: 5_000n, first_asked_at: 4_000n, paid: 0n, held: false };
+  const base = {
+    project: 'project',
+    requested_slot: 100n,
+    asked_at: 5_000n,
+    first_asked_at: 4_000n,
+    paid: 0n,
+    held: false,
+  };
   assert.deepEqual([STALE_SECONDS, LOTTERY_TIMEOUT_SECONDS], [600n, 604_800n]);
   const failed = { ...base, status: 'Failed' };
   assert.deepEqual(orderRefundAt(failed), { slot: 100n, at: null });
@@ -30,7 +51,8 @@ test('refund discovery: a failed roll from the next slot, a stale one by the clo
   assert.equal(orderRefundable(pending, 101n, 5_600n), false, 'the clock, to the second');
   assert.equal(orderRefundable(pending, 101n, 5_601n), true);
   assert.equal(orderRefundable(pending, 100n, 5_601n), false, 'and a later slot');
-  for (const status of ['Rolled', 'Waiting', 'Asked']) assert.equal(orderRefundAt({ ...base, status }), null, `${status}: nothing to give back`);
+  for (const status of ['Rolled', 'Waiting', 'Asked'])
+    assert.equal(orderRefundAt({ ...base, status }), null, `${status}: nothing to give back`);
   // An asked roll holding a payment or an NFT may leave after a week of silence, from its first ask.
   for (const holds of [{ paid: 1n }, { held: true }]) {
     const asked = { ...base, ...holds, status: 'Asked' };

@@ -11,21 +11,21 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 
 ## Layout
 
-| Path | What |
-| --- | --- |
-| `js/chain/` | browser-safe Solana primitives, no SDK: base58, Borsh from the IDL, transactions, PDAs, tokens, Core |
-| `js/client/` | the client: every PDA, one builder per instruction, account and receipt decoders, grant vouchers |
-| `js/economy/` | the economy spec (version 2, `schema.json`), checker, quick simulation, setup plan, cost, explainer, guide |
-| `js/play/`, `js/results/` | what a player does with a live economy from an app; results a server vouched for |
-| `js/approve/` | `xsolana approve`: the local page where an owner approves going live in their own wallet |
-| `js/mcp/` | the MCP server and its `xsolana_*` tools |
-| `js/connect/` | `xsolana connect`: adds the tools and the skill to Claude Code and Codex |
-| `js/sim/` | LiteSVM running the real program (tests, and the full simulation) |
-| `js/test/` | the tests; `fixtures/` pins the programs they run by hash (`npm run fixtures` downloads them) |
-| `skills/` | the skill; `scripts/sync-skills.mjs` copies it to `plugin/skills`, `.claude/skills`, `.agents/skills` |
-| `plugin/` | one plugin folder for both harnesses: `.claude-plugin/plugin.json` + `.mcp.json` (Claude Code), `plugin.json` + `mcp.json` (Codex) |
-| `examples/` | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated against loot |
-| `evals/` | fresh-session evals: prompts, a runner for `claude -p` and `codex exec`, a scorer, live devnet runs |
+| Path                      | What                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `js/chain/`               | browser-safe Solana primitives, no SDK: base58, Borsh from the IDL, transactions, PDAs, tokens, Core                               |
+| `js/client/`              | the client: every PDA, one builder per instruction, account and receipt decoders, grant vouchers                                   |
+| `js/economy/`             | the economy spec (version 2, `schema.json`), checker, quick simulation, setup plan, cost, explainer, guide                         |
+| `js/play/`, `js/results/` | what a player does with a live economy from an app; results a server vouched for                                                   |
+| `js/approve/`             | `xsolana approve`: the local page where an owner approves going live in their own wallet                                           |
+| `js/mcp/`                 | the MCP server and its `xsolana_*` tools                                                                                           |
+| `js/connect/`             | `xsolana connect`: adds the tools and the skill to Claude Code and Codex                                                           |
+| `js/sim/`                 | LiteSVM running the real program (tests, and the full simulation)                                                                  |
+| `js/test/`                | the tests; `fixtures/` pins the programs they run by hash (`npm run fixtures` downloads them)                                      |
+| `skills/`                 | the skill; `scripts/sync-skills.mjs` copies it to `plugin/skills`, `.claude/skills`, `.agents/skills`                              |
+| `plugin/`                 | one plugin folder for both harnesses: `.claude-plugin/plugin.json` + `.mcp.json` (Claude Code), `plugin.json` + `mcp.json` (Codex) |
+| `examples/`               | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated against loot                           |
+| `evals/`                  | fresh-session evals: prompts, a runner for `claude -p` and `codex exec`, a scorer, live devnet runs                                |
 
 ## Rules
 

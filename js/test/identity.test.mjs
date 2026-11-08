@@ -5,9 +5,31 @@ import { test } from 'node:test';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
-import { ACCOUNT_BYTES, CONTEST_ENTRY_BYTES, countKey, decodeAny, decodeEntries, decodeList, entryWidth, limitKey, LIMIT_RECORD_BYTES, pda, projectBytes, readLimit, readVoucher, roundKey, roundPaid, shardBitsFor, shardOf, voucherBody, VOUCHER_BYTES, voucherBytes, walletShard } from '../client/index.js';
+import {
+  ACCOUNT_BYTES,
+  CONTEST_ENTRY_BYTES,
+  countKey,
+  decodeAny,
+  decodeEntries,
+  decodeList,
+  entryWidth,
+  limitKey,
+  LIMIT_RECORD_BYTES,
+  pda,
+  projectBytes,
+  readLimit,
+  readVoucher,
+  roundKey,
+  roundPaid,
+  shardBitsFor,
+  shardOf,
+  voucherBody,
+  VOUCHER_BYTES,
+  voucherBytes,
+  walletShard,
+} from '../client/index.js';
 
-const address = (n) => encodeBase58(new Uint8Array(32).fill(n));
+const address = n => encodeBase58(new Uint8Array(32).fill(n));
 const list = (width, records) => concat(Uint8Array.of(26), uintLE(width, 2), uintLE(records.length, 4), ...records);
 
 test('grant identities scope every record and the voucher itself', () => {
@@ -20,17 +42,31 @@ test('grant identities scope every record and the voucher itself', () => {
   const wallet16 = sha256(concat(utf8('wallet'), addressBytes(wallet))).subarray(0, 16);
   assert.deepEqual(limitKey('wallet', wallet), wallet16);
   assert.notDeepEqual(limitKey('person', person), limitKey('badge', person));
-  assert.deepEqual(roundKey(new Uint8Array(16).fill(5), wallet), sha256(concat(new Uint8Array(16).fill(5), addressBytes(wallet))).subarray(0, 16));
+  assert.deepEqual(
+    roundKey(new Uint8Array(16).fill(5), wallet),
+    sha256(concat(new Uint8Array(16).fill(5), addressBytes(wallet))).subarray(0, 16),
+  );
   // Its shard: the top bits of its key's first byte; a wallet's rounds are in its own limit record's shard.
   assert.equal(shardOf(wallet16, 0), 0);
   assert.equal(shardOf(wallet16, 8), wallet16[0]);
   assert.equal(shardOf(wallet16, 3), wallet16[0] >> 5);
   assert.equal(walletShard({ shard_bits: 4 }, wallet), wallet16[0] >> 4);
-  assert.deepEqual([shardBitsFor(10_000), shardBitsFor(100_001), shardBitsFor(1_000_000, 3), shardBitsFor(1e12)], [0, 1, 5, 8]);
+  assert.deepEqual(
+    [shardBitsFor(10_000), shardBitsFor(100_001), shardBitsFor(1_000_000, 3), shardBitsFor(1e12)],
+    [0, 1, 5, 8],
+  );
   // A wallet's counts key a record by its record and incarnation.
   assert.deepEqual(countKey(grant, 3n), sha256(concat(addressBytes(grant), uintLE(3, 8))).subarray(0, 16));
 
-  const fields = { grant, incarnation: 7n, wallet, personHash: person, round: new Uint8Array(16).fill(5), amount: 4n, expires: -1n };
+  const fields = {
+    grant,
+    incarnation: 7n,
+    wallet,
+    personHash: person,
+    round: new Uint8Array(16).fill(5),
+    amount: 4n,
+    expires: -1n,
+  };
   const bytes = voucherBytes(fields);
   assert.equal(bytes.length, VOUCHER_BYTES);
   const decoded = readVoucher(voucherBody(fields));
@@ -60,8 +96,11 @@ test('a list of records is read with every length checked; a paid round and a co
   assert.equal(decodeAny(rounds).kind, 'List');
   // A contest's entries: 43 bytes in a contest of tokens, read with the NFT's fields as nothing.
   const entry = concat(addressBytes(wallet), uintLE(1, 2), uintLE(500, 8), Uint8Array.of(1));
-  assert.deepEqual(decodeEntries(list(CONTEST_ENTRY_BYTES.tokens, [entry])).map((e) => [e.player, e.side, e.amount, e.bits, e.taken]), [[wallet, 1, 500n, 1, 0]]);
-  assert.throws(() => decodeAny(Uint8Array.of(19)), /Proven/, 'tag 19 is a compressed NFT\'s record');
+  assert.deepEqual(
+    decodeEntries(list(CONTEST_ENTRY_BYTES.tokens, [entry])).map(e => [e.player, e.side, e.amount, e.bits, e.taken]),
+    [[wallet, 1, 500n, 1, 0]],
+  );
+  assert.throws(() => decodeAny(Uint8Array.of(19)), /Proven/, "tag 19 is a compressed NFT's record");
 });
 
 test('fixed allocations, and the records sized to what they hold, share one size source', () => {

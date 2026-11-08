@@ -28,7 +28,15 @@ export function createAccountWithSeedIx({ from, address, seed, lamports, space, 
   return {
     programId: SYSTEM_PROGRAM,
     keys: [meta(from, true, true), meta(address, false, true)],
-    data: concat(uintLE(3, 4), addressBytes(from), uintLE(text.length, 8), text, uintLE(lamports, 8), uintLE(space, 8), addressBytes(owner)),
+    data: concat(
+      uintLE(3, 4),
+      addressBytes(from),
+      uintLE(text.length, 8),
+      text,
+      uintLE(lamports, 8),
+      uintLE(space, 8),
+      addressBytes(owner),
+    ),
   };
 }
 
@@ -81,5 +89,8 @@ export const transferCheckedIx = ({ from, mint, to, owner, amount, decimals, tok
 export const setAuthorityIx = ({ account, current, kind = 0, newAuthority, tokenProgram = TOKEN_PROGRAM }) => ({
   programId: tokenProgram,
   keys: [meta(account, false, true), meta(current, true, false)],
-  data: concat(Uint8Array.of(6, kind), newAuthority ? concat(Uint8Array.of(1), addressBytes(newAuthority)) : Uint8Array.of(0)),
+  data: concat(
+    Uint8Array.of(6, kind),
+    newAuthority ? concat(Uint8Array.of(1), addressBytes(newAuthority)) : Uint8Array.of(0),
+  ),
 });

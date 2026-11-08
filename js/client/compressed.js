@@ -11,7 +11,7 @@ const HEADER = 56;
  * the tree account's bytes.
  */
 export function proofLength(treeData) {
-  const u32 = (at) => treeData[at] | (treeData[at + 1] << 8) | (treeData[at + 2] << 16) | (treeData[at + 3] * 2 ** 24);
+  const u32 = at => treeData[at] | (treeData[at + 1] << 8) | (treeData[at + 2] << 16) | (treeData[at + 3] * 2 ** 24);
   const [buffer, depth] = [u32(2), u32(6)];
   const canopyAt = HEADER + 24 + buffer * (32 * depth + 40) + 32 * depth + 40;
   const canopy = Math.max(0, treeData.length - canopyAt);
@@ -19,7 +19,8 @@ export function proofLength(treeData) {
   return Math.max(0, depth - Math.round(cached));
 }
 
-const bytes = (value) => (value == null ? null : typeof value === 'string' ? decodeBase58(value) : Uint8Array.from(value));
+const bytes = value =>
+  value == null ? null : typeof value === 'string' ? decodeBase58(value) : Uint8Array.from(value);
 
 /**
  * A compressed NFT from an indexer's answers: `asset` (DAS `getAsset`), `proof` (DAS `getAssetProof`) and the tree
@@ -35,7 +36,7 @@ export function compressedFromDas({ asset, proof, treeData }) {
     nonce: BigInt(c.leaf_id),
     owner: asset.ownership.owner,
     delegate: asset.ownership.delegate ?? asset.ownership.owner,
-    collection: asset.grouping?.find((g) => g.group_key === 'collection')?.group_value ?? null,
+    collection: asset.grouping?.find(g => g.group_key === 'collection')?.group_value ?? null,
     dataHash: bytes(c.data_hash),
     creatorHash: bytes(c.creator_hash),
     assetDataHash: bytes(c.asset_data_hash ?? null),

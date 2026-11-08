@@ -33,14 +33,14 @@ function mergedAccounts(payer, instructions) {
 }
 
 /** The order a message lists accounts in: signers first, writable before read-only; payer at the head. */
-const rank = (m) => (m.isSigner ? 0 : 2) + (m.isWritable ? 0 : 1);
+const rank = m => (m.isSigner ? 0 : 2) + (m.isWritable ? 0 : 1);
 
 function compileInstructions(instructions, index) {
-  return instructions.map((ix) =>
+  return instructions.map(ix =>
     concat(
       Uint8Array.of(index.get(ix.programId)),
       compactU16(ix.keys.length),
-      Uint8Array.from(ix.keys.map((k) => index.get(k.pubkey))),
+      Uint8Array.from(ix.keys.map(k => index.get(k.pubkey))),
       compactU16(ix.data.length),
       ix.data,
     ),
@@ -57,10 +57,10 @@ export function compileMessage({ payer, blockhash, instructions, version = 'lega
   const lookups = [];
   if (version === 0) {
     for (const table of lookupTables) {
-      const drain = (writable) => {
+      const drain = writable => {
         const indexes = [];
         const keys = [];
-        accounts = accounts.filter((m) => {
+        accounts = accounts.filter(m => {
           if (m.isSigner || m.invoked || m.isWritable !== writable) return true;
           const at = table.addresses.indexOf(m.pubkey);
           if (at < 0) return true;
@@ -74,30 +74,36 @@ export function compileMessage({ payer, blockhash, instructions, version = 'lega
       const w = drain(true);
       const r = drain(false);
       if (w.indexes.length || r.indexes.length)
-        lookups.push({ address: table.address, writable: w.indexes, readonly: r.indexes, writableKeys: w.keys, readonlyKeys: r.keys });
+        lookups.push({
+          address: table.address,
+          writable: w.indexes,
+          readonly: r.indexes,
+          writableKeys: w.keys,
+          readonlyKeys: r.keys,
+        });
     }
   }
   const [head, ...rest] = accounts;
   const statics = [head, ...rest.sort((a, b) => rank(a) - rank(b))];
-  const loaded = [...lookups.flatMap((l) => l.writableKeys), ...lookups.flatMap((l) => l.readonlyKeys)];
+  const loaded = [...lookups.flatMap(l => l.writableKeys), ...lookups.flatMap(l => l.readonlyKeys)];
   const index = new Map([...statics.map((m, i) => [m.pubkey, i]), ...loaded.map((k, i) => [k, statics.length + i])]);
   if (index.size > 256) throw new Error('Too many accounts for one transaction');
-  const signers = statics.filter((m) => m.isSigner);
+  const signers = statics.filter(m => m.isSigner);
   const header = Uint8Array.of(
     signers.length,
-    signers.filter((m) => !m.isWritable).length,
-    statics.filter((m) => !m.isSigner && !m.isWritable).length,
+    signers.filter(m => !m.isWritable).length,
+    statics.filter(m => !m.isSigner && !m.isWritable).length,
   );
   const body = concat(
     header,
     compactU16(statics.length),
-    ...statics.map((m) => addressBytes(m.pubkey)),
+    ...statics.map(m => addressBytes(m.pubkey)),
     addressBytes(blockhash),
     compactU16(instructions.length),
     ...compileInstructions(instructions, index),
   );
   if (version !== 0) return body;
-  const tables = lookups.map((l) =>
+  const tables = lookups.map(l =>
     concat(
       addressBytes(l.address),
       compactU16(l.writable.length),
@@ -122,13 +128,13 @@ export function readMessage(message) {
     at += n;
     return bytes;
   };
-  const length = (what) => {
+  const length = what => {
     if (at >= message.length) throw new Error(`Truncated message: ${what} runs past its end`);
     const prefix = readCompactU16(message, at);
     at += prefix.size;
     return prefix.value;
   };
-  const address = (what) => encodeBase58(take(32, what));
+  const address = what => encodeBase58(take(32, what));
   let version = 'legacy';
   if (message.length && message[0] & V0_PREFIX) {
     version = message[0] & 0x7f;
@@ -145,8 +151,8 @@ export function readMessage(message) {
   const instructions = [];
   for (let i = 0; i < ixCount; i++) {
     const [programIndex] = take(1, 'an instruction');
-    const accountIndexes = Array.from(take(length('an instruction\'s accounts'), 'an instruction\'s accounts'));
-    const data = take(length('an instruction\'s data'), 'an instruction\'s data').slice();
+    const accountIndexes = Array.from(take(length("an instruction's accounts"), "an instruction's accounts"));
+    const data = take(length("an instruction's data"), "an instruction's data").slice();
     instructions.push({ programIndex, accountIndexes, data });
   }
   const lookups = [];
@@ -154,8 +160,12 @@ export function readMessage(message) {
     const n = length('the lookup table count');
     for (let i = 0; i < n; i++) {
       const tableAddress = address('a lookup table');
-      const writable = Array.from(take(length('a lookup table\'s writable indexes'), 'a lookup table\'s writable indexes'));
-      const readonly = Array.from(take(length('a lookup table\'s read-only indexes'), 'a lookup table\'s read-only indexes'));
+      const writable = Array.from(
+        take(length("a lookup table's writable indexes"), "a lookup table's writable indexes"),
+      );
+      const readonly = Array.from(
+        take(length("a lookup table's read-only indexes"), "a lookup table's read-only indexes"),
+      );
       lookups.push({ address: tableAddress, writable, readonly });
     }
   }
@@ -173,7 +183,7 @@ export function signersOf(message) {
 export function wireTransaction(message, signatures = []) {
   const count = readMessage(message).header.numRequiredSignatures;
   const slots = Array.from({ length: count }, (_, i) => signatures[i] ?? new Uint8Array(SIGNATURE_BYTES));
-  if (slots.some((s) => s.length !== SIGNATURE_BYTES)) throw new Error('A signature is 64 bytes');
+  if (slots.some(s => s.length !== SIGNATURE_BYTES)) throw new Error('A signature is 64 bytes');
   return concat(compactU16(count), ...slots, message);
 }
 
@@ -203,16 +213,16 @@ export function withSignature(wire, signer, signature) {
 }
 
 /** The transaction's id: its first signature, in base58. */
-export const transactionId = (wire) => encodeBase58(readTransaction(wire).signatures[0]);
+export const transactionId = wire => encodeBase58(readTransaction(wire).signatures[0]);
 
 /** Whether a signature slot is still empty. */
-export const isEmptySignature = (signature) => signature.every((b) => b === 0);
+export const isEmptySignature = signature => signature.every(b => b === 0);
 
 /** Whether two wire transactions carry the same message. */
 export const sameMessage = (a, b) => equalBytes(readTransaction(a).message, readTransaction(b).message);
 
 /** The size this message's transaction takes on the wire. */
-export const transactionSize = (message) => wireTransaction(message).length;
+export const transactionSize = message => wireTransaction(message).length;
 
 /** Whether these instructions fit one transaction from this payer. */
 export function fits(input) {

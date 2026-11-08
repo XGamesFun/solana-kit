@@ -28,7 +28,11 @@ export function freshKeypair() {
 export function verifySignature(address, message, signature) {
   if (!signature || signature.length !== 64) return false;
   try {
-    const key = createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(addressBytes(address))]), format: 'der', type: 'spki' });
+    const key = createPublicKey({
+      key: Buffer.concat([SPKI_ED25519, Buffer.from(addressBytes(address))]),
+      format: 'der',
+      type: 'spki',
+    });
     return verify(null, Buffer.from(message), key, Buffer.from(signature));
   } catch {
     return false;

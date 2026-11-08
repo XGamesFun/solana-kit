@@ -149,9 +149,7 @@
         "then": "burn"
       },
       "seed": 0.1,
-      "places": [
-        100
-      ],
+      "places": [100],
       "every": "7d"
     }
   ],

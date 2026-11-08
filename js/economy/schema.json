@@ -4,9 +4,7 @@
   "title": "A loot economy (spec version 2)",
   "description": "One project's economy on the shared loot program: its currencies, collectibles, pools and the mechanics that move them. Kept as xsolana.json in a project (or as the `economy` section of a games.fun game). Amounts are in whole units of their token, percents are percents, durations are like \"7d\".",
   "type": "object",
-  "required": [
-    "version"
-  ],
+  "required": ["version"],
   "additionalProperties": false,
   "properties": {
     "version": {
@@ -164,10 +162,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "collection",
-          "root"
-        ],
+        "required": ["collection", "root"],
         "properties": {
           "collection": {
             "$ref": "#/$defs/address",
@@ -288,10 +283,7 @@
     },
     "share": {
       "type": "object",
-      "required": [
-        "to",
-        "percent"
-      ],
+      "required": ["to", "percent"],
       "additionalProperties": false,
       "properties": {
         "to": {
@@ -324,10 +316,7 @@
     },
     "fall": {
       "type": "object",
-      "required": [
-        "step",
-        "every"
-      ],
+      "required": ["step", "every"],
       "additionalProperties": false,
       "description": "The price falls by `step` every `every`, from `start`, never below `floor`. A sale does not put the price back up: it stays at what was paid. By default (\"clock\": \"sale\") the next step comes `every` after that sale, so steady sales hold the price where it is. With \"clock\": \"shared\" the steps keep their own clock, sales or not: a Dutch drop that keeps falling however often it sells.",
       "properties": {
@@ -344,10 +333,7 @@
           "$ref": "#/$defs/time"
         },
         "clock": {
-          "enum": [
-            "sale",
-            "shared"
-          ],
+          "enum": ["sale", "shared"],
           "default": "sale"
         }
       }
@@ -375,10 +361,7 @@
     },
     "token": {
       "type": "object",
-      "required": [
-        "key",
-        "source"
-      ],
+      "required": ["key", "source"],
       "additionalProperties": false,
       "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (games.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep).",
       "properties": {
@@ -386,12 +369,7 @@
           "$ref": "#/$defs/key"
         },
         "source": {
-          "enum": [
-            "sol",
-            "existing",
-            "project",
-            "game"
-          ],
+          "enum": ["sol", "existing", "project", "game"],
           "description": "`project` (`game` is its older spelling): a token made when the economy goes live, which the project mints. Such a token names no `mint`: the setup makes it."
         },
         "name": {
@@ -412,22 +390,14 @@
           "description": "`project` only: a fixed supply. Going live makes the token, mints all of it to the owner's wallet and turns minting off for good, so nobody (the project included) can ever make more. Pools are seeded from it. Leave it out for a token the project mints as its rules say (points, rewards, an emission)."
         },
         "program": {
-          "enum": [
-            "spl-token",
-            "token-2022"
-          ],
+          "enum": ["spl-token", "token-2022"],
           "default": "spl-token"
         },
         "mint": {
           "$ref": "#/$defs/address"
         },
         "venue": {
-          "enum": [
-            "games.fun",
-            "pump.fun",
-            "meteora",
-            "other"
-          ],
+          "enum": ["games.fun", "pump.fun", "meteora", "other"],
           "description": "Where the token trades, recorded for the app and not read or enforced by the tools: loot doesn't launch or trade tokens. A token launched elsewhere is `existing`, by its mint."
         },
         "uri": {
@@ -443,12 +413,7 @@
           "description": "What the mint's own keys can do, as far as the creator knows. The checker warns about each one.",
           "properties": {
             "mintAuthority": {
-              "enum": [
-                "game",
-                "someone else",
-                "none",
-                "project"
-              ]
+              "enum": ["game", "someone else", "none", "project"]
             },
             "freeze": {
               "type": "boolean"
@@ -485,9 +450,7 @@
     },
     "collection": {
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "additionalProperties": false,
       "description": "The Metaplex Core collection the game's collectibles are minted into.",
       "properties": {
@@ -515,10 +478,7 @@
     },
     "item": {
       "type": "object",
-      "required": [
-        "key",
-        "name"
-      ],
+      "required": ["key", "name"],
       "additionalProperties": false,
       "properties": {
         "key": {
@@ -537,24 +497,14 @@
           "$ref": "#/$defs/words"
         },
         "kind": {
-          "enum": [
-            "collectible",
-            "normal"
-          ],
+          "enum": ["collectible", "normal"],
           "default": "collectible",
           "description": "A collectible is minted to the player's wallet; a normal item lives in the project's own backend and the chain records the sale."
         },
         "rarity": {
           "anyOf": [
             {
-              "enum": [
-                "Common",
-                "Uncommon",
-                "Rare",
-                "Epic",
-                "Legendary",
-                "Mythic"
-              ]
+              "enum": ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
             },
             {
               "type": "integer",
@@ -657,9 +607,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "attribute"
-            ],
+            "required": ["attribute"],
             "properties": {
               "attribute": {
                 "type": "string",
@@ -683,10 +631,7 @@
     },
     "pool": {
       "type": "object",
-      "required": [
-        "key",
-        "currency"
-      ],
+      "required": ["key", "currency"],
       "additionalProperties": false,
       "description": "A vault only the game can spend from: a prize pool, a lottery's pot, stakers' rewards.",
       "properties": {
@@ -713,23 +658,12 @@
     },
     "outcome": {
       "type": "object",
-      "required": [
-        "gives"
-      ],
+      "required": ["gives"],
       "additionalProperties": false,
       "description": "One way a box can land: an item, a fixed amount of tokens from a pool (`pay`) or minted (`tokens`), all of it or none, an NFT of a stash at random (`stash`) or a named one (`nft`), a roll of another box (`roll`), any number of them together (`bundle`), or nothing. Give every outcome a `chance` (percents that add up to 100) or every one a `weight`. In a box that rolls on an NFT (`rollsOn`), an outcome can also move numbers on it (`shifts`) and say where it goes (`then`). A box of one outcome that needs no chance sells in one step (`buy`): no order, no settle. A box burns its price with a \"burn\" share in its `split`, whatever the roll gives.",
       "properties": {
         "gives": {
-          "enum": [
-            "item",
-            "pay",
-            "stash",
-            "tokens",
-            "nft",
-            "roll",
-            "bundle",
-            "nothing"
-          ]
+          "enum": ["item", "pay", "stash", "tokens", "nft", "roll", "bundle", "nothing"]
         },
         "chance": {
           "type": "number",
@@ -756,10 +690,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "attribute",
-              "by"
-            ],
+            "required": ["attribute", "by"],
             "properties": {
               "attribute": {
                 "type": "string",
@@ -807,18 +738,12 @@
           "description": "For a box that rolls on an NFT: where the NFT goes after this outcome. \"back\" (the default) to whoever brought it; \"burn\" (a Core asset burned; any other kind sent to the incinerator's address, where nobody can move it); \"treasury\" to the game's treasury wallet; { \"giveTo\": \"<wallet>\" } to that wallet. A box with any outcome that burns or gives the NFT away takes it into the game's hands when it is rolled, until the roll is settled (a custodial route). { \"stash\": \"<key>\" }: into one of the spec's stashes, a trade-in that becomes another player's prize.",
           "anyOf": [
             {
-              "enum": [
-                "back",
-                "burn",
-                "treasury"
-              ]
+              "enum": ["back", "burn", "treasury"]
             },
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "giveTo"
-              ],
+              "required": ["giveTo"],
               "properties": {
                 "giveTo": {
                   "$ref": "#/$defs/address"
@@ -828,9 +753,7 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "stash"
-              ],
+              "required": ["stash"],
               "properties": {
                 "stash": {
                   "$ref": "#/$defs/key"
@@ -866,9 +789,7 @@
           "description": "For bundle: what it gives together, any number: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
           "items": {
             "type": "object",
-            "required": [
-              "gives"
-            ],
+            "required": ["gives"],
             "additionalProperties": false,
             "properties": {
               "item": {
@@ -902,14 +823,7 @@
                 "description": "For roll: the box rolled for the player when the order settles."
               },
               "gives": {
-                "enum": [
-                  "item",
-                  "pay",
-                  "stash",
-                  "tokens",
-                  "nft",
-                  "roll"
-                ]
+                "enum": ["item", "pay", "stash", "tokens", "nft", "roll"]
               },
               "compressed": {
                 "type": "boolean",
@@ -926,12 +840,7 @@
     },
     "box": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "price",
-        "outcomes"
-      ],
+      "required": ["key", "name", "price", "outcomes"],
       "additionalProperties": false,
       "properties": {
         "key": {
@@ -966,10 +875,7 @@
           "description": "Each item's chance shrinks with what is left of its supply."
         },
         "whenOut": {
-          "enum": [
-            "stopSales",
-            "drawLeft"
-          ],
+          "enum": ["stopSales", "drawLeft"],
           "default": "stopSales",
           "description": "What a box that rolls does once an outcome can't be given (an item sold out, a pool short of its prize, a stash empty). \"stopSales\" (the default): it isn't sold while any outcome couldn't cover this purchase's draws and those of purchases still waiting for their answer, so every roll is on the odds written, and the project restocks or edits the box to sell again. \"drawLeft\": it keeps selling, and a roll draws among the outcomes still there by their written weights, so the others' chances rise as one runs out: a player can empty a common outcome to make a rare one likelier. A box selling a rare prize keeps \"stopSales\"."
         },
@@ -1023,18 +929,12 @@
           "description": "Where the NFT it rolls on goes after an outcome that names no `then` of its own: a box that takes an NFT as its price (`rollsOn` its rule, `then` \"burn\", \"treasury\", { giveTo } or { stash }).",
           "anyOf": [
             {
-              "enum": [
-                "back",
-                "burn",
-                "treasury"
-              ]
+              "enum": ["back", "burn", "treasury"]
             },
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "giveTo"
-              ],
+              "required": ["giveTo"],
               "properties": {
                 "giveTo": {
                   "$ref": "#/$defs/address"
@@ -1044,9 +944,7 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "stash"
-              ],
+              "required": ["stash"],
               "properties": {
                 "stash": {
                   "$ref": "#/$defs/key"
@@ -1061,9 +959,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "count"
-            ],
+            "required": ["count"],
             "properties": {
               "count": {
                 "type": "integer",
@@ -1093,11 +989,7 @@
     },
     "payment": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "amount"
-      ],
+      "required": ["key", "name", "amount"],
       "additionalProperties": false,
       "description": "A payment a player signs for something the game gives off chain: an entry fee, an attempt at a level, a tip.",
       "properties": {
@@ -1126,22 +1018,12 @@
     },
     "input": {
       "type": "object",
-      "required": [
-        "takes"
-      ],
+      "required": ["takes"],
       "additionalProperties": false,
       "description": "burn: `count` collectibles of `item`, burned. use: one collectible of `item`, kept (counts a use of its life). renew: one kept, its uses counted from zero again (its `used` count). staked: one collectible of `item`, kept as `use` keeps it, that must be staked in `farm`: on its own seat in that farm of this spec, which escrows or freezes it (a watched one could be sold). A set bound into a badge takes its pieces this way and moves that farm's `lockAttribute` far ahead, so they stay staked while the badge exists; a recipe that raises anything on a staked piece must raise its farm's `lockAttribute` (to raise a stat and leave the lock alone, use `use`). show: one NFT of `collection` the player holds, kept (any Core NFT, or a Token Metadata NFT verified in it; the game's own collection when left out), read with what the game wrote in its Sheet. pay: `amount` of `currency`, sent `to` a destination. trade: one NFT of `collection` the player holds, any kind, traded in: burned, given on, or put in a stash (`then`).",
       "properties": {
         "takes": {
-          "enum": [
-            "burn",
-            "use",
-            "renew",
-            "show",
-            "staked",
-            "pay",
-            "trade"
-          ]
+          "enum": ["burn", "use", "renew", "show", "staked", "pay", "trade"]
         },
         "item": {
           "$ref": "#/$defs/key"
@@ -1176,19 +1058,12 @@
     },
     "output": {
       "type": "object",
-      "required": [
-        "gives"
-      ],
+      "required": ["gives"],
       "additionalProperties": false,
       "description": "A prize (see `prize`), or a roll on a collectible the recipe keeps: { \"gives\": \"roll\", \"box\": key, \"on\": place } (a risky upgrade; the player or the project’s keys ask the oracle and settle it). A craft refuses a prize it can't give (a pool that holds less, an item sold out or switched off, an NFT gone).",
       "properties": {
         "gives": {
-          "enum": [
-            "item",
-            "tokens",
-            "nft",
-            "roll"
-          ]
+          "enum": ["item", "tokens", "nft", "roll"]
         },
         "item": {
           "$ref": "#/$defs/key"
@@ -1230,11 +1105,7 @@
     },
     "recipe": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "in"
-      ],
+      "required": ["key", "name", "in"],
       "additionalProperties": false,
       "properties": {
         "key": {
@@ -1269,11 +1140,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "place",
-              "key",
-              "atLeast"
-            ],
+            "required": ["place", "key", "atLeast"],
             "additionalProperties": false,
             "description": "The collectible handed in at `place` (the first is 0) must carry a number `key` the authority wrote of at least `atLeast`.",
             "properties": {
@@ -1298,11 +1165,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "key",
-              "from",
-              "to"
-            ],
+            "required": ["key", "from", "to"],
             "additionalProperties": false,
             "description": "The new collectible `to` (the first made is 0) takes attribute `key` from the one handed in at `from`.",
             "properties": {
@@ -1328,11 +1191,7 @@
           "description": "Numbers the recipe moves on collectibles handed in and kept (use, renew, show): a level or a stat bought with the recipe's own payment, or one it costs (a negative `by`: a merge that costs a level, never below 0). Written on the NFT when the game has authority over it, in its Sheet otherwise. One already at `upTo` is refused (MaxedOut) when raising. With `fromNow`, it moves a time: fuel for a day more (\"by\": \"1d\", \"upTo\": \"3d\"), a day off a lock (\"by\": \"-1d\").",
           "items": {
             "type": "object",
-            "required": [
-              "place",
-              "key",
-              "by"
-            ],
+            "required": ["place", "key", "by"],
             "additionalProperties": false,
             "properties": {
               "place": {
@@ -1404,11 +1263,7 @@
     },
     "schedule": {
       "type": "object",
-      "required": [
-        "key",
-        "does",
-        "every"
-      ],
+      "required": ["key", "does", "every"],
       "additionalProperties": false,
       "description": "issue: mint `amount` of a game token into `pool`, halving every `halveEvery` runs. burn: burn `percent` (or `amount`) of what `pool` holds. move: move `percent` (or `amount`) of what pool `from` holds into pool `to`. pay: pay `amount` (or `percent`) from pool `from` `to` a wallet (\"wallet:<address>\"), a token account (\"account:<token account>\") or a collectible's holder (\"holder:<asset>\") on each run: a payroll, a vesting drip, a landlord's rent. Anyone may run it when it is due.",
       "properties": {
@@ -1425,12 +1280,7 @@
           "maxLength": 40
         },
         "does": {
-          "enum": [
-            "issue",
-            "burn",
-            "move",
-            "pay"
-          ]
+          "enum": ["issue", "burn", "move", "pay"]
         },
         "currency": {
           "$ref": "#/$defs/key"
@@ -1500,10 +1350,7 @@
     },
     "lottery": {
       "type": "object",
-      "required": [
-        "key",
-        "name"
-      ],
+      "required": ["key", "name"],
       "additionalProperties": false,
       "properties": {
         "key": {
@@ -1636,9 +1483,7 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "nft"
-              ],
+              "required": ["nft"],
               "properties": {
                 "nft": {
                   "$ref": "#/$defs/address"
@@ -1663,9 +1508,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "nft"
-                ],
+                "required": ["nft"],
                 "properties": {
                   "nft": {
                     "$ref": "#/$defs/address"
@@ -1684,11 +1527,7 @@
     },
     "contest": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "sides"
-      ],
+      "required": ["key", "name", "sides"],
       "additionalProperties": false,
       "description": "Players put money on a side; the side that wins shares the pot. The authority opens each one while the game runs, and the authority or one of its `deciders` (a results server's key) names the side that won. One side and a `minPot` is an all-or-nothing crowdfund; a wallet gate and a `stake` is a duel.",
       "properties": {
@@ -1769,12 +1608,7 @@
     },
     "auction": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "lot",
-        "runs"
-      ],
+      "required": ["key", "name", "lot", "runs"],
       "additionalProperties": false,
       "description": "An English auction, opened when the economy goes live: the highest bid when the time runs out wins the lot. Each bid must reach the reserve and top the last by the least raise; a bid that is topped goes back to its bidder at once. A late bid moves the end. With no bid the lot goes home.",
       "properties": {
@@ -1804,9 +1638,7 @@
           "oneOf": [
             {
               "type": "object",
-              "required": [
-                "item"
-              ],
+              "required": ["item"],
               "additionalProperties": false,
               "properties": {
                 "item": {
@@ -1816,9 +1648,7 @@
             },
             {
               "type": "object",
-              "required": [
-                "asset"
-              ],
+              "required": ["asset"],
               "additionalProperties": false,
               "properties": {
                 "asset": {
@@ -1832,9 +1662,7 @@
             },
             {
               "type": "object",
-              "required": [
-                "roll"
-              ],
+              "required": ["roll"],
               "additionalProperties": false,
               "properties": {
                 "roll": {
@@ -1880,11 +1708,7 @@
     },
     "hold": {
       "type": "object",
-      "required": [
-        "key",
-        "name",
-        "item"
-      ],
+      "required": ["key", "name", "item"],
       "additionalProperties": false,
       "description": "A player hands a collectible to the game for a time they choose; until it is up the authority says where it goes, after it anyone can send it home.",
       "properties": {
@@ -1914,11 +1738,7 @@
     },
     "decision": {
       "type": "object",
-      "required": [
-        "key",
-        "when",
-        "does"
-      ],
+      "required": ["key", "when", "does"],
       "additionalProperties": false,
       "description": "A rule only the game can carry out, signed by the authority while the game runs.",
       "properties": {
@@ -1929,18 +1749,7 @@
           "$ref": "#/$defs/words"
         },
         "does": {
-          "enum": [
-            "payout",
-            "burn",
-            "issue",
-            "make",
-            "unmake",
-            "set",
-            "award",
-            "decide",
-            "roll",
-            "open_contest"
-          ]
+          "enum": ["payout", "burn", "issue", "make", "unmake", "set", "award", "decide", "roll", "open_contest"]
         },
         "pool": {
           "$ref": "#/$defs/key"
@@ -1973,19 +1782,14 @@
           "description": "How often it happens, for the simulation."
         },
         "signedBy": {
-          "enum": [
-            "page",
-            "server"
-          ],
+          "enum": ["page", "server"],
           "default": "page",
           "description": "page: the authority approves each one in its own wallet. server: a server you run holds the authority key (keys.authority is its public address)."
         },
         "proof": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "payment"
-          ],
+          "required": ["payment"],
           "description": "What a claim must show before the keeper or the page acts on it: a payment the receiver made on chain (an attempt), not claimed before, at least `after` and at most `within` before the claim. The game's word alone is never proof: it runs in the player's browser. The checker only checks that `payment` is one of the economy's payments; `after` and `within` are recorded for the server that acts on claims, and neither the tools nor the program enforce them.",
           "properties": {
             "payment": {
@@ -2159,10 +1963,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "signature",
-              "steps"
-            ],
+            "required": ["signature", "steps"],
             "properties": {
               "signature": {
                 "type": "string",
@@ -2241,10 +2042,7 @@
           "type": "string"
         },
         "time": {
-          "enum": [
-            "ahead",
-            "passed"
-          ],
+          "enum": ["ahead", "passed"],
           "description": "The attribute is a time (Unix seconds) still to come (\"ahead\": fuel left, a pass still good) or past, or missing (\"passed\": out of jail, no cooldown). In a farm's gate it is read as an NFT comes in; after that, the farm's `upkeepAttribute` says how long it earns."
         }
       }
@@ -2276,11 +2074,7 @@
     "odds": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcome",
-        "when",
-        "add"
-      ],
+      "required": ["outcome", "when", "add"],
       "description": "A box outcome that grows more likely for a player who shows a collectible.",
       "properties": {
         "outcome": {
@@ -2300,9 +2094,7 @@
     "tier": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "lock"
-      ],
+      "required": ["lock"],
       "properties": {
         "lock": {
           "$ref": "#/$defs/duration",
@@ -2336,11 +2128,7 @@
     "farm": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "key",
-        "name",
-        "stakes"
-      ],
+      "required": ["key", "name", "stakes"],
       "description": "Players stake a token or collectibles. Rewards are whatever lands in the farm's own rewards vault (\"farm:<key>\" in a split or a schedule, its `seed`), shared by weight (what they stake, times their lock tier, plus boosts from what a collectible says), or a fixed `rate`. A farm can also write points and levels on what is staked (`growth`), and pay a mission's `prize` to a collectible that stays its tier's lock. It cannot be edited once open. A farm of collectibles can keep two times on the NFT itself: its lock (`lockAttribute`) and an upkeep (`upkeepAttribute`), which recipes and rolls move like any number.",
       "properties": {
         "key": {
@@ -2381,9 +2169,7 @@
         "rate": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "perDay"
-          ],
+          "required": ["perDay"],
           "description": "A fixed rate instead of sharing what lands: for each seat whoever else is in, times its tier and boosts (most Solana NFT staking paid this way), or with `shared` the whole farm's a day, shared by weight.",
           "properties": {
             "perDay": {
@@ -2407,11 +2193,7 @@
           }
         },
         "custody": {
-          "enum": [
-            "freeze",
-            "escrow",
-            "watch"
-          ],
+          "enum": ["freeze", "escrow", "watch"],
           "default": "escrow",
           "description": "For staked NFTs and token-seat boosters. escrow (default): the game holds them (Core NFTs only; issuer-controlled transfer rules can block return). freeze: they stay in the wallet, frozen (Core) or locked by Token Metadata (legacy NFTs and pNFTs), the game their delegate; Core's unfreeze can fail if the issuer later enlarges metadata or plugins. Select freeze explicitly for soulbound collectibles, which need no extra freeze. watch (a farm of collectibles only): they stay in the wallet, free: an NFT can be sold while staked, and its seat earns only while its staker holds it (a staker who no longer does collects nothing, their due going back to the farm, and the next holder can take the seat over). A Token Metadata NFT is frozen or watched, never escrowed. Staked tokens always go to the farm's vault."
         },
@@ -2429,10 +2211,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "when",
-              "add"
-            ],
+            "required": ["when", "add"],
             "properties": {
               "when": {
                 "$ref": "#/$defs/rule"
@@ -2501,10 +2280,7 @@
     "grant": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "key",
-        "name"
-      ],
+      "required": ["key", "name"],
       "description": "A reward handed out to wallets that earned it: one collectible of an item, a fixed amount from a pool, or a roll of a box (any random prize). A voucher key signs who earned it (one of `vouchers`, or of `keys`), or the wallet is on an approved list. With none of them the grant is open: any wallet claims, within its limits (with a gate, a collectible shown claims once too). The program keeps every claim within the limits. Each wallet can receive at most 256 distinct voucher rounds per grant incarnation, retained permanently; open claims do not consume round slots, and a list written in xsolana.json pays each wallet once. Closing and recreating starts a new incarnation with separate vouchers and receipts.",
       "properties": {
         "key": {
@@ -2558,9 +2334,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "wallet"
-                ],
+                "required": ["wallet"],
                 "properties": {
                   "wallet": {
                     "$ref": "#/$defs/address"
@@ -2668,9 +2442,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "wallets"
-          ],
+          "required": ["wallets"],
           "properties": {
             "wallets": {
               "type": "array",
@@ -2684,9 +2456,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "list"
-          ],
+          "required": ["list"],
           "properties": {
             "list": {
               "type": "array",
@@ -2703,17 +2473,12 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "staked"
-          ],
+          "required": ["staked"],
           "properties": {
             "staked": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "farm",
-                "atLeast"
-              ],
+              "required": ["farm", "atLeast"],
               "description": "A stake to enter: the wallet’s seat in `farm` (a farm of a token in this spec) holds at least `atLeast` of its token, staked before this second (launchpad tiers, stake to play).",
               "properties": {
                 "farm": {
@@ -2732,9 +2497,7 @@
     "perWalletEach": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "count"
-      ],
+      "required": ["count"],
       "description": "How many one wallet may do in each window of time: `{ \"count\": 1, \"every\": \"1d\" }` is once a day (windows counted from the Unix epoch, a UTC day for \"1d\").",
       "properties": {
         "count": {
@@ -2751,9 +2514,7 @@
     "growth": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "perDay"
-      ],
+      "required": ["perDay"],
       "description": "Points a collectible earns by staying in, written under `attribute`, with the level they reach under `level` when there are `levels`. Without `levels` the points themselves can be the level: { \"attribute\": \"level\", \"perDay\": 1 } is a level a day.",
       "properties": {
         "attribute": {
@@ -2793,11 +2554,7 @@
     "stash": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "key",
-        "name",
-        "nfts"
-      ],
+      "required": ["key", "name", "nfts"],
       "description": "A stash: NFTs of any collection the game holds until a prize names one or a roll gives one away. Any kind: a Core asset (with or without the game's authority), a Token Metadata NFT, a compressed NFT. A roll takes the one it picks out of the stash at once, so two winners never get the same one, and an empty stash can't be won. The game's owner or authority can put more in, or take one out, at any time (`loot.stashIx`).",
       "properties": {
         "key": {
@@ -2827,9 +2584,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "asset"
-                ],
+                "required": ["asset"],
                 "properties": {
                   "asset": {
                     "$ref": "#/$defs/address"
@@ -2849,9 +2604,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "mint"
-                ],
+                "required": ["mint"],
                 "properties": {
                   "mint": {
                     "$ref": "#/$defs/address"
@@ -2876,9 +2629,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "compressed"
-                ],
+                "required": ["compressed"],
                 "properties": {
                   "compressed": {
                     "$ref": "#/$defs/address",
@@ -2904,20 +2655,12 @@
     },
     "prize": {
       "type": "object",
-      "required": [
-        "gives"
-      ],
+      "required": ["gives"],
       "additionalProperties": false,
       "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`).",
       "properties": {
         "gives": {
-          "enum": [
-            "item",
-            "tokens",
-            "nft",
-            "roll",
-            "raffled"
-          ]
+          "enum": ["item", "tokens", "nft", "roll", "raffled"]
         },
         "item": {
           "$ref": "#/$defs/key"
@@ -2967,17 +2710,12 @@
       "description": "Where an NFT paid goes: \"burn\" (a Core asset burned, any other kind sent to the incinerator's address), \"treasury\" (the treasury wallet), { \"giveTo\": \"<wallet>\" }, or { \"stash\": \"<key>\" } (into one of this spec's stashes, to be given away as a prize).",
       "anyOf": [
         {
-          "enum": [
-            "burn",
-            "treasury"
-          ]
+          "enum": ["burn", "treasury"]
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "giveTo"
-          ],
+          "required": ["giveTo"],
           "properties": {
             "giveTo": {
               "$ref": "#/$defs/address"
@@ -2987,9 +2725,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "stash"
-          ],
+          "required": ["stash"],
           "properties": {
             "stash": {
               "$ref": "#/$defs/key"
@@ -3001,9 +2737,7 @@
     "nftPrice": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "rule"
-      ],
+      "required": ["rule"],
       "description": "An NFT as the price: one the player holds that passes `rule`, sent where `then` says (default \"burn\").",
       "properties": {
         "rule": {
@@ -3017,10 +2751,7 @@
     "table": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "key",
-        "rows"
-      ],
+      "required": ["key", "rows"],
       "description": "A table (`table.rs`): rows, each a weight and an optional stock, and a label (`\"labels\"`, up to 32 bytes each) or nothing (`\"numbers\"`: a row gives its own number, from 0). Sealed once written: its weights never change and its stock only goes down. A row with a stock leaves the draws once it is used up.",
       "properties": {
         "key": {
@@ -3032,10 +2763,7 @@
           "maximum": 4294967295
         },
         "kind": {
-          "enum": [
-            "labels",
-            "numbers"
-          ],
+          "enum": ["labels", "numbers"],
           "default": "labels"
         },
         "rows": {
@@ -3044,9 +2772,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "weight"
-            ],
+            "required": ["weight"],
             "properties": {
               "label": {
                 "type": "string"

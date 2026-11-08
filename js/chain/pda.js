@@ -24,7 +24,7 @@ const MAX_SEEDS = 16;
 
 /** The address for these seeds (bump included), or null when it lands on the curve (not a valid PDA). */
 export function createProgramAddress(seeds, programId) {
-  if (seeds.length > MAX_SEEDS || seeds.some((s) => s.length > MAX_SEED_BYTES)) throw new Error('Invalid PDA seeds');
+  if (seeds.length > MAX_SEEDS || seeds.some(s => s.length > MAX_SEED_BYTES)) throw new Error('Invalid PDA seeds');
   const hash = sha256(concat(...seeds, addressBytes(programId), MARKER));
   return isOnCurve(hash) ? null : encodeBase58(hash);
 }
@@ -34,7 +34,7 @@ const found = new Map();
 
 /** The canonical PDA and its bump: the highest bump whose address is off the curve. */
 export function findProgramAddress(seeds, programId) {
-  const key = `${programId}:${seeds.map((s) => Array.from(s).join(',')).join('|')}`;
+  const key = `${programId}:${seeds.map(s => Array.from(s).join(',')).join('|')}`;
   if (found.has(key)) return found.get(key);
   for (let bump = 255; bump >= 0; bump--) {
     const address = createProgramAddress([...seeds, Uint8Array.of(bump)], programId);

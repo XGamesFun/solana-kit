@@ -31,7 +31,7 @@ export const ACCOUNT_OVERHEAD = 128n;
  * devnet and mainnet lowered it (a local validator and LiteSVM still charge it). An RPC that asks more is not believed.
  */
 export const MOST_RENT_PER_BYTE = 6_960n;
-export const rent = (bytes) => (BigInt(bytes) + ACCOUNT_OVERHEAD) * RENT_PER_BYTE;
+export const rent = bytes => (BigInt(bytes) + ACCOUNT_OVERHEAD) * RENT_PER_BYTE;
 /**
  * A collectible's Core account, paid from the SOL its order holds (or by whoever gives it): its rent (a Core asset of
  * about 190 bytes) plus Metaplex Core's creation fee of 0.0015 SOL, which the account keeps. The full simulation
@@ -46,9 +46,30 @@ export const WSOL = 'So11111111111111111111111111111111111111112';
  * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32) and the two
  * caps that keep a farm's numbers from overflowing. Since loot 0.22 the program caps no count or size of its own. */
 export const LIMITS = Object.freeze({
-  callbackAccounts: 21, tiers: 256, collectiblesPerCraft: 255, vouchers: 3, compressedNameBytes: 32, compressedUriBytes: 200, maxBoostBps: 1_000_000, maxTierBps: 110_000,
+  callbackAccounts: 21,
+  tiers: 256,
+  collectiblesPerCraft: 255,
+  vouchers: 3,
+  compressedNameBytes: 32,
+  compressedUriBytes: 200,
+  maxBoostBps: 1_000_000,
+  maxTierBps: 110_000,
   // The program's caps on a record's lists (constants.rs, not in the IDL): a spec over one is refused before anything is signed.
-  boxEntries: 128, boxSlots: 32, boxOdds: 32, boxFates: 64, entryPrizes: 14, itemTraits: 64, traitKeyBytes: 64, recipeLines: 48, farmRules: 32, growthSteps: 128, contestSides: 1024, deciders: 32, collections: 32, lotteryRuns: 64, farmEnds: 100_000,
+  boxEntries: 128,
+  boxSlots: 32,
+  boxOdds: 32,
+  boxFates: 64,
+  entryPrizes: 14,
+  itemTraits: 64,
+  traitKeyBytes: 64,
+  recipeLines: 48,
+  farmRules: 32,
+  growthSteps: 128,
+  contestSides: 1024,
+  deciders: 32,
+  collections: 32,
+  lotteryRuns: 64,
+  farmEnds: 100_000,
 });
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
  * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
@@ -69,7 +90,8 @@ export class SpecError extends Error {
 /** A plain decimal string for an amount written as a number or text (no exponent). */
 export function decimalText(amount) {
   if (typeof amount === 'string') return amount;
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) throw new SpecError('E-AMOUNT', `${amount} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0)
+    throw new SpecError('E-AMOUNT', `${amount} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
   const text = String(amount);
   if (!/e/i.test(text)) return text;
   return amount.toFixed(20).replace(/\.?0+$/, '');
@@ -78,12 +100,19 @@ export function decimalText(amount) {
 /** "0.1" of a currency with 9 decimals → 100000000n. Refuses more decimals than the currency has. */
 export function toUnits(amount, decimals) {
   const text = decimalText(amount ?? 0);
-  if (!/^\d{1,20}(\.\d+)?$/.test(text)) throw new SpecError('E-AMOUNT', `${text} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
+  if (!/^\d{1,20}(\.\d+)?$/.test(text))
+    throw new SpecError('E-AMOUNT', `${text} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
   const [whole, fraction = ''] = text.split('.');
   const trimmed = fraction.replace(/0+$/, '');
-  if (trimmed.length > decimals) throw new SpecError('E-AMOUNT', `${text} has more decimals than its currency (${decimals}).`, `Round it to ${decimals} decimals.`);
+  if (trimmed.length > decimals)
+    throw new SpecError(
+      'E-AMOUNT',
+      `${text} has more decimals than its currency (${decimals}).`,
+      `Round it to ${decimals} decimals.`,
+    );
   const units = BigInt(whole + trimmed.padEnd(decimals, '0'));
-  if (units >= 2n ** 64n) throw new SpecError('E-AMOUNT', `${text} is too large for the program.`, 'Use a smaller amount.');
+  if (units >= 2n ** 64n)
+    throw new SpecError('E-AMOUNT', `${text} is too large for the program.`, 'Use a smaller amount.');
   return units;
 }
 
@@ -98,7 +127,7 @@ export function fromUnits(units, decimals) {
 
 /** A count written as an amount (a contest of NFTs counts NFTs): 2 or "2" → 2n. Null when it is not a whole number. */
 export function wholeCount(value) {
-  const text = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? String(value) : value ?? '0';
+  const text = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? String(value) : (value ?? '0');
   return typeof text === 'string' && /^\d{1,19}$/.test(text) && BigInt(text) < 2n ** 64n ? BigInt(text) : null;
 }
 
@@ -114,7 +143,8 @@ export function toSeconds(duration) {
   if (duration === undefined || duration === null) return 0;
   if (typeof duration === 'number') return duration;
   const m = /^(\d+(?:\.\d+)?)(s|m|h|d|w)$/.exec(duration);
-  if (!m) throw new SpecError('E-TIME', `${duration} is not a duration.`, 'Write it like "45s", "30m", "6h", "7d" or "2w".');
+  if (!m)
+    throw new SpecError('E-TIME', `${duration} is not a duration.`, 'Write it like "45s", "30m", "6h", "7d" or "2w".');
   return Math.round(Number(m[1]) * UNIT[m[2]]);
 }
 
@@ -122,7 +152,7 @@ export function toSeconds(duration) {
  * How long what lands in a farm's rewards vault takes to be released to its seats, in seconds (a farm that shares what
  * lands, `farm.rs` `release_span`): its longest lock tier, and a day at least.
  */
-export const releaseSeconds = (f) => Math.max(86_400, ...(f.tiers ?? []).map((t) => toSeconds(t.lock ?? 0)));
+export const releaseSeconds = f => Math.max(86_400, ...(f.tiers ?? []).map(t => toSeconds(t.lock ?? 0)));
 
 /** A farm's release span in words: "a day", "30 days", "36 hours". */
 export function releaseWords(f) {
@@ -135,16 +165,29 @@ export function releaseWords(f) {
  * What a run sent late does, in words (schedule.rs `catches_up`): a sealed schedule's fixed amount pays every run due;
  * any other run pays once, for the latest run due, and the runs before it lapse.
  */
-export const lateRunWords = (s) => (s.sealed && s.percent === undefined ? 'a run sent late pays every run due since' : 'a run missed is missed: one sent late pays once, for the latest run due, and the runs before it lapse');
+export const lateRunWords = s =>
+  s.sealed && s.percent === undefined
+    ? 'a run sent late pays every run due since'
+    : 'a run missed is missed: one sent late pays once, for the latest run due, and the runs before it lapse';
 
 /**
  * Whether a farm's boost reads a number its own growth writes (`refresh_seat` writes it): each level counts from when it is
  * written, so a page or a keeper should refresh seats.
  */
-export const boostReadsGrowth = (f) => (f.boosts ?? []).some((b) => b.when?.attribute && listOf(f.growth).some((g) => b.when.attribute === (g.attribute ?? 'xp') || ((g.levels ?? []).length > 0 && b.when.attribute === (g.level ?? 'level'))));
+export const boostReadsGrowth = f =>
+  (f.boosts ?? []).some(
+    b =>
+      b.when?.attribute &&
+      listOf(f.growth).some(
+        g =>
+          b.when.attribute === (g.attribute ?? 'xp') ||
+          ((g.levels ?? []).length > 0 && b.when.attribute === (g.level ?? 'level')),
+      ),
+  );
 
 /** A box's roll against what is in stock, in words (order.rs): the odds stay as written, whatever is left. */
-export const STOCK_WORDS = 'The odds stay as written whatever is in stock: a draw that lands on an outcome that can’t be given then (its pool short of the whole amount, its item or stash gone) is not made, no other outcome takes its place, and that draw’s worth of the price goes back at the settle; with no draw made at all, a paid open fails and is refunded, and a free roll goes back to waiting';
+export const STOCK_WORDS =
+  'The odds stay as written whatever is in stock: a draw that lands on an outcome that can’t be given then (its pool short of the whole amount, its item or stash gone) is not made, no other outcome takes its place, and that draw’s worth of the price goes back at the settle; with no draw made at all, a paid open fails and is refunded, and a free roll goes back to waiting';
 
 /**
  * What a box that rolls does once an outcome can't be given (`whenOut`, order.rs `WhenOut`), in words. `sold`: it is
@@ -193,21 +236,27 @@ export function toTime(time, now) {
   const m = /^publish\+(.+)$/.exec(time);
   if (m) return now + toSeconds(m[1]);
   const at = Date.parse(time);
-  if (!Number.isFinite(at)) throw new SpecError('E-TIME', `${time} is not a time.`, 'Write "publish", "publish+7d" or a date like "2026-11-01T18:00:00Z".');
+  if (!Number.isFinite(at))
+    throw new SpecError(
+      'E-TIME',
+      `${time} is not a time.`,
+      'Write "publish", "publish+7d" or a date like "2026-11-01T18:00:00Z".',
+    );
   return Math.floor(at / 1000);
 }
 
-export const rarityNumber = (rarity) => (typeof rarity === 'number' ? rarity : Math.max(0, RARITIES.indexOf(rarity ?? 'Common')));
-export const utf8Bytes = (s) => new TextEncoder().encode(s ?? '').length;
-export const isAddress = (s) => typeof s === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+export const rarityNumber = rarity =>
+  typeof rarity === 'number' ? rarity : Math.max(0, RARITIES.indexOf(rarity ?? 'Common'));
+export const utf8Bytes = s => new TextEncoder().encode(s ?? '').length;
+export const isAddress = s => typeof s === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 
 // ---------------------------------------------------------------- the model
 
 /** Gives every part without one the next free program id (pools from 0, the rest from 1). */
 function assignIds(list, field, first) {
-  const used = new Set(list.map((x) => x[field]).filter((v) => Number.isInteger(v)));
+  const used = new Set(list.map(x => x[field]).filter(v => Number.isInteger(v)));
   let next = first;
-  return list.map((x) => {
+  return list.map(x => {
     if (Number.isInteger(x[field])) return x;
     while (used.has(next)) next += 1;
     used.add(next);
@@ -227,7 +276,17 @@ export const spendOf = (then, m) => {
 function tokenOf(given) {
   // "project" is the spec's word for a token the project mints; "game" is the older spelling of it.
   const t = given.source === 'project' ? { ...given, source: 'game' } : given;
-  if (t.source === 'sol') return { ...t, name: t.name ?? 'SOL', symbol: t.symbol ?? 'SOL', decimals: 9, program: 'spl-token', mint: WSOL, wsol: true, gameMints: false };
+  if (t.source === 'sol')
+    return {
+      ...t,
+      name: t.name ?? 'SOL',
+      symbol: t.symbol ?? 'SOL',
+      decimals: 9,
+      program: 'spl-token',
+      mint: WSOL,
+      wsol: true,
+      gameMints: false,
+    };
   const decimals = t.decimals ?? (t.source === 'game' ? 0 : undefined);
   return {
     ...t,
@@ -249,22 +308,37 @@ function tokenOf(given) {
  */
 export function model(economy, { now = 0 } = {}) {
   const e = economy ?? {};
-  const tokens = new Map((e.tokens ?? []).map((t) => [t.key, tokenOf(t)]));
+  const tokens = new Map((e.tokens ?? []).map(t => [t.key, tokenOf(t)]));
   const currencyKey = e.currency ?? (tokens.size === 1 ? [...tokens.keys()][0] : undefined);
   const currency = tokens.get(currencyKey);
   // Numbers are given in this order: the pools that have one, then the rest in the spec's order.
   const listed = e.pools ?? [];
-  const order = [...listed.keys()].sort((a, b) => Number(!Number.isInteger(listed[a].index)) - Number(!Number.isInteger(listed[b].index)));
-  const assigned = assignIds(order.map((i) => listed[i]), 'index', 0);
+  const order = [...listed.keys()].sort(
+    (a, b) => Number(!Number.isInteger(listed[a].index)) - Number(!Number.isInteger(listed[b].index)),
+  );
+  const assigned = assignIds(
+    order.map(i => listed[i]),
+    'index',
+    0,
+  );
   const pools = listed.map((_, i) => assigned[order.indexOf(i)]);
   // A farm's rewards land in a vault of its own: `rewardsToken` is their token.
-  const poolCurrency = new Map(pools.map((p) => [p.key, p.currency]));
-  const farms = (e.farms ?? []).map((f) => ({ ...f, rewardsToken: farmRewardsToken(f, tokens, currencyKey, poolCurrency) }));
+  const poolCurrency = new Map(pools.map(p => [p.key, p.currency]));
+  const farms = (e.farms ?? []).map(f => ({
+    ...f,
+    rewardsToken: farmRewardsToken(f, tokens, currencyKey, poolCurrency),
+  }));
   // A raffle: its NFT is first place's prize, held in the lottery's own stash.
-  const lotteries = (e.lotteries ?? []).map((l) => {
+  const lotteries = (e.lotteries ?? []).map(l => {
     if (!l.raffle) return l;
     const { nft, collection } = typeof l.raffle === 'string' ? { nft: l.raffle } : l.raffle;
-    return { ...l, places: [{ percent: 0, prize: { gives: 'nft', nft, held: true, ...(collection ? { collection } : {}) } }, ...(l.places ?? [])] };
+    return {
+      ...l,
+      places: [
+        { percent: 0, prize: { gives: 'nft', nft, held: true, ...(collection ? { collection } : {}) } },
+        ...(l.places ?? []),
+      ],
+    };
   });
   const m = {
     now,
@@ -276,7 +350,15 @@ export function model(economy, { now = 0 } = {}) {
     currencyKey,
     currency,
     /** The collection the setup makes (null when the spec says `"collection": false`: a project of tokens only). */
-    collection: e.collection === false ? null : { name: e.collection?.name ?? (e.name ?? 'Project').slice(0, 32), royaltyPercent: e.collection?.royaltyPercent ?? 5, uri: e.collection?.uri ?? '', ...e.collection },
+    collection:
+      e.collection === false
+        ? null
+        : {
+            name: e.collection?.name ?? (e.name ?? 'Project').slice(0, 32),
+            royaltyPercent: e.collection?.royaltyPercent ?? 5,
+            uri: e.collection?.uri ?? '',
+            ...e.collection,
+          },
     /** Core collections the owner already has that the project also takes (its update authority is the owner). */
     collections: e.collections ?? [],
     /** How many compressed NFTs the project's tree holds (`compressedTree`), when a prize gives one. */
@@ -305,8 +387,8 @@ export function model(economy, { now = 0 } = {}) {
   // A shop item is a box of one entry (the program sells items only through boxes). Its box takes the item's price,
   // rise, fall, split and gate; it is numbered with the boxes, after the ones the spec numbered itself.
   const shop = m.items
-    .filter((it) => Number(it.price ?? 0) > 0 || it.free)
-    .map((it) => ({
+    .filter(it => Number(it.price ?? 0) > 0 || it.free)
+    .map(it => ({
       key: `shop-${it.key}`,
       ...(Number.isInteger(it.shopBox) ? { id: it.shopBox } : {}),
       name: it.name,
@@ -316,17 +398,19 @@ export function model(economy, { now = 0 } = {}) {
       ...(it.split ? { split: it.split } : {}),
       ...(it.gate ? { gate: it.gate } : {}),
       // When it sells, and how many one wallet may buy.
-      ...Object.fromEntries(['opens', 'closes', 'perWallet', 'perWalletEach'].filter((k) => it[k] !== undefined).map((k) => [k, it[k]])),
+      ...Object.fromEntries(
+        ['opens', 'closes', 'perWallet', 'perWalletEach'].filter(k => it[k] !== undefined).map(k => [k, it[k]]),
+      ),
       active: it.active !== false,
       outcomes: [{ gives: 'item', item: it.key, weight: 1 }],
       shopOf: it.key,
     }));
   const numbered = assignIds([...(e.boxes ?? []), ...shop], 'id', 1);
-  m.boxes = numbered.filter((b) => !b.shopOf);
-  m.shop = numbered.filter((b) => b.shopOf);
+  m.boxes = numbered.filter(b => !b.shopOf);
+  m.shop = numbered.filter(b => b.shopOf);
   /** Every box the program holds: the spec's own and the shop's. */
   m.allBoxes = numbered;
-  const index = (list) => new Map(list.map((x) => [x.key, x]));
+  const index = list => new Map(list.map(x => [x.key, x]));
   m.item = index(m.items);
   m.pool = index(m.pools);
   m.stash = index(m.stashes);
@@ -340,9 +424,9 @@ export function model(economy, { now = 0 } = {}) {
   m.auction = index(m.auctions);
   m.hold = index(m.holds);
   /** The token a pool holds. */
-  m.poolToken = (key) => tokens.get(m.pool.get(key)?.currency);
+  m.poolToken = key => tokens.get(m.pool.get(key)?.currency);
   /** The token a part is priced in (its own `currency`, else the game's). */
-  m.priceToken = (part) => tokens.get(part?.currency ?? currencyKey);
+  m.priceToken = part => tokens.get(part?.currency ?? currencyKey);
   return m;
 }
 
@@ -352,10 +436,17 @@ export function model(economy, { now = 0 } = {}) {
  * NFT (`compressed`, its asset id).
  */
 export function stashNfts(s) {
-  return (s.nfts ?? []).map((n) => {
+  return (s.nfts ?? []).map(n => {
     if (typeof n === 'string') return { kind: 'core', asset: n, collection: s.collection ?? null, weight: 1 };
     const weight = n.weight ?? 1;
-    if (n.mint) return { kind: 'token-metadata', asset: n.mint, programmable: Boolean(n.programmable), ruleSet: n.ruleSet ?? null, weight };
+    if (n.mint)
+      return {
+        kind: 'token-metadata',
+        asset: n.mint,
+        programmable: Boolean(n.programmable),
+        ruleSet: n.ruleSet ?? null,
+        weight,
+      };
     if (n.compressed) return { kind: 'compressed', asset: n.compressed, weight };
     return { kind: 'core', asset: n.asset, collection: n.collection ?? s.collection ?? null, weight };
   });
@@ -377,10 +468,11 @@ export function prizeLine(p) {
 }
 
 /** The pool a prize line pays from: tokens' "pool:<key>". */
-export const prizePool = (p) => (p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
+export const prizePool = p => (p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
 
 /** The token a prize line pays in: its pool's, or the one it mints. */
-export const prizeToken = (p, m) => (prizePool(p) ? m.poolToken(prizePool(p)) : p?.gives === 'tokens' ? m.tokens.get(p.currency ?? m.currencyKey) : null);
+export const prizeToken = (p, m) =>
+  prizePool(p) ? m.poolToken(prizePool(p)) : p?.gives === 'tokens' ? m.tokens.get(p.currency ?? m.currencyKey) : null;
 
 /**
  * Every prize the spec gives (prize.rs): a grant's, a lottery place's, a contest's winners', a mission tier's and a
@@ -390,12 +482,40 @@ export const prizeToken = (p, m) => (prizePool(p) ? m.poolToken(prizePool(p)) : 
  */
 export function prizes(m) {
   const list = [];
-  const add = (p, where, by, route, strict, once = false) => p && list.push({ prize: p, where, by, route, strict, once });
-  for (const g of m.grants) add(prizeLine(g.prize ?? g.gives), `economy.grants.${g.key}.${g.prize ? 'prize' : 'gives'}`, `grant:${g.key}`, 'grant', true, Number(g.limits?.total ?? 0) === 1);
-  for (const l of m.lotteries) (l.places ?? []).forEach((p, i) => add(placeOf(p).prize, `economy.lotteries.${l.key}.places[${i}].prize`, `lottery:${l.key}`, `place ${i + 1}`, false, !l.every));
-  for (const c of m.contests) add(prizeLine(c.prize), `economy.contests.${c.key}.prize`, `contest:${c.key}`, 'contest', false);
-  for (const f of m.farms) (f.tiers ?? []).forEach((t, i) => add(prizeLine(t.prize), `economy.farms.${f.key}.tiers[${i}].prize`, `farm:${f.key}`, 'mission', false));
-  for (const r of m.recipes) (r.out ?? []).forEach((o, i) => o.gives !== 'roll' || o.on === undefined ? add(o, `economy.recipes.${r.key}.out[${i}]`, `recipe:${r.key}`, 'recipe', true) : null);
+  const add = (p, where, by, route, strict, once = false) =>
+    p && list.push({ prize: p, where, by, route, strict, once });
+  for (const g of m.grants)
+    add(
+      prizeLine(g.prize ?? g.gives),
+      `economy.grants.${g.key}.${g.prize ? 'prize' : 'gives'}`,
+      `grant:${g.key}`,
+      'grant',
+      true,
+      Number(g.limits?.total ?? 0) === 1,
+    );
+  for (const l of m.lotteries)
+    (l.places ?? []).forEach((p, i) =>
+      add(
+        placeOf(p).prize,
+        `economy.lotteries.${l.key}.places[${i}].prize`,
+        `lottery:${l.key}`,
+        `place ${i + 1}`,
+        false,
+        !l.every,
+      ),
+    );
+  for (const c of m.contests)
+    add(prizeLine(c.prize), `economy.contests.${c.key}.prize`, `contest:${c.key}`, 'contest', false);
+  for (const f of m.farms)
+    (f.tiers ?? []).forEach((t, i) =>
+      add(prizeLine(t.prize), `economy.farms.${f.key}.tiers[${i}].prize`, `farm:${f.key}`, 'mission', false),
+    );
+  for (const r of m.recipes)
+    (r.out ?? []).forEach((o, i) =>
+      o.gives !== 'roll' || o.on === undefined
+        ? add(o, `economy.recipes.${r.key}.out[${i}]`, `recipe:${r.key}`, 'recipe', true)
+        : null,
+    );
   return list;
 }
 
@@ -406,8 +526,10 @@ export function prizes(m) {
  * canopy, bytes }
  */
 export function compressedTree(m) {
-  const boxGives = m.allBoxes.some((b) => (b.outcomes ?? []).flatMap(outcomeParts).some((o) => o.gives === 'item' && o.compressed));
-  if (!boxGives && !prizes(m).some((p) => p.prize.gives === 'item' && p.prize.compressed)) return null;
+  const boxGives = m.allBoxes.some(b =>
+    (b.outcomes ?? []).flatMap(outcomeParts).some(o => o.gives === 'item' && o.compressed),
+  );
+  if (!boxGives && !prizes(m).some(p => p.prize.gives === 'item' && p.prize.compressed)) return null;
   const depth = Math.min(20, Math.max(14, Math.ceil(Math.log2(Math.max(1, m.treeHolds)))));
   const canopy = Math.min(depth - 10, 8);
   return { depth, buffer: 64, canopy, bytes: treeSize(depth, 64, canopy) };
@@ -418,11 +540,17 @@ export function compressedTree(m) {
  * mission's roll on the NFT leaving it and a recipe's roll on a collectible it keeps. [{ box, by, route }]
  */
 export function prizeRolls(m) {
-  const rolls = prizes(m).filter((p) => p.prize.gives === 'roll').map((p) => ({ box: p.prize.box, by: p.by, route: p.route }));
-  for (const a of m.auctions) if (a.lot?.roll) rolls.push({ box: a.lot.roll, by: `auction:${a.key}`, route: 'auction' });
-  for (const f of m.farms) for (const t of f.tiers ?? []) if (t.roll) rolls.push({ box: t.roll, by: `farm:${f.key}`, route: 'mission' });
-  for (const r of m.recipes) for (const o of r.out ?? []) if (o.gives === 'roll' && o.on !== undefined) rolls.push({ box: o.box, by: `recipe:${r.key}`, route: 'recipe' });
-  return rolls.filter((r) => r.box);
+  const rolls = prizes(m)
+    .filter(p => p.prize.gives === 'roll')
+    .map(p => ({ box: p.prize.box, by: p.by, route: p.route }));
+  for (const a of m.auctions)
+    if (a.lot?.roll) rolls.push({ box: a.lot.roll, by: `auction:${a.key}`, route: 'auction' });
+  for (const f of m.farms)
+    for (const t of f.tiers ?? []) if (t.roll) rolls.push({ box: t.roll, by: `farm:${f.key}`, route: 'mission' });
+  for (const r of m.recipes)
+    for (const o of r.out ?? [])
+      if (o.gives === 'roll' && o.on !== undefined) rolls.push({ box: o.box, by: `recipe:${r.key}`, route: 'recipe' });
+  return rolls.filter(r => r.box);
 }
 
 /**
@@ -433,9 +561,21 @@ export function prizeRolls(m) {
  */
 export function rollsOf(m) {
   const rolls = [...prizeRolls(m)];
-  for (const b of m.allBoxes) for (const o of b.outcomes ?? []) for (const x of outcomeParts(o)) if (x.gives === 'roll' && x.box) rolls.push({ box: x.box, by: `box:${b.key}`, route: 'box' });
-  const seen = new Set(rolls.map((r) => `${r.box}|${r.by}|${r.route}`));
-  const rollsFrom = (key) => [...new Set(m.box.get(key) ? (m.box.get(key).outcomes ?? []).flatMap(outcomeParts).filter((x) => x.gives === 'roll' && x.box).map((x) => x.box) : [])];
+  for (const b of m.allBoxes)
+    for (const o of b.outcomes ?? [])
+      for (const x of outcomeParts(o))
+        if (x.gives === 'roll' && x.box) rolls.push({ box: x.box, by: `box:${b.key}`, route: 'box' });
+  const seen = new Set(rolls.map(r => `${r.box}|${r.by}|${r.route}`));
+  const rollsFrom = key => [
+    ...new Set(
+      m.box.get(key)
+        ? (m.box.get(key).outcomes ?? [])
+            .flatMap(outcomeParts)
+            .filter(x => x.gives === 'roll' && x.box)
+            .map(x => x.box)
+        : [],
+    ),
+  ];
   // A breadth-first walk: each roll of a box is also a roll of every box it rolls, once for each route.
   for (let i = 0; i < rolls.length; i++) {
     const r = rolls[i];
@@ -453,15 +593,20 @@ export function rollsOf(m) {
 export function prizeWords(p, m) {
   const line = prizeLine(p);
   if (!line) return 'nothing';
-  const sym = (key) => m.tokens.get(key)?.symbol ?? key;
-  if (line.gives === 'item') return `one ${m.item.get(line.item)?.name ?? line.item}${line.compressed ? ' (compressed)' : ''}`;
+  const sym = key => m.tokens.get(key)?.symbol ?? key;
+  if (line.gives === 'item')
+    return `one ${m.item.get(line.item)?.name ?? line.item}${line.compressed ? ' (compressed)' : ''}`;
   if (line.gives === 'raffled') return 'an NFT drawn at random from the lottery’s own stash';
-  if (line.gives === 'nft' && line.held) return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} (held in the lottery’s own stash until it is won)`;
-  if (line.gives === 'nft') return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} of “${m.stash.get(line.stash)?.name ?? line.stash}”`;
+  if (line.gives === 'nft' && line.held)
+    return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} (held in the lottery’s own stash until it is won)`;
+  if (line.gives === 'nft')
+    return `the NFT ${String(line.nft).slice(0, 4)}…${String(line.nft).slice(-4)} of “${m.stash.get(line.stash)?.name ?? line.stash}”`;
   if (line.gives === 'roll') return `a roll of “${m.box.get(line.box)?.name ?? line.box}”`;
   const pool = prizePool(line);
   const split = line.split ? ', split by what each winner put in' : '';
-  return pool ? `${line.amount} ${sym(m.pool.get(pool)?.currency)} from “${pool}”${split}` : `${line.amount} ${sym(line.currency ?? m.currencyKey)}, minted${split}`;
+  return pool
+    ? `${line.amount} ${sym(m.pool.get(pool)?.currency)} from “${pool}”${split}`
+    : `${line.amount} ${sym(line.currency ?? m.currencyKey)}, minted${split}`;
 }
 
 /**
@@ -474,17 +619,23 @@ export function outcomeParts(o) {
   if (!o) return [];
   if (o.gives === 'bundle') return (o.prizes ?? []).flatMap(outcomeParts);
   if (o.gives === 'nothing') return [];
-  if (o.gives === 'tokens') return [o.from?.startsWith('pool:') ? { gives: 'pay', pool: o.from.slice(5), amount: o.amount } : { gives: 'mint', currency: o.currency, amount: o.amount }];
+  if (o.gives === 'tokens')
+    return [
+      o.from?.startsWith('pool:')
+        ? { gives: 'pay', pool: o.from.slice(5), amount: o.amount }
+        : { gives: 'mint', currency: o.currency, amount: o.amount },
+    ];
   return [o];
 }
 
 /** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
 /** How many draws one open of a box makes: its slots' counts, or one. */
-export const drawsOf = (b) => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
+export const drawsOf = b => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
 /** Whether a box's prize costs its settle a collectible's rent: an item minted as a Core NFT, or a fresh compressed one
  * (its traits' Sheet). A plain compressed NFT costs no rent. */
-export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
+export const holdsRent = (p, m) =>
+  p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
 
 /**
  * The units of `SETTLE_RENT_UNIT` a settle of box `b`'s order may spend (`loot.settleRent`), which js/play funds its
@@ -493,14 +644,23 @@ export const holdsRent = (p, m) => p.gives === 'item' && (!p.compressed || (m?.i
  * pay, and the fate of the NFT it rolls on.
  */
 export function settleUnits(b, m) {
-  const opens = (p) => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
-  const parts = (b.outcomes ?? []).map((o) => outcomeParts(o));
-  const most = Math.max(0, ...parts.map((ps) => ps.filter(opens).length));
-  const sources = new Set(parts.flat().filter((p) => ['tokens', 'pay', 'mint'].includes(p.gives)).map((p) => prizePool(p) ?? `mint:${p.currency ?? ''}`));
+  const opens = p => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
+  const parts = (b.outcomes ?? []).map(o => outcomeParts(o));
+  const most = Math.max(0, ...parts.map(ps => ps.filter(opens).length));
+  const sources = new Set(
+    parts
+      .flat()
+      .filter(p => ['tokens', 'pay', 'mint'].includes(p.gives))
+      .map(p => prizePool(p) ?? `mint:${p.currency ?? ''}`),
+  );
   return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
 }
 
-export const boxRolls = (b, m) => (b.outcomes ?? []).length > 1 || (b.outcomes ?? []).flatMap(outcomeParts).some((p) => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
+export const boxRolls = (b, m) =>
+  (b.outcomes ?? []).length > 1 ||
+  (b.outcomes ?? [])
+    .flatMap(outcomeParts)
+    .some(p => p.gives === 'stash' || (p.gives === 'item' && (m?.item.get(p.item)?.drawn ?? []).length > 0));
 
 /** Whether a box sells with `buy`, in one transaction (buy.rs): it doesn't roll and rolls on no NFT, any number of draws
  * a sale (a fixed pack: its prizes given once for each draw). */
@@ -518,13 +678,20 @@ const RENEW_BY = -2_147_483_647;
  * { needs, raises }, in the program's shapes.
  */
 export function lifeLines(r, m) {
-  const places = (r.in ?? []).flatMap((l) => (l.takes === 'pay' ? [] : Array(l.takes === 'burn' ? l.count ?? 1 : 1).fill(l)));
+  const places = (r.in ?? []).flatMap(l =>
+    l.takes === 'pay' ? [] : Array(l.takes === 'burn' ? (l.count ?? 1) : 1).fill(l),
+  );
   const needs = [];
   const raises = [];
   places.forEach((l, place) => {
     const it = l.item ? m.item.get(l.item) : null;
     if (!it?.life || it.kind === 'normal') return;
-    const [ready, lasts, uses, cooldown] = [toSeconds(it.life.readyAfter ?? 0), toSeconds(it.life.lasts ?? 0), it.life.uses ?? 0, toSeconds(it.life.cooldown ?? 0)];
+    const [ready, lasts, uses, cooldown] = [
+      toSeconds(it.life.readyAfter ?? 0),
+      toSeconds(it.life.lasts ?? 0),
+      it.life.uses ?? 0,
+      toSeconds(it.life.cooldown ?? 0),
+    ];
     if (ready) needs.push({ place, key: 'made', test: { Older: [ready] } });
     if (lasts) needs.push({ place, key: 'made', test: { Within: [lasts] } });
     if (l.takes === 'renew') raises.push({ place, shift: { key: 'used', by: RENEW_BY, most: 0, from_now: false } });
@@ -539,7 +706,10 @@ export function lifeLines(r, m) {
 }
 
 /** A lottery's place as { percent, prize }: a number is a share of the pot and no prize. */
-export const placeOf = (p) => (typeof p === 'object' && p !== null ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 } : { percent: p, prize: null, times: 1 });
+export const placeOf = p =>
+  typeof p === 'object' && p !== null
+    ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 }
+    : { percent: p, prize: null, times: 1 };
 
 /** "pool:house" → { kind: 'pool', key: 'house' }; "burn" → { kind: 'burn' }. */
 export function destination(to) {
@@ -551,7 +721,8 @@ export function destination(to) {
 }
 
 /** The share with its basis points, or null bps when the percent is not whole hundredths. */
-export const sharesOf = (split) => (split ?? []).map((s) => ({ ...destination(s.to), to: s.to, percent: s.percent, bps: toBps(s.percent) }));
+export const sharesOf = split =>
+  (split ?? []).map(s => ({ ...destination(s.to), to: s.to, percent: s.percent, bps: toBps(s.percent) }));
 
 /**
  * The program's `To` for a destination, with pool indexes resolved (the IDL's own shape). A wallet ("wallet:<address>")
@@ -580,13 +751,20 @@ export function toEnum(to, m) {
 export function ruleOf(rule, m) {
   if (!rule) return null;
   const time = { ahead: 'Ahead', passed: 'Passed' }[rule.time];
-  const test = rule.atLeast !== undefined ? { AtLeast: [rule.atLeast] } : rule.equals !== undefined ? { Equals: { text: String(rule.equals) } } : time ?? 'Any';
-  const of = rule.item ? { Item: [m.item.get(rule.item)?.id ?? 0] } : { Collection: [rule.collection ?? '@collection'] };
+  const test =
+    rule.atLeast !== undefined
+      ? { AtLeast: [rule.atLeast] }
+      : rule.equals !== undefined
+        ? { Equals: { text: String(rule.equals) } }
+        : (time ?? 'Any');
+  const of = rule.item
+    ? { Item: [m.item.get(rule.item)?.id ?? 0] }
+    : { Collection: [rule.collection ?? '@collection'] };
   return { of, key: rule.attribute ?? '', test };
 }
 
 /** One thing or a list of them, as a list: a farm's `gate` and `growth` take either. */
-export const listOf = (x) => (x == null ? [] : Array.isArray(x) ? x : [x]);
+export const listOf = x => (x == null ? [] : Array.isArray(x) ? x : [x]);
 
 /**
  * The program's `Gate` for a spec gate: a few wallets (`wallets`), a list of any size (`list`: an allowlist, its root and
@@ -598,7 +776,12 @@ export const gateOf = (gate, m) => {
   if (gate.wallets) return { Wallets: [gate.wallets] };
   if (gate.staked) {
     const farm = m.farm.get(gate.staked.farm);
-    return { Staked: { farm: `@farm:${farm?.id ?? 0}`, at_least: toUnits(gate.staked.atLeast ?? 0, m.tokens.get(farm?.stakes)?.decimals ?? 0) } };
+    return {
+      Staked: {
+        farm: `@farm:${farm?.id ?? 0}`,
+        at_least: toUnits(gate.staked.atLeast ?? 0, m.tokens.get(farm?.stakes)?.decimals ?? 0),
+      },
+    };
   }
   if (gate.list) {
     const { root, depth } = gateList(gate.list);
@@ -608,39 +791,48 @@ export const gateOf = (gate, m) => {
 };
 
 /** The program's `PerWallet` for a part's "perWallet" (in all) and "perWalletEach" ({ count, every }). */
-export const perWalletOf = (part) => ({
+export const perWalletOf = part => ({
   total: part?.perWallet ?? 0,
   per_window: part?.perWalletEach?.count ?? 0,
   window: part?.perWalletEach ? toSeconds(part.perWalletEach.every ?? '1d') : 0,
 });
 
 /** The program's `Window` for a part's "opens" and "closes" (times; 0 leaves a side open). */
-export const windowOf = (part, now) => ({ opens_at: BigInt(part?.opens ? toTime(part.opens, now) : 0), closes_at: BigInt(part?.closes ? toTime(part.closes, now) : 0) });
+export const windowOf = (part, now) => ({
+  opens_at: BigInt(part?.opens ? toTime(part.opens, now) : 0),
+  closes_at: BigInt(part?.closes ? toTime(part.closes, now) : 0),
+});
 
 /** A lottery's split of ticket money: its own, and "cutPercent" as a share to the treasury. */
-export const lotterySplit = (l) => [...(l.split ?? []), ...(l.cutPercent ? [{ to: 'treasury', percent: l.cutPercent }] : [])];
+export const lotterySplit = l => [
+  ...(l.split ?? []),
+  ...(l.cutPercent ? [{ to: 'treasury', percent: l.cutPercent }] : []),
+];
 
 /** The program's `Effect` for a spec effect: a flat share, or a share per point of the attribute. */
 export function effectOf(effect) {
-  if (effect?.perPointPercent !== undefined) return { PerPoint: { bps: Math.round(effect.perPointPercent * 100), most: effect.upTo ?? 4_294_967_295 } };
+  if (effect?.perPointPercent !== undefined)
+    return { PerPoint: { bps: Math.round(effect.perPointPercent * 100), most: effect.upTo ?? 4_294_967_295 } };
   return { Flat: [Math.round((effect?.addPercent ?? 0) * 100)] };
 }
 
 /** A box's outcomes with their program weights: chances become whole weights (hundredths of a basis point). */
 export function weights(box) {
   const outcomes = box.outcomes ?? [];
-  if (outcomes.every((o) => Number.isInteger(o.weight))) return outcomes.map((o) => o.weight);
-  const raw = outcomes.map((o) => Math.round((o.chance ?? 0) * 10_000));
+  if (outcomes.every(o => Number.isInteger(o.weight))) return outcomes.map(o => o.weight);
+  const raw = outcomes.map(o => Math.round((o.chance ?? 0) * 10_000));
   const gcd = (a, b) => (b ? gcd(b, a % b) : a);
   const g = raw.reduce((a, b) => gcd(a, b), 0) || 1;
-  return raw.map((w) => w / g);
+  return raw.map(w => w / g);
 }
 
 /** Every place the spec names a pool as somewhere money leaves from, with what takes it. */
 export function poolTakers(m) {
   const takers = [];
   const add = (pool, by, how) => pool && takers.push({ pool, by, how });
-  for (const b of m.allBoxes) for (const o of (b.outcomes ?? []).flatMap(outcomeParts)) if (o.gives === 'pay') add(o.pool, `box:${b.key}`, 'pays prizes');
+  for (const b of m.allBoxes)
+    for (const o of (b.outcomes ?? []).flatMap(outcomeParts))
+      if (o.gives === 'pay') add(o.pool, `box:${b.key}`, 'pays prizes');
   for (const p of prizes(m)) add(prizePool(p.prize), p.by, `pays prizes (${p.route})`);
   for (const s of m.schedules) {
     if (s.does === 'burn') add(s.pool, `schedule:${s.key}`, 'burns a share');
@@ -649,7 +841,13 @@ export function poolTakers(m) {
     // from a vault of its own and names no pool.
     if (s.does === 'pay') add(s.from, `schedule:${s.key}`, 'pays out on a timer');
   }
-  for (const d of m.decisions) if (d.does === 'payout' || d.does === 'burn') add(d.pool, `decision:${d.key}`, d.does === 'payout' ? 'pays out on the authority’s word' : 'burns on the authority’s word');
+  for (const d of m.decisions)
+    if (d.does === 'payout' || d.does === 'burn')
+      add(
+        d.pool,
+        `decision:${d.key}`,
+        d.does === 'payout' ? 'pays out on the authority’s word' : 'burns on the authority’s word',
+      );
   return takers;
 }
 
@@ -657,11 +855,16 @@ export function poolTakers(m) {
 export function poolFillers(m) {
   const fillers = [];
   const add = (pool, by, how) => pool && fillers.push({ pool, by, how });
-  const fromSplit = (split, by) => sharesOf(split).forEach((s) => s.kind === 'pool' && add(s.key, by, `${s.percent}% of each payment`));
-  for (const p of m.pools) if (p.seed !== undefined && Number(p.seed) > 0) add(p.key, `pool:${p.key}`, 'the owner’s seed');
+  const fromSplit = (split, by) =>
+    sharesOf(split).forEach(s => s.kind === 'pool' && add(s.key, by, `${s.percent}% of each payment`));
+  for (const p of m.pools)
+    if (p.seed !== undefined && Number(p.seed) > 0) add(p.key, `pool:${p.key}`, 'the owner’s seed');
   for (const b of m.allBoxes) fromSplit(b.split, b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`);
   for (const p of m.payments) fromSplit(p.split, `payment:${p.key}`);
-  for (const r of m.recipes) for (const i of r.in ?? []) if (i.takes === 'pay' && destination(i.to).kind === 'pool') add(destination(i.to).key, `recipe:${r.key}`, 'a craft pays in');
+  for (const r of m.recipes)
+    for (const i of r.in ?? [])
+      if (i.takes === 'pay' && destination(i.to).kind === 'pool')
+        add(destination(i.to).key, `recipe:${r.key}`, 'a craft pays in');
   for (const s of m.schedules) {
     if (s.does === 'issue') add(s.pool, `schedule:${s.key}`, 'mints into it');
     if (s.does === 'move') add(s.to, `schedule:${s.key}`, 'moves a share in');
@@ -682,15 +885,18 @@ export function farmFillers(m) {
     const d = destination(to ?? '');
     if (d.kind === 'farm') fillers.push({ farm: d.key, by, how });
   };
-  const fromSplit = (split, by) => sharesOf(split).forEach((s) => add(s.to, by, `${s.percent}% of each payment`));
+  const fromSplit = (split, by) => sharesOf(split).forEach(s => add(s.to, by, `${s.percent}% of each payment`));
   for (const f of m.farms) {
     if (Number(f.seed ?? 0) > 0) fillers.push({ farm: f.key, by: `farm:${f.key}`, how: 'the owner’s seed' });
     if (f.exitFeeTo === 'rewards') fillers.push({ farm: f.key, by: `farm:${f.key}`, how: 'early-exit fees' });
   }
   for (const b of m.allBoxes) fromSplit(b.split, b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`);
   for (const p of m.payments) fromSplit(p.split, `payment:${p.key}`);
-  for (const r of m.recipes) for (const i of r.in ?? []) if (i.takes === 'pay') add(i.to, `recipe:${r.key}`, 'a craft pays in');
-  for (const s of m.schedules) if (s.does === 'pay' || s.does === 'issue') add(s.to, `schedule:${s.key}`, s.does === 'issue' ? 'mints into it on a timer' : 'pays in on a timer');
+  for (const r of m.recipes)
+    for (const i of r.in ?? []) if (i.takes === 'pay') add(i.to, `recipe:${r.key}`, 'a craft pays in');
+  for (const s of m.schedules)
+    if (s.does === 'pay' || s.does === 'issue')
+      add(s.to, `schedule:${s.key}`, s.does === 'issue' ? 'mints into it on a timer' : 'pays in on a timer');
   for (const l of m.lotteries) fromSplit(lotterySplit(l), `lottery:${l.key}`);
   for (const c of m.contests) fromSplit(c.split, `contest:${c.key}`);
   for (const a of m.auctions) fromSplit(a.split, `auction:${a.key}`);
