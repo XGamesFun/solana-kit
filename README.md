@@ -183,7 +183,7 @@ Node 22 or later.
 npm ci
 npm run fixtures   # downloads the loot program from devnet and the programs it calls from mainnet, each checked by hash
 npm test           # every instruction the client builds, and every example's whole setup, against the real program in LiteSVM
-npm run lint       # ESLint
+npm run lint       # ESLint and Prettier (npm run format fixes the formatting)
 npm run check      # fixtures, skill copies and release.json in step, lint, then the tests
 ```
 

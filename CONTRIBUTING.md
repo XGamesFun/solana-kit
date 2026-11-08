@@ -11,6 +11,7 @@ Node 22 or later.
 npm ci
 npm run fixtures   # once: the loot program and the programs it calls, each checked against its pinned hash
 npm run check      # fixtures, skill copies and release.json in step, lint, then the tests
+npm run format     # Prettier, before you commit (npm run lint checks it)
 ```
 
 Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM.
@@ -23,7 +24,11 @@ Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM
 - After editing `skills/`, run `npm run sync-skills`.
 - Changes to tool texts, the skill or the plugin are best measured with the evals before and after
   ([evals/README.md](evals/README.md)). Write general rules, never a fix that names one scenario or product.
-- Plain ES modules, no build step. `js/chain` and `js/client` stay browser-safe.
+- Plain ES modules, no build step. `js/chain`, `js/client`, `js/play` and `js/results` stay browser-safe: lint refuses
+  a `node:` import, `Buffer`, `process` or `require` there.
+- Formatting is Prettier's (`.prettierrc.json`, the same settings as xcore's): `npm run format`, and your editor can
+  follow `.editorconfig`. The code was reformatted in one commit; `git config blame.ignoreRevsFile
+  .git-blame-ignore-revs` makes `git blame` look past it (GitHub does on its own).
 
 ## Rules that don't bend
 

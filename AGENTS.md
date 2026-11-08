@@ -43,9 +43,10 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
   mainnet to fetch test fixtures is the one exception.
 - Plain ES modules, Node 22 or later, no build step: the code runs as written. The TypeScript declarations are
   generated from it when the package is packed (`npm run types`); `js/test/types.test.mjs` keeps them compiling.
-  `js/chain` and `js/client` stay browser-safe (no `node:` imports, no `Buffer` or `process`), and `js/chain` imports
+  `js/chain`, `js/client`, `js/play` and `js/results` stay browser-safe (no `node:` imports, no `Buffer` or `process`), and `js/chain` imports
   nothing from `js/client`.
-- `npm run lint` (ESLint's recommended rules) passes.
+- `npm run lint` passes: ESLint's recommended rules (browser globals only in `js/chain`, `js/client`, `js/play` and
+  `js/results`, and no `node:` import, `Buffer` or `process` there) and Prettier's formatting (`npm run format`).
 - `js/client/idl/` is generated: a new program build comes with a new IDL (`node scripts/sync-idl.mjs`, given the
   build in `XSOLANA_PROGRAM_DIR`), a new `loot.so` row in `js/test/fixtures/pinned.txt` and a new `release.json`
   (`node scripts/release-manifest.mjs`).

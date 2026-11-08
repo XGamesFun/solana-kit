@@ -71,10 +71,11 @@
   ],
   "scripts": {
     "test": "node --test \"js/test/**/*.test.mjs\"",
-    "lint": "eslint .",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
     "types": "tsc -p tsconfig.types.json",
     "fixtures": "node scripts/fetch-fixtures.mjs",
-    "check": "node scripts/fetch-fixtures.mjs --check && node scripts/sync-skills.mjs --check && node scripts/release-manifest.mjs --check && eslint . && npm test",
+    "check": "node scripts/fetch-fixtures.mjs --check && node scripts/sync-skills.mjs --check && node scripts/release-manifest.mjs --check && npm run lint && npm test",
     "check:idl": "node scripts/sync-idl.mjs --check",
     "sync-idl": "node scripts/sync-idl.mjs",
     "sync-skills": "node scripts/sync-skills.mjs",
@@ -85,10 +86,11 @@
     "@eslint/js": "10.0.1",
     "@modelcontextprotocol/sdk": "1.32.2",
     "ajv": "8.20.0",
-    "eslint": "10.13.0",
+    "eslint": "10.14.0",
     "globals": "17.13.0",
     "litesvm": "1.6.1",
     "playwright-core": "1.64.1",
+    "prettier": "3.9.10",
     "typescript": "7.0.2"
   },
   "bin": {

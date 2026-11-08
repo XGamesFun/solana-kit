@@ -1,0 +1,13 @@
+node_modules/
+package-lock.json
+types/
+evals/results/
+# generated: the program's IDL (scripts/sync-idl.mjs) and the release pin (scripts/release-manifest.mjs)
+js/client/idl/
+release.json
+# pinned by hash (js/test/fixtures/pinned.txt): a reformatted fixture would no longer match
+js/test/fixtures/
+# copies of skills/ (scripts/sync-skills.mjs keeps them identical to it)
+plugin/skills/
+.claude/skills/
+.agents/skills/
