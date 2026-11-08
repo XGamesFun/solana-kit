@@ -48,7 +48,7 @@ const REFERENCE = [
     ? ['How the program behaves (docs/program.md), for anything the parts above leave out:', PROGRAM_MD, '']
     : []),
   'Made from a page at run time, not in xsolana.json, but part of loot: fixed-price listings of any NFT between players (for sale or for rent by the period), bids for any NFT that passes a rule, and fixed-term loans against an NFT between players (no price oracle, no liquidation).',
-  "Truly outside loot: AMMs, order books, bonding curves with sell-back, fees on trades made elsewhere, lending against tokens, liquidation by price, leverage/perps/price oracles, native SOL staking, governance votes, pulling funds from a wallet without its signature, mainnet (not audited yet). What the chain cannot see (a match, steps, a store visit, a score) is vouched for by a signer: a voucher key (a results server such as the games.fun loot server, or the project's own), which is a normal composition, not a gap.",
+  "Truly outside loot: AMMs, order books, bonding curves with sell-back, fees on trades made elsewhere, lending against tokens, liquidation by price, leverage/perps/price oracles, native SOL staking, governance votes, pulling funds from a wallet without its signature, mainnet (not audited yet). What the chain cannot see (a match, steps, a store visit, a score) is vouched for by a signer: a voucher key (a results server such as the xgames.fun loot server, or the project's own), which is a normal composition, not a gap.",
 ].join('\n');
 
 const SYSTEM = `You judge how an AI coding agent handled a person's request to build an onchain economy on loot, a shared Solana program configured by a JSON spec. You are strict and concrete.

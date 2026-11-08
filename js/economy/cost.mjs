@@ -108,7 +108,7 @@ export function setupCost(plan, economy) {
 }
 
 /**
- * What each action costs whoever signs it while the economy runs: games.fun's fee, the network's, and for anything
+ * What each action costs whoever signs it while the economy runs: xgames.fun's fee, the network's, and for anything
  * that asks MagicBlock's oracle for a random number (a box's open, a lottery's draw, the authority's `roll`) the
  * oracle's own fee (`oracleSol`, model.mjs ORACLE_FEE).
  */
