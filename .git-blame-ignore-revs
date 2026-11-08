@@ -1,0 +1,5 @@
+# Formatting-only commits, skipped by `git blame` (git config blame.ignoreRevsFile .git-blame-ignore-revs; GitHub
+# does it on its own). Add the full hash of any future commit that only reformats.
+
+# Format the code with Prettier
+03ceac27ab35cd7ffc7fbc079631b912dba02b69
