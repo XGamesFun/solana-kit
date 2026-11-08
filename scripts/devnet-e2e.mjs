@@ -5,8 +5,8 @@
 // authority signs; and an auction, where two fresh players bid through js/play, the outbid one has their SOL back at
 // once, and the winner ends it; and farm times and a set, where two pieces staked with their lock and fuel on the NFT
 // are refuelled and bound into a badge by recipes, held in until the badge is burned. Spends a little devnet SOL; every
-// key lives in memory only, and at the end of the run (or when it fails) each fresh wallet sends what it still holds back
-// to the funder, so a run leaves only the rent of the records it made.
+// fresh key is also written to the run's folder, and at the end of the run (or when it fails) each fresh wallet sends what
+// it still holds back to the funder, so a run leaves only the rent of the records it made.
 //
 //   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
 //
@@ -14,7 +14,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { freshKeypair as newKeypair } from '../js/approve/ed25519.mjs';
+import { generateKeyPairSync } from 'node:crypto';
 import { keypairFromSecret } from './keypair.mjs';
 import { createApproval, devnetChain } from '../js/approve/server.mjs';
 import { fromBase64, toBase64 } from '../js/chain/bytes.js';
@@ -48,10 +48,17 @@ async function send(signers, instructions) {
   return signature;
 }
 
-// Every fresh wallet of the run, to send what it still holds back to the funder at the end (`sweepBack`).
+// Every fresh wallet of the run, to send what it still holds back to the funder at the end (`sweepBack`). Each is also
+// written to the run's folder (keys/<address>.json, a 64-byte secret key) so a run that stops before its end can be
+// swept later.
 const fresh = [];
+mkdirSync(path.join(dir, 'keys'), { recursive: true });
 function freshKeypair() {
-  const k = newKeypair();
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const jwk = privateKey.export({ format: 'jwk' });
+  const secret = new Uint8Array([...Buffer.from(jwk.d, 'base64url'), ...Buffer.from(publicKey.export({ format: 'jwk' }).x, 'base64url')]);
+  const k = keypairFromSecret(secret);
+  writeFileSync(path.join(dir, 'keys', `${k.address}.json`), JSON.stringify([...secret]), { mode: 0o600 });
   fresh.push(k);
   return k;
 }
@@ -69,11 +76,14 @@ async function sweepBack() {
   }
   console.log(`Sent ${Number(back) / 1e9} SOL back to the funder from ${fresh.length} fresh wallets.`);
 }
-process.on('unhandledRejection', async (e) => {
-  console.error(e);
-  await sweepBack();
-  process.exit(1);
-});
+// A step that fails still sends the fresh wallets' SOL back before the run ends.
+for (const event of ['unhandledRejection', 'uncaughtException']) {
+  process.on(event, async (e) => {
+    console.error(e);
+    await sweepBack();
+    process.exit(1);
+  });
+}
 
 const owner = freshKeypair();
 console.log(`owner ${owner.address}`);
@@ -345,7 +355,7 @@ if (want('lottery')) {
     prompt: 'A one-off draw 90 seconds after going live: 0.001 SOL a ticket, the winner takes the pot.',
     currency: 'sol',
     tokens: [{ key: 'sol', source: 'sol' }],
-    lotteries: [{ key: 'quick', name: 'Quick draw', price: 0.001, places: [100], firstDraw: 'publish+90s' }],
+    lotteries: [{ key: 'quick', name: 'Quick draw', price: 0.001, places: [100], pot: 0, firstDraw: 'publish+90s' }],
   });
   const players = [freshKeypair(), freshKeypair()];
   for (const k of players) await send([funder], [transferLamports(funder.address, k.address, 30_000_000n)]);
