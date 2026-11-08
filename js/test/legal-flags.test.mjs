@@ -21,11 +21,11 @@ test('each legal flag once, in plain words, and none for an economy that raises 
   assert.deepEqual(legalFlags({ warnings: [{ code: 'W-CHANCE-PRIZE' }, { code: 'W-CHANCE-PRIZE' }, { code: 'toString' }] }), [{ code: 'W-CHANCE-PRIZE', says: LEGAL['W-CHANCE-PRIZE'] }]);
 });
 
-test('xsolana_publish leads its answer with the legal flags', async () => {
+test('xsolana_publish leads its answer with the legal flags, to say once if they were not said yet', async () => {
   const r = await runTool('xsolana_publish', { example: 'coin-flip-arena' }, { now: NOW });
   assert.equal(r.ok, true);
   const lines = r.text.split('\n');
-  assert.match(lines[0], /^Before anything else, tell the person/);
+  assert.match(lines[0], /^If you haven't told the person these yet, say each once/);
   assert.equal(lines[1], `- ${LEGAL['W-REVENUE-SHARE']}`);
   assert.equal(lines[2], `- ${LEGAL['W-CHANCE-PRIZE']}`);
   // with no flags, the answer starts with what going live does

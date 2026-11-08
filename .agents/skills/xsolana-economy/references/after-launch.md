@@ -86,12 +86,21 @@ the winner claims themselves. The grant's limits (per wallet in all and per wind
 total, between two dates) are the most anything can ever pay out, whatever happens to a server.
 
 - **A list** (an airdrop, a known set of winners): the owner writes the wallets in the grant's `list`; no server.
-- **Promo codes, claim links**: the grant's `keys` are the public keys of one keypair per code (made offline from each
-  code; only public keys go in the spec), with `limits.perKey: 1`. The player types the code; the page derives its
-  keypair, signs a voucher for the player's own wallet, and claims (`app.claimGrant(key, { voucher })`). A code pays
-  once in all; a signature someone copies pays only the wallet it names.
+- **Promo codes, claim links**: make the codes with `makeCodes(n)` (`@xgamesfun/solana/results`: 80 bits each, never
+  fewer than 64, since each code's key is public in the spec and a short code can be found by trying them all
+  offline) and put `await codeAddresses(codes)` in the grant's `keys`, with `limits.perKey: 1`. Keep the codes out of
+  the repository. The player types a code; the page makes `codeVoucher({ code, game, grant, incarnation, wallet,
+  now })` for the player's own wallet and claims (`app.claimGrant(key, { voucher })`). A code pays once in all; a
+  signature someone copies pays only the wallet it names.
 - **Show a badge, claim once**: an open grant (no `vouchers`, `keys` or `list`) with a `gate` and `limits.perWallet`:
   any wallet that shows the collectible claims, and each collectible shown counts too. No server.
+- **A wallet is not a person.** Wallets are free, so a per-wallet limit never limits a person, and a game runs in the
+  player's browser, so its own claims prove nothing. For a reward worth farming: the server decides or checks the
+  result; it pays only a wallet the player proved (`proofRequest` / `verifyProof` from `@xgamesfun/solana/results`: a
+  text the wallet signs, with the game, a nonce the server takes once, and an expiry); it counts people where it can
+  (`perPerson`, with a person hash the voucher names: that needs an outside sign-in such as X, and a wallet-only
+  player has none); it checks what a wallet holds on the chain, never the page's word (`collectiblesOf`, `holds`); and
+  the grant's `perDay` and `total` bound everything whatever happens to a key. Keep token rewards for results small.
 - **Vouchers from a results server**: the grant names the server's public key in `vouchers`; the server checks the
   game's result and signs a voucher (for a grant of tokens, with each winner's own `amount`, up to the grant's: rewards
   by rank); the winner's page claims with it (`app.claimGrant(key, { voucher })`).

@@ -1,0 +1,166 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Stride Sneakers",
+  "prompt": "A move-to-earn game. Players buy a shoebox for 0.1 SOL and get a sneaker with random efficiency and luck, or a rare golden one. Walking earns STRIDE: the app's server vouches for a day's steps, once a day per wallet. Two sneakers and 200 STRIDE mint a new shoebox, at most 7 times per sneaker. 50 STRIDE levels a sneaker up, to level 30. Sneakers can be rented out from the app.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "stride",
+      "source": "project",
+      "name": "Stride",
+      "symbol": "STRIDE",
+      "decimals": 6
+    }
+  ],
+  "collection": {
+    "name": "Stride Sneakers"
+  },
+  "items": [
+    {
+      "key": "sneaker",
+      "name": "Sneaker",
+      "drawn": [
+        {
+          "attribute": "efficiency",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "attribute": "luck",
+          "min": 1,
+          "max": 10
+        }
+      ]
+    },
+    {
+      "key": "golden",
+      "name": "Golden Sneaker",
+      "rarity": "Legendary",
+      "supply": 100
+    }
+  ],
+  "boxes": [
+    {
+      "key": "shoebox",
+      "name": "Shoebox",
+      "price": 0.1,
+      "outcomes": [
+        {
+          "gives": "item",
+          "item": "sneaker",
+          "chance": 98
+        },
+        {
+          "gives": "item",
+          "item": "golden",
+          "chance": 2
+        }
+      ]
+    }
+  ],
+  "recipes": [
+    {
+      "key": "mint",
+      "name": "Mint a shoebox",
+      "in": [
+        {
+          "takes": "use",
+          "item": "sneaker"
+        },
+        {
+          "takes": "use",
+          "item": "sneaker"
+        },
+        {
+          "takes": "pay",
+          "amount": 200,
+          "currency": "stride",
+          "to": "burn"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "mints",
+          "by": 1,
+          "upTo": 7
+        },
+        {
+          "place": 1,
+          "key": "mints",
+          "by": 1,
+          "upTo": 7
+        }
+      ],
+      "out": [
+        {
+          "gives": "roll",
+          "box": "shoebox"
+        }
+      ]
+    },
+    {
+      "key": "level-up",
+      "name": "Level up",
+      "in": [
+        {
+          "takes": "use",
+          "item": "sneaker"
+        },
+        {
+          "takes": "pay",
+          "amount": 50,
+          "currency": "stride",
+          "to": "burn"
+        }
+      ],
+      "raises": [
+        {
+          "place": 0,
+          "key": "level",
+          "by": 1,
+          "upTo": 30
+        }
+      ]
+    }
+  ],
+  "grants": [
+    {
+      "key": "steps",
+      "name": "Daily steps",
+      "prize": {
+        "gives": "tokens",
+        "amount": 20,
+        "currency": "stride",
+        "from": "mint"
+      },
+      "vouchers": [
+        "B8CrCHTMi223kknNgaJXXp8QGqNR9pwD1bfZVYvr5fmJ"
+      ],
+      "limits": {
+        "perWalletEach": {
+          "count": 1,
+          "every": "1d"
+        },
+        "perDay": 1000
+      },
+      "wallets": 1000,
+      "rounds": 365,
+      "fund": 0.5
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "box:shoebox": 20,
+      "grant:steps": 300,
+      "recipe:mint": 15,
+      "recipe:level-up": 60
+    }
+  }
+}

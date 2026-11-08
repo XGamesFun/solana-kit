@@ -53,6 +53,18 @@ export const CONVENTIONS = [
  * then offer the nearest versions with their numbers, best first, and build the one the person picks. A feature that
  * ships later moves its entry to HOW.
  */
+/**
+ * What no code removes, only makes smaller: a wallet is not a person, the page can't be trusted, and bots play well.
+ * Said once in the guide, so every design starts from it.
+ */
+export const SAFETY = [
+  'A wallet is not a person: wallets are free, so a limit per wallet never limits a person. What bounds a reward is its totals ("perDay", "total": the most it can ever pay), and what makes farming cost something: a gate on holding a collectible the game sells or a locked stake, or vouchers from your server that count people ("perPerson": the voucher signer names a person hash, which needs an outside sign-in such as X; a wallet-only player has none).',
+  'Open grants (no voucher, keys or list) pay any wallet: keep their prizes small or soulbound, gate them, and set "perDay". `xsolana_simulate` says what a crowd of wallets could take next to one.',
+  'The page can’t be trusted: a game runs in the player’s browser, so a result worth paying is decided or checked by your server, which signs the voucher. A server checks what a wallet holds with `collectiblesOf` / `holds`, pays only wallets a player proved (`proofRequest` / `verifyProof`), and makes promo codes with `makeCodes` (80 bits: a code’s key is public, so a short code can be guessed offline) and `codeAddresses` for the grant’s `keys` (all from `@xgamesfun/solana/results`).',
+  'Bots play well: even a verified result pays a bot what it pays a good player. Keep token rewards for results small and capped (a grant’s limits), give SOL prizes only by chance (the oracle) or by what your server decides, and don’t let a minted farm rate run without end into what its token buys (it compounds: give it an end, a term or an upkeep).',
+  'A gate costs a sybil most when it asks for something the game sells: a rule takes any of several items (`{ "items": ["oak", "pine"] }`, up to 16), and can read the attributes only the program writes on every minted collectible, `item_id`, `rarity`, `serial` and `made` (`{ "attribute": "rarity", "atLeast": 2 }`: any of the game’s Rare or better).',
+];
+
 export const CANNOT = [
   {
     what: 'a prize that is a share of what a pool holds (a jackpot paying a tenth of itself)',
@@ -157,6 +169,7 @@ export const CANNOT = [
  * person's words match.
  */
 export const HOW = [
+  { what: 'a pity counter that resets on a rare and can’t be traded (gacha pity, a guaranteed legendary by the 90th pull)', words: 'pity counter guaranteed hard pity soft pity gacha resets non-transferable soulbound charm', how: 'a soulbound collectible each player holds (a charm: `"soulbound": true`, free or cheap, `perWallet` 1) that the pull box rolls on (`"rollsOn": { "item": "charm" }, "then": "back"`): each miss shifts its "pity" attribute by +1 (`shifts`, `upTo` the cap), the rare shifts it by -1000000 (a number never goes below 0, so it resets), and the rare’s `odds` add a percent per point of "pity". It counts per charm, never trades, and resets on a rare; a pity token (a token minted on each miss, spent in a recipe) can be sold and never resets. One pull at a time per charm (the box holds it until the roll settles)' },
   { what: 'an NFT raffle (a seller raffles one NFT; the winner gets it, the seller the ticket money)', words: 'raffle nft raffle sell tickets winner gets nft one-of-one', how: 'a lottery with `"raffle": "<NFT address>"` and `"rest": "wallet:<seller>"` (the ticket money, less any cut, to the seller) (or a first place `{ "prize": { "gives": "nft", "nft": "<address>", "held": true } }`): the NFT waits in the lottery’s own stash, which nothing but the draw can empty; the winner pulls it after the draw; `minSold` cancels and refunds a round that sold fewer. A seller runs it as the owner of a project of their own (`app.raffle`)' },
   { what: 'rent an NFT out (a cabin, a club, a hero for a scholar)', words: 'rent rental renter lease borrow use scholarship cabin club hero lend for a week', how: 'a listing for rent: `openListingIx` with `deal: { Rent: { price, lasts, max_periods } }` (`app.listForRent`); a renter pays by the period (`app.rentListing`) and is its user until the end; nobody ends it early; the game reads the renter with one account read (`app.rentedTo(asset)`). On-chain gates don’t read rentals: the game checks them' },
   { what: 'a presale or fair launch: a token split by what each put in', words: 'presale fair launch pro rata proportional raise contribute allocation by amount crowdsale ido', how: 'a contest with one side, a `minPot`, a split of 100% to the treasury, and a token `prize` with `"split": true`: the whole prize is set aside when it is decided, and each backer claims their part in proportion to what they put in; short of `minPot`, everyone is refunded' },
@@ -221,6 +234,8 @@ export function guideText(only) {
       : [
           '\nWriting it:',
           ...CONVENTIONS.map((c) => `- ${c}`),
+          '\nDesigning against farming and cheating (no code removes these; a design makes them small):',
+          ...SAFETY.map((x) => `- ${x}`),
           '\nAsks that look impossible but are one field or a short combination:',
           ...HOW.map((h) => `- ${h.what}: ${h.how}.`),
           '\nWhat no part of loot does (before saying so, try combining the parts above: most ideas are several parts together). Say what is missing, then offer the nearest versions, best first, and build the one the person picks; never end on "it can’t":',

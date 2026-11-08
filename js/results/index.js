@@ -182,3 +182,6 @@ export const giveaways = {
     return post(server, `/v1/giveaways/${seg(game)}/${seg(giveaway)}/result`, { endedAt, winners: winners.map(({ wallet, place }) => ({ wallet, place })), signature }, fetchImpl);
   },
 };
+
+// What a game's server checks: a wallet's collectibles, a wallet's signed proof, promo codes (server.js).
+export { codeAddresses, codeKey, codeVoucher, collectiblesOf, holds, makeCodes, normalizeCode, proofRequest, proofText, readProof, verifyProof } from './server.js';

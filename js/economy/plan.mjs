@@ -841,11 +841,21 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       });
     }
   }
+  /** A seed in a token the project mints (no fixed supply): the owner's wallet holds none of it, so the authority
+   * mints it straight into its account, as a pool's seed is minted into the pool. */
+  const mintedSeed = (id, part, t, units, says, account) => {
+    const signer = m.authority === 'owner' ? owner : 'authority';
+    add({ id, part, signers: [signer], says, build: (ctx) => [loot.moveTokensIx({ authority: ctx.authority, project: project(ctx), mint: ctx.mints[t.key], from: { Mint: [ctx.mints[t.key]] }, to: { Account: [account(ctx)] }, amount: { Fixed: [units] }, reference: id.replace(/^seed:[a-z]+:/, 'seed ') })] });
+  };
   // A farm's seed: the owner puts it straight into the farm's rewards vault, once the farm is open.
   for (const f of m.farms) {
     if (!(Number(f.seed ?? 0) > 0) || live?.seeded?.includes(`farm:${f.key}`)) continue;
     const t = m.tokens.get(f.rewardsToken);
     const units = amount(f.seed, t);
+    if (t.gameMints) {
+      mintedSeed(`seed:farm:${f.key}`, `farm:${f.key}`, t, units, `Mint ${f.seed} ${t.symbol} into the rewards of “${f.name}”`, (ctx) => loot.pda.rewards(loot.pda.farm(project(ctx), f.id)));
+      continue;
+    }
     add({
       id: `seed:farm:${f.key}`,
       part: `farm:${f.key}`,
@@ -864,6 +874,10 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     if (!(Number(l.seed ?? 0) > 0) || live?.seeded?.includes(`lottery:${l.key}`)) continue;
     const t = m.tokens.get(l.currency ?? m.currencyKey);
     const units = amount(l.seed, t);
+    if (t.gameMints) {
+      mintedSeed(`seed:lottery:${l.key}`, `lottery:${l.key}`, t, units, `Mint ${l.seed} ${t.symbol} into the pot of “${l.name}”`, (ctx) => loot.pda.lotteryPot(loot.pda.lottery(project(ctx), l.id), l.pot));
+      continue;
+    }
     add({
       id: `seed:lottery:${l.key}`,
       part: `lottery:${l.key}`,

@@ -653,7 +653,7 @@
         },
         "drawn": {
           "type": "array",
-          "description": "A fresh collectible: at most 64 traits drawn for each unit, in order, written on it, each attribute's name at most 64 bytes. Each from a table (`\"table\": key`, a row by weight among those in stock, drawn atomically with the box's roll) or a range (`\"min\"`/`\"max\"`, every whole number as likely, drawn at the mint from the same answer). Its name and link may contain `{attribute}` for each, beside `{serial}`. A fresh item is given only by a box's roll.",
+          "description": "A fresh collectible: at most 64 traits drawn for each unit, in order, written on it, each attribute's name at most 64 bytes. Each from a table (`\"table\": key`, a row by weight among those in stock, drawn atomically with the box's roll) or a range (`\"min\"`/`\"max\"`, every whole number as likely, drawn at the mint from the same answer). Its name and link may contain `{attribute}` for each, and its link `{serial}` (the name always ends with “ #<serial>”). A fresh item is given only by a box's roll.",
           "items": {
             "type": "object",
             "additionalProperties": false,

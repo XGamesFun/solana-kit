@@ -15,6 +15,8 @@ import { boxBuys, COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS, drawsOf, settle
 
 const DAY = 86_400;
 const DEFAULT_PER_DAY = 100;
+/** How many wallets the simulation's crowd is, next to one: what a person with many wallets could take from a grant. */
+const MANY_WALLETS = 100;
 /** Bids a day on an auction the scenario doesn't name (`auction:<key>`); a grant it doesn't name is claimed by nobody. */
 const DEFAULT_BIDS = 10;
 const sol = (lamports) => Number(lamports) / Number(LAMPORTS_PER_SOL);
@@ -706,6 +708,27 @@ export function simulate(economy, { now = 0 } = {}) {
     };
   });
   for (const f of m.farms) playerAction(perDay('farm', f.key));
+  /**
+   * What many wallets could take from a grant a day, next to one: wallets are free, so per-wallet limits bound a person
+   * only when the grant counts people (vouchers that name a person) or each claim must show something bought. `perDay`
+   * caps it whatever happens. Leaves out a list (each entry is paid once) and codes that each pay a set number of times.
+   */
+  const MANY = MANY_WALLETS;
+  const manyWallets = (g) => {
+    const l = g.limits ?? {};
+    const vouched = (g.vouchers ?? []).length > 0 || (g.keys ?? []).length > 0;
+    const listed = (g.list ?? []).length > 0;
+    if ((listed && !vouched) || ((g.keys ?? []).length && l.perKey && !(g.vouchers ?? []).length)) return {};
+    const who = vouched ? 'its voucher signer vouches for' : g.gate ? 'each showing what its gate asks' : '(free to make)';
+    if (l.perWalletEach?.count) {
+      const each = l.perWalletEach.count / Math.max((toSeconds(l.perWalletEach.every ?? '1d') || DAY) / DAY, 1);
+      const many = Math.min(MANY * each, l.perDay || Infinity);
+      return { many: { one: round(each), all: round(many), per: 'a day', who, capped: Boolean(l.perDay && MANY * each > l.perDay) } };
+    }
+    if (!l.perWallet) return {};
+    const many = Math.min(MANY * l.perWallet, l.total || Infinity);
+    return { many: { one: l.perWallet, all: many, per: 'in all', who, capped: Boolean(l.total && MANY * l.perWallet > l.total), perDay: l.perDay ?? null } };
+  };
   // Grants: each claim's sender pays the player fee; its records' rent comes from the grant's funds (the owner's SOL, back when its shards close).
   const grants = m.grants.map((g) => {
     const claims = num(m.scenario.perDay?.[`grant:${g.key}`]);
@@ -714,7 +737,7 @@ export function simulate(economy, { now = 0 } = {}) {
     // Its prize, paid for by the grant's funds; a roll's order goes back to the winner at settle.
     const line = prizeLine(g.prize ?? g.gives);
     const each = givePrize(line, claims, `grant:${g.key}`, creator);
-    return { key: g.key, name: g.name, claimsPerDay: claims, gives: prizeWords(line, m), fundsPerClaimSol: round(claimRecordsRent(g) + each), ...(line?.gives === 'roll' ? { orderHeldSol: round(orderHeld(line.box)) } : {}) };
+    return { key: g.key, name: g.name, claimsPerDay: claims, gives: prizeWords(line, m), fundsPerClaimSol: round(claimRecordsRent(g) + each), ...(line?.gives === 'roll' ? { orderHeldSol: round(orderHeld(line.box)) } : {}), ...manyWallets(g) };
   });
   for (const h of m.holds) playerAction(perDay('hold', h.key));
   for (const c of m.contests) playerAction(perDay('contest', c.key));
@@ -1016,7 +1039,7 @@ export function explain(sim, economy) {
     if (f.upkeepAttribute) lines.push(`  Upkeep: each collectible earns and grows only until the time under “${f.upkeepAttribute}”; the figures assume every one is kept topped up.`);
     for (const t of f.tiers.filter((t) => t.prize)) lines.push(`  Mission (lock ${t.lock}): ${t.prize} for each one that stays it (tokens grown by its boosts).`);
   }
-  for (const g of sim.grants) lines.push(`Grant “${g.name}”: ${n(g.claimsPerDay)} claims a day, each giving ${g.gives}; each claim costs its funds about ${n(g.fundsPerClaimSol)} SOL${g.orderHeldSol ? ` (${n(g.orderHeldSol)} of it the roll’s order, which goes to the winner when it is settled; whoever asks for the roll pays the oracle)` : ''}.`);
+  for (const g of sim.grants) lines.push(`Grant “${g.name}”: ${n(g.claimsPerDay)} claims a day, each giving ${g.gives}; each claim costs its funds about ${n(g.fundsPerClaimSol)} SOL${g.orderHeldSol ? ` (${n(g.orderHeldSol)} of it the roll’s order, which goes to the winner when it is settled; whoever asks for the roll pays the oracle)` : ''}.${g.many ? ` One wallet may claim ${n(g.many.one)} ${g.many.per}; ${MANY_WALLETS} wallets ${g.many.who} could claim ${n(g.many.all)} ${g.many.per}${g.many.capped ? `, its "${g.many.per === 'a day' ? 'perDay' : 'total'}" the cap` : ''}${g.many.perDay ? `, at most ${n(g.many.perDay)} a day` : ''}.` : ''}`);
   for (const s of sim.stashes ?? []) lines.push(`Stash “${s.name}”: ${s.holds} NFT${s.holds === 1 ? '' : 's'} to start${s.takenInPerDay ? `, about ${n(s.takenInPerDay)} a day come in` : ''}${s.lastsDays !== undefined ? `, given at about ${n(s.givenPerDay)} a day: lasts about ${n(s.lastsDays)} days` : s.givenPerDay ? `, given at about ${n(s.givenPerDay)} a day` : ''}.`);
   for (const r of sim.recipes) lines.push(`Recipe “${r.name}”: ${r.takes.join(' + ') || 'nothing'} → ${r.gives.join(' + ') || 'nothing'}, ${n(r.craftsPerDay)} a day.`);
   for (const s of sim.schedules) lines.push(`Schedule “${s.key}”: ${s.says}; ${lateRunWords(m.schedules.find((x) => x.key === s.key) ?? {})}.`);
@@ -1035,7 +1058,7 @@ export function explain(sim, economy) {
       m.decisions.some((x) => x.does === 'roll' && Number(x.perDay) > 0) && 'the authority’s rolls',
     ].filter(Boolean);
     const words = what.length > 1 ? `${what.slice(0, -1).join(', ')} and ${what.at(-1)}` : what[0] ?? 'its rolls';
-    lines.push(`The oracle also takes about ${n(d.creator.oracleFeesSol)} SOL a day for ${words}, from whoever asks for them (the game’s keeper or the authority).`);
+    lines.push(`The oracle also takes about ${n(d.creator.oracleFeesSol)} SOL a day for ${words}, from whoever asks for them: anyone may (a player's page, or a ticket bought once a draw is due, sends it).`);
   }
   lines.push(`The treasury gets ${list(d.creator.treasury)} a day; burned: ${list(d.burned)}. The platform’s fees: ${n(d.platform.totalSol)} SOL a day.`);
   for (const note of sim.notes) lines.push(note);

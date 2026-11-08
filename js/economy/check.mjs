@@ -471,6 +471,21 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   if (refusals.length) return result();
 
   const m = model(economy, { now });
+  /** Whether a prize is worth farming from many wallets: tokens, an NFT, a collectible that isn't soulbound, or a roll. */
+  const tradeable = (p) => p?.gives === 'tokens' || p?.gives === 'nft' || p?.gives === 'roll' || (p?.gives === 'item' && !m.item.get(p.item)?.soulbound && m.item.get(p.item)?.kind !== 'normal');
+  /** What one claim of grant `key` costs its funds, in SOL, as `simulate` counts it (null when it can't say). */
+  let fundsSim;
+  const grantClaimSol = (key) => {
+    if (fundsSim === undefined) {
+      try {
+        fundsSim = simulate(economy, { now });
+      } catch {
+        fundsSim = null;
+      }
+    }
+    const each = fundsSim?.grants?.find((x) => x.key === key)?.fundsPerClaimSol;
+    return each > 0 ? each : null;
+  };
   const units = (amount, token, where, what = 'This amount') => {
     if (!token) return null;
     try {
@@ -2082,11 +2097,18 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     if (open && !l.perWallet && !l.perWalletEach?.count)
       warn('W-GRANT', where, `${label(g)} has no voucher key, no keys and no list, and limits no wallet: the first wallet to come can claim it again and again, up to its total${l.total ? '' : ' (it has none: until its funds or its pool run out)'}.`, 'Set "limits.perWallet" (1 is usual) to make it a one-per-wallet claim, or add "vouchers", "keys" or a "list".');
     if (open)
-      warn('W-GRANT-OPEN', where, g.gate?.wallets ? `${label(g)} is open to the ${g.gate.wallets.length} wallets its gate lists, within its limits.` : g.gate?.list ? `${label(g)} is open to the wallets on its gate’s list, within its limits.` : g.gate?.staked ? `${label(g)} is open to any wallet with the stake its gate asks, within its limits. Someone who stakes from many wallets claims once per wallet.` : g.gate ? `${label(g)} is open: any wallet that shows what its gate asks can claim it, within its limits, and each collectible shown counts too, so passing one around claims nothing more.` : `${label(g)} is open: any wallet can claim it, within its limits. Someone with many wallets claims once per wallet.`, g.gate ? undefined : 'Give it a gate (a collectible each claimer must hold), or keep "total" small.');
+      warn('W-GRANT-OPEN', where, g.gate?.wallets ? `${label(g)} is open to the ${g.gate.wallets.length} wallets its gate lists, within its limits.` : g.gate?.list ? `${label(g)} is open to the wallets on its gate’s list, within its limits.` : g.gate?.staked ? `${label(g)} is open to any wallet with the stake its gate asks, within its limits. Someone who stakes from many wallets claims once per wallet.` : g.gate ? `${label(g)} is open: any wallet that shows what its gate asks can claim it, within its limits, and each collectible shown counts too, so passing one around claims nothing more.` : tradeable(gives) ? `${label(g)} is open: any wallet can claim it, within its limits, and wallets are free to make, so someone with many wallets claims once per wallet. What it gives ${gives.gives === 'roll' ? 'is a roll of a box' : 'can be sold'}, so claiming it from many wallets pays.` : `${label(g)} is open: any wallet can claim it, within its limits. Someone with many wallets claims once per wallet.`, g.gate ? undefined : tradeable(gives) ? 'Make each claim cost a sybil something: a gate on holding a collectible the game sells or a locked stake, or vouchers from your server that count people ("perPerson", with an outside sign-in such as X). Keep "perDay" and "total" small either way.' : 'Give it a gate (a collectible each claimer must hold), or keep "total" small.');
     for (const [i, v] of vouchers.entries()) if (!isAddress(v)) refuse('E-GRANT', `${where}.vouchers[${i}]`, 'A voucher key must be a public address.', 'Write the signer’s public key (never its private key).');
     for (const [i, v] of keys.entries()) if (!isAddress(v)) refuse('E-GRANT', `${where}.keys[${i}]`, 'A key must be a public address.', 'Write each code’s public key (never its private key or the code itself).');
     if (!open && !l.perWallet && !l.perPerson && !l.total && !l.perDay && !l.perKey && !l.perWalletEach?.count)
       warn('W-GRANT-LIMITS', `${where}.limits`, `${label(g)} has no limits: a leaked voucher key can take everything its ${prizePool(gives) ? 'pool' : 'prize'} has.`, 'Set "perWallet" (1 is usual), and "total" or "perDay".');
+    // Wallets are free, and a voucher key can leak: what bounds a grant is its totals, not its per-wallet limits.
+    const perClaimer = l.perWallet || l.perWalletEach?.count || l.perPerson || l.perKey;
+    const listOnly = !open && !vouchers.length && !keys.length;
+    // Codes that each pay a set number of times (perKey) are a total already: as many claims as codes allow.
+    const codesOnly = keys.length && l.perKey && !vouchers.length;
+    if (!listOnly && !codesOnly && perClaimer && !l.perDay && !l.total)
+      warn('W-GRANT-TOTAL', `${where}.limits`, `${label(g)} limits each ${l.perPerson ? 'person' : l.perKey ? 'key' : 'wallet'} but nothing a day or in all: ${open ? 'every new wallet (free to make) claims its share' : vouchers.length ? 'a leaked voucher key signs for as many wallets as it likes' : 'a shared code pays every wallet that uses it'}, until ${prizePool(gives) ? 'its pool' : gives.gives === 'tokens' && gives.from !== 'mint' ? 'its prize runs out' : 'its funds run out (then each claimer pays its own rent)'}.`, 'Set "perDay" (and "total"): they are the most it can ever pay, whatever happens to a key or how many wallets come.');
     if (keys.length && !l.perKey) warn('W-GRANT-LIMITS', `${where}.limits.perKey`, `${label(g)} takes vouchers from ${keys.length} keys but limits no key: a code someone shares pays every wallet that uses it.`, 'Set "perKey": 1 for codes that pay once each.');
     // A list written in xsolana.json has every leaf at round zero, and a round pays a wallet once (grant.rs take_round).
     const rounds = (g.list ?? []).some((e) => typeof e === 'object' && e.round);
@@ -2107,10 +2129,41 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     }
     // Its funds are SOL, which pays each claim's rent.
     const funds = g.fund === undefined ? 0n : units(g.fund, { decimals: 9 }, `${where}.fund`, `${label(g)}’s funds`);
+    const perClaim = grantClaimSol(g.key);
     if (funds === 0n)
-      warn('W-GRANT-FUNDS', `${where}.fund`, `${label(g)} has no funds: whoever pays for each claim (the winner, who always signs it, or anyone paying its fees for them) pays its rent as well as the player fee.`, 'Set "fund" (0.05 SOL covers about a dozen claims) so winners claim for only the player fee and the network fee, or top it up after it goes live: anyone sends SOL to the grant.');
+      warn('W-GRANT-FUNDS', `${where}.fund`, `${label(g)} has no funds: whoever pays for each claim (the winner, who always signs it, or anyone paying its fees for them) pays its rent as well as the player fee.`, perClaim ? `Set "fund": each claim costs its funds about ${perClaim} SOL, so 0.05 SOL covers about ${Math.floor(0.05 / perClaim)} claims (then claimers pay their own rent).` : 'Set "fund" (0.05 SOL covers about a dozen claims) so winners claim for only the player fee and the network fee, or top it up after it goes live: anyone sends SOL to the grant.');
     rule(g.gate, `${where}.gate`, label(g));
   }
+
+  // ---- farms that mint without end: a rate minted for good is supply nobody bounds, and when that token buys more of
+  // what earns it (or is staked for more of itself), whoever stakes most (a bot never sleeps) compounds it.
+  for (const f of m.farms) {
+    const t = m.tokens.get(f.rewardsToken);
+    if (!f.rate?.minted || !(Number(f.rate.perDay ?? 0) > 0) || !t?.gameMints || f.runs || f.upkeepAttribute) continue;
+    if ((f.tiers ?? []).some((x) => x.earnsFor)) continue;
+    const buys = [
+      ...m.allBoxes.filter((b) => (b.currency ?? m.currencyKey) === t.key && Number(b.price ?? 0) > 0).map((b) => label(b)),
+      ...m.recipes.filter((r) => (r.in ?? []).some((i) => i.takes === 'pay' && (i.currency ?? m.currencyKey) === t.key)).map((r) => label(r)),
+      ...m.lotteries.filter((l) => (l.ticketCurrency ?? l.currency ?? m.currencyKey) === t.key).map((l) => label(l)),
+      ...(m.currencyKey === t.key ? m.items.filter((it) => Number(it.price ?? 0) > 0).map((it) => label(it)) : []),
+    ];
+    const self = f.stakes === t.key;
+    if (!buys.length && !self) continue;
+    warn('W-FARM-MINT', `economy.farms.${f.key}.rate`, `${label(f)} mints ${t.symbol ?? t.key} for good, with no end${self ? ', and stakes the same token: what it pays can be staked for more' : `, and ${t.symbol ?? t.key} buys ${buys.slice(0, 3).join(', ')}${buys.length > 3 ? ' and more' : ''}`}. Nothing bounds the supply, and whoever stakes most (a bot included) compounds it.`, 'Give it an end ("runs"), a term on its tiers ("earnsFor"), or an upkeep, or pay its rewards from its vault (no "minted": a seed, a share of sales or a schedule) so it can only pay what it holds.');
+  }
+  // An NFT a farm watches (left free in its wallet) can be staked in a farm that holds it: its watched seat stops, and
+  // what it was owed and not harvested is gone (farm.rs: a watched seat earns only while its NFT is still there).
+  const farmCollections = (f) => listOf(f.gate).map((r) => r?.collection).filter(Boolean);
+  const overlaps = (a, b) => {
+    if (a.item && b.item) return a.item === b.item;
+    const [ca, cb] = [farmCollections(a), farmCollections(b)];
+    return !ca.length || !cb.length || ca.some((c) => cb.includes(c));
+  };
+  const nftFarms = m.farms.filter((f) => f.stakes === 'collectibles');
+  for (const w of nftFarms.filter((f) => f.custody === 'watch'))
+    // (a farm that freezes the NFT leaves it in its wallet, so the watched seat goes on: only escrow moves it away)
+    for (const h of nftFarms.filter((f) => f !== w && (f.custody ?? 'escrow') === 'escrow' && overlaps(w, f)))
+      warn('W-FARM-SWITCH', `economy.farms.${w.key}.custody`, `An NFT ${label(w)} watches can be staked in ${label(h)}, which takes it into the game's keeping: its seat in ${label(w)} stops, and what that seat was owed and not harvested is lost.`, `Have the page harvest (or leave) ${label(w)} before it stakes the NFT in ${label(h)}.`);
 
   // ---- parts switched off: saved as a draft (waiting for a voucher key, a date), they do nothing once live, while the
   // person may hear about them as if they worked. A box only prizes, missions or recipes roll is meant to be off.
