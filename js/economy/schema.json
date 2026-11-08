@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/XGamesFun/solana-kit/main/js/economy/schema.json",
   "title": "A loot economy (spec version 2)",
-  "description": "One project's economy on the shared loot program: its currencies, collectibles, pools and the mechanics that move them. Kept as xsolana.json in a project (or as the `economy` section of a xgames.fun game). Amounts are in whole units of their token, percents are percents, durations are like \"7d\".",
+  "description": "One project's economy on the shared loot program: its currencies, collectibles, pools and the mechanics that move them. Kept as xsolana.json in a project (or as the `economy` section of an xgames.fun game). Amounts are in whole units of their token, percents are percents, durations are like \"7d\".",
   "type": "object",
   "required": ["version"],
   "additionalProperties": false,
