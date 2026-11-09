@@ -10,7 +10,7 @@ import { PROGRAM_INFO, tools, VERSION } from './tools.mjs';
 
 export const INSTRUCTIONS = [
   'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
-  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_save; xsolana_publish when they say to put it live (they approve in their own wallet: you never sign or ask for a key).',
+  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live (they approve in their own wallet: you never sign or ask for a key).',
   `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
 ].join(' ');
 

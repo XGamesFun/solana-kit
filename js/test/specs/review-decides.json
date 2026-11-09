@@ -1,0 +1,182 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Ruin Run",
+  "prompt": "When a player discovers Bronze Relic, Silver Relic or Gold Relic they earn that relic as an NFT, and can stake their relic NFTs in a farm that pays Shards over time. Bigger relic earn more. Devnet only.",
+  "currency": "shards",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "shards",
+      "source": "project",
+      "name": "Shards",
+      "symbol": "SHARD",
+      "decimals": 6,
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/shards.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/shard.svg"
+    }
+  ],
+  "collection": {
+    "name": "Ruin Run Relics",
+    "description": "Discoveries from a little living ocean.",
+    "royaltyPercent": 0,
+    "uri": "https://ruin-run-2-play.xgames.fun/relic/collection.json",
+    "image": "https://ruin-run-2-play.xgames.fun/relic/collection.svg"
+  },
+  "items": [
+    {
+      "key": "bronze",
+      "name": "Bronze Relic",
+      "rarity": "Epic",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Bronze Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/bronze.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/bronze.svg",
+      "id": 1
+    },
+    {
+      "key": "silver",
+      "name": "Silver Relic",
+      "rarity": "Legendary",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Silver Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/silver.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/silver.svg",
+      "id": 2
+    },
+    {
+      "key": "gold",
+      "name": "Gold Relic",
+      "rarity": "Mythic",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Gold Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/gold.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/gold.svg",
+      "id": 3
+    }
+  ],
+  "grants": [
+    {
+      "key": "discover-bronze",
+      "name": "Discover Bronze Relic",
+      "prize": {
+        "gives": "item",
+        "item": "bronze"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 1,
+      "trust": "decides"
+    },
+    {
+      "key": "discover-silver",
+      "name": "Discover Silver Relic",
+      "prize": {
+        "gives": "item",
+        "item": "silver"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 2,
+      "trust": "decides"
+    },
+    {
+      "key": "discover-gold",
+      "name": "Discover Gold Relic",
+      "prize": {
+        "gives": "item",
+        "item": "gold"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 3,
+      "trust": "decides"
+    }
+  ],
+  "farms": [
+    {
+      "key": "shard-vault",
+      "name": "Shard Vault",
+      "stakes": "collectibles",
+      "gate": {
+        "items": ["bronze", "silver", "gold"]
+      },
+      "custody": "watch",
+      "rewards": "shards",
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "0d",
+          "multiplier": 1
+        }
+      ],
+      "boosts": [
+        {
+          "when": {
+            "item": "silver"
+          },
+          "add": {
+            "addPercent": 100
+          }
+        },
+        {
+          "when": {
+            "item": "gold"
+          },
+          "add": {
+            "addPercent": 300
+          }
+        }
+      ],
+      "maxBoostPercent": 300,
+      "runs": "90d",
+      "id": 1
+    }
+  ],
+  "scenario": {
+    "days": 90,
+    "perDay": {
+      "grant:discover-bronze": 5,
+      "grant:discover-silver": 3,
+      "grant:discover-gold": 1,
+      "farm:shard-vault": 5
+    },
+    "staked": {
+      "shard-vault": 30
+    },
+    "players": 100
+  }
+}

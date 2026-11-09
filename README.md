@@ -6,7 +6,7 @@ package `@xgamesfun/solana`:
 - a JavaScript client with no Solana SDK (`@xgamesfun/solana/client`), a player module for apps (`/play`) and a results
   client (`/results`);
 - the economy spec and its checker, quick simulation, cost and plain-words explainer;
-- the `xsolana` CLI and an MCP server with ten `xsolana_*` tools;
+- the `xsolana` CLI and an MCP server with eleven `xsolana_*` tools;
 - the `xsolana-economy` skill, and one plugin that carries the tools and the skill to Claude Code and Codex;
 - a local approval page where a project's owner approves going live in their own wallet.
 
@@ -35,7 +35,10 @@ An economy is a JSON spec, not a new smart contract. Every project shares the on
 - **Players also trust the token and the collection.** A mint's issuer (a freeze authority, a pause, a transfer hook, a
   permanent delegate) or a collection's controller can stop or move what loot holds. USDC has a freeze authority.
 - **The chain can't see a game.** Results a game reports (a win, a score, a clear) are vouched for by a key the project
-  trusts, a results server or deciders. Checking that a player really did it is the project's job, on its own server.
+  trusts, a results server or deciders. Checking that a player really did it is the project's job, on its own server:
+  a server that decides the result, replays it, or only bounds what the page reports leaves a cheater very different
+  amounts. A grant says which in `trust`, and `xsolana review` says what a cheater gets on every route
+  ([trust and cheating](skills/xsolana-economy/references/trust-and-cheating.md)).
 - **The hosted results server is optional.** `https://play.xgames.fun/xsolana` (`@xgamesfun/solana/results`'s
   default) signs vouchers for games without a server of their own. It can only pay what a grant allows, and only for a
   grant whose owner named its key in `vouchers`. It sends nothing on chain, and it is offered as is: it can be down, and
@@ -121,6 +124,7 @@ npx -y @xgamesfun/solana@0.25.0 check xsolana.json                 # refusals an
 npx -y @xgamesfun/solana@0.25.0 simulate xsolana.json              # where the money goes, day by day
 npx -y @xgamesfun/solana@0.25.0 cost xsolana.json                  # what going live and each action cost
 npx -y @xgamesfun/solana@0.25.0 explain xsolana.json               # the economy in plain words
+npx -y @xgamesfun/solana@0.25.0 review xsolana.json                # what a cheater gets on each route (exits 1 on a high finding)
 npx -y @xgamesfun/solana@0.25.0 approve xsolana.json               # go live, approved in your own wallet
 ```
 
@@ -138,30 +142,31 @@ import * as loot from '@xgamesfun/solana/client';
 const ix = loot.openBoxIx({ player, project, box, nonce }); // one builder per instruction, no Solana SDK
 ```
 
-| Import                           | What                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------ |
-| `@xgamesfun/solana`              | the economy tools: `check`, `simulate`, `plan`, `cost`, `explainEconomy`, `model`    |
-| `@xgamesfun/solana/client`       | every PDA, one builder per instruction, account and receipt decoders, grant vouchers |
-| `@xgamesfun/solana/play`         | `solanaApp`: what a player does with a live economy, from a browser app              |
-| `@xgamesfun/solana/results`      | results and vouchers a game's server signs                                           |
-| `@xgamesfun/solana/chain/*`      | browser-safe Solana primitives: base58, Borsh, transactions, PDAs, tokens, Core      |
-| `@xgamesfun/solana/idl.json`     | the program's IDL, the authority for account and argument layouts                    |
-| `@xgamesfun/solana/release.json` | the program build, IDL and client this release is pinned to                          |
+| Import                           | What                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `@xgamesfun/solana`              | the economy tools: `check`, `simulate`, `plan`, `cost`, `explainEconomy`, `review`, `model` |
+| `@xgamesfun/solana/client`       | every PDA, one builder per instruction, account and receipt decoders, grant vouchers        |
+| `@xgamesfun/solana/play`         | `solanaApp`: what a player does with a live economy, from a browser app                     |
+| `@xgamesfun/solana/results`      | results and vouchers a game's server signs                                                  |
+| `@xgamesfun/solana/chain/*`      | browser-safe Solana primitives: base58, Borsh, transactions, PDAs, tokens, Core             |
+| `@xgamesfun/solana/idl.json`     | the program's IDL, the authority for account and argument layouts                           |
+| `@xgamesfun/solana/release.json` | the program build, IDL and client this release is pinned to                                 |
 
 The client, chain and play modules run in browsers and Node 22 or later, with no bundler required. The package
 ships TypeScript declarations for every entry point.
 
 ## Documentation
 
-|                                                              |                                                                                             |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| [`docs/program.md`](docs/program.md)                         | the program: who signs, accounts, every instruction, fees, limits, receipts, costs          |
-| [`docs/nfts.md`](docs/nfts.md)                               | NFTs and tokens, with and without the project's authority                                   |
-| [`docs/harnesses.md`](docs/harnesses.md)                     | how the plugin reaches Claude Code and Codex, and the release checklist                     |
-| [`skills/xsolana-economy`](skills/xsolana-economy/SKILL.md)  | the skill an agent follows                                                                  |
-| [`examples/`](examples)                                      | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated |
-| [`evals/`](evals/README.md)                                  | fresh-session evals of agents building on loot                                              |
-| [`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md) | versions, the trust model, reporting a vulnerability                                        |
+|                                                                                    |                                                                                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`docs/program.md`](docs/program.md)                                               | the program: who signs, accounts, every instruction, fees, limits, receipts, costs          |
+| [`docs/nfts.md`](docs/nfts.md)                                                     | NFTs and tokens, with and without the project's authority                                   |
+| [`docs/harnesses.md`](docs/harnesses.md)                                           | how the plugin reaches Claude Code and Codex, and the release checklist                     |
+| [`skills/xsolana-economy`](skills/xsolana-economy/SKILL.md)                        | the skill an agent follows                                                                  |
+| [`trust-and-cheating.md`](skills/xsolana-economy/references/trust-and-cheating.md) | what a server decides, replays or bounds; who gets paid; an exploit checklist               |
+| [`examples/`](examples)                                                            | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated |
+| [`evals/`](evals/README.md)                                                        | fresh-session evals of agents building on loot                                              |
+| [`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md)                       | versions, the trust model, reporting a vulnerability                                        |
 
 ## Layout
 

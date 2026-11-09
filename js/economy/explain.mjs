@@ -26,6 +26,7 @@ import {
   whenOutWords,
 } from './model.mjs';
 import { farmEnds, playSteps } from './plan.mjs';
+import { TRUST_WORDS } from './trust.mjs';
 import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -75,7 +76,7 @@ const paysWords = (l, treasury) =>
     ? `its places are paid from its pot (an account of its own, which only its winners are paid from): each place takes its percent of what the pot holds when the draw is asked, with the round’s ticket money, so whatever reaches the pot counts (the seed, a sponsor, shares of other sales, yield) and so does what earlier rounds’ places left; what this round’s places leave stays in the pot, and the next round always starts with it`
     : `its places are paid from each round’s own ticket money alone, which nothing sent from outside can change (no seed, no gift, no carry-over); what the places leave, and the part of places nobody won, goes ${toWords(destination(l.rest), treasury)}${l.rest === 'burn' ? ' when the round closes' : ''}`;
 
-const ruleWords = r => {
+export const ruleWords = r => {
   if (!r) return '';
   if (r.wallets) return `they are one of the ${r.wallets.length} wallets it names`;
   if (r.items) return `any of ${r.items.map(k => `“${k}”`).join(', ')}`;
@@ -99,7 +100,7 @@ const stakeWords = (staked, m) => {
   );
 };
 /** A gate in a sentence: "Only players who show …", "Only the wallets it names …", "Only wallets with … staked …". */
-const gateWords = (gate, verb, m) =>
+export const gateWords = (gate, verb, m) =>
   !gate
     ? ''
     : gate.wallets
@@ -464,8 +465,14 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const who = signers.length ? signers.join(' or ') : 'that asks (it is open to any wallet)';
     // A grant of a fixed amount of tokens, paid by voucher or list: each claim may name its own amount, up to the grant's.
     const named = signers.length > 0 && src.prize?.gives === 'tokens';
+    // What the voucher's server checks before it signs (`trust`): the spec's own word, never sent on chain.
+    const trust = src.trust
+      ? ` What its server checks: ${TRUST_WORDS[src.trust]}.`
+      : (src.vouchers ?? []).length
+        ? ' What its server checks before it signs is not said ("trust"): xsolana_review reads it as the weakest, a server that only bounds what the page reports.'
+        : '';
     actions.push(
-      `Claim “${g.name}” (only the winning wallet claims, signing it; anyone may pay its fees): gives ${g.gives}, to a wallet ${who}${limits ? `; limits ${limits}` : '; no limits'}${src.gate ? (src.gate.wallets ? `; only the ${src.gate.wallets.length} wallets it names` : src.gate.list || src.gate.staked ? `; ${gateWords(src.gate, 'claim it', m).replace(/^Only/, 'only')}` : `; the wallet must hold ${ruleWords(src.gate)}${!signers.length ? ', and each one of those claims once too' : ''}`) : ''}${named ? `; a voucher or the list can name each claim’s own amount, up to that (a reward by rank or share)` : ''}. Each claim costs the grant’s funds about ${num(g.fundsPerClaimSol)} SOL of rent, and whoever sends it the ${fee} SOL player fee.`,
+      `Claim “${g.name}” (only the winning wallet claims, signing it; anyone may pay its fees): gives ${g.gives}, to a wallet ${who}${limits ? `; limits ${limits}` : '; no limits'}${src.gate ? (src.gate.wallets ? `; only the ${src.gate.wallets.length} wallets it names` : src.gate.list || src.gate.staked ? `; ${gateWords(src.gate, 'claim it', m).replace(/^Only/, 'only')}` : `; the wallet must hold ${ruleWords(src.gate)}${!signers.length ? ', and each one of those claims once too' : ''}`) : ''}${named ? `; a voucher or the list can name each claim’s own amount, up to that (a reward by rank or share)` : ''}. Each claim costs the grant’s funds about ${num(g.fundsPerClaimSol)} SOL of rent, and whoever sends it the ${fee} SOL player fee.${trust}`,
     );
   }
   for (const st of sim.stashes ?? []) {

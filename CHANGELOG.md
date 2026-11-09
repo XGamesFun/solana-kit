@@ -6,6 +6,27 @@ tools see them.
 
 ## Unreleased
 
+- **A security review, `xsolana review` and the `xsolana_review` tool** (`review`, `describeReview` in
+  `js/economy/review.mjs`): an economy read the way a cheater reads it, not a validity check. For every route that
+  pays or gives value (grants, the shop, boxes, payments, recipes, farms, lotteries, contests, auctions, schedules,
+  holds, decisions) it says who can trigger it, what the program enforces, what it trusts off the chain, the declared
+  `trust`, the most one cheater gets (per person, per wallet, with free wallets, a day, in all, and what the prize then
+  earns in a farm) and what it feeds. Findings carry stable ids and a severity: `R-TRUST-UNSAID`, `R-CLAIM-COMPOUNDS`,
+  `R-CLAIM-UNCAPPED`, `R-STAKES-PAID`, `R-GRANT-PERSON`, `R-GRANT-OPEN`, `R-GRANT-TOTAL`, `R-CODES`, `R-FREE`,
+  `R-STOCK-STEER`, `R-FARM-ENDLESS`, `R-FARM-WATCH`, `R-FARM-SWITCH`, `R-LOTTERY-LATE`, `R-CONTEST-RESULT`,
+  `R-AUCTION-SHILL`, `R-AUTHORITY-ON-SERVER`, `R-DECISION-SERVER`, `R-VOUCHER-KEY`, `R-AUTHORITY`, `R-MINT-POWERS`
+  (the checker's exploit notes, `W-GRANT-OPEN`, `W-GRANT-TOTAL`, `W-FARM-MINT`, `W-VOUCHERS`, `W-FREE` and others, are
+  folded in). `tradeoffs` is short markdown for the person: the three levels, which route uses which, what a cheater
+  gets and what moving up costs. The answer is `{ ok, routes, findings, tradeoffs }`; the command exits 1 on a high
+  finding.
+- **A grant's `trust`** (`"decides"`, `"replays"` or `"bounds"`): what the server holding its voucher key checks
+  before it signs. The spec's own note: the setup plan and the approval ignore it, and adding or changing it on a live
+  economy publishes nothing. Refused on a grant no voucher key or code signs for (`E-GRANT-TRUST`); `xsolana_explain`
+  says it in words; the review reads a voucher grant without it as `"bounds"`.
+- **The skill**: a new reference, `trust-and-cheating.md` (what a server decides, replays or bounds and what each costs;
+  who gets paid; what the program guarantees, from a devnet attack audit of 0.25.0, and the exploit checklist that is
+  still the project's); rules 9 and 10 say a signer is not the end of the story; rule 12 and step 8 of the loop run
+  `xsolana_review` before the owner approves, and tell the person what a cheater gets so they choose the trade-off.
 - The five examples 0.25.0 added from the rated economies (`stride-sneakers`, `holder-den`, `pack-league`,
   `match-predictions`, `holders-drop`) are taken out again; fuller examples come later. The tests cover each part they
   used on their own.

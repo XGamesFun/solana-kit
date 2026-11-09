@@ -1,0 +1,150 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Ruin Run",
+  "prompt": "When a player discovers one of the rare relics (Bronze Relic, Silver Relic, Gold Relic) on a run, they earn that relic as an NFT, one of each per player. They can stake their relic NFTs in a farm that pays out a token, Shards, over time; rarer relics earn more.",
+  "currency": "shard",
+  "tokens": [
+    {
+      "key": "shard",
+      "source": "project",
+      "name": "Shard",
+      "symbol": "SHARD",
+      "decimals": 3
+    }
+  ],
+  "collection": {
+    "name": "Ruin Run Relics"
+  },
+  "items": [
+    {
+      "key": "bronze",
+      "name": "Bronze Relic",
+      "description": "Found on a run. Earns 10 Shards a day staked.",
+      "rarity": "Rare",
+      "uri": "https://ruin-run-play.xgames.fun/nft/bronze.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/bronze.png",
+      "id": 1
+    },
+    {
+      "key": "silver",
+      "name": "Silver Relic",
+      "description": "Found on a run. Earns 25 Shards a day staked.",
+      "rarity": "Epic",
+      "uri": "https://ruin-run-play.xgames.fun/nft/silver.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/silver.png",
+      "id": 2
+    },
+    {
+      "key": "gold",
+      "name": "Gold Relic",
+      "description": "Found on a run. Earns 50 Shards a day staked.",
+      "rarity": "Legendary",
+      "uri": "https://ruin-run-play.xgames.fun/nft/gold.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/gold.png",
+      "id": 3
+    }
+  ],
+  "grants": [
+    {
+      "key": "found-bronze",
+      "name": "Discovered an Bronze Relic",
+      "prize": {
+        "gives": "item",
+        "item": "bronze"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 500
+      },
+      "fund": 0.1,
+      "id": 1,
+      "trust": "bounds"
+    },
+    {
+      "key": "found-silver",
+      "name": "Discovered a Silver Relic",
+      "prize": {
+        "gives": "item",
+        "item": "silver"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 300
+      },
+      "fund": 0.1,
+      "id": 2,
+      "trust": "bounds"
+    },
+    {
+      "key": "found-gold",
+      "name": "Discovered a Gold Relic",
+      "prize": {
+        "gives": "item",
+        "item": "gold"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 100
+      },
+      "fund": 0.1,
+      "id": 3,
+      "trust": "bounds"
+    }
+  ],
+  "farms": [
+    {
+      "key": "vault",
+      "name": "The Vault",
+      "stakes": "collectibles",
+      "rewards": "shard",
+      "gate": {
+        "items": ["bronze", "silver", "gold"]
+      },
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1h",
+          "multiplier": 1
+        }
+      ],
+      "boosts": [
+        {
+          "when": {
+            "item": "silver"
+          },
+          "add": {
+            "addPercent": 150
+          }
+        },
+        {
+          "when": {
+            "item": "gold"
+          },
+          "add": {
+            "addPercent": 400
+          }
+        }
+      ],
+      "maxBoostPercent": 400,
+      "id": 1
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "grant:found-bronze": 40,
+      "grant:found-silver": 15,
+      "grant:found-gold": 4
+    }
+  }
+}

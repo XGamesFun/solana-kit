@@ -4909,6 +4909,16 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
             ? 'Make each claim cost a sybil something: a gate on holding a collectible the game sells or a locked stake, or vouchers from your server that count people ("perPerson", with an outside sign-in such as X). Keep "perDay" and "total" small either way.'
             : 'Give it a gate (a collectible each claimer must hold), or keep "total" small.',
       );
+    // `trust` says what the server holding a voucher key checks: a grant with no voucher key or code has no such server.
+    if (g.trust && !vouchers.length && !keys.length)
+      refuse(
+        'E-GRANT-TRUST',
+        `${where}.trust`,
+        `${label(g)} says its server ${g.trust} the result ("trust"), but it is paid ${open ? 'to any wallet that asks (it is open)' : 'to the wallets on its list'}: no server signs for it, so nothing checks what a claimer did.`,
+        open
+          ? 'Remove "trust", or name the server’s public key in "vouchers" so its claims are signed.'
+          : 'Remove "trust": the list is the owner’s own choice, written in the spec.',
+      );
     for (const [i, v] of vouchers.entries())
       if (!isAddress(v))
         refuse(
@@ -5175,6 +5185,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       'W-VOUCHERS',
       'economy.grants',
       `A voucher key signs who earned a grant: whatever holds it (your server, a play host) decides who gets rewards, within the limits the program keeps. The program does not check that a player really did what the voucher says. The keys: ${voucherKeys.join(', ')}.`,
+      'Say on each such grant what its server checks before it signs ("trust": "decides", "replays" or "bounds"), run xsolana_review, and tell the person what a cheater gets.',
     );
 
   if (randomItems && !chance)
