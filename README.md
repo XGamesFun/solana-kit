@@ -105,13 +105,13 @@ codex plugin add xsolana@xgamesfun
 ```
 
 **Any agent with MCP** (Cursor, opencode, Cline…): run the server with
-`npx -y --package=@xgamesfun/solana@0.25.0 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.0 connect` register it, with
+`npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.1 connect` register it, with
 the skill, for Claude Code and Codex.
 
 Then ask for an economy, for example _"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
 monthly draw"_.
 
-Going live is always yours: `npx -y @xgamesfun/solana@0.25.0 approve` opens a page on your computer where you connect a
+Going live is always yours: `npx -y @xgamesfun/solana@0.25.1 approve` opens a page on your computer where you connect a
 devnet wallet and approve each transaction. The agent never signs and never asks for a key.
 
 ## Use it from a terminal
@@ -119,13 +119,13 @@ devnet wallet and approve each transaction. The agent never signs and never asks
 Every tool runs from the CLI too, on a spec file (`xsolana.json` by default):
 
 ```bash
-npx -y @xgamesfun/solana@0.25.0 examples shop with loot boxes   # the nearest worked examples
-npx -y @xgamesfun/solana@0.25.0 check xsolana.json                 # refusals and warnings
-npx -y @xgamesfun/solana@0.25.0 simulate xsolana.json              # where the money goes, day by day
-npx -y @xgamesfun/solana@0.25.0 cost xsolana.json                  # what going live and each action cost
-npx -y @xgamesfun/solana@0.25.0 explain xsolana.json               # the economy in plain words
-npx -y @xgamesfun/solana@0.25.0 review xsolana.json                # what a cheater gets on each route (exits 1 on a high finding)
-npx -y @xgamesfun/solana@0.25.0 approve xsolana.json               # go live, approved in your own wallet
+npx -y @xgamesfun/solana@0.25.1 examples shop with loot boxes   # the nearest worked examples
+npx -y @xgamesfun/solana@0.25.1 check xsolana.json                 # refusals and warnings
+npx -y @xgamesfun/solana@0.25.1 simulate xsolana.json              # where the money goes, day by day
+npx -y @xgamesfun/solana@0.25.1 cost xsolana.json                  # what going live and each action cost
+npx -y @xgamesfun/solana@0.25.1 explain xsolana.json               # the economy in plain words
+npx -y @xgamesfun/solana@0.25.1 review xsolana.json                # what a cheater gets on each route (exits 1 on a high finding)
+npx -y @xgamesfun/solana@0.25.1 approve xsolana.json               # go live, approved in your own wallet
 ```
 
 `xsolana help` lists every command. Every command names the exact version, so `npx` runs that release and never whatever

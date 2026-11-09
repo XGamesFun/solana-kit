@@ -99,11 +99,23 @@ describe('the xsolana MCP server', () => {
     }
   });
 
-  // The plugin manifests, the release manifest and the MCP Registry entry name the same version as the package.
-  test('the plugin manifests, release.json and server.json carry this package’s version', () => {
+  // The plugin manifests and the MCP Registry entry name the same version as the package; release.json names the
+  // program's (the IDL's), which a JS-only patch release (0.25.1 on loot 0.25.0) leaves as it is.
+  test('the plugin manifests and server.json carry this package’s version; release.json its program’s', () => {
     const root = new URL('../../', import.meta.url);
     const { name, version, mcpName } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-    for (const file of ['plugin/plugin.json', 'plugin/.claude-plugin/plugin.json', 'release.json', 'server.json']) {
+    const idl = JSON.parse(readFileSync(new URL('js/client/idl/loot.json', root), 'utf8'));
+    assert.equal(
+      JSON.parse(readFileSync(new URL('release.json', root), 'utf8')).version,
+      idl.metadata.version,
+      'release.json names the program',
+    );
+    assert.equal(
+      version.split('.').slice(0, 2).join('.'),
+      idl.metadata.version.split('.').slice(0, 2).join('.'),
+      'the package is its program’s major.minor',
+    );
+    for (const file of ['plugin/plugin.json', 'plugin/.claude-plugin/plugin.json', 'server.json']) {
       assert.equal(
         JSON.parse(readFileSync(new URL(file, root), 'utf8')).version,
         version,

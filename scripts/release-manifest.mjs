@@ -3,7 +3,7 @@
 //
 //   node scripts/release-manifest.mjs           writes release.json from the program binary: a local build's
 //                                               target/deploy/loot.so in XSOLANA_PROGRAM_DIR, else js/test/fixtures/loot.so
-//   node scripts/release-manifest.mjs --check   checks release.json against this checkout: the version, the IDL and
+//   node scripts/release-manifest.mjs --check   checks release.json against this checkout: the program's version, the IDL and
 //                                               the client always; the program binary only when one is there (it
 //                                               says so when it is not)
 import { createHash } from 'node:crypto';
@@ -37,9 +37,17 @@ const sbfFile = process.env.XSOLANA_PROGRAM_DIR
   : path.join(root, 'js/test/fixtures/loot.so');
 const checking = process.argv.includes('--check');
 const target = path.join(root, 'release.json');
-if (pkg.version !== idl.metadata.version) throw new Error('Package and IDL versions differ. Rebuild and sync the IDL.');
+// The package's major.minor is the program's (the IDL's); its patch may be higher: a release of the JavaScript alone
+// (the review, the checker, the skill) on the same program. release.json names the program's version, which a keeper
+// pins: it never moves with a JS-only patch.
+const [pm, pn, pp] = pkg.version.split('.').map(Number),
+  [im, inn, ip] = idl.metadata.version.split('.').map(Number);
+if (pm !== im || pn !== inn || !(pp >= ip))
+  throw new Error(
+    `Package ${pkg.version} and IDL ${idl.metadata.version} differ: a package names its program's major.minor (a patch above it is a JS-only release). Rebuild and sync the IDL.`,
+  );
 const held = {
-  version: pkg.version,
+  version: idl.metadata.version,
   programId: idl.address,
   idlSha256: sha(idlBytes),
   clientSha256: client.digest('hex'),
