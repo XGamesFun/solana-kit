@@ -110,6 +110,17 @@ codex plugin add xsolana@xgamesfun
 `npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.1 connect` register it, with
 the skill, for Claude Code and Codex.
 
+**The skill alone, in any agent that reads skills** (Claude Code, Codex, Copilot, Gemini CLI, Cursor, Windsurf, Cline,
+opencode…): `npx skills add XGamesFun/solana-kit` finds it and installs it for the agents you have. Without the MCP
+server it runs the same tools through `npx`. Each GitHub release also carries `xsolana-economy.zip`, the skill as one
+file for apps that take a skill as an upload (the Claude and ChatGPT desktop apps).
+
+**Over HTTP**: `npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp --http` serves the tools that read nothing but
+their arguments (guide, examples, check, simulate, cost, explain, review, status, client) at
+`http://127.0.0.1:8787/mcp`, MCP's Streamable HTTP transport. `@xgamesfun/solana/mcp/http` exports the same handler
+(`mcpHttp(request) → response`) for a hosted endpoint: it reads no files, and the agent hands the person the spec and the
+`approve` command to go live.
+
 Then ask for an economy, for example _"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
 monthly draw"_.
 
@@ -143,6 +154,9 @@ npm install @xgamesfun/solana
 import * as loot from '@xgamesfun/solana/client';
 const ix = loot.openBoxIx({ player, project, box, nonce }); // one builder per instruction, no Solana SDK
 ```
+
+Building on `@solana/kit`? `loot.toKitInstruction(ix)` gives any builder's instruction in Kit's shape
+(`{ programAddress, accounts, data }`), and `loot.fromKitInstruction` turns one back.
 
 | Import                           | What                                                                                        |
 | -------------------------------- | ------------------------------------------------------------------------------------------- |

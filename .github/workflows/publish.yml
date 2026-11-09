@@ -39,3 +39,18 @@ jobs:
   registry:
     needs: publish
     uses: ./.github/workflows/mcp-registry.yml
+
+  # The skill as one zip on the release, for apps that take a skill as an upload (scripts/skill-zip.mjs).
+  skill-zip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload the zip to this release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node scripts/skill-zip.mjs xsolana-economy.zip
+      - run: gh release upload "$GITHUB_REF_NAME" xsolana-economy.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

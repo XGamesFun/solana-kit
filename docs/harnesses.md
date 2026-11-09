@@ -22,6 +22,19 @@ The skill follows the Agent Skills standard (front matter `name` and `descriptio
 its text names no harness. `xsolana connect` knows Claude Code and Codex only. From a checkout,
 `node bin/xsolana.mjs connect --local` registers that checkout's server instead of the published package.
 
+## Other agents and chat apps
+
+- **Any agent that reads skills**: `npx skills add XGamesFun/solana-kit` (the `skills` CLI) finds the one skill (it
+  skips the copies in `plugin/`, `.claude/` and `.agents/`) and installs it for each agent it finds.
+- **Apps that take a skill as an upload**: the release job `skill-zip` attaches `xsolana-economy.zip`
+  (`scripts/skill-zip.mjs`: the folder with `SKILL.md` at its top, the same bytes for the same files).
+- **Chat apps that add an MCP server by URL** (claude.ai, ChatGPT, Claude Desktop): `js/mcp/http.mjs` is the server
+  over Streamable HTTP, one JSON answer a request, no session. It runs the stdio server's handler in remote mode: only
+  `REMOTE_TOOLS` (the tools that read nothing but their arguments and the chain), no `file` argument, and instructions
+  that hand the person the spec and the `approve` command instead of `xsolana_save` and `xsolana_publish`. A host
+  mounts `mcpHttp` (exported as `@xgamesfun/solana/mcp/http`); `xsolana mcp --http` serves it on 127.0.0.1, answering
+  only pages on localhost. Once a hosted URL is live, `server.json` names it under `remotes`.
+
 ## Releasing a version
 
 Keep these in step:

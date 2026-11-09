@@ -68,7 +68,10 @@
     },
     "./idl.json": "./js/client/idl/loot.json",
     "./package.json": "./package.json",
-    "./release.json": "./release.json"
+    "./release.json": "./release.json",
+    "./mcp/http": {
+      "default": "./js/mcp/http.mjs"
+    }
   },
   "sideEffects": [
     "./bin/xsolana.mjs",
