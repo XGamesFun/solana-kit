@@ -1,7 +1,9 @@
-# solana-kit
+# solana-kit: Solana game and NFT economies without a smart contract
 
-The tools for **loot**, one shared Solana program for game and community economies. This repository is the npm
-package `@xgamesfun/solana`:
+Loot boxes and gacha, shops, lotteries and raffles, auctions, NFT staking farms, crafting, quests and capped rewards on
+Solana, written as a JSON spec instead of a new Anchor program. They all run on **loot**, one shared, open Solana
+program, and an AI coding agent (Claude Code, Codex, Cursor or any MCP client) can design, check, simulate and price
+one from a sentence. This repository is the npm package `@xgamesfun/solana`:
 
 - a JavaScript client with no Solana SDK (`@xgamesfun/solana/client`), a player module for apps (`/play`) and a results
   client (`/results`);
@@ -154,6 +156,30 @@ const ix = loot.openBoxIx({ player, project, box, nonce }); // one builder per i
 
 The client, chain and play modules run in browsers and Node 22 or later, with no bundler required. The package
 ships TypeScript declarations for every entry point.
+
+## Questions people ask
+
+**How do I make a loot box, gacha or pack opening on Solana without writing a smart contract?** Describe it as a box
+in a spec (its price, its outcomes and their odds, what each one pays), run `xsolana check` and `xsolana simulate`, then
+approve it in your wallet with `xsolana approve`. Rolls come from MagicBlock's VRF, and a buyer is refunded if the
+oracle never answers. [`examples/`](examples) has whole worked economies.
+
+**How do I add staking to an NFT collection, even one I didn't mint?** A staking farm takes any collection, with lock
+tiers, boosts and fixed or shared reward rates. The project needs no authority over the NFTs: see
+[`docs/nfts.md`](docs/nfts.md).
+
+**Can I run a lottery, raffle or auction on Solana without deploying a program?** Yes: lotteries (including no-loss
+ones), raffles with a Merkle allowlist, and auctions that refund the outbid at once are all routes in the same spec.
+
+**Is there an MCP server or Claude Code plugin for building on Solana?** Yes: the `xsolana` plugin for Claude Code and
+Codex, and `npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp` for any MCP client. It is listed in the MCP
+Registry as `io.github.XGamesFun/solana-kit`.
+
+**How is this different from writing my own Anchor program?** Nothing is written, deployed or upgraded per project:
+every project's rules are checked by the one program, and its tests run every instruction against that program in
+LiteSVM. The trade-off is that an economy can only be what the spec can say ([known limits](docs/program.md#known-limits)).
+
+**Does it run on mainnet?** Not yet: devnet only until the program is independently audited.
 
 ## Documentation
 

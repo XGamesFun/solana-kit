@@ -9,5 +9,21 @@
   "homepage": "https://github.com/XGamesFun/solana-kit",
   "repository": "https://github.com/XGamesFun/solana-kit",
   "license": "Apache-2.0",
-  "keywords": ["solana", "web3", "economy", "loot-box", "staking", "nft", "game"]
+  "keywords": [
+    "solana",
+    "web3",
+    "nft",
+    "nft-staking",
+    "staking",
+    "loot-box",
+    "gacha",
+    "lottery",
+    "raffle",
+    "auction",
+    "crafting",
+    "game-economy",
+    "web3-gaming",
+    "no-smart-contract",
+    "mcp"
+  ]
 }
