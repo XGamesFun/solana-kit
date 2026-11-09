@@ -1,73 +1,73 @@
 {
   "version": 2,
   "network": "devnet",
-  "name": "Tide Pool",
-  "prompt": "When a player discovers Octopus, Turtle or Whale they earn that creature as an NFT, and can stake their creature NFTs in a farm that pays Pearls over time. Bigger creatures earn more. Devnet only.",
-  "currency": "pearls",
+  "name": "Ruin Run",
+  "prompt": "When a player discovers Bronze Relic, Silver Relic or Gold Relic they earn that relic as an NFT, and can stake their relic NFTs in a farm that pays Shards over time. Bigger relic earn more. Devnet only.",
+  "currency": "shards",
   "tokens": [
     {
       "key": "sol",
       "source": "sol"
     },
     {
-      "key": "pearls",
+      "key": "shards",
       "source": "project",
-      "name": "Pearls",
-      "symbol": "PEARL",
+      "name": "Shards",
+      "symbol": "SHARD",
       "decimals": 6,
-      "uri": "https://tide-pool-2-play.xgames.fun/creatures/pearls.json",
-      "image": "https://tide-pool-2-play.xgames.fun/creatures/pearl.svg"
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/shards.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/shard.svg"
     }
   ],
   "collection": {
-    "name": "Tide Pool Creatures",
+    "name": "Ruin Run Relics",
     "description": "Discoveries from a little living ocean.",
     "royaltyPercent": 0,
-    "uri": "https://tide-pool-2-play.xgames.fun/creatures/collection.json",
-    "image": "https://tide-pool-2-play.xgames.fun/creatures/collection.svg"
+    "uri": "https://ruin-run-2-play.xgames.fun/relic/collection.json",
+    "image": "https://ruin-run-2-play.xgames.fun/relic/collection.svg"
   },
   "items": [
     {
-      "key": "octopus",
-      "name": "Octopus",
+      "key": "bronze",
+      "name": "Bronze Relic",
       "rarity": "Epic",
       "kind": "collectible",
       "supply": 500,
-      "description": "A Octopus discovered in a server-verified Tide Pool tide.",
-      "uri": "https://tide-pool-2-play.xgames.fun/creatures/octopus.json",
-      "image": "https://tide-pool-2-play.xgames.fun/creatures/octopus.svg",
+      "description": "A Bronze Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/bronze.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/bronze.svg",
       "id": 1
     },
     {
-      "key": "turtle",
-      "name": "Turtle",
+      "key": "silver",
+      "name": "Silver Relic",
       "rarity": "Legendary",
       "kind": "collectible",
       "supply": 500,
-      "description": "A Turtle discovered in a server-verified Tide Pool tide.",
-      "uri": "https://tide-pool-2-play.xgames.fun/creatures/turtle.json",
-      "image": "https://tide-pool-2-play.xgames.fun/creatures/turtle.svg",
+      "description": "A Silver Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/silver.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/silver.svg",
       "id": 2
     },
     {
-      "key": "whale",
-      "name": "Whale",
+      "key": "gold",
+      "name": "Gold Relic",
       "rarity": "Mythic",
       "kind": "collectible",
       "supply": 500,
-      "description": "A Whale discovered in a server-verified Tide Pool tide.",
-      "uri": "https://tide-pool-2-play.xgames.fun/creatures/whale.json",
-      "image": "https://tide-pool-2-play.xgames.fun/creatures/whale.svg",
+      "description": "A Gold Relic discovered in a run the server checked.",
+      "uri": "https://ruin-run-2-play.xgames.fun/relic/gold.json",
+      "image": "https://ruin-run-2-play.xgames.fun/relic/gold.svg",
       "id": 3
     }
   ],
   "grants": [
     {
-      "key": "discover-octopus",
-      "name": "Discover Octopus",
+      "key": "discover-bronze",
+      "name": "Discover Bronze Relic",
       "prize": {
         "gives": "item",
-        "item": "octopus"
+        "item": "bronze"
       },
       "active": true,
       "limits": {
@@ -83,11 +83,11 @@
       "trust": "decides"
     },
     {
-      "key": "discover-turtle",
-      "name": "Discover Turtle",
+      "key": "discover-silver",
+      "name": "Discover Silver Relic",
       "prize": {
         "gives": "item",
-        "item": "turtle"
+        "item": "silver"
       },
       "active": true,
       "limits": {
@@ -103,11 +103,11 @@
       "trust": "decides"
     },
     {
-      "key": "discover-whale",
-      "name": "Discover Whale",
+      "key": "discover-gold",
+      "name": "Discover Gold Relic",
       "prize": {
         "gives": "item",
-        "item": "whale"
+        "item": "gold"
       },
       "active": true,
       "limits": {
@@ -125,14 +125,14 @@
   ],
   "farms": [
     {
-      "key": "pearl-reef",
-      "name": "Pearl Reef",
+      "key": "shard-vault",
+      "name": "Shard Vault",
       "stakes": "collectibles",
       "gate": {
-        "items": ["octopus", "turtle", "whale"]
+        "items": ["bronze", "silver", "gold"]
       },
       "custody": "watch",
-      "rewards": "pearls",
+      "rewards": "shards",
       "rate": {
         "perDay": 10,
         "minted": true
@@ -146,7 +146,7 @@
       "boosts": [
         {
           "when": {
-            "item": "turtle"
+            "item": "silver"
           },
           "add": {
             "addPercent": 100
@@ -154,7 +154,7 @@
         },
         {
           "when": {
-            "item": "whale"
+            "item": "gold"
           },
           "add": {
             "addPercent": 300
@@ -169,13 +169,13 @@
   "scenario": {
     "days": 90,
     "perDay": {
-      "grant:discover-octopus": 5,
-      "grant:discover-turtle": 3,
-      "grant:discover-whale": 1,
-      "farm:pearl-reef": 5
+      "grant:discover-bronze": 5,
+      "grant:discover-silver": 3,
+      "grant:discover-gold": 1,
+      "farm:shard-vault": 5
     },
     "staked": {
-      "pearl-reef": 30
+      "shard-vault": 30
     },
     "players": 100
   }

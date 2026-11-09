@@ -84,6 +84,7 @@
   "grants": [
     {
       "key": "race",
+      "trust": "decides",
       "name": "Weekly race rewards",
       "prize": {
         "gives": "tokens",

@@ -1,57 +1,57 @@
 {
   "version": 2,
   "network": "devnet",
-  "name": "Tide Pool",
-  "prompt": "When a player discovers one of the big creatures (Octopus, Turtle, Whale) in a tide, they earn that creature as an NFT, one of each per player. They can stake their creature NFTs in a farm that pays out a token, Pearls, over time; bigger creatures earn more.",
-  "currency": "pearl",
+  "name": "Ruin Run",
+  "prompt": "When a player discovers one of the rare relics (Bronze Relic, Silver Relic, Gold Relic) on a run, they earn that relic as an NFT, one of each per player. They can stake their relic NFTs in a farm that pays out a token, Shards, over time; rarer relics earn more.",
+  "currency": "shard",
   "tokens": [
     {
-      "key": "pearl",
+      "key": "shard",
       "source": "project",
-      "name": "Pearl",
-      "symbol": "PEARL",
+      "name": "Shard",
+      "symbol": "SHARD",
       "decimals": 3
     }
   ],
   "collection": {
-    "name": "Tide Pool Creatures"
+    "name": "Ruin Run Relics"
   },
   "items": [
     {
-      "key": "octopus",
-      "name": "Octopus",
-      "description": "Discovered in a Tide Pool tide. Earns 10 Pearls a day staked.",
+      "key": "bronze",
+      "name": "Bronze Relic",
+      "description": "Found on a run. Earns 10 Shards a day staked.",
       "rarity": "Rare",
-      "uri": "https://tide-pool-play.xgames.fun/nft/octopus.json",
-      "image": "https://tide-pool-play.xgames.fun/nft/octopus.png",
+      "uri": "https://ruin-run-play.xgames.fun/nft/bronze.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/bronze.png",
       "id": 1
     },
     {
-      "key": "turtle",
-      "name": "Turtle",
-      "description": "Discovered in a Tide Pool tide. Earns 25 Pearls a day staked.",
+      "key": "silver",
+      "name": "Silver Relic",
+      "description": "Found on a run. Earns 25 Shards a day staked.",
       "rarity": "Epic",
-      "uri": "https://tide-pool-play.xgames.fun/nft/turtle.json",
-      "image": "https://tide-pool-play.xgames.fun/nft/turtle.png",
+      "uri": "https://ruin-run-play.xgames.fun/nft/silver.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/silver.png",
       "id": 2
     },
     {
-      "key": "whale",
-      "name": "Whale",
-      "description": "Discovered in a Tide Pool tide. Earns 50 Pearls a day staked.",
+      "key": "gold",
+      "name": "Gold Relic",
+      "description": "Found on a run. Earns 50 Shards a day staked.",
       "rarity": "Legendary",
-      "uri": "https://tide-pool-play.xgames.fun/nft/whale.json",
-      "image": "https://tide-pool-play.xgames.fun/nft/whale.png",
+      "uri": "https://ruin-run-play.xgames.fun/nft/gold.json",
+      "image": "https://ruin-run-play.xgames.fun/nft/gold.png",
       "id": 3
     }
   ],
   "grants": [
     {
-      "key": "found-octopus",
-      "name": "Discovered an Octopus",
+      "key": "found-bronze",
+      "name": "Discovered an Bronze Relic",
       "prize": {
         "gives": "item",
-        "item": "octopus"
+        "item": "bronze"
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
@@ -64,11 +64,11 @@
       "trust": "bounds"
     },
     {
-      "key": "found-turtle",
-      "name": "Discovered a Turtle",
+      "key": "found-silver",
+      "name": "Discovered a Silver Relic",
       "prize": {
         "gives": "item",
-        "item": "turtle"
+        "item": "silver"
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
@@ -81,11 +81,11 @@
       "trust": "bounds"
     },
     {
-      "key": "found-whale",
-      "name": "Discovered a Whale",
+      "key": "found-gold",
+      "name": "Discovered a Gold Relic",
       "prize": {
         "gives": "item",
-        "item": "whale"
+        "item": "gold"
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
@@ -100,12 +100,12 @@
   ],
   "farms": [
     {
-      "key": "reef",
-      "name": "The Reef",
+      "key": "vault",
+      "name": "The Vault",
       "stakes": "collectibles",
-      "rewards": "pearl",
+      "rewards": "shard",
       "gate": {
-        "items": ["octopus", "turtle", "whale"]
+        "items": ["bronze", "silver", "gold"]
       },
       "rate": {
         "perDay": 10,
@@ -120,7 +120,7 @@
       "boosts": [
         {
           "when": {
-            "item": "turtle"
+            "item": "silver"
           },
           "add": {
             "addPercent": 150
@@ -128,7 +128,7 @@
         },
         {
           "when": {
-            "item": "whale"
+            "item": "gold"
           },
           "add": {
             "addPercent": 400
@@ -142,9 +142,9 @@
   "scenario": {
     "days": 30,
     "perDay": {
-      "grant:found-octopus": 40,
-      "grant:found-turtle": 15,
-      "grant:found-whale": 4
+      "grant:found-bronze": 40,
+      "grant:found-silver": 15,
+      "grant:found-gold": 4
     }
   }
 }

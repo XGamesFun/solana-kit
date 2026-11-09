@@ -30,9 +30,9 @@ test('a bounded claim whose NFT earns minted tokens in a farm with no end is hig
   const r = review(spec('review-bounds'), { now: NOW });
   assert.equal(r.ok, false);
   const high = ids(r, 'high');
-  for (const g of ['found-octopus', 'found-turtle', 'found-whale'])
+  for (const g of ['found-bronze', 'found-silver', 'found-gold'])
     assert.ok(high.includes(`R-CLAIM-COMPOUNDS grant:${g}`), high.join());
-  assert.ok(ids(r).includes('R-FARM-ENDLESS farm:reef'));
+  assert.ok(ids(r).includes('R-FARM-ENDLESS farm:vault'));
   // The shape another package reads.
   for (const route of r.routes)
     assert.deepEqual(Object.keys(route), [
@@ -51,11 +51,11 @@ test('a bounded claim whose NFT earns minted tokens in a farm with no end is hig
     assert.match(f.id, /^R-[A-Z-]+$/);
     assert.equal(typeof f.message, 'string');
   }
-  const whale = r.routes.find(x => x.key === 'found-whale');
-  assert.equal(whale.trust, 'bounds');
-  assert.deepEqual(whale.feeds, ['farm:reef']);
-  assert.match(whale.ceiling, /50 PEARL a day/);
-  assert.match(whale.ceiling, /with no end/);
+  const gold = r.routes.find(x => x.key === 'found-gold');
+  assert.equal(gold.trust, 'bounds');
+  assert.deepEqual(gold.feeds, ['farm:vault']);
+  assert.match(gold.ceiling, /50 SHARD a day/);
+  assert.match(gold.ceiling, /with no end/);
   assert.match(r.tradeoffs, /\| bounds \|/);
   assert.match(r.tradeoffs, /\*\*bounds\*\*/);
 });
@@ -71,14 +71,14 @@ test('the same economy decided by the server, or with an end and a total, has no
     { now: NOW },
   );
   assert.equal(bounded.ok, true);
-  assert.ok(ids(bounded, 'medium').includes('R-CLAIM-COMPOUNDS grant:discover-whale'));
+  assert.ok(ids(bounded, 'medium').includes('R-CLAIM-COMPOUNDS grant:discover-gold'));
   // Decided by the server, the first economy keeps only the farm with no end.
   const first = review(
     edit(spec('review-bounds'), s => s.grants.forEach(g => (g.trust = 'decides'))),
     { now: NOW },
   );
   assert.equal(first.ok, true);
-  assert.deepEqual(ids(first, 'medium'), ['R-FARM-ENDLESS farm:reef']);
+  assert.deepEqual(ids(first, 'medium'), ['R-FARM-ENDLESS farm:vault']);
 });
 
 test('a voucher grant with no trust said is read as bounds, and says so', () => {
@@ -86,21 +86,21 @@ test('a voucher grant with no trust said is read as bounds, and says so', () => 
     edit(spec('review-bounds'), s => s.grants.forEach(g => delete g.trust)),
     { now: NOW },
   );
-  assert.ok(ids(r, 'medium').includes('R-TRUST-UNSAID grant:found-whale'));
-  assert.ok(ids(r, 'high').includes('R-CLAIM-COMPOUNDS grant:found-whale'));
-  assert.equal(r.routes.find(x => x.key === 'found-whale').trust, null);
+  assert.ok(ids(r, 'medium').includes('R-TRUST-UNSAID grant:found-gold'));
+  assert.ok(ids(r, 'high').includes('R-CLAIM-COMPOUNDS grant:found-gold'));
+  assert.equal(r.routes.find(x => x.key === 'found-gold').trust, null);
   // A replayed result is one step less serious than a bounded one.
   const replayed = review(
     edit(spec('review-bounds'), s => s.grants.forEach(g => (g.trust = 'replays'))),
     { now: NOW },
   );
-  assert.ok(ids(replayed, 'medium').includes('R-CLAIM-COMPOUNDS grant:found-whale'));
+  assert.ok(ids(replayed, 'medium').includes('R-CLAIM-COMPOUNDS grant:found-gold'));
   assert.deepEqual(ids(replayed, 'high'), []);
 });
 
 test('a voucher grant that counts no person: each free wallet claims again', () => {
   const noPerson = edit(spec('review-decides'), s => s.grants.forEach(g => delete g.limits.perPerson));
-  assert.ok(ids(review(noPerson, { now: NOW }), 'medium').includes('R-GRANT-PERSON grant:discover-whale'));
+  assert.ok(ids(review(noPerson, { now: NOW }), 'medium').includes('R-GRANT-PERSON grant:discover-gold'));
   assert.ok(!ids(review(spec('review-decides'), { now: NOW })).some(x => x.startsWith('R-GRANT-PERSON')));
   // One claim in all: nothing for a second wallet to take.
   const once = edit(noPerson, s => s.grants.forEach(g => (g.limits.total = 1)));
