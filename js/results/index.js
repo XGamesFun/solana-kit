@@ -1,5 +1,5 @@
 // `@xgamesfun/solana/results`: what a game uses with a results server, in a host server or in a player's game page.
-// Browser-safe: Web Crypto only. `server` is RESULTS_SERVER (the public one, on the games.fun play host), or another
+// Browser-safe: Web Crypto only. `server` is RESULTS_SERVER (the public one, on the xgames.fun play host), or another
 // one's URL. The server confirms who won (from signatures rooted on the chain) and signs grant vouchers; winners claim
 // them with js/play (`claimWins`, `claimGrant`). The program pays a wallet each round once, ever, whatever is signed.
 //
@@ -40,7 +40,7 @@ export {
   rosterHash,
 } from './wire.js';
 
-/** games.fun's results server, on its play host (devnet until the program's audit). */
+/** xgames.fun's results server, on its play host (devnet until the program's audit). */
 export const RESULTS_SERVER = 'https://play.xgames.fun/xsolana';
 
 const subtle = () => globalThis.crypto.subtle;

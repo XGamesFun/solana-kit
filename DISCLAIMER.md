@@ -35,7 +35,7 @@ Read this before you use this package, its tools or the loot program. Using them
 
 ## Limitation of liability
 
-To the fullest extent the law allows, games.fun, XGamesFun and the contributors to this package are not liable for any
+To the fullest extent the law allows, xgames.fun, XGamesFun and the contributors to this package are not liable for any
 loss or damage of any kind, direct or indirect, including lost funds, tokens, NFTs, profits or data, arising from the
 use of, or inability to use, this package, the loot program, the results server or anything built with them, even if
 told such loss was possible.

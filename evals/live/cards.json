@@ -495,7 +495,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Indie developer of a small multiplayer arena browser game with its own Node server. Comfortable with JavaScript, new to Solana. Careful about security.",
-      "opening": "My arena game's Node server knows who wins each match. I want each match winner to get 0.001 SOL from a prize pool I fund with 0.05 SOL, and at most 3 paid wins per wallet a day. games.fun told me their results server (@xgamesfun/solana/results, running at {KEEPER}) can check my server's results, so my server never holds a key that can empty the pool. Can you set that up?",
+      "opening": "My arena game's Node server knows who wins each match. I want each match winner to get 0.001 SOL from a prize pool I fund with 0.05 SOL, and at most 3 paid wins per wallet a day. xgames.fun told me their results server (@xgamesfun/solana/results, running at {KEEPER}) can check my server's results, so my server never holds a key that can empty the pool. Can you set that up?",
       "facts": {
         "my game server": "a Node server; for this test, give me a script I can run that reports one match winner",
         "the test winner": "my tester's wallet, {PLAYER}"
@@ -524,7 +524,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Producer of a casual mobile-web puzzle game. Knows JavaScript basics; has a small Node backend. New to crypto.",
-      "opening": "Players who finish our daily quest should get 10 STAR tokens, once a day each. Our backend knows who finished. We'd like to use games.fun's results server for this ({KEEPER}, its client, @xgamesfun/solana/results) rather than giving our backend a wallet.",
+      "opening": "Players who finish our daily quest should get 10 STAR tokens, once a day each. Our backend knows who finished. We'd like to use xgames.fun's results server for this ({KEEPER}, its client, @xgamesfun/solana/results) rather than giving our backend a wallet.",
       "facts": { "STAR supply": "1 million, we keep the rest", "test player": "{PLAYER} finished today's quest" },
       "beats": [
         {
@@ -550,7 +550,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Moderator of an art Discord. Not technical at all; uses Phantom. Cares a lot that people trust the draw.",
-      "opening": "Every Friday I want a free draw for our members: 3 winners each get a 'Lucky Cat' NFT. Nobody, not even me, should be able to pick who wins. Someone said games.fun's server ({KEEPER}) can do draws from a public random number. Can we do that?",
+      "opening": "Every Friday I want a free draw for our members: 3 winners each get a 'Lucky Cat' NFT. Nobody, not even me, should be able to pick who wins. Someone said xgames.fun's server ({KEEPER}) can do draws from a public random number. Can we do that?",
       "facts": {
         "how people enter": "they click enter on a page with their wallet",
         "test": "just do one draw now so I can see it work; my tester {PLAYER} will enter"
@@ -757,7 +757,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Runs weekly tournaments for a browser racing game with its own Node server. Semi-technical, careful.",
-      "opening": "Weekly tournament: entry is 0.002 SOL, and at the end my game server reports the top 3, who get 50%, 30% and 20% of the pot. I'd like to use games.fun's results server ({KEEPER}, @xgamesfun/solana/results) so my server can't just pay anyone it likes.",
+      "opening": "Weekly tournament: entry is 0.002 SOL, and at the end my game server reports the top 3, who get 50%, 30% and 20% of the pot. I'd like to use xgames.fun's results server ({KEEPER}, @xgamesfun/solana/results) so my server can't just pay anyone it likes.",
       "facts": {
         "for this test": "run one short tournament now; my tester {PLAYER} enters and finishes first; I'll also enter from my own wallet",
         "my game server": "a Node script you give me that reports the final standings"
@@ -780,7 +780,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Producer of a casual web game. Knows JavaScript basics, has a small Node backend. Wants retention features.",
-      "opening": "A free daily spin for logged-in players: once a day each, 5% chance to win 0.002 SOL, otherwise 10 GEMS points. My backend can do the spin. games.fun said their results server ({KEEPER}) can help pay winners.",
+      "opening": "A free daily spin for logged-in players: once a day each, 5% chance to win 0.002 SOL, otherwise 10 GEMS points. My backend can do the spin. xgames.fun said their results server ({KEEPER}) can help pay winners.",
       "facts": { "prize pool": "I'll put 0.05 SOL in", "GEMS": "our in-game points token, make it" },
       "beats": [
         {
@@ -800,7 +800,7 @@
       "kind": "plain",
       "keeper": true,
       "persona": "Developer of a 1v1 card battler with a Node game server. Comfortable with JS, new to Solana.",
-      "opening": "1v1 duels with a wager: both players put in 0.005 SOL, my game server says who won, and the winner gets 95% of the 0.01 (I keep 5%). If the server never reports, both should get their money back. Can loot do this with games.fun's results server ({KEEPER})?",
+      "opening": "1v1 duels with a wager: both players put in 0.005 SOL, my game server says who won, and the winner gets 95% of the 0.01 (I keep 5%). If the server never reports, both should get their money back. Can loot do this with xgames.fun's results server ({KEEPER})?",
       "facts": { "for this test": "one duel between my tester {PLAYER} and my own wallet; {PLAYER} wins" },
       "beats": [
         { "when": "after it is live", "say": "the test duel is done, {PLAYER} won. report it so they get paid" }
