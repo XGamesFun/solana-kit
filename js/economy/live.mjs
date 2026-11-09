@@ -137,7 +137,8 @@ export function changedParts(economy) {
   const only = new Set();
   const fixed = [];
   const removed = [];
-  const strip = ({ id, index, shopBox, seller, ...rest }) => JSON.stringify(rest);
+  // A grant's `trust` is the spec's own note about its server, never sent on chain: changing it publishes nothing.
+  const strip = ({ id, index, shopBox, seller, trust, ...rest }) => JSON.stringify(rest);
   for (const [list, kind] of Object.entries(PART_LISTS)) {
     const before = new Map((published[list] ?? []).map(p => [p.key, p]));
     for (const part of economy[list] ?? []) {
