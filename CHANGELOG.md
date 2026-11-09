@@ -12,6 +12,14 @@ tools see them.
   `xsolana_save` and `xsolana_publish`, and its instructions hand the person the spec and the `approve` command.
   Locally it listens on 127.0.0.1 and answers only pages on localhost.
 - **`xsolana_status` takes a spec** as well as a file.
+- **A sponsor pays players' fees** (`js/play/sponsor.js`, `@xgamesfun/solana/sponsor`; `solanaApp({ sponsor })`): a
+  plain key on the project's own server is each step's fee payer and lends the player SOL for it, the player giving
+  back in the same transaction all but its fees and rent (the player fee, the oracle's, the rent of what the program
+  opens or mints); never the price. `checkSponsored` reads and dry-runs every transaction before the server signs:
+  the sponsor named nowhere but its loan and the give-back, this project's instruction in it, no priority fee past
+  its limit, the player keeping no more than the step's fees and rent, at most `maxLamports` a transaction, and the
+  project's `budget`. Sponsored, a roll settles by the player's wallet (a second, sponsored prompt) rather than a
+  funded settle key.
 - **`toKitInstruction` and `fromKitInstruction`** (`@xgamesfun/solana/client`): a builder's instruction in
   `@solana/kit`'s shape and back.
 - **The skill as one zip** on every GitHub release (`scripts/skill-zip.mjs`), for apps that take a skill as an upload;

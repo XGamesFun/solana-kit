@@ -155,6 +155,10 @@ import * as loot from '@xgamesfun/solana/client';
 const ix = loot.openBoxIx({ player, project, box, nonce }); // one builder per instruction, no Solana SDK
 ```
 
+Players with no SOL can still play when the project sponsors their fees: `solanaApp({ sponsor })` has a key on the
+project's own server pay each step's fees and rent (never its price), and `@xgamesfun/solana/sponsor` is that server's
+side: `sponsorSigner` dry-runs and checks every transaction before it signs, under the project's own per-player budget.
+
 Building on `@solana/kit`? `loot.toKitInstruction(ix)` gives any builder's instruction in Kit's shape
 (`{ programAddress, accounts, data }`), and `loot.fromKitInstruction` turns one back.
 

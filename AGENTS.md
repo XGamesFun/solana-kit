@@ -38,7 +38,8 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
   and never holds anything after its job. So a page that closes mid-job can finish it (`recover`), a key is named by
   its job's account and made from the wallet's own signature of a fixed text (`js/play/keys.js`), or, for a wallet that
   signs no messages, kept in the page's storage encrypted with a device key the page can't read out, and dropped once
-  empty. Tests may make throwaway keys too; nothing else holds a secret.
+  empty. A sponsor (`js/play/sponsor.js`) is a key on the project's own server: this package checks what it signs and
+  hands it the message, never holds it. Tests may make throwaway keys too; nothing else holds a secret.
 - **Devnet only.** Never pass a mainnet URL for anything that sends; mainnet waits for an audit. Reading public
   mainnet to fetch test fixtures is the one exception.
 - Plain ES modules, Node 22 or later, no build step: the code runs as written. The TypeScript declarations are

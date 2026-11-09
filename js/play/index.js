@@ -57,6 +57,20 @@ import {
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { browserStore, keyring } from './keys.js';
+import { SPONSOR_MAX_LAMPORTS, sponsoredCost, sponsorGiveBack, sponsorTopUp, stepShape, topUpFor } from './sponsor.js';
+
+export {
+  checkSponsored,
+  httpSponsor,
+  sponsoredCost,
+  sponsorGiveBack,
+  sponsorHandler,
+  sponsorSigner,
+  sponsorTopUp,
+  stepShape,
+  topUpFor,
+  SPONSOR_MAX_LAMPORTS,
+} from './sponsor.js';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 /** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
@@ -190,6 +204,7 @@ export function solanaApp({
   programs = {},
   now = () => Math.floor(Date.now() / 1000),
   keyStore = browserStore(),
+  sponsor = null,
 }) {
   const live = spec?.live;
   if (!live?.project) throw new Error('This economy is not live yet: its xsolana.json has no "live" section.');
@@ -591,6 +606,15 @@ export function solanaApp({
     // A compressed NFT's record is closed in the transaction that used it, its prover signing: its rent comes back.
     instructions = loot.withLeafCloses(instructions);
     if (!keepWrapped) instructions = await unwrapAfter(instructions);
+    if (sponsor) {
+      const sponsored = await sendSponsored(instructions, extra);
+      if (sponsored) return sponsored;
+    }
+    return sendUnsponsored(instructions, extra);
+  }
+
+  /** The player's step as they pay for it themselves: their wallet the fee payer (`sendFitting`). */
+  async function sendUnsponsored(instructions, extra = []) {
     const sign = async message => {
       const { signers } = readTransaction(wireTransaction(message));
       const sigs = await Promise.all(
@@ -616,6 +640,79 @@ export function solanaApp({
 
   const sendNow = (...args) => send(...args);
 
+  /** The most the sponsor pays a transaction (its top-up and network fee), as the app was told. */
+  // It lends the player that, less room for the network fee, and takes back what the step didn't need.
+  const sponsorMax = sponsor ? BigInt(sponsor.maxLamports ?? SPONSOR_MAX_LAMPORTS) - SIGNATURE_FEE * 4n : 0n;
+
+  /** Every account a list of instructions names, its programs too. */
+  const namedIn = instructions => [
+    ...new Set(instructions.flatMap(ix => [ix.programId, ...ix.keys.map(k => k.pubkey)])),
+  ];
+
+  /**
+   * The player's step with the sponsor paying (`sponsor`, js/play/sponsor.js): the sponsor the fee payer and the
+   * player topped up first by what the step costs them in fees and rent (a dry run, as the sponsor's server will
+   * check it), the player's wallet signing, then the sponsor's server. Null when it can't be sponsored as one
+   * transaction (it needs a lookup table of its own, or proofs sent first), or the sponsor refused it and the player
+   * pays instead (`sponsor.playerPaysIfRefused`, the default): the step then goes as the player's own.
+   */
+  async function sendSponsored(instructions, extra) {
+    const me = wallet.address;
+    const tables = await standing();
+    const { blockhash, lastValidBlockHeight } = await client.latestBlockhash();
+    // Lent the most, the step is tried; then sent lent the same, the player giving back last all but what it costs in
+    // fees and rent: a step can need more SOL midway than it costs (a wrapped-SOL account it opens and closes).
+    const compile = (back = 0n) =>
+      compileFitting({
+        payer: sponsor.address,
+        blockhash,
+        instructions: [
+          sponsorTopUp(sponsor.address, me, sponsorMax),
+          ...instructions,
+          ...(back > 0n ? [sponsorGiveBack(sponsor.address, me, back)] : []),
+        ],
+        tables,
+      });
+    const tried = compile();
+    if (!tried) return null;
+    const addresses = namedIn([sponsorTopUp(sponsor.address, me, 0n), ...instructions]);
+    const pre = await client.accounts(addresses);
+    // A step loot refuses is refused in words; one that fails otherwise (the sponsor short of SOL) goes as the player's.
+    const run = await client
+      .simulate(wireTransaction(tried), { accounts: addresses, replaceBlockhash: true })
+      .catch(e => (loot.lootError(e?.logs ?? []) ? inWords(e) : null));
+    if (!run) return null;
+    const post = run.accounts;
+    const at = a => addresses.indexOf(a);
+    const balance = a => (a ? BigInt(a.lamports) : 0n);
+    const cost = sponsoredCost({
+      addresses,
+      pre,
+      post,
+      project,
+      skip: [sponsor.address, me],
+      ...stepShape(instructions),
+    });
+    const spend = balance(pre[at(me)]) + sponsorMax - balance(post[at(me)]);
+    const message = compile(sponsorMax - topUpFor({ spend, cost }));
+    if (!message) return null;
+    const { signers } = readTransaction(wireTransaction(message));
+    const sigs = await Promise.all(
+      signers.map(async s => extra.find(k => k.address === s)?.sign(message) ?? new Uint8Array(64)),
+    );
+    const signed = await wallet.signTransaction(wireTransaction(message, sigs));
+    let wire;
+    try {
+      wire = await sponsor.sign(signed);
+    } catch (e) {
+      if (sponsor.playerPaysIfRefused === false) throw e;
+      return null;
+    }
+    const signature = await client.send(wire).catch(inWords);
+    await client.confirm?.(signature, { lastValidBlockHeight });
+    return signature;
+  }
+
   /**
    * Several independent steps of the player's, each one transaction (`lists`: their instructions), signed in one wallet
    * prompt when the wallet signs several at once (`wallet.signTransactions`), then sent in order; one by one otherwise,
@@ -630,7 +727,7 @@ export function solanaApp({
     let signed = null;
     let messages = [];
     let lastValidBlockHeight = null;
-    if (wallet?.signTransactions && lists.length > 1) {
+    if (wallet?.signTransactions && lists.length > 1 && !sponsor) {
       const latest = await client.latestBlockhash();
       lastValidBlockHeight = latest.lastValidBlockHeight;
       const tables = await standing();
@@ -791,6 +888,12 @@ export function solanaApp({
    * them), and the accounts `watch` as they would be after: { ok, accounts, error }, `error` loot's when it refused
    * ({ code, name, msg }, `loot.lootError`). */
   async function dryRun(payer, instructions, watch = []) {
+    // A sponsored player's step is tried as it will be sent: the sponsor pays, and tops the player up (here by the
+    // most it pays, so a player with no SOL is tried as one the sponsor covers).
+    if (sponsor && payer === wallet?.address) {
+      instructions = [sponsorTopUp(sponsor.address, payer, sponsorMax), ...instructions];
+      payer = sponsor.address;
+    }
     const { blockhash } = await client.latestBlockhash();
     const message = compileFitting({ payer, blockhash, instructions, tables: await standing() });
     if (!message) return { ok: false, accounts: [], error: null };
@@ -848,6 +951,17 @@ export function solanaApp({
       return order.status === 'Waiting' && order.player === wallet.address ? [[address, order]] : [];
     });
     if (!waiting.length) return { signature: await send(instructions), rolls: [] };
+    // Sponsored, a settle key isn't funded (a plain account the player could empty is never sponsored): the step asks
+    // for each roll, and the player's wallet settles it once it is answered (one more prompt, sponsored too).
+    if (sponsor) {
+      const asked = [...instructions];
+      for (const [orderAddress, order] of waiting) asked.push(...(await asksFor(wallet.address, orderAddress, order)));
+      const tried = await dryRun(wallet.address, asked);
+      const signature = await send(tried.ok ? asked : instructions);
+      const rolls = [];
+      if (tried.ok) for (const [orderAddress] of waiting) rolls.push(await collect(orderAddress, { opened: true }));
+      return { signature, rolls };
+    }
     const asks = [];
     const funds = [];
     const burners = [];
@@ -1337,7 +1451,7 @@ export function solanaApp({
       on = null,
       maxPrice,
       listing,
-      oneSignature = true,
+      oneSignature = !sponsor,
       chosenRecipient = null,
       listProof,
       count = 1,
