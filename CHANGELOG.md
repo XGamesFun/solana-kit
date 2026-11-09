@@ -4,8 +4,11 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased
+## 0.25.1: a security review (the JavaScript only; the program is still loot 0.25.0)
 
+- **Patch releases for the JavaScript alone.** The package's major.minor is its program's; a patch above it (0.25.1 on
+  loot 0.25.0) ships the review, the checker, the skill or the client without a new program. `release.json` keeps
+  naming the program's version (a keeper pins it), and `scripts/release-manifest.mjs --check` accepts the higher patch.
 - **A security review, `xsolana review` and the `xsolana_review` tool** (`review`, `describeReview` in
   `js/economy/review.mjs`): an economy read the way a cheater reads it, not a validity check. For every route that
   pays or gives value (grants, the shop, boxes, payments, recipes, farms, lotteries, contests, auctions, schedules,
