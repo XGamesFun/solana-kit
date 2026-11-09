@@ -185,6 +185,7 @@ LiteSVM. The trade-off is that an economy can only be what the spec can say ([kn
 
 |                                                                                    |                                                                                             |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`docs/tutorial-loot-box.md`](docs/tutorial-loot-box.md)                           | a loot box from one sentence to going live, step by step                                    |
 | [`docs/program.md`](docs/program.md)                                               | the program: who signs, accounts, every instruction, fees, limits, receipts, costs          |
 | [`docs/nfts.md`](docs/nfts.md)                                                     | NFTs and tokens, with and without the project's authority                                   |
 | [`docs/harnesses.md`](docs/harnesses.md)                                           | how the plugin reaches Claude Code and Codex, and the release checklist                     |
