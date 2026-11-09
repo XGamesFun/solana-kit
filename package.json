@@ -70,6 +70,7 @@
     "./package.json": "./package.json",
     "./release.json": "./release.json",
     "./mcp/http": {
+      "types": "./types/mcp/http.d.mts",
       "default": "./js/mcp/http.mjs"
     }
   },

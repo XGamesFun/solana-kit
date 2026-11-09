@@ -92,7 +92,7 @@ export async function mcpHttp(request, { allowOrigin = () => true, maxBodyBytes 
 /**
  * Serves mcpHttp at `path` on this machine (`xsolana mcp --http`). It listens on 127.0.0.1 unless told otherwise, and
  * then answers only pages on localhost: a site in the browser can't reach it by renaming its host (DNS rebinding).
- * @returns {Promise<import('node:http').Server>}
+ * @returns {Promise<{ address(): { port: number } | string | null, close(done?: () => void): unknown }>} the node:http server
  */
 export function serveHttp({ port = 8787, host = '127.0.0.1', path = '/mcp' } = {}) {
   const local = host === '127.0.0.1' || host === 'localhost' || host === '::1';
