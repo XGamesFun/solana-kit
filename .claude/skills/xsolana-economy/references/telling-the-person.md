@@ -40,6 +40,12 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    For a collectible they already hold: "It stays with the project until someone wins it or the auction ends."
 8. **Anything else the checker warned about**, in a sentence each (a mint that can freeze accounts, a free box bots
    can drain, a grant with no limits or no funds).
+9. **What a cheater gets**, from `xsolana_review`, before the owner approves: for each route paid on a server's
+   voucher, which level it uses (the server decides, replays or only bounds the result), what one cheater gets there
+   (its ceiling, and what the prize goes on to earn), and what the stronger level would cost to build: "A script that
+   waits as long as a player would gets each reward NFT once per wallet, and each then earns tokens every day with no
+   end; having the server replay each run would stop forged runs, and needs the game to be deterministic." Then each
+   high finding and its fix. The person chooses the trade-off (`trust-and-cheating.md`).
 
 ## What stays the project's job
 

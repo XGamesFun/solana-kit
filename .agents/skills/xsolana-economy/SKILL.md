@@ -9,7 +9,7 @@ An economy is one JSON spec (`xsolana.json` in the project) on **loot**, a Solan
 writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and the project's
 owner puts it live by approving in their own wallet. It runs on **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.25.0 <guide|examples|check|simulate|cost|explain|publish|status> [xsolana.json]`,
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.25.0 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
 or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
@@ -41,7 +41,9 @@ or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always w
    anything a limit, break the idea into its pieces (what players pay, what they get, what is random, what the chain
    can't see, what is held and for how long, who is paid) and find the part for each (`references/sentence-to-spec.md`).
    What the chain can't see (a match, a score, something done offline) is vouched for by a signer: a results server's voucher, a
-   decider's key, a list. Build the combination and say which part does which piece. When the tools' words and the
+   decider's key, a list. The signer is not the end of the story: the program checks its signature and limits, never
+   what happened, so a signed result is worth what that server checks (it decides the result, replays it, or only
+   bounds what the page reports: rule 12). Build the combination and say which part does which piece. When the tools' words and the
    checker disagree (a field the schema takes that a sentence somewhere calls impossible), the checker and
    `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`.
    A piece is a limit only when no part or combination does it. Then:
@@ -53,10 +55,12 @@ or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always w
      table.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
-    (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`), keep token
-    rewards for results small, and have a server check what the page claims (`@xgamesfun/solana/results`:
-    `collectiblesOf`, `verifyProof`, `makeCodes`). The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`,
-    `W-FARM-MINT`); xsolana_guide's "Designing against farming" says why.
+    (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the
+    server naming an X account, never a wallet), keep token rewards for results small, and have a server decide or
+    replay a result worth paying rather than take the page's word (`@xgamesfun/solana/results`: `collectiblesOf`,
+    `verifyProof`, `makeCodes`). Keep entry fees and prize pools for results the server decides and for chance, and
+    give a minted farm an end. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
+    `references/trust-and-cheating.md` says why.
 
 11. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
     draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
@@ -65,6 +69,14 @@ or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always w
     grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
     nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
     the owner to fund: whoever signs pays.
+
+12. **Review before going live, and let the person choose the trade-off.** Run `xsolana_review` before the owner
+    approves. Fix every high finding, or have the person accept it in plain words. Declare `"trust"` honestly on every
+    voucher grant: `"decides"` (the server runs the game or match; the page sends only inputs), `"replays"` (it re-runs
+    the page's inputs from randomness it keeps) or `"bounds"` (it takes the page's word within a pace and caps). Then
+    tell the person, for each signed route, which level it uses, what a cheater gets (the review's ceiling, with what
+    the prize goes on to earn), and what the stronger level would cost to build. They choose; you don't choose for
+    them by leaving it out. `references/trust-and-cheating.md` has the levels, the costs and the checklist.
 
 ## The loop
 
@@ -96,14 +108,17 @@ or `npx -y @xgamesfun/solana@0.25.0 tool <name> '<json>'` for any tool (always w
    (every value of a fresh item's `{attribute}`), a table's rent, and the collectible rent a pack's settle pays.
 6. **Iterate on what they say.** "Make legendaries 0.5%", "a bigger seed": change, check, simulate, explain again.
 7. **Save it**: `xsolana_save {"spec": …}` writes `xsolana.json`, only if it checks. A live file keeps its program numbers.
-8. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
+8. **Review it before they approve**: `xsolana_review` (rule 12). Fix the high findings, declare `trust` on every
+   voucher grant, and tell the person which level each signed route uses, what a cheater gets and what the stronger
+   level would cost. Run it again after every change that touches a route that pays.
+9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
    run it themselves in the project folder, exactly as `xsolana_publish` gives it (it names the exact version:
    `npx -y @xgamesfun/solana@0.25.0 approve xsolana.json`; never drop the version). It opens a page on their computer where
    they connect a devnet wallet and approve; what lands is written back into `xsolana.json`. You publish nothing.
-9. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
-   happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the
-   owner signs (open or decide a contest, pay out) goes on an owner page they approve in their own wallet:
-   `references/after-launch.md`.
+10. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
+    happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the
+    owner signs (open or decide a contest, pay out) goes on an owner page they approve in their own wallet:
+    `references/after-launch.md`.
 
 ## Building the app around it
 
@@ -121,3 +136,4 @@ For staking an NFT of another collection, show what custody means and get explic
 - Telling the person what they get, and what stays the project's job: `references/telling-the-person.md`
 - Building the app for a live economy: `references/apps.md`
 - After it goes live (who sends each step, owner pages, results from a game, a results server): `references/after-launch.md`
+- What a server decides, replays or bounds, who gets paid, and the exploit checklist: `references/trust-and-cheating.md`
