@@ -15,6 +15,7 @@ import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
+import { describeReview, review } from '../economy/review.mjs';
 import { CANNOT, catalog, guideText, PARTS } from '../economy/guide.mjs';
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
@@ -339,7 +340,7 @@ export const tools = [
       const verdict = check(economy, { now: nowOf(ctx) });
       const head = verdict.refusals.length || verdict.warnings.length ? describe(verdict) : 'No problems found.';
       const tail = verdict.ok
-        ? `\nReady (${plural(verdict.warnings.length, 'warning')}). Next: xsolana_simulate and xsolana_explain, and tell the person what it means in plain words.`
+        ? `\nReady (${plural(verdict.warnings.length, 'warning')}). Next: xsolana_simulate and xsolana_explain, and tell the person what it means in plain words; before going live, xsolana_review.`
         : `\n${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`;
       return {
         ok: verdict.ok,
@@ -418,6 +419,30 @@ export const tools = [
       const { economy, from } = await load(input, ctx);
       const r = explainEconomy(economy, { now: nowOf(ctx) });
       return { ...r, from, text: r.text + footer };
+    },
+  },
+  {
+    name: 'xsolana_review',
+    annotations: READ,
+    description:
+      'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Give the spec inline (`spec`), a file, or an example. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }], tradeoffs (markdown) }.',
+    inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
+    async handler(input, ctx) {
+      const { economy, from } = await load(input, ctx);
+      const r = review(economy, { now: nowOf(ctx) });
+      if (r.refusals) return refused({ refusals: r.refusals, warnings: [] }, from);
+      const highs = r.findings.filter(f => f.severity === 'high').length;
+      const tail = highs
+        ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'} (or have the person accept ${highs === 1 ? 'it' : 'them'} in plain words) before going live, then review again.`
+        : '\nNo high finding. Tell the person, in plain words, which level each signed route uses and what a cheater gets (the trade-offs above).';
+      return {
+        ok: r.ok,
+        from,
+        routes: r.routes,
+        findings: r.findings,
+        tradeoffs: r.tradeoffs,
+        text: `${describeReview(r, economy.name)}${tail}${footer}`,
+      };
     },
   },
   {

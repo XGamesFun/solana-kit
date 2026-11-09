@@ -4,6 +4,7 @@ export { simulate, explain } from './economy/simulate.mjs';
 export { plan, setupSteps, playSteps } from './economy/plan.mjs';
 export { cost, explainCost } from './economy/cost.mjs';
 export { explainEconomy } from './economy/explain.mjs';
+export { review, describeReview, SEVERITIES, TRUST_LEVELS, TRUST_WORDS } from './economy/review.mjs';
 export { model } from './economy/model.mjs';
 export { prepare, recordLanded, changedParts } from './economy/live.mjs';
 export { guideText, catalog, CANNOT } from './economy/guide.mjs';

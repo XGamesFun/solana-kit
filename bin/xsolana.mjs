@@ -5,7 +5,7 @@
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
 //   xsolana guide [part] [--json]        what an economy can be made of, and what loot cannot do
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
-//   xsolana check|simulate|cost|explain|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
+//   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
 //   xsolana approve [file] [--port n] [--no-open]   open the local page where the owner approves going live in their wallet
 //   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
@@ -25,6 +25,7 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana simulate [file]         the quick simulation
   xsolana cost [file]             what going live and each action cost
   xsolana explain [file]          the economy in plain words
+  xsolana review [file]           what a cheater gets on each route, and what to fix before going live
   xsolana publish [file]          what going live does, and how to approve it
   xsolana approve [file]          approve going live in your own wallet (a local page; --port n, --no-open)
   xsolana status [file]           a live economy on chain
@@ -33,7 +34,8 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana tool --list             every tool; xsolana tool <name> '<json>' runs one (--args-file f)
   xsolana version                 this package's xsolana version and program
 
-  A tool's command (guide, examples, check … status, tool) takes --json for its whole answer as JSON.`;
+  A tool's command (guide, examples, check … status, tool) takes --json for its whole answer as JSON.
+  review exits 1 when it finds something high.`;
 
 /** A failure the person caused (a bad flag, a missing file): said in one line, without a stack. */
 class UsageError extends Error {}
@@ -50,6 +52,7 @@ const FLAGS = {
   simulate: TOOL_FLAGS,
   cost: TOOL_FLAGS,
   explain: TOOL_FLAGS,
+  review: TOOL_FLAGS,
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
   approve: ['--port', '--no-open'],
@@ -105,8 +108,10 @@ async function main(argv) {
     const { runTool } = await import('../js/mcp/server.mjs');
     const r = await runTool(name, input, { cwd: process.cwd() });
     const failed = Boolean(r.isError || r.ok === false);
+    // A review is a report whatever it finds: printed on stdout, its exit code saying whether a finding is high.
+    const report = name === 'xsolana_review' && !r.isError && !r.refusals;
     if (flags.has('--json')) console.log(JSON.stringify(r, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2));
-    else (failed ? console.error : console.log)(r.text ?? JSON.stringify(r, null, 2));
+    else (failed && !report ? console.error : console.log)(r.text ?? JSON.stringify(r, null, 2));
     if (failed) process.exitCode = 1;
   }
 
@@ -128,6 +133,7 @@ async function main(argv) {
     case 'simulate':
     case 'cost':
     case 'explain':
+    case 'review':
     case 'publish':
     case 'status':
       await tool(`xsolana_${command}`, fileInput());

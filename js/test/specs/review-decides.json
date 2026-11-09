@@ -1,0 +1,182 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Tide Pool",
+  "prompt": "When a player discovers Octopus, Turtle or Whale they earn that creature as an NFT, and can stake their creature NFTs in a farm that pays Pearls over time. Bigger creatures earn more. Devnet only.",
+  "currency": "pearls",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "pearls",
+      "source": "project",
+      "name": "Pearls",
+      "symbol": "PEARL",
+      "decimals": 6,
+      "uri": "https://tide-pool-2-play.xgames.fun/creatures/pearls.json",
+      "image": "https://tide-pool-2-play.xgames.fun/creatures/pearl.svg"
+    }
+  ],
+  "collection": {
+    "name": "Tide Pool Creatures",
+    "description": "Discoveries from a little living ocean.",
+    "royaltyPercent": 0,
+    "uri": "https://tide-pool-2-play.xgames.fun/creatures/collection.json",
+    "image": "https://tide-pool-2-play.xgames.fun/creatures/collection.svg"
+  },
+  "items": [
+    {
+      "key": "octopus",
+      "name": "Octopus",
+      "rarity": "Epic",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Octopus discovered in a server-verified Tide Pool tide.",
+      "uri": "https://tide-pool-2-play.xgames.fun/creatures/octopus.json",
+      "image": "https://tide-pool-2-play.xgames.fun/creatures/octopus.svg",
+      "id": 1
+    },
+    {
+      "key": "turtle",
+      "name": "Turtle",
+      "rarity": "Legendary",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Turtle discovered in a server-verified Tide Pool tide.",
+      "uri": "https://tide-pool-2-play.xgames.fun/creatures/turtle.json",
+      "image": "https://tide-pool-2-play.xgames.fun/creatures/turtle.svg",
+      "id": 2
+    },
+    {
+      "key": "whale",
+      "name": "Whale",
+      "rarity": "Mythic",
+      "kind": "collectible",
+      "supply": 500,
+      "description": "A Whale discovered in a server-verified Tide Pool tide.",
+      "uri": "https://tide-pool-2-play.xgames.fun/creatures/whale.json",
+      "image": "https://tide-pool-2-play.xgames.fun/creatures/whale.svg",
+      "id": 3
+    }
+  ],
+  "grants": [
+    {
+      "key": "discover-octopus",
+      "name": "Discover Octopus",
+      "prize": {
+        "gives": "item",
+        "item": "octopus"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 1,
+      "trust": "decides"
+    },
+    {
+      "key": "discover-turtle",
+      "name": "Discover Turtle",
+      "prize": {
+        "gives": "item",
+        "item": "turtle"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 2,
+      "trust": "decides"
+    },
+    {
+      "key": "discover-whale",
+      "name": "Discover Whale",
+      "prize": {
+        "gives": "item",
+        "item": "whale"
+      },
+      "active": true,
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 25,
+        "total": 500
+      },
+      "wallets": 500,
+      "rounds": 1,
+      "vouchers": ["DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"],
+      "id": 3,
+      "trust": "decides"
+    }
+  ],
+  "farms": [
+    {
+      "key": "pearl-reef",
+      "name": "Pearl Reef",
+      "stakes": "collectibles",
+      "gate": {
+        "items": ["octopus", "turtle", "whale"]
+      },
+      "custody": "watch",
+      "rewards": "pearls",
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "0d",
+          "multiplier": 1
+        }
+      ],
+      "boosts": [
+        {
+          "when": {
+            "item": "turtle"
+          },
+          "add": {
+            "addPercent": 100
+          }
+        },
+        {
+          "when": {
+            "item": "whale"
+          },
+          "add": {
+            "addPercent": 300
+          }
+        }
+      ],
+      "maxBoostPercent": 300,
+      "runs": "90d",
+      "id": 1
+    }
+  ],
+  "scenario": {
+    "days": 90,
+    "perDay": {
+      "grant:discover-octopus": 5,
+      "grant:discover-turtle": 3,
+      "grant:discover-whale": 1,
+      "farm:pearl-reef": 5
+    },
+    "staked": {
+      "pearl-reef": 30
+    },
+    "players": 100
+  }
+}

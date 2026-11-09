@@ -1,0 +1,150 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Tide Pool",
+  "prompt": "When a player discovers one of the big creatures (Octopus, Turtle, Whale) in a tide, they earn that creature as an NFT, one of each per player. They can stake their creature NFTs in a farm that pays out a token, Pearls, over time; bigger creatures earn more.",
+  "currency": "pearl",
+  "tokens": [
+    {
+      "key": "pearl",
+      "source": "project",
+      "name": "Pearl",
+      "symbol": "PEARL",
+      "decimals": 3
+    }
+  ],
+  "collection": {
+    "name": "Tide Pool Creatures"
+  },
+  "items": [
+    {
+      "key": "octopus",
+      "name": "Octopus",
+      "description": "Discovered in a Tide Pool tide. Earns 10 Pearls a day staked.",
+      "rarity": "Rare",
+      "uri": "https://tide-pool-play.xgames.fun/nft/octopus.json",
+      "image": "https://tide-pool-play.xgames.fun/nft/octopus.png",
+      "id": 1
+    },
+    {
+      "key": "turtle",
+      "name": "Turtle",
+      "description": "Discovered in a Tide Pool tide. Earns 25 Pearls a day staked.",
+      "rarity": "Epic",
+      "uri": "https://tide-pool-play.xgames.fun/nft/turtle.json",
+      "image": "https://tide-pool-play.xgames.fun/nft/turtle.png",
+      "id": 2
+    },
+    {
+      "key": "whale",
+      "name": "Whale",
+      "description": "Discovered in a Tide Pool tide. Earns 50 Pearls a day staked.",
+      "rarity": "Legendary",
+      "uri": "https://tide-pool-play.xgames.fun/nft/whale.json",
+      "image": "https://tide-pool-play.xgames.fun/nft/whale.png",
+      "id": 3
+    }
+  ],
+  "grants": [
+    {
+      "key": "found-octopus",
+      "name": "Discovered an Octopus",
+      "prize": {
+        "gives": "item",
+        "item": "octopus"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 500
+      },
+      "fund": 0.1,
+      "id": 1,
+      "trust": "bounds"
+    },
+    {
+      "key": "found-turtle",
+      "name": "Discovered a Turtle",
+      "prize": {
+        "gives": "item",
+        "item": "turtle"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 300
+      },
+      "fund": 0.1,
+      "id": 2,
+      "trust": "bounds"
+    },
+    {
+      "key": "found-whale",
+      "name": "Discovered a Whale",
+      "prize": {
+        "gives": "item",
+        "item": "whale"
+      },
+      "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
+      "limits": {
+        "perWallet": 1,
+        "perPerson": 1,
+        "perDay": 100
+      },
+      "fund": 0.1,
+      "id": 3,
+      "trust": "bounds"
+    }
+  ],
+  "farms": [
+    {
+      "key": "reef",
+      "name": "The Reef",
+      "stakes": "collectibles",
+      "rewards": "pearl",
+      "gate": {
+        "items": ["octopus", "turtle", "whale"]
+      },
+      "rate": {
+        "perDay": 10,
+        "minted": true
+      },
+      "tiers": [
+        {
+          "lock": "1h",
+          "multiplier": 1
+        }
+      ],
+      "boosts": [
+        {
+          "when": {
+            "item": "turtle"
+          },
+          "add": {
+            "addPercent": 150
+          }
+        },
+        {
+          "when": {
+            "item": "whale"
+          },
+          "add": {
+            "addPercent": 400
+          }
+        }
+      ],
+      "maxBoostPercent": 400,
+      "id": 1
+    }
+  ],
+  "scenario": {
+    "days": 30,
+    "perDay": {
+      "grant:found-octopus": 40,
+      "grant:found-turtle": 15,
+      "grant:found-whale": 4
+    }
+  }
+}
