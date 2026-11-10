@@ -14,7 +14,34 @@ npm run check      # fixtures, skill copies and release.json in step, lint, then
 npm run format     # Prettier, before you commit (npm run lint checks it)
 ```
 
-Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM.
+Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM. They send every instruction the
+client builds, and every example's whole setup.
+
+To try the tools in your own agent from a clone, `node bin/xsolana.mjs connect --local` registers this checkout's MCP
+server and the skill with Claude Code and Codex (`--remove` takes them out again).
+
+| Variable              | What it does                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| `XSOLANA_RPC_URL`     | a devnet RPC of your own for `xsolana approve` and `xsolana status` (a mainnet URL is refused) |
+| `XSOLANA_NO_OPEN`     | `xsolana approve` prints its link without opening a browser                                    |
+| `XSOLANA_DEBUG`       | the CLI prints a failure's whole stack, not one line                                           |
+| `XSOLANA_PROGRAM_DIR` | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it       |
+
+## Layout
+
+| Path                                    | What                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `js/chain/`                             | browser-safe Solana primitives, no SDK                                                               |
+| `js/client/`                            | the client; `idl/` is the program's IDL                                                              |
+| `js/economy/`                           | the economy spec (version 2, `schema.json`), checker, simulation, setup plan, cost, explainer, guide |
+| `js/play/`, `js/results/`               | a player's side of a live economy (and a sponsor's checks); results a server vouches for             |
+| `js/approve/`, `js/mcp/`, `js/connect/` | the approval page, the MCP server (stdio and HTTP) and its tools, `xsolana connect`                  |
+| `js/sim/`, `js/test/`                   | LiteSVM running the real program; the tests and their pinned fixtures                                |
+| `bin/xsolana.mjs`                       | the CLI                                                                                              |
+| `skills/`, `plugin/`                    | the skill (copied to `plugin/skills`, `.claude/skills`, `.agents/skills`) and the plugin             |
+| `scripts/`                              | fixtures, skill sync and zip, IDL sync, release manifest, a devnet end-to-end run                    |
+| `release.json`                          | the program binary, IDL and client hashes this version is pinned to                                  |
+| `evals/`                                | fresh-session evals of agents building on loot ([evals/README.md](evals/README.md))                  |
 
 ## Sending a change
 

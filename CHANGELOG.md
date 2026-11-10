@@ -4,6 +4,13 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.25.4: a README for people (the documentation only; the program is still loot 0.25.0)
+
+- **The README reads from the top**: what it is in plain words, what you can build as examples, how it works in three
+  steps, three ways to start, a short "good to know", the questions, and links to learn more.
+- **`docs/before-you-use.md`** holds the whole of what was the README's "Before you use it", unchanged.
+- **`CONTRIBUTING.md`** has the setup's variables (their table had a broken row) and the repository's layout.
+
 ## 0.25.3: the hosted server in the MCP Registry (the JavaScript only; the program is still loot 0.25.0)
 
 - **`https://xgames.fun/mcp`**, the MCP server over HTTP that xgames.fun hosts, is in `server.json` under `remotes`,
