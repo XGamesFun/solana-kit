@@ -6,7 +6,7 @@ version; this is the whole of it.
 - **Devnet only, and not independently audited.** Nothing here is for real money yet. Use a devnet wallet.
 - **The program can be upgraded, and an upgrade can mean starting again.** Its upgrade authority can replace the
   program's code, which is power over every economy on it (on mainnet that key is to be a multisig). No version so far
-  has carried accounts over from the one before: an economy made on 0.23 was made again for 0.24. Pin the package
+  has carried accounts over from the one before: an economy made on 0.25 is made again for 0.26. Pin the package
   version (each one names the program build it is for in `release.json`) and expect to set an economy up again after an
   upgrade.
 - **Players trust the project.** Its owner and authority are trusted keys with no caps: the authority mints, moves the
@@ -14,7 +14,14 @@ version; this is the whole of it.
   platform and from mistakes, not from the project they chose to play. Money held for a record (an order, a bid, a
   farm's stakes, a contest's or lottery's pot) leaves only by that record's rules.
 - **Players also trust the token and the collection.** A mint's issuer (a freeze authority, a pause, a transfer hook, a
-  permanent delegate) or a collection's controller can stop or move what loot holds. USDC has a freeze authority.
+  permanent delegate, a transfer fee it can still raise) or a collection's controller can stop or move what loot holds:
+  a farm, a vest or a box is only as safe as its token. USDC has a freeze authority. The program takes any token in any
+  role; in one whose new accounts start frozen, or with confidential transfers, a player can hold up their own part (an
+  auction's high bidder can block every higher bid, a lender can block a repayment), and `xsolana check` says so.
+- **The program restricts a project only where it must.** A price or a prize of 0, a mission with no lock, a time years
+  out, a sealed schedule paying any address, a farm that mints a token the project can't mint yet: the program takes
+  them, and `xsolana check` warns of each in plain words. Read every warning before you sign; a time far off is shown
+  with its date.
 - **The chain can't see a game.** Results a game reports (a win, a score, a clear) are vouched for by a key the project
   trusts, a results server or deciders. Checking that a player really did it is the project's job, on its own server:
   a server that decides the result, replays it, or only bounds what the page reports leaves a cheater very different
@@ -32,8 +39,11 @@ version; this is the whole of it.
 - **The rules are strict.** A prize is a fixed amount: a jackpot that grows is a lottery's pot. A lottery says where its
   places are paid from: a pot that carries over (gifts and what earlier rounds left count), or each round's own ticket
   money, which nothing from outside can change. A prize never shifts to a later round. A draw uses the odds
-  as written. When an outcome runs out, a box either stops selling (`stopSales`, the default) or keeps selling and
-  draws among what's left (`drawLeft`, which lets a player empty a common outcome to make a rare one likelier).
+  as written. When an outcome runs out, a box stops selling (`stopSales`, the default, a paid miss refunded), keeps
+  selling and draws among what's left (`drawLeft`, which lets a player empty a common outcome to make a rare one
+  likelier), or keeps selling and gives nothing for a miss (`giveNothing`, never refunded). Both sides of an exchange
+  move together: an auction's seller is paid only when the lot reaches the winner, and a loan's repayment brings its NFT
+  home.
 - **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls wait. An
   order still unanswered after 7 days can be refunded. Once a roll has waited 10 minutes, a buyer who sees a late
   answer coming can take a refund instead.
