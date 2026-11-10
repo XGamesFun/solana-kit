@@ -520,7 +520,7 @@ export function contestArgs(c, m, at = m.now) {
     // Each entry stakes one NFT that passes this rule, and the NFTs are the pot: each winner shares the losers', at most
     // `losersEach` of them (none: no cap).
     nft: c.stakeNft ? ruleOf(c.stakeNft, m) : null,
-    cap: c.stakeNft && c.losersEach ? c.losersEach : null,
+    cap: c.stakeNft && c.losersEach !== undefined ? c.losersEach : null,
   };
 }
 

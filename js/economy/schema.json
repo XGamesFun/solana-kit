@@ -427,6 +427,14 @@
             "transferFeePercent": {
               "$ref": "#/$defs/percent"
             },
+            "feeChangeable": {
+              "type": "boolean",
+              "description": "Its issuer can still change its transfer fee (Token-2022's transfer fee config has an authority): raised to 100%, it takes every stake or payment as it leaves."
+            },
+            "closeAuthority": {
+              "type": "boolean",
+              "description": "Its mint has a close authority, who could close it and make it again with other powers."
+            },
             "pausable": {
               "type": "boolean"
             },
@@ -435,14 +443,14 @@
             },
             "defaultState": {
               "type": "boolean",
-              "description": "The mint carries Token-2022's DefaultAccountState, whatever it is set to. With a freeze authority it can be switched to frozen: auctions, contests, lotteries and sealed schedules refuse it."
+              "description": "The mint carries Token-2022's DefaultAccountState, whatever it is set to. With a freeze authority it can be switched to frozen: the checker warns what that does to an auction, a loan, a lottery or a contest in it."
             },
             "nonTransferable": {
               "type": "boolean"
             },
             "confidentialTransfers": {
               "type": "boolean",
-              "description": "Its holders can turn plain transfers away (Token-2022 confidential transfers): lotteries, contests and auctions refuse it."
+              "description": "Its holders can turn plain transfers away (Token-2022 confidential transfers): the checker warns what that does to an auction, a loan, a lottery or a contest in it."
             }
           }
         }
@@ -1619,8 +1627,8 @@
         },
         "losersEach": {
           "type": "integer",
-          "minimum": 1,
-          "description": "In a contest of NFTs (`stakeNft`), the most losers' NFTs one winner takes; what the winners leave goes to whoever opened it. Default: no cap, the winners share every loser's NFT (the first to enter on the winning side take one more when they don't divide evenly), each picking which."
+          "minimum": 0,
+          "description": "In a contest of NFTs (`stakeNft`), the most losers' NFTs one winner takes; what the winners leave goes to whoever opened it (0: every loser's NFT goes to the opener). Default: no cap, the winners share every loser's NFT (the first to enter on the winning side take one more when they don't divide evenly), each picking which."
         }
       }
     },
@@ -2062,16 +2070,14 @@
         "oneOf": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 16,
           "items": { "type": "string" },
-          "description": "The attribute is one of these texts (at most 16): a tier of two, one species of three."
+          "description": "The attribute is one of these texts: a tier of two, one species of forty. As many as the record holds; a lottery's NFT ticket takes at most 170, and a box's gate about 340 (what one answer of the oracle's reads)."
         },
         "items": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 16,
           "items": { "$ref": "#/$defs/key" },
-          "description": "Any of these items the game mints (at most 16), in its own collection: a farm for three tree species, a gate for holders of any of five plots. Read by the program as the collection's `item_id` being one of theirs; not with `item`, `collection` or `attribute`."
+          "description": "Any of these items the game mints, in its own collection: a farm for three tree species, a gate for holders of any of five plots. Read by the program as the collection's `item_id` being one of theirs; not with `item`, `collection` or `attribute`."
         },
         "time": {
           "enum": ["ahead", "passed"],
@@ -2082,8 +2088,32 @@
     "boost": {
       "type": "number",
       "minimum": 0,
-      "maximum": 10000,
-      "description": "A percent added to a weight: 100 doubles it. At most 10,000 (101 times): enough for a stat that scales a rate, such as +100% a point of power up to 100."
+      "maximum": 100000,
+      "description": "A percent a farm's boost adds to a weight: 100 doubles it. At most 100,000 (1,001 times), alone and all of a farm's boosts together: enough for a stat that scales a rate, such as +100% a point of power up to 1,000."
+    },
+    "oddsBoost": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 42949672.95,
+      "description": "A percent a box's odds rule adds to an outcome's weight: 100 doubles it, 99,900 makes it a thousand times likelier. Any amount: a boosted weight stops at the largest weight (4,294,967,295), and two outcomes boosted past it are equally likely."
+    },
+    "oddsEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How much a collectible that passes the rule adds to the outcome's weight: a flat percent, or a percent per point of its attribute (up to `upTo` points).",
+      "properties": {
+        "addPercent": {
+          "$ref": "#/$defs/oddsBoost"
+        },
+        "perPointPercent": {
+          "$ref": "#/$defs/oddsBoost"
+        },
+        "upTo": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
     },
     "effect": {
       "type": "object",
@@ -2119,7 +2149,7 @@
           "$ref": "#/$defs/rule"
         },
         "add": {
-          "$ref": "#/$defs/effect"
+          "$ref": "#/$defs/oddsEffect"
         }
       }
     },
@@ -2135,9 +2165,9 @@
         "multiplier": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "maximum": 11,
+          "maximum": 100,
           "default": 1,
-          "description": "Its weight: above 0 and up to 11 times what it stakes (below 1: a flexible tier that earns less)."
+          "description": "Its weight: above 0 and up to 100 times what it stakes (below 1: a flexible tier that earns less)."
         },
         "prize": {
           "$ref": "#/$defs/prize",
@@ -2631,9 +2661,9 @@
                   },
                   "weight": {
                     "type": "integer",
-                    "minimum": 1,
+                    "minimum": 0,
                     "maximum": 4294967295,
-                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1. 0: never drawn, given only by name."
                   }
                 }
               },
@@ -2656,9 +2686,9 @@
                   },
                   "weight": {
                     "type": "integer",
-                    "minimum": 1,
+                    "minimum": 0,
                     "maximum": 4294967295,
-                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1. 0: never drawn, given only by name."
                   }
                 }
               },
@@ -2673,9 +2703,9 @@
                   },
                   "weight": {
                     "type": "integer",
-                    "minimum": 1,
+                    "minimum": 0,
                     "maximum": 4294967295,
-                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1."
+                    "description": "Its weight in the stash's draws (1 when left out): an NFT that weighs 10 is drawn ten times as often as one that weighs 1. 0: never drawn, given only by name."
                   }
                 }
               }
@@ -2815,14 +2845,15 @@
               },
               "weight": {
                 "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
+                "minimum": 0,
+                "maximum": 4294967295,
+                "description": "Its weight in the draws. 0: never drawn."
               },
               "stock": {
                 "type": "integer",
-                "minimum": 1,
+                "minimum": 0,
                 "maximum": 4294967294,
-                "description": "How many units may draw it: left out, never runs out."
+                "description": "How many units may draw it: left out, never runs out. 0: never drawn."
               }
             }
           }
