@@ -556,8 +556,12 @@ paying what each part opens or mints: each `settle` carries out the prizes from 
 10 KB keeps it. The first call splits the payment, its shares' accounts and their hook tail with it (`upto` 0 splits
 and gives no prize, accepted only before the split: sent first when a prize can't land yet, a winner's account its
 issuer froze, so the shares are paid); the last part (`upto` past the end, `SETTLE_LAST` = u32::MAX: `OrderSettled`)
-carries out the NFT rolled on, pays the undrawn draws' share back, gives whatever prizes are left (maybe none) and
-closes the order. A part before it (`upto` at most the end) gives prizes with a stand-in piece.
+carries out the NFT rolled on that the project holds, pays the undrawn draws' share back, gives whatever prizes are left
+(maybe none) and closes the order. An NFT rolled on that the project doesn't hold has its numbers moved by the first
+call, its accounts (and its Sheet) with it. A part before the last (`upto` at most the end) gives prizes with a
+stand-in piece. The order's own player may give up tokens or a collectible they can't receive (`settleIx`'s `giveUp`:
+the project's vault, or the item, in the receiver's place): tokens given up stay in the vault, and `PrizeForgone` says
+which.
 `OrderPartSettled` carries `amount` and `treasury_remainder` when it split; in a settle of several parts the last's
 `OrderSettled` has them 0. A compressed prize's item account is written; one of an item whose collection lacks
 Bubblegum's plugin mints nothing, so the next one's Sheet is at the tree's count one less (`wonAccounts`' `unminted`). A transaction's instruction trace (64 calls) binds
@@ -780,23 +784,31 @@ closed by any pull.
 
 - **Raffle**: draws once; a place gives `Prize::Held(nft)` from the lottery's own stash, or `Prize::Raffled` (a run of
   places, each an NFT drawn at random from it), never both. The stash is filled with `stash` (`StashOf::Lottery`, several
-  NFTs a call); the write refuses an NFT not there or fewer NFTs than raffled places (`NotInStash`), and places one pull
-  couldn't take out (`BadLottery`: about 200 raffled places of a small stash). A run of places given one by one (an
-  NFT, a compressed NFT, a raffled one: anything but tokens) holds at most `MAX_RUN_PLACES` (4,096; `BadLottery`): more is
-  several runs. Nothing comes out but a place's prize
-  while the lottery runs, nor once it has ended while its round 0 still owes NFTs of it (`Promised`): its close, write
-  again and stash moves name round 0 then (`idleRound`).
+  NFTs a call, `stashBatches` splits a long list); the write refuses an NFT not there or fewer NFTs than raffled places
+  (`NotInStash`), and more than 256 places from its own stash (`BadLottery`: the oracle's answer loads their list). A
+  pull takes out at most 64 of them (`pullAssigns`) and stops at a place whose NFT is not out yet: pull again until every
+  place has its own. A run of places given one by one (an NFT, a compressed NFT, a raffled one, a roll: anything but
+  tokens) holds at most `MAX_RUN_PLACES` (4,096; `BadLottery`): more is several runs; a run of rolls takes two accounts a
+  place, as many as a pull carries (`prize.most`). Nothing comes out but a place's prize while the lottery runs, nor once
+  it has ended while its last round (`Lottery.last`) still owes NFTs of it (`Promised`): its close, write again and
+  stash moves name that round then (`idleRound`).
 - **Least sale** (`min_sold`): a due round that sold fewer is cancelled at its draw, no oracle, everyone refunded.
 - **Free tickets** (`price` 0): only the player fee; `per_wallet` keeps one wallet from most tickets.
 - **NFT ticket** (`nft_ticket: { rule, then }`): one ticket for one NFT (`OneTicket`), held until the draw, then
   burned, given or stashed by its pull; home if cancelled. No price, shares or ticket mint.
-- **No-loss** (`returns`): after the draw every ticket is owed back whole; winners take only what was paid into the pot.
-  It pays from a pot (`BadLottery` otherwise).
+- **No-loss** (`returns`): after the draw every ticket is owed back whole; winners take only what was paid into the pot,
+  and their prizes. Paid from its rounds' own money, its places take no money: they give their prizes.
+- **Sales close** (`closes_before`): sales close that many seconds before the draw (`SalesClosed`, `salesCloseAt`).
+- **Weighed by time** (`time_weighted`, a no-loss lottery only): a purchase of `count` tickets weighs `count` times the
+  seconds from it to the close of sales (`TicketsBought.weight`, `ticketWeight`, `purchaseOdds`), and a place is won by
+  weight: an entry's slice of the draw is its weight's (`decodeRound`'s `start`, `end`), its tickets `tickets`.
 
-Pot and payment mints can't be non-transferable, default-frozen or switchable to it, or confidential (`BadLottery`); at
+Pot and payment mints may be any token: one that can start frozen, a confidential one or one that can't be transferred
+is the project's choice (the kit warns); a source that can't move into the round gives it nothing. At
 most 8 shares (`MAX_SHARES`, as every split kept to be paid later) and 8 mints. Edits apply to the next round (the gate and `per_wallet` at once); closing or making a
 draw-once lottery again, an edit of an ended one, or one making it repeat, waits while its current round has a record,
-or once ended while round 0 still owes NFTs of its own stash (`RoundRunning`). `per_wallet` counts tickets per
+or once ended while its last round still owes NFTs of its own stash (`RoundRunning`). Writing `every` 0 on a running
+lottery ends it after its current round (`Lottery.last`). `per_wallet` counts tickets per
 round in the wallet's counts.
 
 ## Recipes

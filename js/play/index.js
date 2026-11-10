@@ -2853,6 +2853,9 @@ export function solanaApp({
           freeAt: farm.lock_key ? null : Number(BigInt(seat.since) + lock),
           ...(farm.lock_key ? { lockKey: farm.lock_key } : {}),
           boostPercent: Number(seat.boost_bps) / 100,
+          // Its weight in the farm, as the seat holds it: near the farm's total cap a seat weighs only what is left, so
+          // it is read, never worked out from the tier and the boost.
+          weight: BigInt(seat.weight),
           rewards: rewards?.key ?? null,
           waiting: show(seat.owed, rewards ? decimalsOf(rewards.key) : 0),
           owedUnits: BigInt(seat.owed),
