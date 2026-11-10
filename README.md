@@ -107,7 +107,7 @@ codex plugin add xsolana@xgamesfun
 ```
 
 **Any agent with MCP** (Cursor, opencode, Cline…): run the server with
-`npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.1 connect` register it, with
+`npx -y --package=@xgamesfun/solana@0.25.2 xsolana mcp`. Or let `npx -y @xgamesfun/solana@0.25.2 connect` register it, with
 the skill, for Claude Code and Codex.
 
 **The skill alone, in any agent that reads skills** (Claude Code, Codex, Copilot, Gemini CLI, Cursor, Windsurf, Cline,
@@ -115,7 +115,7 @@ opencode…): `npx skills add XGamesFun/solana-kit` finds it and installs it for
 server it runs the same tools through `npx`. Each GitHub release also carries `xsolana-economy.zip`, the skill as one
 file for apps that take a skill as an upload (the Claude and ChatGPT desktop apps).
 
-**Over HTTP**: `npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp --http` serves the tools that read nothing but
+**Over HTTP**: `npx -y --package=@xgamesfun/solana@0.25.2 xsolana mcp --http` serves the tools that read nothing but
 their arguments (guide, examples, check, simulate, cost, explain, review, status, client) at
 `http://127.0.0.1:8787/mcp`, MCP's Streamable HTTP transport. `@xgamesfun/solana/mcp/http` exports the same handler
 (`mcpHttp(request) → response`) for a hosted endpoint: it reads no files, and the agent hands the person the spec and the
@@ -124,7 +124,7 @@ their arguments (guide, examples, check, simulate, cost, explain, review, status
 Then ask for an economy, for example _"a fishing game where each cast costs 0.02 SOL, with a rare golden fish and a
 monthly draw"_.
 
-Going live is always yours: `npx -y @xgamesfun/solana@0.25.1 approve` opens a page on your computer where you connect a
+Going live is always yours: `npx -y @xgamesfun/solana@0.25.2 approve` opens a page on your computer where you connect a
 devnet wallet and approve each transaction. The agent never signs and never asks for a key.
 
 ## Use it from a terminal
@@ -132,13 +132,13 @@ devnet wallet and approve each transaction. The agent never signs and never asks
 Every tool runs from the CLI too, on a spec file (`xsolana.json` by default):
 
 ```bash
-npx -y @xgamesfun/solana@0.25.1 examples shop with loot boxes   # the nearest worked examples
-npx -y @xgamesfun/solana@0.25.1 check xsolana.json                 # refusals and warnings
-npx -y @xgamesfun/solana@0.25.1 simulate xsolana.json              # where the money goes, day by day
-npx -y @xgamesfun/solana@0.25.1 cost xsolana.json                  # what going live and each action cost
-npx -y @xgamesfun/solana@0.25.1 explain xsolana.json               # the economy in plain words
-npx -y @xgamesfun/solana@0.25.1 review xsolana.json                # what a cheater gets on each route (exits 1 on a high finding)
-npx -y @xgamesfun/solana@0.25.1 approve xsolana.json               # go live, approved in your own wallet
+npx -y @xgamesfun/solana@0.25.2 examples shop with loot boxes   # the nearest worked examples
+npx -y @xgamesfun/solana@0.25.2 check xsolana.json                 # refusals and warnings
+npx -y @xgamesfun/solana@0.25.2 simulate xsolana.json              # where the money goes, day by day
+npx -y @xgamesfun/solana@0.25.2 cost xsolana.json                  # what going live and each action cost
+npx -y @xgamesfun/solana@0.25.2 explain xsolana.json               # the economy in plain words
+npx -y @xgamesfun/solana@0.25.2 review xsolana.json                # what a cheater gets on each route (exits 1 on a high finding)
+npx -y @xgamesfun/solana@0.25.2 approve xsolana.json               # go live, approved in your own wallet
 ```
 
 `xsolana help` lists every command. Every command names the exact version, so `npx` runs that release and never whatever
@@ -190,7 +190,7 @@ tiers, boosts and fixed or shared reward rates. The project needs no authority o
 ones), raffles with a Merkle allowlist, and auctions that refund the outbid at once are all routes in the same spec.
 
 **Is there an MCP server or Claude Code plugin for building on Solana?** Yes: the `xsolana` plugin for Claude Code and
-Codex, and `npx -y --package=@xgamesfun/solana@0.25.1 xsolana mcp` for any MCP client. It is listed in the MCP
+Codex, and `npx -y --package=@xgamesfun/solana@0.25.2 xsolana mcp` for any MCP client. It is listed in the MCP
 Registry as `io.github.XGamesFun/solana-kit`.
 
 **How is this different from writing my own Anchor program?** Nothing is written, deployed or upgraded per project:

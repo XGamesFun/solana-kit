@@ -4,7 +4,7 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased: easier to find and to reach (the JavaScript only; the program is still loot 0.25.0)
+## 0.25.2: easier to find and to reach, and sponsored fees (the JavaScript only; the program is still loot 0.25.0)
 
 - **The MCP server over HTTP** (`js/mcp/http.mjs`, exported as `@xgamesfun/solana/mcp/http`; `xsolana mcp --http`):
   MCP's Streamable HTTP transport for a hosted endpoint that chat apps add by URL. It offers only the tools that read
