@@ -221,6 +221,7 @@ export async function createApproval({
    */
   const names = () =>
     namesOf(model(spec, { now: at }), {
+      now: at,
       treasury: madeSoFar(live())?.treasury ?? model(spec, { now: at }).treasuryWallet ?? null,
     });
   /**
@@ -232,7 +233,7 @@ export async function createApproval({
   async function readLive(p) {
     if (!spec.live?.published || typeof chain.account !== 'function') return;
     // The names a published list or key list goes by: the published spec's, each held against the root on chain.
-    const n = namesOf(model(spec.live.published, { now: at }), { treasury: p.ctx.treasury });
+    const n = namesOf(model(spec.live.published, { now: at }), { now: at, treasury: p.ctx.treasury });
     const was = new Map();
     for (const t of p.transactions) {
       for (const [i, step] of t.steps.entries()) {
@@ -381,14 +382,14 @@ export async function createApproval({
       trusted = await trust(wallet);
     } catch (e) {
       if (!(e instanceof ApproveError)) throw e;
-      const v = view(p0, namesOf(model(spec, { now: at }), { owner: wallet }), { refused: e.message });
+      const v = view(p0, namesOf(model(spec, { now: at }), { now: at, owner: wallet }), { refused: e.message });
       return { ...v, remaining: p0.ok ? p0.transactions.length : 0, done: false };
     }
     if (!p0.ok || !p0.transactions.length)
       return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
     const p = await build(trusted.owner);
     await readLive(p);
-    const v = view(p, namesOf(model(spec, { now: at }), { owner: wallet, treasury: p.ctx.treasury }), {
+    const v = view(p, namesOf(model(spec, { now: at }), { now: at, owner: wallet, treasury: p.ctx.treasury }), {
       project: p.ctx.project,
     });
     return { ...v, remaining: p.transactions.length, done: false };
@@ -435,7 +436,7 @@ export async function createApproval({
       return wireTransaction(message, sigs);
     });
     // What each transaction pays to whom, read back from the very instructions the wallet signs.
-    const n = namesOf(model(spec, { now: at }), { owner: wallet, treasury: p.ctx.treasury });
+    const n = namesOf(model(spec, { now: at }), { now: at, owner: wallet, treasury: p.ctx.treasury });
     // Every line names the project it goes to first: always the wallet's own, or the one it is the authority of.
     const details = batch.map(t => [
       `Project: ${p.ctx.project}${p.ctx.owner === wallet ? ' (your own)' : ` (owned by ${p.ctx.owner})`}`,

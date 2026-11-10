@@ -756,12 +756,11 @@ describe('stashes and prizes in a spec', () => {
       ),
       'a chest is a prize, not a roll on the NFT',
     );
+    const unlocked = edit(s => (s.farms[0].tiers[0].lock = 0));
     assert.ok(
-      has(
-        edit(s => (s.farms[0].tiers[0].lock = 0)),
-        'E-FARM economy.farms.expedition.tiers[0].prize',
-      ),
-      'a prize needs a lock',
+      !has(unlocked, 'E-FARM economy.farms.expedition.tiers[0]') &&
+        has(unlocked, 'W-FARM-MISSION economy.farms.expedition.tiers[0].lock'),
+      'a prize with no lock is the project’s choice: warned, not refused',
     );
     assert.ok(
       has(

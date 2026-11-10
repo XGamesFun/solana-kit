@@ -107,11 +107,21 @@ Run `xsolana_review` and go through what it reports; these are the points behind
 12. **The page is untrusted.** A page builds the player's transactions, and a cheater builds their own: the program's
     checks are what count, never the page's. Anything the page decides (a score, a reward amount, who won) is only as
     good as the server that checks it.
-13. **Ordering.** A lottery's tickets are not weighted by time: one buyer can take most of a round right before the
-    draw. Anyone, the seller included, can bid an auction up. A box that keeps selling when an outcome runs out
-    (`drawLeft`) lets someone watching the stock empty a common outcome to make a rare likelier.
-14. **Contests.** Players' stakes go to the side the authority or a decider key names: keep contests for results the
-    server decides, or that anyone can check outside the game.
+13. **Ordering.** A lottery's tickets count one each unless it weighs them by time (`timeWeighted`, no-loss
+    lotteries only): then one buyer can't take most of a round right before the draw for the fees alone, and the buy
+    screen shows what a purchase weighs. A no-loss lottery should close its sales a while before the draw
+    (`closesBefore`). Anyone, the seller included, can bid an auction up; an auction with no extension or no least
+    raise lets two wallets topping each other in the last seconds keep every other bid out. A box that keeps selling
+    when an outcome runs out (`drawLeft`) lets someone watching the stock empty a common outcome to make a rare
+    likelier; one that gives nothing for a miss (`giveNothing`) lets anyone emptying a shared source make its rolls
+    miss.
+14. **Contests.** Players' stakes go to the side the authority or a decider key names, and whoever names it can also
+    enter: keep contests for results the server decides, or that anyone can check outside the game. A prize to each
+    winning entry with no stake and no gate pays one person with many wallets once a wallet.
+15. **NFTs the project doesn't control.** The creator of an NFT with a permanent delegate can pull it back out of a
+    hold, a stake, a loan or a listing, and a collection the project is only an update delegate of lets its owner and
+    every other delegate mint NFTs that read as the project's own items. Name only collections whose every writer the
+    project trusts.
 
 ## Telling the person
 

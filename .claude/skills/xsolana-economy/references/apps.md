@@ -33,7 +33,7 @@ const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: w
 
 const shop = await app.shop(); // [{ key, name, price, priceUnits, currency, active, left }]
 await app.buy('badge', { listing: shop.find(l => l.key === 'badge') }); // the price shown is the most it pays
-const boxes = await app.boxes(); // each box's price, outcome chances and whenOut (show it: stops selling, or draws among what is left)
+const boxes = await app.boxes(); // each box's price, outcome chances and whenOut (show it: stops selling, draws among what is left, or a miss gives nothing)
 await app.openBox('chest', { listing: boxes.find(l => l.key === 'chest') }); // pays, waits for the roll, settles
 await app.pay('entry'); // a payment of the spec
 const lotteries = await app.lotteries(); // [{ key, name, price, currency, status, round, sold, drawsAt, nftTicket, … }]
@@ -159,7 +159,16 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   (`{ "staked": … }`) needs nothing from the page: js/play passes the player's seat and the farm, and says plainly when
   the stake is too small or its lock is over (show the farm's locked tiers next to the gate).
 - **A no-loss lottery** (`noLoss`): once the round is drawn every ticket is owed back to its buyer (a pull, which
-  anyone may send, so say "your tickets come back after the draw"), and the winners then collect the pot.
+  anyone may send, so say "your tickets come back after the draw"), and the winners then collect the pot. Sales close
+  `closesBefore` before each draw. A lottery weighed by time (`timeWeighted`) shows each buyer, on the buy screen,
+  what this purchase would weigh now (its tickets times the seconds left until sales close) and their share of the
+  round's weight, and that the same tickets bought later weigh less.
+- **Sending for a player through a session key** (a delegate on their token account): a payment by a delegate is
+  refused whole when one of its shares would land back on the account it pays from (a rebate naming that player, a
+  share to the holder of a collectible that player holds). Pay such a purchase with the player's own signature.
+- **Reading results from logs**: a transaction's log holds 10,000 bytes and a sender can fill it before the program
+  writes. Read the accounts as the record of what is owed and held; treat a missing receipt as unknown, not as "did
+  not happen".
 - **A lottery round** finishes in a few steps whatever its size: `app.claims()` lists the draw (`reveal`, whose ask
   fixes the round's money and opens the next round at once), what this player is owed (`pull`: a refund, a place's
   part of the pot, its prize; a raffled NFT; a roll asked for in the same transaction and settled in the same prompt)

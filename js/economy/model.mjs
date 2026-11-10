@@ -43,8 +43,8 @@ export const SIGNATURE_FEE = 5_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;
 export const WSOL = 'So11111111111111111111111111111111111111112';
 /** The limits a spec meets: the chain's (the oracle's answer carries 21 accounts; a farm names a tier and a recipe a
- * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32) and the two
- * caps that keep a farm's numbers from overflowing. Since loot 0.22 the program caps no count or size of its own. */
+ * collectible's place in a byte; Bubblegum keeps a compressed NFT's link in 200 bytes and its name in 32), the two
+ * caps that keep a farm's numbers from overflowing, and the lists the program still bounds. */
 export const LIMITS = Object.freeze({
   callbackAccounts: 21,
   tiers: 256,
@@ -52,24 +52,50 @@ export const LIMITS = Object.freeze({
   vouchers: 3,
   compressedNameBytes: 32,
   compressedUriBytes: 200,
-  maxBoostBps: 1_000_000,
-  maxTierBps: 110_000,
+  // A farm's boost alone, and its boosts together, add at most +100,000% (rules.rs `MAX_BOOST_BPS`); a tier weighs at
+  // most x100 (farm.rs `MAX_TIER_BPS`). A box's odds have no such cap: a boosted weight stops at the largest weight.
+  maxBoostBps: 10_000_000,
+  maxTierBps: 1_000_000,
   // The program's caps on a record's lists (constants.rs, not in the IDL): a spec over one is refused before anything is signed.
-  boxEntries: 128,
-  boxSlots: 32,
-  boxOdds: 32,
-  boxFates: 64,
-  entryPrizes: 14,
   itemTraits: 64,
   traitKeyBytes: 64,
-  recipeLines: 48,
   farmRules: 32,
   growthSteps: 128,
   contestSides: 1024,
   deciders: 32,
   collections: 32,
   lotteryRuns: 64,
-  farmEnds: 100_000,
+  // How many prizes one outcome of a box gives: the count of what a draw set aside is kept in a byte (catalog.rs).
+  entryPrizes: 255,
+  // A raffle's places from its own stash, raffled or named: the oracle's answer loads that many (lottery.rs `MOST_OWN`).
+  ownStashPlaces: 256,
+  // "One of" texts in a lottery's NFT ticket rule: the oracle's answer reads them into room for 4,096 bytes (lottery.rs).
+  ticketOneOf: 170,
+});
+/**
+ * What one answer of the oracle's holds, as measured on the program (W22): a box is refused when it is written
+ * (PackTooLarge, or TooManyAccounts) when one answer can't hold a draw of it, a box of one draw included. Each number is
+ * the most of that one thing in a box that is otherwise small: `entriesOfNothing` outcomes that give nothing,
+ * `entriesOfTokens` outcomes of token amounts, `entriesOfItems` outcomes each of its own item, `slots`, `odds` rules,
+ * `entryTokens` token prizes or `entryCollectibles` collectibles in one outcome, `gateTexts` "one of" texts in a box's
+ * gate. A box that mixes them fits less. A recipe: `recipePayments` payments in one coin, `recipeCoins` in different
+ * coins, `recipePoolOutputs` outputs from a pool, `recipeRaises` raises or needs; past those it is written but never
+ * crafts. `recipeRolls`: the rolls whose receipts a transaction's log still holds (W32).
+ */
+export const ANSWER_HOLDS = Object.freeze({
+  entriesOfNothing: 128,
+  entriesOfTokens: 29,
+  entriesOfItems: 18,
+  slots: 41,
+  odds: 72,
+  entryTokens: 16,
+  entryCollectibles: 18,
+  gateTexts: 340,
+  recipePayments: 60,
+  recipeCoins: 26,
+  recipePoolOutputs: 59,
+  recipeRaises: 108,
+  recipeRolls: 15,
 });
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
  * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
@@ -194,13 +220,106 @@ export const STOCK_WORDS =
  * sold (an open checks the stock); a box only other routes roll (a prize, a mission) never stops a sale.
  */
 export function whenOutWords(b, { sold = b.active !== false } = {}) {
+  if (b.whenOut === 'giveNothing')
+    return `When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), ${sold ? 'the box keeps selling while its first draw has anything left, and ' : ''}a roll is on the weights as written: a draw that lands on the outcome that is out is made and gives nothing ("whenOut": "giveNothing"). A paid draw is not refunded and a free roll is over, so tell players a draw can miss, and keep what each outcome gives in stock; anyone who empties a source the box shares makes its rolls miss`;
   if (b.whenOut === 'drawLeft' && !sold)
     return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), a roll draws among the outcomes still there by their written weights, so the others’ chances rise; with nothing left at all, a free roll waits to be asked again and a paid one is refunded';
   if (b.whenOut === 'drawLeft')
     return 'When an outcome runs out (an item sold out, a pool short of its prize, a stash empty), the box keeps selling while its first draw has anything left, and a roll draws among the outcomes still there by their written weights: the others’ chances rise as one runs out, so a player can empty a common outcome to make a rare one likelier (a box selling a rare prize should stop selling instead, the default)';
   if (!sold)
-    return `${STOCK_WORDS}. A free roll (a prize, a recipe’s, a mission’s chest) is on the odds as written too: a draw on an outcome that is out misses and gives nothing back (a pack keeps what its other draws won; a roll that drew nothing waits to be asked again), so emptying a shared source before asking steers nothing. A pack that should draw among what is left needs "whenOut": "drawLeft"`;
-  return 'When an outcome runs out, the box stops selling: it isn’t sold while anything an outcome takes (an item’s units left, a pool’s tokens, a stash’s NFTs) couldn’t cover, at the most any outcome sharing it takes in one draw, this purchase’s draws and those of purchases still waiting for the oracle, so every roll is on the odds as written and nobody can buy their way to a refund on every miss; it sells again once the project restocks or edits the box (an outcome whose odds shrink with stock needs no cover). An outcome emptied another way all the same (another route sharing its pool, item or stash) makes no draw, no other outcome taking its place, and gives back that draw’s worth of the price at the settle; with no draw made at all, the open is refunded';
+    return `${STOCK_WORDS}. A free roll (a prize, a recipe’s, a mission’s chest) is on the odds as written too: a draw on an outcome that is out misses and gives nothing back (a pack keeps what its other draws won; a roll that drew nothing waits to be asked again, and is asked again until it hits, so with one outcome dry it always ends on what is left). A pack that should draw among what is left needs "whenOut": "drawLeft"; one where a miss should give nothing, "giveNothing"`;
+  return 'When an outcome runs out, the box stops selling: it isn’t sold while anything an outcome takes (an item’s units left, a pool’s tokens, a stash’s NFTs) couldn’t cover, at the most any outcome sharing it takes in one draw, this purchase’s draws and those of purchases still waiting for the oracle, so every roll is on the odds as written and nobody can buy their way to a refund on every miss; it sells again once the project restocks or edits the box (an outcome whose odds shrink with stock needs no cover). An outcome emptied another way all the same (another route sharing its pool, item or stash) makes no draw, no other outcome taking its place, and gives back that draw’s worth of the price at the settle; with no draw made at all, the open is refunded. A roll given by another route (another box, a recipe, a grant, a mission, a lottery’s place) is still given after the box has stopped, and is asked again until it hits, so with one outcome dry it always ends on what is left';
+}
+
+/** Whether a box stops selling while an outcome is out (`whenOut` "stopSales", the default). */
+export const stopsSales = b => (b.whenOut ?? 'stopSales') === 'stopSales';
+
+/** The largest weight an outcome has (a `u32`). */
+export const MOST_WEIGHT = 4_294_967_295n;
+
+/**
+ * An outcome's weight grown by `bps` basis points (rules.rs `boosted`): rounded down, and never past the largest weight.
+ * Counted in BigInt: the largest weight times the largest boost passes 2^53. Two outcomes boosted past the largest
+ * weight are equally likely.
+ */
+export function boostedWeight(weight, bps) {
+  const grown = (BigInt(weight) * (10_000n + BigInt(bps))) / 10_000n;
+  return grown > MOST_WEIGHT ? MOST_WEIGHT : grown;
+}
+
+/**
+ * Box `b`'s weights for a player who passes every one of its odds rules at their most (order.rs): the rules' boosts on
+ * one outcome add up, and stop at the largest `u32`; each outcome's weight is then boosted (`boostedWeight`). A boost
+ * per point counts its `upTo` points. BigInt weights, outcome by outcome.
+ */
+export function boostedWeights(b) {
+  const bps = (b.outcomes ?? []).map(() => 0n);
+  for (const o of b.odds ?? []) {
+    if (!(o.outcome < bps.length)) continue;
+    const add = o.add ?? {};
+    const each =
+      add.addPercent !== undefined
+        ? BigInt(Math.round(Number(add.addPercent) * 100))
+        : BigInt(Math.round(Number(add.perPointPercent ?? 0) * 100)) * BigInt(add.upTo ?? 0);
+    const sum = bps[o.outcome] + each;
+    bps[o.outcome] = sum > MOST_WEIGHT ? MOST_WEIGHT : sum;
+  }
+  return weights(b).map((w, i) => boostedWeight(Math.round(w), bps[i]));
+}
+
+/**
+ * What places of tokens paid from one pool get when it holds `holds` and they win more (lottery.rs `WhenShort`), as a
+ * pull pays them: `runs` are [{ each, places }] in place order (base units, BigInt), `whenShort` the setting they all
+ * say. Each run gets [{ each, sent }]. "inOrder": whole prizes, first to last, while what is left covers one;
+ * "inProportion": every place the same share of its prize, rounded down; "nothing": no place, and the pool keeps it.
+ * Prizes of 1,000, 500 and 500 from a pool holding 1,700: 1,000, 500 and 0; 850, 425 and 425; or nothing.
+ */
+export function shortPays(runs, holds, whenShort = 'inOrder') {
+  const owed = runs.reduce((n, r) => n + BigInt(r.each) * BigInt(r.places), 0n);
+  let left = BigInt(holds);
+  return runs.map(r => {
+    const amount = BigInt(r.each);
+    const each =
+      BigInt(holds) >= owed
+        ? amount
+        : whenShort === 'inProportion'
+          ? (amount * BigInt(holds)) / owed
+          : whenShort === 'nothing'
+            ? 0n
+            : amount;
+    const whole = left / (each > 0n ? each : 1n);
+    const sent = each * (BigInt(r.places) < whole ? BigInt(r.places) : whole);
+    left -= sent;
+    return { each, sent };
+  });
+}
+
+/**
+ * What a purchase of `count` tickets at `at` weighs in a lottery that weighs tickets by time (lottery.rs
+ * `time_weighted`): each ticket the seconds from it to the close of sales (`drawsAt` less `closesBefore`), at least 1.
+ * Off, a ticket weighs one. BigInt.
+ */
+export function purchaseWeight(count, at, drawsAt, closesBefore = 0, weighted = true) {
+  if (!weighted) return BigInt(count);
+  const left = BigInt(drawsAt) - BigInt(closesBefore) - BigInt(at);
+  return BigInt(count) * (left > 1n ? left : 1n);
+}
+
+/**
+ * The entry that wins each place of a round (lottery.rs `ticket_of_place`): place `k` is at `first + k × (total /
+ * winners)`, rounding the end, and its winner is the entry whose slice of the draw holds that point. `entries` are each
+ * purchase's weight in order (BigInt), `first` the answer's point below the total. The entry's index for each place.
+ */
+export function placeWinners(entries, winners, first) {
+  const total = entries.reduce((n, w) => n + BigInt(w), 0n);
+  if (total === 0n) return [];
+  const step = total / BigInt(winners) > 0n ? total / BigInt(winners) : 1n;
+  const ends = [];
+  entries.reduce((n, w, i) => ((ends[i] = n + BigInt(w)), ends[i]), 0n);
+  return Array.from({ length: winners }, (_, k) => {
+    const point = (BigInt(first) + BigInt(k) * step) % total;
+    return ends.findIndex(end => point < end);
+  });
 }
 
 /**

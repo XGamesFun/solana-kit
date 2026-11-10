@@ -24,7 +24,7 @@ const codes = spec => {
 const edit = (spec, fn) => {
   const copy = structuredClone(spec);
   fn(copy);
-  return codes(copy);
+  return { ...codes(copy), spec: copy };
 };
 
 test('what the program takes is a warning: free tickets, a faucet, a tier below x1, a fall to 0, an empty gate', () => {
@@ -125,32 +125,31 @@ test('a schedule pays a lottery’s pot or a farm’s rewards; a farm nothing fu
   assert.ok(pooled.refused.includes('E-FARM economy.farms.farm.rewards'), pooled.refused.join());
 });
 
-test('a sealed schedule pays a key someone holds, its last run within 10 years; a draw within 5 years', () => {
+test('a sealed schedule may pay an address nobody signs for, and end far off: each is warned, with the date in words', () => {
   const vesting = example('team-vesting');
   const toPda = edit(vesting, s => (s.schedules[0].to = `wallet:${pda.platform()}`));
-  assert.ok(
-    toPda.refused.includes('E-SCHEDULE economy.schedules.lead.to'),
-    'a program’s address is not a wallet anyone can spend from',
-  );
-  assert.ok(
-    edit(vesting, s => (s.schedules[0].maxRuns = 200)).refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'),
-    '200 runs of 30 days pass 10 years',
-  );
+  assert.ok(toPda.ok, toPda.refused.join());
+  assert.ok(toPda.warned.includes('W-SCHEDULE-PAYEE economy.schedules.lead.to'), 'a program’s address is warned of');
+  const far = check(edit(vesting, s => (s.schedules[0].maxRuns = 200)).spec, { now: NOW });
+  assert.ok(far.ok, '200 runs of 30 days pass 10 years: taken');
+  const said = far.warnings.find(w => w.code === 'W-FAR-TIME' && w.where === 'economy.schedules.lead.maxRuns');
+  assert.match(said?.message ?? '', /lands on \d{1,2} [A-Z][a-z]+ \d{4}, 1\d years after go-live/);
   const raffle = example('nft-raffle');
-  assert.ok(
-    edit(raffle, s => (s.lotteries[0].firstDraw = 'publish+2000d')).refused.includes(
-      'E-LOTTERY economy.lotteries.art.firstDraw',
-    ),
-  );
+  const late = edit(raffle, s => (s.lotteries[0].firstDraw = 'publish+2000d'));
+  assert.ok(late.ok && late.warned.includes('W-FAR-TIME economy.lotteries.art.firstDraw'), late.warned.join());
+  // A week written in milliseconds: read as seconds, it lands 19 years out, and the words say so.
+  const millis = check(edit(example('fair-presale'), s => (s.contests[0].resultDue = 604_800_000)).spec, {
+    now: NOW,
+  }).warnings.find(w => w.code === 'W-FAR-TIME');
+  assert.match(millis?.message ?? '', /reads like milliseconds/);
+  assert.match(millis?.message ?? '', /604,800 seconds is 7 days/);
 });
 
-test('sealed runs capped, a contest in a default-frozen mint refused, warnings for outside NFT bids, a heavy box that fits', () => {
+test('sealed runs uncapped, a contest in a default-frozen mint warned, warnings for outside NFT bids, a heavy box that fits', () => {
   const vesting = example('team-vesting');
-  assert.ok(
-    edit(vesting, s => Object.assign(s.schedules[0], { maxRuns: 100_001, every: '1h' })).refused.includes(
-      'E-SCHEDULE economy.schedules.lead.maxRuns',
-    ),
-  );
+  const hourly = edit(vesting, s => Object.assign(s.schedules[0], { maxRuns: 100_001, every: '1h' }));
+  assert.ok(!hourly.refused.includes('E-SCHEDULE economy.schedules.lead.maxRuns'), 'more than 100,000 runs is taken');
+  assert.ok(hourly.warned.includes('W-FAR-TIME economy.schedules.lead.maxRuns'), 'its last run, 11 years out, is said');
   assert.ok(
     !edit(vesting, s => Object.assign(s.schedules[0], { maxRuns: 35_040, every: '1h' })).refused.includes(
       'E-SCHEDULE economy.schedules.lead.maxRuns',
@@ -162,7 +161,11 @@ test('sealed runs capped, a contest in a default-frozen mint refused, warnings f
     presale,
     s => (s.tokens[0] = { key: 'sol', source: 'existing', mint: WALLET, decimals: 9, powers: { defaultFrozen: true } }),
   );
-  assert.ok(frozen.refused.includes('E-CONTEST economy.contests.raise.currency'), frozen.refused.join());
+  assert.ok(!frozen.refused.includes('E-CONTEST economy.contests.raise.currency'), frozen.refused.join());
+  const held = check(frozen.spec, { now: NOW }).warnings.find(
+    w => w.code === 'W-HOLD-UP' && w.where === 'economy.contests.raise.currency',
+  );
+  assert.match(held?.message ?? '', /a winner who closes their own account of it holds up their own claim/);
   const auction = edit(
     presale,
     s => (
@@ -378,11 +381,18 @@ test('a lottery’s places as runs and a raffle of many NFTs are checked as the 
     'a run of 101 places at 1% is more than the pot',
   );
   assert.ok(
-    edit(raffle, s =>
+    !edit(raffle, s =>
       Object.assign(s.lotteries[0], { places: [{ percent: 0, prize: { gives: 'roll', box: 'x' }, times: 2 }] }),
     ).refused.includes('E-LOTTERY economy.lotteries.art.places[1].times'),
-    'a roll is one place’s (after the raffle’s own NFT)',
+    'a run of places may each give a roll (after the raffle’s own NFT)',
   );
+  // A raffle of up to 256 places from its own stash: the oracle's answer loads that many.
+  const stash = n => Array.from({ length: n }, (_, i) => pda.project(WALLET, i));
+  const big = n =>
+    edit(raffle, s => many(s, { places: [{ percent: 0, prize: { gives: 'raffled' }, times: n }], nfts: stash(n) }));
+  assert.ok(!big(256).refused.includes('E-LOTTERY economy.lotteries.art.places'), big(256).refused.join());
+  const over = check(big(257).spec, { now: NOW }).refusals.find(r => r.where === 'economy.lotteries.art.places');
+  assert.match(over?.message ?? '', /257 places from its own stash: a raffle has at most 256/);
 });
 
 test('a run of places whose token prize in all passes a u64 is refused (BadLottery)', () => {
