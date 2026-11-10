@@ -90,7 +90,8 @@ money; it holds no files and serves nothing.
   the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
   `xsolana_check` counts them. One answer also holds only so much of a box (measured: 128 outcomes that give
   nothing, 29 of token amounts, 18 each of its own item; 41 slots; 72 odds rules; 16 token prizes or 18 collectibles
-  in one outcome; 340 texts in a gate): a box past that is refused when written. Put a long weighted list in a table
+  in one outcome; 340 texts in a gate; fewer where outcomes name pools or stashes, since the write counts finding
+  each one's address): a box past that is refused when written. Put a long weighted list in a table
   or a stash, drawn by one outcome.
 - **The program takes any time, and the checker says a far one's date in words (W-FAR-TIME).** A time that looks like
   milliseconds, or lands more than three years out, locks the bids, tickets, NFTs or vault that wait on it until then.

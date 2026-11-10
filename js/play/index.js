@@ -1489,6 +1489,11 @@ export function solanaApp({
     const g = await projectNow();
     const box = await read('LootBox', loot.pda.box(project, boxId));
     if (!Number.isInteger(count) || count < 1) throw new Error('Buy a whole number, one at least (count).');
+    // One `buy` prices at most so many sales (`PackTooLarge` past it): more is several purchases.
+    if (count > loot.MOST_SALES_A_BUY)
+      throw new Error(
+        `One purchase buys at most ${loot.MOST_SALES_A_BUY.toLocaleString('en-US')} (count): buy the rest in another.`,
+      );
     const bound =
       boundOf({ ...box, currencyKey: part?.currency }, part?.name ?? `box ${boxId}`, { maxPrice, listing }, part?.key) *
       BigInt(count);
@@ -2325,8 +2330,9 @@ export function solanaApp({
     const e = i == null ? null : r.entries[i];
     const out = [];
     const rolls = [];
-    // Whether a pull here wants the largest heap (a run of rolls), and whether one stops short of the part (a raffle's
-    // NFTs past what one pull takes out, a run of rolls past what one transaction carries): a next pull carries on.
+    // Whether a pull here wants the largest heap (a run of rolls, or several NFTs out of the round's own stash), and
+    // whether one stops short of the part (a raffle's NFTs past what one pull takes out or one transaction carries, a
+    // run of rolls past what one transaction carries): a next pull carries on.
     let heap = false;
     let partial = false;
     const g = await projectNow();
@@ -2382,10 +2388,12 @@ export function solanaApp({
           projectMint: mintOf(),
         };
         more.nonce = pullNonce(key, i);
-        // A run of places that each give a roll: two accounts a place, as many as one transaction carries, on the
-        // largest heap. The pull is sized from a dry run, largest first; the next pull carries on, and only the last
-        // carries the close.
-        if (given.Roll) {
+        // A run of places that each give a roll (two accounts a place), or several NFTs out of the round's own stash
+        // (each NFT's accounts, and heap the program does not give back: 8 Core moves in a round of some 125 places or
+        // more run past the default 32 KiB): as many places as one transaction carries, on the largest heap. The pull
+        // is sized from a dry run, largest first; the next pull carries on while the round still owes the entry, and
+        // only the last carries the close.
+        if (given.Roll || (stash && loot.prizePlacesOwed(r, i, run).length > 1)) {
           const owed = loot.prizePlacesOwed(r, i, run).length;
           const sized = async most => {
             const ix = loot.pullIx({
@@ -4928,7 +4936,7 @@ export function solanaApp({
         heap ||= built.heap;
         partial ||= built.partial;
       }
-      // A run of rolls asks for the largest heap.
+      // A run of rolls, or several NFTs out of the round's own stash, asks for the largest heap.
       if (heap) instructions.splice(1, 0, requestHeapFrame(loot.LARGE_SETTLE_HEAP));
       // A pull that stopped short of its part (a raffle's NFTs, 64 a pull; a run of rolls): sent, then the next carries
       // on while the round moves (its NFTs out, its places paid) and still owes it.

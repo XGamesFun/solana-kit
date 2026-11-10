@@ -1,10 +1,11 @@
 # The loot program: how it behaves
 
-**Version 0.26.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 520,815,761
-(2026-11-10). Nothing runs on mainnet. **Not independently
+**Version 0.26.1**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 520,911,720
+(2026-11-10; 0.26.0 ran from slot 520,815,761, and no layout changed between them, so its accounts carry over).
+Nothing runs on mainnet. **Not independently
 audited** (`SECURITY.md`). No accounts carry over from older versions: make fresh economies for this one.
 
-This page describes 0.26.0, the build its IDL comes from. Its rule: **the program restricts a project only where it
+This page describes 0.26.1, the build its IDL comes from. Its rule: **the program restricts a project only where it
 must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that
 only guarded a project against itself are out (token screens, time limits, caps on lists, values of 0), each bounded by
 what the chain allows ([Limits](#limits)). **Both sides of an exchange move in one instruction**: an auction's seller is
@@ -228,8 +229,8 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 |                | `set_traits` (`setTraitsIx`)                                               | owner or authority                                                                                                                                                                 | J                                             | the root of off-chain traits the project vouches for                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | In             | `pay` (`payIx`)                                                            | anyone                                                                                                                                                                             | P, or J for the project's keys                | `amount` split by any number of shares, each its own transfer                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |                | `pay_nft` (`payNftIx`)                                                     | the holder                                                                                                                                                                         | P, or J                                       | any NFT, given to a wallet or burned (never to a loot account, `ToTheProject`)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Boxes          | `buy` (`buyIx`)                                                            | player                                                                                                                                                                             | P                                             | a box of one entry with nothing random, no subject (`Rolls`): `count` sales (at least 1) at the price each leaves, one `max_price` for all, each counted against `per_wallet`; price split, the entry's prizes given `draws × count` times (`buyGives`: a fixed amount of tokens once with the whole amount, any other prize once a draw, its rolls at `nonce`, `nonce + 1`, …), one instruction                                                                                                                          |
-|                | `open_box` (`openBoxIx`)                                                   | player                                                                                                                                                                             | P, held in the order                          | `count` opens in one purchase (more than 1 only for a box with no `subject`, `BadEntries`), each at the price the one before left: the price into the vault, an order made, the oracle asked (its accounts required: every box opened asks, one with nothing random too)                                                                                                                                                                                                                                                  |
+| Boxes          | `buy` (`buyIx`)                                                            | player                                                                                                                                                                             | P                                             | a box of one entry with nothing random, no subject (`Rolls`): `count` sales (at least 1, at most 25,454: what one transaction can price, `PackTooLarge`, `MOST_SALES_A_BUY`) at the price each leaves, one `max_price` for all, each counted against `per_wallet`; price split, the entry's prizes given `draws × count` times (`buyGives`: a fixed amount of tokens once with the whole amount, any other prize once a draw, its rolls at `nonce`, `nonce + 1`, …), one instruction                                      |
+|                | `open_box` (`openBoxIx`)                                                   | player                                                                                                                                                                             | P, held in the order                          | `count` opens in one purchase (more than 1 only for a box with no `subject`, `BadEntries`; more than 300 draws in all, what one answer could weigh, refused before any price is added up, `PackTooLarge`, `MOST_DRAWS_A_PURCHASE`), each at the price the one before left: the price into the vault, an order made, the oracle asked (its accounts required: every box opened asks, one with nothing random too)                                                                                                          |
 |                | `callback_roll`                                                            | the oracle                                                                                                                                                                         | —                                             | draws every card of every open from one answer, sets aside what it won (at most 21 accounts; a fresh item's tables only while they fit the box's table budget)                                                                                                                                                                                                                                                                                                                                                            |
 |                | `settle` (`settleIx`)                                                      | its player, the project's keys or the key its player named; pays what it opens or mints                                                                                            | free                                          | a part: delivers what was won from where the last part stopped up to `upto` (`settlePartEnd`; past the end, `SETTLE_LAST`, is the last part; 0 only splits the payment), `prize_accounts` of its accounts the prizes'. The last part pays the split, does the NFT's fate and closes the order                                                                                                                                                                                                                             |
 |                | `refund` (`refundIx`)                                                      | anyone                                                                                                                                                                             | free                                          | a failed order from the next slot, a pending one after 10 minutes, an asked one holding a payment or an NFT 7 days after its first ask (its box named while the order counts draws in its `in_flight`, `Order.reserved`; `orderRefundable`); never a rolled or waiting one                                                                                                                                                                                                                                                |
@@ -403,7 +404,7 @@ the pool if any, the winner's account; an item, and for a collectible its collec
 stash, the NFT's accounts and proof; a roll the box and the order.
 
 **A prize that can't be given** (an item sold out, off or closed; an NFT no longer in its stash; a pool short of its
-amount, a prize being all of it or none, or never opened; a mint the project can no longer mint; a compressed URI too long; a box nobody wrote):
+amount, a prize being all of it or none, or never opened (whatever the amount, 0 too); a mint the project can no longer mint; a compressed URI too long; a box nobody wrote):
 
 - a route that **finishes what was decided** (a lottery place, a contest claim, a mission's end) goes on without it;
 - a route a **player pays or asks for** (`buy`, `craft`, `claim_grant`) refuses (`PrizeNotCovered`); a refused grant claim keeps its round;
@@ -593,7 +594,23 @@ purchase (possible while none of it is issued) is out of stock for that order. *
 answer** (`drawsFit`, the program's `draws_fit`: each draw at the least it could cost, with the pairs of entries a roll
 of several draws compares first): a box whose one open doesn't is refused at its upsert, and a purchase of several opens
 that don't at `open_box` (`PackTooLarge`). The answer's heap counts the box's own bytes too (its odds, gate, shares,
-subject, slots and fates: `boxBytes`, the program's `box_bytes`). A box that doesn't roll sells by `buy` when one
+subject, slots and fates: `boxBytes`, the program's `box_bytes`). A draw of an entry that gives nothing (or can't be
+given) costs some 1,100 units beyond its weighing: a pack of entries that give nothing is written up to 116 draws, and
+one purchase takes 109 opens of a box of one such draw. The write counts finding each pool's and stash's address, as
+the purchase does: 1,500 units a try (`256 - bump` tries, known from the project's address and the id; `searchTries`),
+for each prize that names one, and a named NFT's stash at one row at least. So thirteen entries of one pool fit 8 draws
+(5 where finding the pool takes 4 tries), sixteen stashes 9 (36 tries to find them all). `drawsFit` and `boxFits` take
+the project for that (`project`); the checker counts each search exactly once a wallet is named (the plan for a real
+setup passes it), and at 2 tries an address before (`ASSUMED_TRIES`). A purchase also reads what the accounts hold, which
+the write can't know (a stash's rows past 4,096, a named NFT's stash's rows, a fresh item's tables, an item not written):
+`drawsFit` with `purchase` counts what the box alone tells. The answer still stops before a draw that might not fit,
+from what it has spent, the heap it has really used and the lists that draw may outgrow; what it doesn't draw is
+`undrawn`, its worth given back when it was paid for. A box written under 0.26.0 past what 0.26.1's write counts is
+not rewritten: each purchase of it counts as any other (a pack of draws that give nothing that no answer could finish
+is refused at its purchase), and any edit of it, even one that only switches it off or changes its price, is refused
+(`PackTooLarge`) until its draws are cut. A box's write takes more than the 200,000 units an instruction
+has by default where its addresses take many tries: the plan's transaction that carries one asks for 1,400,000. A box
+that doesn't roll sells by `buy` when one
 transaction carries the whole purchase (`buyFits`, the program's `buy_fits`: 64 accounts, 64 instructions, 1,400,000
 compute units), else through the oracle with its heap counted; such a box can't give a roll (`PackTooLarge` at its
 write). On loot 0.24: 31 draws of tokens from a pool by `buy`, 20 through the oracle; 64 of one item (past 14 no `buy`
@@ -1162,7 +1179,8 @@ grant, a mission, a lottery's place, an auction's lot) reads them at its **first
 project's keys only, `NotAuthority`), after the accounts it took before: the order's player's profile
 `["profile", project, player]` when any odds rule reads a profile, and an NFT the player holds, with the accounts
 `open_box` takes for one shown, when any rule reads an NFT and the roll is on no NFT. Each must be the order's
-player's own, whoever asks; anything else reads as nothing, and odds never stop a roll. Their boosts add to what the
+player's own, whoever asks; anything else reads as nothing (an account of another kind in a profile's or a Sheet's
+place too: its tag, project and key are checked before it is read), and odds never stop a roll. Their boosts add to what the
 NFT the roll is on raised when it was made. A later ask reads nothing; after an edit of the box, the next ask reads
 them afresh. So a player may level up before asking, a profile rule can only add (a player may leave the profile out),
 and a roll asked without them stays at the odds it was made with.
@@ -1208,14 +1226,24 @@ by itself.
 least), along a straight line, and credited by weight as released. New funding is counted at the next move and moves
 the line's end by its share. So no seat is credited at once what landed before it (a stake and harvest in one
 transaction take nothing). The clock pauses while nobody weighs anything. Rounding fractions are kept, so frequent
-refreshes lose nothing.
+refreshes lose nothing. The farm's carry (that rounding) is credited to whoever is in once it adds up to a share; with
+no weight left its whole tokens are free again: at the end of a move that leaves no weight, and where a walk of the
+record of ends takes the last weight out or begins with none (`walk_farm`'s, and the authority's take-back of free
+tokens, `TokenSource::Farm`, included), before any weight that move brings comes in (loot 0.26.1; before, the first
+stake after every seat had stopped earning was credited all of it, and a farm 0.26.0 already left with no weight and a
+carry frees it at its next walk).
 
 **A fixed rate** (`Rate { per_day, mints, shared, halve_every }`): `per_day` base units for each `NFT_UNIT` of weight,
 by the second; with `shared`, `per_day` is the whole farm's, shared by weight while anything weighs (an emission
 budget). It halves every `halve_every` seconds from the farm's opening (`Farm.opened_at`; 0: never), paid in closed
 form by what the rate paid a unit between two times (`farm::paid`), a lapsed seat's share too. Minted when a seat
 is paid (the project the mint authority; the mint written only on a paying move) as far as the supply has room, or
-paid from what the vault holds free as far as it goes; what can't be covered isn't owed later. A rate of 0 pays
+paid from what the vault holds free as far as it goes; what can't be covered isn't owed later. **The room a farm that
+mints counts on is not kept for it**: what it owes is counted against the mint's room only in that farm, so anything
+else that mints the same mint (a mission's prize, a second farm, a box's minted prize, the project's own mints) can
+take that room. Then, while the mint holds within what the farm owes of `u64::MAX`, a seat's harvest, and its unstake
+with its rewards, fail in the token program; `forfeit` still takes the stake or the NFT out, giving its rewards up,
+and once anyone burns enough of the mint, paying works again. It matters only for a mint near its largest supply. A rate of 0 pays
 nothing (a farm for growth or prizes only).
 
 **Given back** (a forfeit, a watched NFT gone): its whole tokens are free again at once, released again like anything
@@ -1334,7 +1362,7 @@ only where a call writes them, so a hold never write-locks a collection or tree.
 `compressedFromDas`). `prove_leaf` checks it against a tree whose authority is Bubblegum's own `TreeConfig`, at the
 current root or one still in the tree's change log with no change since at that leaf (`StaleProof` otherwise), and
 records owner, delegate, collection, hashes, flags and root at `["leaf", asset]`. An empty leaf at or past the tree's
-`num_minted` is no NFT (`NotTheNft`). Routes read the record only while its
+`num_minted` is no NFT (`NotTheNft`), and so is an account that is not a tree passed as one. Routes read the record only while its
 leaf is unchanged and its root is still in the log (`NotProven` otherwise, never read as the NFT gone). Other leaves
 moving never spoil it, so two compressed NFTs of one tree move in one instruction. Anyone may re-prove at an older
 root, so **prove in the same transaction as the move** (v0 with a lookup table if needed; the client does). A data
@@ -1464,7 +1492,9 @@ signed. **A box's lists have no cap of their own**: a box is written only when o
 of it (`PackTooLarge`, or `TooManyAccounts` past the answer's 21 accounts), a box of one draw included, so a box too
 long is refused when it is written, before anyone pays. Measured: 128 outcomes that give nothing, 29 of token amounts,
 18 each of its own item; 41 slots; 72 odds rules; 64 fates; 16 token prizes or 18 collectibles in one outcome (an
-outcome holds at most 255 prizes, `BadEntries`); 340 texts in a box's gate. A box that mixes them fits less. A
+outcome holds at most 255 prizes, `BadEntries`); 340 texts in a box's gate. A box that mixes them fits less, and so does one
+naming pools or stashes: each prize that names one counts finding its address, 1,500 units a try (sixteen stashes fit
+9 draws an open where finding them takes 36 tries). A
 one-outcome box of 15 to 18 collectibles sells only through the oracle, and 19 or more can be written but never sold. A
 box written from a wallet carries about 960 bytes; a longer one needs a program call (a multisig). A long weighted list
 goes in a table or a stash, drawn by one outcome. **A recipe's lines have no cap**: one craft is one transaction that
@@ -1473,7 +1503,9 @@ past that it is written but never crafts. It may give several rolls (each its ow
 rolls in the recipe's order from 0); past 15 its receipts run past what a transaction's log holds (10,000 bytes), and
 `Crafted` is cut. **A rule's "one of" texts have no cap**: the record that holds it bounds them; a lottery's NFT
 ticket's rule holds at most 170 (`BadLottery`), since the oracle's answer reads it. **A raffle** has at most 256 places
-from its own stash (`BadLottery`). **Times have no cap**: a contest's result, an auction's end and extension, a
+from its own stash (`BadLottery`); a pull that hands several of its NFTs out asks for the largest heap (js/play does).
+**A purchase's count**: one `open_box` takes at most 300 draws in all, one `buy` at most 25,454 sales (`PackTooLarge`
+before any price is added up). **Times have no cap**: a contest's result, an auction's end and extension, a
 lottery's draw, a loan or a rental, a sealed schedule's last run may be as far off as a date holds; `xsolana_check`
 says a far one's date in words. **Values of 0 are the project's**: a price, a prize, a loan repaid for less, a
 contest of NFTs whose winners take none, a stash NFT or a table row of weight 0. The other lists a record holds keep a

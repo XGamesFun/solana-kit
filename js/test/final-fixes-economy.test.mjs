@@ -131,12 +131,26 @@ test('the checker asks what a slot that names outcomes is worth, and a pack shar
     ['E-ODDS economy.boxes.pack.slots'],
     'draws among all are alike',
   );
-  const shared = Array.from({ length: 13 }, (_, i) => ({
-    prizes: [{ Tokens: { from: { Pool: [3] }, amount: BigInt(i + 1) } }],
-  }));
-  assert.ok(loot.drawsFit(shared, 9) && !loot.drawsFit(shared, 10), 'as the program counts it');
+  // Thirteen entries of one pool, each prize finding the pool's address (1,500 units a try, `256 - bump` tries): 8 draws
+  // where it takes 1 try, 5 where it takes 4, as the program's own table says; 7 at the 2 tries assumed with no project.
+  const project = loot.pda.project('5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T', 0);
+  const poolTaking = tries =>
+    Array.from({ length: 2000 }, (_, i) => i).find(i => loot.searchTries(project, true, i) === tries);
+  const shared = pool =>
+    Array.from({ length: 13 }, (_, i) => ({
+      prizes: [{ Tokens: { from: { Pool: [pool] }, amount: BigInt(i + 1) } }],
+    }));
+  const one = shared(poolTaking(1));
+  const four = shared(poolTaking(4));
   assert.ok(
-    loot.drawsFit(shared, [{ count: 4, only: [] }], 2) && !loot.drawsFit(shared, [{ count: 5, only: [] }], 2),
+    loot.drawsFit(one, 8, 1, { project }) && !loot.drawsFit(one, 9, 1, { project }),
+    'as the program counts it',
+  );
+  assert.ok(loot.drawsFit(four, 5, 1, { project }) && !loot.drawsFit(four, 6, 1, { project }), 'four tries');
+  assert.ok(loot.drawsFit(one, 7) && !loot.drawsFit(one, 8), 'two tries assumed with no project');
+  assert.ok(
+    loot.drawsFit(one, [{ count: 4, only: [] }], 2, { project }) &&
+      !loot.drawsFit(one, [{ count: 5, only: [] }], 2, { project }),
     'by the opens',
   );
 });

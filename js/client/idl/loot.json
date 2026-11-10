@@ -2,7 +2,7 @@
   "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
   "metadata": {
     "name": "loot",
-    "version": "0.26.0",
+    "version": "0.26.1",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"
@@ -9551,7 +9551,7 @@
     {
       "code": 6141,
       "name": "PackTooLarge",
-      "msg": "A box's draws (one, or each open's times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
+      "msg": "A box's draws (one, or each open's times the opens bought together) must all fit one answer of the oracle's, and the sales one buy adds up one transaction: fewer entries, prizes an entry, draws or opens"
     },
     {
       "code": 6142,
@@ -11575,7 +11575,8 @@
             "docs": [
               "The carry: rounding of a share over the total weight, times `PRECISION`. The next move before",
               "the farm's end credits it to the seats there once it adds up to a share; a move that leaves no",
-              "weight, or any move once the farm is over, frees its whole tokens (`FarmSide::settle`)."
+              "weight, or any move once the farm is over, frees its whole tokens (`FarmSide::settle`), and so",
+              "does a walk that begins with no weight or where the weight reaches 0 (`Farm::walk`)."
             ],
             "type": "u128"
           },

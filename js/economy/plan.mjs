@@ -21,7 +21,12 @@ import {
 } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
-import { createAssociatedTokenAccountIdempotent, syncNative, transferLamports } from '../chain/programs.js';
+import {
+  computeUnitLimit,
+  createAssociatedTokenAccountIdempotent,
+  syncNative,
+  transferLamports,
+} from '../chain/programs.js';
 import {
   createAccountIx,
   initializeMint2Ix,
@@ -34,7 +39,7 @@ import { compileMessage, transactionSize } from '../chain/tx.js';
 import { sha256 } from '../chain/sha256.js';
 import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
-import { check } from './check.mjs';
+import { check, MAX_COMPUTE_UNITS } from './check.mjs';
 import {
   ACCOUNT_OVERHEAD,
   boxBuys,
@@ -944,6 +949,10 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       id: `${part}:${kind}`,
       part,
       says,
+      // A box's write finds each of its pools' and stashes' addresses (1,500 units a try) and compares its entries
+      // pair by pair: a box of 16 stashes takes some 170,000 units, more where its addresses take more tries, past
+      // the 200,000 an instruction has by default. Its transaction asks for all a transaction can have.
+      compute: Boolean(def.Box),
       creates: [{ what, bytes }, ...pot],
       build: ctx => [
         loot.upsertIx({ owner: ctx.owner, project: project(ctx), def: resolve(def, ctx), ...options(ctx) }),
@@ -1785,7 +1794,18 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent 
 export const stepBytes = (instructions, ctx) =>
   transactionSize(compileMessage({ payer: ctx.owner, blockhash: placeholderKey('blockhash'), instructions }));
 
-/** Packs steps into transactions under the size budget, one signer set at a time; each step whole. */
+/** `instructions`, led by a compute limit of all a transaction can have when `compute` (a box's write is in them). */
+const budgeted = (instructions, compute) =>
+  compute ? [computeUnitLimit(MAX_COMPUTE_UNITS), ...instructions] : instructions;
+
+/** The bytes of a transaction of `step` alone, as `pack` sends it (its compute limit included). */
+export const stepAloneBytes = (step, ctx) => stepBytes(budgeted(step.build(ctx), Boolean(step.compute)), ctx);
+
+/**
+ * Packs steps into transactions under the size budget, one signer set at a time; each step whole. A transaction that
+ * carries a step needing more compute than an instruction has by default (`compute`: a box's write) asks for all a
+ * transaction can have, first.
+ */
 export function pack(steps, ctx) {
   const transactions = [];
   let current = null;
@@ -1795,25 +1815,28 @@ export function pack(steps, ctx) {
     // A step with nothing to send (the lookup table of a plan built with no recent slot) is left out.
     if (!instructions.length) continue;
     const signerKind = step.signers.includes('authority') ? 'authority' : 'owner';
-    // A write that names boxes to roll takes all the compute a transaction has: alone.
     if (current && current.signer === signerKind && !step.alone && !current.alone) {
-      const next = [...current.instructions, ...instructions];
+      const compute = current.compute || Boolean(step.compute);
+      const next = budgeted([...current.built.flat(), ...instructions], compute);
       if (sizeOf(next) <= BUDGET) {
         current.instructions = next;
+        current.compute = compute;
         current.steps.push(step);
         current.built.push(instructions);
         current.signers = [...new Set([...current.signers, ...step.signers])];
         continue;
       }
     }
-    const size = sizeOf(instructions);
+    const alone = budgeted(instructions, Boolean(step.compute));
+    const size = sizeOf(alone);
     if (size > BUDGET) throw new Error(`The step “${step.says}” is ${size} bytes: too big for one transaction.`);
     // `built`: each step's own instructions, in the order of `steps`.
     current = {
       signer: signerKind,
       steps: [step],
       built: [instructions],
-      instructions,
+      instructions: alone,
+      compute: Boolean(step.compute),
       signers: [...step.signers],
       alone: Boolean(step.alone),
     };
@@ -1828,7 +1851,8 @@ export function pack(steps, ctx) {
  * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing).
  */
 export function plan(economy, { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null } = {}) {
-  const checked = check(economy, { now });
+  // With a real context the project is known: a box's write is checked with its own address searches counted.
+  const checked = check(economy, { now, ...(ctx?.project ? { project: ctx.project } : {}) });
   if (!checked.ok) return { ok: false, refusals: checked.refusals, warnings: checked.warnings };
   const { steps, model: m } = setupSteps(economy, { now, only, live });
   if (ctx)
