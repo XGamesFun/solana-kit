@@ -4,6 +4,67 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.26.0: loot 0.26.0 (DEVNET-LINE)
+
+The program's own changes are in its changelog (gamesfun-loot, `CHANGELOG.md`, 0.26.0): the fixes of the deep audit of
+0.25.0, and limits only where the chain sets them. What the tools do with them:
+
+**Both sides of an exchange move together**
+
+- **`endAuctionIx` takes `ending`**: `Deliver` (the lot to the winner and the money to the seller in one instruction),
+  `LotFirst` then `Deliver` for an end too wide for one transaction, and `CallOff`. A sold lot is never made a hold.
+  `app.endAuction` sends them in that order, says a sale is waiting when its lot can't move right now, and calls a sale
+  off with the evidence when the lot is gone; `app.callOffSale` is the project's keys' way out of a lot that never moves.
+- **`repayIx` brings the NFT home** (`home`, true by default) in the same instruction as the money; `home: false` sends
+  the money alone for an NFT that can't move right now. `app.repay` refuses, before signing, a loan whose NFT is gone.
+- **A roll's odds at its first ask**: `askRollIx` passes the player's profile, and an NFT they hold for a roll on no
+  NFT (`askReads`, `firstAsk`, `bestShown`); `app.askRoll` picks the collectible that raises the odds most.
+- A Token Metadata NFT's move always names two different token accounts (`twoAccounts`).
+
+**Boxes, recipes, settles**
+
+- `openBoxIx` builds its accounts from what the box's rules read: the profile first, then the NFT shown.
+- `craftIx`: each roll a recipe gives is at `nonce + k` (`craftRollNonces`); a payment line nobody can take goes to the
+  treasury.
+- `settleIx` takes `giveUp`: the order's own player gives up a prize they can't receive (tokens stay in the project's
+  vault). `app.collect` says which prizes and takes `giveUp`.
+- `makeIx` passes the Sheet of a compressed NFT made with attributes. `stashBatches` splits a long stock into calls by
+  kind.
+- `drawsFit` and `boxBytes` count as the program does: a box of one draw is held to one answer of the oracle's.
+
+**Lotteries**
+
+- New settings: `closesBefore` (sales close before the draw), `timeWeighted` (a no-loss lottery's tickets weigh by the
+  time they are held), a place's `whenShort` (`inOrder`, `inProportion`, `nothing`), and a box's
+  `whenOut: "giveNothing"`. `decodeRound` reads the 128-bit weight and draw point; an entry has its slice of the draw
+  (`start`, `end`) and its `tickets`. `app.lotteries()` and `app.ticketWeight()` show what a purchase would weigh.
+- A raffle's NFTs come out at most 64 a pull, a run of places that each give a roll is pulled in parts, a closing pull
+  by someone other than the owner names the lottery, and a place's minted prize the project can't mint yet waits.
+- `Lottery.last`: "end this lottery" is one edit (`every` 0).
+
+**Farms**: a tier up to x100 and boosts up to +100,000%; `unstakeNftIx` takes `needPrize` (true by default), and
+`app.unstakeNft` offers leaving without a prize that can't be given; `app.staked()` returns each seat's weight.
+
+**The checker says what the program does**
+
+- What 0.26 no longer refuses is no longer refused here, and each is a warning in plain words: a time far out (with
+  the date in words, and a hint when it looks like milliseconds), a token whose accounts can start frozen, a price or a
+  prize of 0, a mission tier with no lock, a farm that mints a token the project can't mint yet, a player's auction of
+  any NFT, a collection the project only has delegate access to, a sealed schedule's payee, and the rest of the port's
+  list (W1 to W35 in the program's `docs/kit-0.26.md`).
+- The bounds the program keeps are refused before anything is signed: 256 raffle places from a lottery's own stash,
+  170 texts in an NFT ticket's rule, 255 prizes an entry, the farm caps, and what one answer of the oracle's holds.
+  A contest that splits a prize of 0 is refused: the program opens it but can never name its winner.
+- The simulator: boosted weights in whole numbers up to the largest weight, a box that gives nothing for a miss, a
+  stash with nothing that weighs, a round weighed by time, a short pool by `whenShort`.
+- The guide, the explainer, the review, the approval page, the skill and `docs/program.md` follow.
+
+**Also**
+
+- The errors' sentences in the IDL say what 0.26 does (34 were out of date).
+- `scripts/devnet-e2e.mjs` has two more scenarios: `weighted` (a no-loss lottery weighed by time, drawn by the real
+  oracle) and `exchanges` (a player's auction ended in one step; a loan repaid with the NFT home).
+
 ## 0.25.4: a README for people (the documentation only; the program is still loot 0.25.0)
 
 - **The README reads from the top**: what it is in plain words, what you can build as examples, how it works in three

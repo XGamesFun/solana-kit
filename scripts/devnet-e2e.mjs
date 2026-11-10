@@ -10,7 +10,7 @@
 //
 //   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
 //
-// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm.
+// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm, weighted, exchanges.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -705,6 +705,241 @@ if (want('compressed')) {
   if (minted !== 1n) throw new Error(`The tree counts ${minted} minted, not 1.`);
   console.log(
     `compressed: ${player.address} claimed ${claimed}; the tree ${tree} holds badge ${loot.pda.compressedAsset(tree, 0)}`,
+  );
+}
+// 10. A no-loss lottery whose tickets weigh by the time they are held (loot 0.26): the pot is a seed, sales close 20
+// seconds before the draw, and the second player buys the same tickets half a minute after the first, so they weigh
+// less. MagicBlock's real oracle draws over the round's weight; every ticket's price comes back, and the winner has the pot.
+if (want('weighted')) {
+  await send([funder], [transferLamports(funder.address, owner.address, 100_000_000n)]);
+  const live = await goLive('savers-draw', {
+    version: 2,
+    network: 'devnet',
+    name: 'Savers draw',
+    prompt: 'A no-loss draw: 0.001 SOL a ticket, back after the draw; tickets held longer weigh more.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    lotteries: [
+      {
+        key: 'savers',
+        name: 'Savers draw',
+        price: 0.001,
+        noLoss: true,
+        timeWeighted: true,
+        closesBefore: '20s',
+        perWallet: 10,
+        places: [100],
+        pot: 0,
+        seed: 0.003,
+        firstDraw: 'publish+150s',
+      },
+    ],
+  });
+  const players = [freshKeypair(), freshKeypair()];
+  for (const k of players) await send([funder], [transferLamports(funder.address, k.address, 30_000_000n)]);
+  const apps = players.map(k => solanaApp({ spec: live, rpc, wallet: asWallet(k) }));
+  const lotteryAddress = loot.pda.lottery(live.live.project, live.lotteries[0].id);
+  const roundAddress = loot.currentRound(
+    lotteryAddress,
+    loot.decode('Lottery', (await rpc.account(lotteryAddress)).data),
+  );
+  for (const [i, app] of apps.entries()) {
+    if (i) await sleep(30_000);
+    const would = await app.ticketWeight('savers', 2);
+    console.log(
+      `weighted: ${players[i].address} buys 2 tickets (they would weigh ${JSON.stringify(would, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}): ${await app.buyTickets('savers', 2, { listing: (await app.lotteries())[0] })}`,
+    );
+  }
+  const bought = loot.decodeRound((await rpc.account(roundAddress)).data);
+  const weights = bought.entries.map(e => e.end - e.start);
+  if (bought.weight == null || weights.length !== 2 || !(weights[0] > weights[1]))
+    throw new Error(`The round does not weigh the earlier purchase more: ${bought.weight} ${weights.join(' / ')}`);
+  console.log(
+    `weighted: the round weighs ${bought.weight} for ${bought.sold} tickets; the purchases weigh ${weights.join(' and ')}`,
+  );
+  const { drawsAt } = (await apps[0].lotteries())[0];
+  await sleep(Math.max(0, drawsAt * 1000 - Date.now()) + 3000);
+  let reveal;
+  for (let i = 0; i < 20 && !reveal; i++)
+    reveal = (await apps[0].claims()).find(c => c.kind === 'reveal' && c.key === 'savers') ?? (await sleep(5000), null);
+  if (!reveal) throw new Error('The weighted draw never came due.');
+  console.log(`weighted: revealed (the oracle asked) ${await apps[0].claim(reveal)}`);
+  let round;
+  for (let i = 0; i < 30; i++) {
+    round = loot.decodeRound((await rpc.account(roundAddress)).data);
+    if (round.status !== 'Drawing') break;
+    await sleep(2000);
+  }
+  if (round.status !== 'Drawn') throw new Error(`The oracle did not draw the weighted round: ${round.status}`);
+  const point = loot.ticketOfPlace(round, 0);
+  const winner = round.entries[loot.entryOf(round, point)].buyer;
+  console.log(`weighted: drawn by the oracle at point ${point} of ${round.weight}; the winner is ${winner}`);
+  for (let pass = 0; pass < 4 && (await rpc.account(roundAddress)); pass++)
+    for (const [i, app] of apps.entries())
+      for (const c of (await app.claims()).filter(x => x.key === 'savers' && ['pull', 'payout'].includes(x.kind)))
+        console.log(`weighted: ${players[i].address} ${c.kind}s: ${await app.claim(c)}`);
+  if (await rpc.account(roundAddress)) throw new Error('The weighted round is still open after every pull.');
+  const back = await Promise.all(
+    players.map(async k => {
+      const held = await rpc.account(loot.ata(k.address, NATIVE_MINT));
+      return held ? new DataView(held.data.buffer, held.data.byteOffset).getBigUint64(64, true) : 0n;
+    }),
+  );
+  // Each ticket's price back (0.002 SOL each player); the winner has the seed on top.
+  for (const [i, k] of players.entries()) {
+    const least = 2_000_000n + (k.address === winner ? 3_000_000n : 0n);
+    if (back[i] < least) throw new Error(`${k.address} holds ${back[i]} wrapped lamports, less than ${least}.`);
+  }
+  console.log(
+    `weighted: every ticket's price is back and the winner has the pot; wrapped SOL: ${players.map((k, i) => `${k.address} ${back[i]}`).join(', ')}`,
+  );
+}
+// 11. Both sides of an exchange move together (loot 0.26). A player auctions a collectible they hold, another bids,
+// and one end delivers the lot to the winner and pays the seller in the same instruction. Then a loan: a lender offers
+// SOL against a collectible, the player borrows, and the repayment brings the NFT home in the same transaction.
+if (want('exchanges')) {
+  await send([funder], [transferLamports(funder.address, owner.address, 100_000_000n)]);
+  const live = await goLive('fair-trades', {
+    version: 2,
+    network: 'devnet',
+    name: 'Fair trades',
+    prompt: 'A relic its holder can auction or borrow against.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    collection: { name: 'Fair trades' },
+    items: [{ key: 'relic', name: 'Relic' }],
+  });
+  const { project } = live.live;
+  const projectState = () => rpc.account(project).then(a => loot.decode('Project', a.data));
+  const itemId = live.items[0].id;
+  const [seller, bidder, lender] = [freshKeypair(), freshKeypair(), freshKeypair()];
+  for (const k of [seller, bidder, lender])
+    await send([funder], [transferLamports(funder.address, k.address, 40_000_000n)]);
+  const make = async to => {
+    const itemState = loot.decode('Item', (await rpc.account(loot.pda.item(project, itemId))).data);
+    const [asset] = loot.madeAssets(project, itemId, itemState);
+    await send(
+      [owner],
+      [loot.makeIx({ authority: owner.address, project, item: itemId, itemState, owners: [to], attributes: [] })],
+    );
+    return asset;
+  };
+  const ownerOf = async asset => parseCoreAsset((await rpc.account(asset)).data).owner;
+  const wrapped = async k => {
+    const held = await rpc.account(loot.ata(k.address, NATIVE_MINT));
+    return held ? new DataView(held.data.buffer, held.data.byteOffset).getBigUint64(64, true) : 0n;
+  };
+  const wrap = (k, lamports) => [
+    createAssociatedTokenAccountIdempotent(k.address, k.address, NATIVE_MINT),
+    transferLamports(k.address, loot.ata(k.address, NATIVE_MINT), lamports),
+    syncNative(loot.ata(k.address, NATIVE_MINT)),
+  ];
+
+  // The auction: the seller's own, of an NFT they hold.
+  const lot = await make(seller.address);
+  const collection = live.live.collection;
+  const now = Math.floor(Date.now() / 1000);
+  const opened = await send(
+    [seller],
+    [
+      computeUnitLimit(400_000),
+      loot.openAuctionIx({
+        seller: seller.address,
+        project,
+        collection,
+        id: 1,
+        mint: NATIVE_MINT,
+        args: {
+          lot: { Asset: [lot] },
+          reserve: 1_000_000n,
+          min_raise_bps: 0,
+          starts_at: BigInt(now - 30),
+          ends_at: BigInt(now + 75),
+          extend: 0,
+          shares: [],
+          gate: null,
+          nft_bids: null,
+        },
+      }),
+    ],
+  );
+  const auctionAddress = loot.pda.auction(project, seller.address, 1);
+  console.log(`exchanges: ${seller.address} auctions the relic ${lot}: ${opened}; the project holds it`);
+  let auction = loot.decode('Auction', (await rpc.account(auctionAddress)).data);
+  console.log(
+    `exchanges: ${bidder.address} bids 0.002 SOL: ${await send([bidder], [computeUnitLimit(400_000), ...wrap(bidder, 2_000_000n), loot.bidIx({ bidder: bidder.address, project, id: 1, auction, amount: 2_000_000n })])}`,
+  );
+  await sleep(80_000);
+  const before = await wrapped(seller);
+  let ended;
+  for (let i = 0; i < 10 && !ended; i++) {
+    auction = loot.decode('Auction', (await rpc.account(auctionAddress)).data);
+    ended = await send(
+      [bidder],
+      [
+        computeUnitLimit(400_000),
+        loot.endAuctionIx({
+          signer: bidder.address,
+          project,
+          projectState: await projectState(),
+          id: 1,
+          auction,
+          collection,
+          ending: 'Deliver',
+        }),
+      ],
+    ).catch(e =>
+      /AuctionRunning|0x17b[0-9a-f]/i.test(`${e.message ?? e} ${(e.logs ?? []).join(' ')}`)
+        ? sleep(5000).then(() => null)
+        : Promise.reject(e),
+    );
+  }
+  if (!ended) throw new Error('The auction never ended.');
+  const paid = (await wrapped(seller)) - before;
+  if ((await ownerOf(lot)) !== bidder.address) throw new Error('The lot did not reach the winner.');
+  if (paid !== 2_000_000n) throw new Error(`The seller was paid ${paid}, not 2,000,000 lamports.`);
+  if (await rpc.account(auctionAddress)) throw new Error('The auction is still open after its end.');
+  console.log(`exchanges: one end ${ended}: the winner holds the relic and the seller has ${paid} lamports`);
+
+  // The loan: SOL against a relic, repaid with the NFT home in the same transaction.
+  const pledged = await make(seller.address);
+  console.log(
+    `exchanges: ${lender.address} offers 0.002 SOL against a relic, 0.0022 back within 10 minutes: ${await send(
+      [lender],
+      [
+        computeUnitLimit(400_000),
+        ...wrap(lender, 2_000_000n),
+        loot.openOfferIx({
+          maker: lender.address,
+          project,
+          id: 1,
+          mint: NATIVE_MINT,
+          args: {
+            rule: { of: { Item: [itemId] }, key: '', test: 'Any' },
+            deal: { Lend: { amount: 2_000_000n, repay: 2_200_000n, lasts: 600 } },
+            left: 1,
+            shares: [],
+          },
+        }),
+      ],
+    )}`,
+  );
+  const app = solanaApp({ spec: live, rpc, wallet: asWallet(seller) });
+  const offer = await app.loanOffer(lender.address, 1);
+  const loan = await app.borrow(lender.address, 1, pledged, { acceptRisks: true });
+  if ((await ownerOf(pledged)) === seller.address) throw new Error('The pledged relic never left its borrower.');
+  console.log(
+    `exchanges: borrowed ${loan.signature ?? JSON.stringify(loan, (_, v) => (typeof v === 'bigint' ? v.toString() : v))} (risks said: ${(offer.risks ?? []).length}); the project holds the relic until ${loan.due}`,
+  );
+  const lenderBefore = await wrapped(lender);
+  await send([seller], wrap(seller, 300_000n));
+  const repaid = await app.repay(pledged, loan.due, { repay: 2_200_000n });
+  if (!repaid.home) throw new Error(`The repayment did not bring the relic home: ${repaid.says}`);
+  if ((await ownerOf(pledged)) !== seller.address) throw new Error('The relic is not back with its borrower.');
+  if ((await wrapped(lender)) - lenderBefore !== 2_200_000n) throw new Error('The lender was not repaid 2,200,000.');
+  if (await rpc.account(loot.pda.hold(pledged, loan.due))) throw new Error('The loan’s hold is still open.');
+  console.log(
+    `exchanges: repaid ${repaid.signature}: the lender has 2,200,000 lamports and the relic is home, in one transaction`,
   );
 }
 await sweepBack();
