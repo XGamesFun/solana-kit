@@ -129,6 +129,9 @@ is due, list what a player owns). Pages call `claims()` when they open and show 
 `references/apps.md` shows a whole page; `xsolana_client` gives the program and the calls. Never invent account layouts,
 instruction data or addresses, and never put a key or the authority's actions in a page players load.
 For staking an NFT of another collection, show what custody means and get explicit acceptance before sending.
+Players with no SOL can still play when the project sponsors their fees: a key on the project's own server pays them,
+never the price (`references/apps.md`, "Sponsoring players' fees"). Offer it when the person wants free first steps or
+players new to Solana.
 
 ## More
 

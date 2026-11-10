@@ -198,6 +198,34 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   `collectibles()`), one read at a time, and keep what is on screen when one read fails.
 - **Errors** come back as plain sentences (a sold-out item, a gate not met, a price above the most they agreed to):
   show them.
+- **Sponsoring players' fees** (players with no SOL, a free item or box as a first step): the project runs a sponsor,
+  a plain key on its own server with no role in the program, funded with SOL. The page passes
+  `solanaApp({ ..., sponsor: httpSponsor({ url: '/sponsor', address: SPONSOR_ADDRESS }) })`; each step then has the
+  sponsor pay the network fee and lend the player SOL for the step, the player giving back, in the same transaction,
+  all but what it costs in fees and rent (the player fee, the oracle's fee for a roll, the rent of what the program
+  opens or mints). The price is never sponsored: a priced step still takes the player's own SOL or tokens. The server
+  route is a few lines:
+
+  ```js
+  import { sponsorHandler, sponsorSigner } from '@xgamesfun/solana/sponsor';
+  const signer = sponsorSigner({
+    rpc, // the client's rpcClient, or any with accounts and simulate
+    project: spec.live.project,
+    sponsor: { address: SPONSOR_ADDRESS, sign: message => signWithServerKey(message) }, // the server's own ed25519 key
+    maxLamports: 10_000_000n, // the most one transaction costs it (0.01 SOL)
+    budget: ({ player, lamports }) => underTodaysCap(player, lamports), // the project's own per-player, per-day limit
+  });
+  export const POST = request => sponsorHandler(request, signer);
+  ```
+
+  The server reads and dry-runs every transaction before it signs (`checkSponsored`): the sponsor may only pay the fee
+  and the one loan, the transaction must be this project's, and the player may keep no more than the step's fees and
+  rent. What a sponsor can still lose is rent the program later gives back to the player (an order's, at its settle)
+  and fees for transactions that fail on chain, so always give it a `budget`, keep only a few days' worth of SOL in
+  it, and never make it the owner or the authority. Sponsored, a box's roll takes two prompts (the open, then the
+  settle) instead of one, and a step too big for one transaction goes as the player's own. Tell the person what a
+  day of their players costs the sponsor (`xsolana_cost`: the player fee, the oracle's fee and rent per step).
+
 - **Never in a page**: a private key, a keyed RPC link, or anything the authority signs (payouts, minting, rewriting
   a collectible). Those are the owner's or the authority's to sign in their own wallet, or on a server they run.
 - **Lower level**: `@xgamesfun/solana/client` has one builder per instruction and the account decoders, for what the

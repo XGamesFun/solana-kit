@@ -704,6 +704,7 @@ export const tools = [
         '  `chosenRecipient` (buy, openBox, pay): the wallet (or collectible) the player names for a "chosen" share of the split (a referrer from the link)',
         '  app.lotteries(), app.buyTickets(key, n, { listing }) (or { maxPrice }: a ticket’s most, in base units),',
         '  app.stake(key, amount), app.harvest(key), app.staked(key) (each seat and what it is owed now), app.recipes(), app.craft(key, assets, 1, { listing }), app.claimGrant(key),',
+        '  solanaApp({ ..., sponsor: httpSponsor({ url, address }) })   the project pays players’ fees (never the price) from a key on its own server: @xgamesfun/solana/sponsor sponsorSigner + sponsorHandler there',
         '  app.collectibles(), app.balances()   what a player does. `listing`: the entry shop(), boxes(), lotteries() or recipes() showed the',
         '  player; its price (or version) is the most they pay: one that moved since is refused, never paid unseen',
         '  a prize (a grant, a lottery place, a contest win, a mission, a recipe) is given in the instruction that wins it,',

@@ -62,6 +62,10 @@
       "types": "./types/play/index.d.ts",
       "default": "./js/play/index.js"
     },
+    "./sponsor": {
+      "types": "./types/play/sponsor.d.ts",
+      "default": "./js/play/sponsor.js"
+    },
     "./results": {
       "types": "./types/results/index.d.ts",
       "default": "./js/results/index.js"
