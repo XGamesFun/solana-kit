@@ -4949,6 +4949,15 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     split(c.split, tok, `${where}.split`, { what: label(c) });
     rule(c.gate, `${where}.gate`, label(c));
     const cp = c.prize ? prizeCheck(c.prize, `${where}.prize`, label(c), 'E-CONTEST') : null;
+    // A prize split among the winners is set aside when the winner is named, and the program sets aside only an amount
+    // above 0 (contest.rs `set_aside`: PrizeNotCovered). The contest opens, but no winner can ever be named.
+    if (cp && c.prize.split && cp.gives === 'tokens' && Number(cp.amount) === 0)
+      refuse(
+        'E-CONTEST',
+        `${where}.prize.amount`,
+        `${label(c)} splits a prize of 0 among its winners: the program opens the contest but can never name its winner (PrizeNotCovered), so it runs past its result and is called off, every entry refunded.`,
+        'Give the prize an amount above 0, or leave the prize out.',
+      );
     // One NFT, the last units of an item, a pool's prize: the winning entries share it in the order they are claimed.
     const scarce =
       cp &&

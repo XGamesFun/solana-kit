@@ -283,6 +283,22 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-CONTEST-PRIZE', 'economy.contests.c.prize').message, /collects one prize a wallet/);
   });
 
+  test('a contest that splits a prize of 0 is refused: the program could never name its winner', () => {
+    const contest = amount => ({
+      key: 'c',
+      name: 'C',
+      sides: 2,
+      entriesClose: '1d',
+      stake: 1,
+      prize: { gives: 'tokens', from: 'pool:prizes', amount, split: true },
+    });
+    assert.match(
+      refusal(base({ contests: [contest(0)] }), 'economy.contests.c.prize.amount')?.message ?? '',
+      /can never name its winner \(PrizeNotCovered\)/,
+    );
+    assert.equal(refusal(base({ contests: [contest(5)] }), 'economy.contests.c.prize.amount'), undefined);
+  });
+
   test('W4: a box that draws from a pool another route takes from', () => {
     const spec = base({
       boxes: [
