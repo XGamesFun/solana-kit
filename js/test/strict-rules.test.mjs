@@ -887,45 +887,51 @@ test('a raise with no cap works, again and again', { skip }, () => {
   assert.ok(!check(spec, { now: NOW }).warnings.some(x => x.code === 'W-RECIPE' && /maxed out/.test(x.message)));
 });
 
-test('a tier with a prize needs a lock', { skip }, () => {
-  const spec = lock =>
-    base({
-      farms: [
-        {
-          key: 'f',
-          name: 'F',
-          stakes: 'collectibles',
-          rewards: 'gem',
-          rate: { perDay: 1, minted: true },
-          tiers: [{ lock, multiplier: 1, prize: { gives: 'item', item: 'shard' } }],
-        },
-      ],
-    });
-  assert.ok(refused(spec(0)).some(r => r.code === 'E-FARM' && /BadFarm/.test(r.message) && /lock/.test(r.fix)));
-  assert.ok(!refused(spec('1d')).some(r => /no lock/.test(r.message)));
-  const w = world({ seed: 'strict-tier-prize' });
-  w.upsert({ Item: { id: 1, args: collectible('Hero') } });
-  const open = lock =>
-    w.chain.send(w.creator, [
-      computeUnitLimit(600_000),
-      loot.openFarmIx({
-        owner: w.creator,
-        project: w.project,
-        id: lock + 1,
-        rewardsMint: w.mint,
-        args: {
-          custody: 'Escrow',
-          tiers: [{ lock, bps: 10_000, prize: { Item: [1] } }],
-          boosts: [],
-          max_boost_bps: 0,
-          gates: [],
-          rate: { per_day: 0n, mints: false },
-        },
-      }),
-    ]);
-  fails(() => open(0), 'BadFarm');
-  open(60);
-});
+test(
+  'a tier with a prize and no lock is taken: the program refuses it no more, and neither does the check',
+  { skip },
+  () => {
+    const spec = lock =>
+      base({
+        farms: [
+          {
+            key: 'f',
+            name: 'F',
+            stakes: 'collectibles',
+            rewards: 'gem',
+            rate: { perDay: 1, minted: true },
+            tiers: [{ lock, multiplier: 1, prize: { gives: 'item', item: 'shard' } }],
+          },
+        ],
+      });
+    const w = world({ seed: 'strict-tier-prize' });
+    w.upsert({ Item: { id: 1, args: collectible('Hero') } });
+    const open = lock =>
+      w.chain.send(w.creator, [
+        computeUnitLimit(600_000),
+        loot.openFarmIx({
+          owner: w.creator,
+          project: w.project,
+          id: lock + 1,
+          rewardsMint: w.mint,
+          args: {
+            custody: 'Escrow',
+            tiers: [{ lock, bps: 10_000, prize: { Item: [1] } }],
+            boosts: [],
+            max_boost_bps: 0,
+            gates: [],
+            rate: { per_day: 0n, mints: false },
+          },
+        }),
+      ]);
+    open(0);
+    open(60);
+    assert.equal(w.read('Farm', pda.farm(w.project, 1)).tiers[0].lock, 0, 'a tier with a prize and no lock, taken');
+    // The check refuses nothing for it either (it warns: W17, the economy check's).
+    assert.ok(!refused(spec(0)).some(r => r.code === 'E-FARM' && /lock/.test(r.message)));
+    assert.ok(!refused(spec('1d')).some(r => /no lock/.test(r.message)));
+  },
+);
 
 test('a number-moving roll on an NFT a recipe shows warns that only a Core NFT can be held', () => {
   const spec = base({

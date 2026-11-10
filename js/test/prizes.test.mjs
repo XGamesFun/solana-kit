@@ -182,8 +182,8 @@ t('a lottery’s place gives a roll of a box', () => {
   assert.deepEqual(
     lottery.terms.places,
     [
-      { bps: 7000, prize: null, times: 1 },
-      { bps: 0, prize: { Roll: [CHEST] }, times: 1 },
+      { bps: 7000, prize: null, when_short: 'InOrder', times: 1 },
+      { bps: 0, prize: { Roll: [CHEST] }, when_short: 'InOrder', times: 1 },
     ],
     'its places as written',
   );

@@ -778,14 +778,13 @@ export const placeSet = place => Number(place.bps) > 0 || place.prize != null;
 /** The address of a lottery's current round's record (there or not). */
 export const roundAddress = (lotteryAddress, lottery) => pda.round(lotteryAddress, lottery.incarnation, lottery.round);
 
-/** Whether a lottery (decoded) drew once and has ended. */
-export const lotteryEnded = lottery => Number(lottery.every) === 0 && Number(lottery.round) > 0;
+/** Whether a lottery (decoded) drew its last round and has ended: it draws once (`every` 0) and is past round `last`. */
+export const lotteryEnded = lottery => Number(lottery.every) === 0 && Number(lottery.round) > Number(lottery.last ?? 0);
 
-/** The round a lottery's close, its write again and its own stash's moves name (`lottery::check_idle`): its current
- * round's, or once a lottery that draws once has ended, round 0's (which keeps its stash's NFTs until its places took
- * them out). */
+/** The round a lottery's close, its write again and its own stash's moves name (`Lottery::waits_on`): its current
+ * round's, or once it has ended, its last round's (which keeps its stash's NFTs until its places took them out). */
 export const idleRound = (lotteryAddress, lottery) =>
-  pda.round(lotteryAddress, lottery.incarnation, lotteryEnded(lottery) ? 0 : lottery.round);
+  pda.round(lotteryAddress, lottery.incarnation, lotteryEnded(lottery) ? lottery.last : lottery.round);
 
 /**
  * Who rents a listed NFT at `now` (Unix seconds), from its decoded Listing (or null for none): the renter's wallet while
