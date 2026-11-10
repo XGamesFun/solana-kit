@@ -12,6 +12,6 @@
     "rootDir": "js",
     "outDir": "types"
   },
-  "files": ["js/index.js", "js/client/index.js", "js/play/index.js", "js/results/index.js"],
+  "files": ["js/index.js", "js/client/index.js", "js/play/index.js", "js/results/index.js", "js/mcp/http.mjs"],
   "include": ["js/chain/*.js"]
 }

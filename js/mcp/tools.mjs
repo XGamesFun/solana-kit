@@ -69,6 +69,22 @@ const nowOf = ctx => ctx?.now ?? Math.floor(Date.now() / 1000);
 const cwdOf = ctx => ctx?.cwd ?? process.cwd();
 export const DEFAULT_FILE = 'xsolana.json';
 
+/**
+ * The tools a hosted server (js/mcp/http.mjs) offers: those that read nothing but their arguments and the chain.
+ * xsolana_save and xsolana_publish write and read the person's own files, so they run only on the person's machine.
+ */
+export const REMOTE_TOOLS = new Set([
+  'xsolana_guide',
+  'xsolana_examples',
+  'xsolana_check',
+  'xsolana_simulate',
+  'xsolana_cost',
+  'xsolana_explain',
+  'xsolana_review',
+  'xsolana_status',
+  'xsolana_client',
+]);
+
 /** The real path of `p`, or of the nearest folder above it that exists, with the rest added back. */
 function realPath(p) {
   try {
@@ -141,6 +157,11 @@ const SOURCE = {
 async function load(input, ctx) {
   if (input.spec) return { economy: economyOf(input.spec), from: 'the spec given' };
   if (input.example) return { economy: example(input.example).spec, from: `the example ${input.example}` };
+  // A hosted server (js/mcp/http.mjs) reads no file: the machine it runs on is not the person's.
+  if (ctx?.remote)
+    throw new Error(
+      'This hosted server reads no files: pass the whole spec as "spec" (or a worked example by name as "example").',
+    );
   const rel = input.file ?? DEFAULT_FILE;
   const file = projectFile(rel, ctx);
   if (!existsSync(file)) {
@@ -591,7 +612,7 @@ export const tools = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     description:
       'A live economy as it is on chain: the project, every pool’s balance, every record the spec names (found or missing). Reads devnet (or XSOLANA_RPC_URL).',
-    inputSchema: { type: 'object', properties: { file: SOURCE.file }, additionalProperties: false },
+    inputSchema: { type: 'object', properties: { spec: SOURCE.spec, file: SOURCE.file }, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
       if (!economy.live?.project)
@@ -683,6 +704,7 @@ export const tools = [
         '  `chosenRecipient` (buy, openBox, pay): the wallet (or collectible) the player names for a "chosen" share of the split (a referrer from the link)',
         '  app.lotteries(), app.buyTickets(key, n, { listing }) (or { maxPrice }: a ticket’s most, in base units),',
         '  app.stake(key, amount), app.harvest(key), app.staked(key) (each seat and what it is owed now), app.recipes(), app.craft(key, assets, 1, { listing }), app.claimGrant(key),',
+        '  solanaApp({ ..., sponsor: httpSponsor({ url, address }) })   the project pays players’ fees (never the price) from a key on its own server: @xgamesfun/solana/sponsor sponsorSigner + sponsorHandler there',
         '  app.collectibles(), app.balances()   what a player does. `listing`: the entry shop(), boxes(), lotteries() or recipes() showed the',
         '  player; its price (or version) is the most they pay: one that moved since is refused, never paid unseen',
         '  a prize (a grant, a lottery place, a contest win, a mission, a recipe) is given in the instruction that wins it,',
@@ -704,6 +726,7 @@ export const tools = [
         '  import * as loot from "@xgamesfun/solana/client";',
         '  loot.pda.project(owner, number), loot.pda.box(project, id), …   every address the program derives',
         '  loot.openBoxIx({ player, project, box, nonce }), loot.buyIx({ player, project, box, items }) …   one builder per instruction; each returns { programId, keys, data }',
+        '  loot.toKitInstruction(ix)   a builder’s instruction in @solana/kit’s shape ({ programAddress, accounts, data }), for an app built on Kit; loot.fromKitInstruction back',
         '  loot.payNftIx({ player, project, asset, to })             pay with an NFT (burned, or given to `to`): the app admits by the receipt',
         '  loot.openListingIx / takeListingIx / closeListingIx, loot.listingTerms(listing), loot.pda.listing(project, asset), loot.renterOf(listing, now)',
         '  a take or a bid signs the record’s terms: loot.listingTerms / offerTerms / auctionTerms(record), the hash of its bytes as read, but what a take changes',

@@ -4,6 +4,29 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased: easier to find and to reach (the JavaScript only; the program is still loot 0.25.0)
+
+- **The MCP server over HTTP** (`js/mcp/http.mjs`, exported as `@xgamesfun/solana/mcp/http`; `xsolana mcp --http`):
+  MCP's Streamable HTTP transport for a hosted endpoint that chat apps add by URL. It offers only the tools that read
+  nothing but their arguments and the chain (`REMOTE_TOOLS`), takes every spec whole, reads no file, refuses
+  `xsolana_save` and `xsolana_publish`, and its instructions hand the person the spec and the `approve` command.
+  Locally it listens on 127.0.0.1 and answers only pages on localhost.
+- **`xsolana_status` takes a spec** as well as a file.
+- **A sponsor pays players' fees** (`js/play/sponsor.js`, `@xgamesfun/solana/sponsor`; `solanaApp({ sponsor })`): a
+  plain key on the project's own server is each step's fee payer and lends the player SOL for it, the player giving
+  back in the same transaction all but its fees and rent (the player fee, the oracle's, the rent of what the program
+  opens or mints); never the price. `checkSponsored` reads and dry-runs every transaction before the server signs:
+  the sponsor named nowhere but its loan and the give-back, this project's instruction in it, no priority fee past
+  its limit, the player keeping no more than the step's fees and rent, at most `maxLamports` a transaction, and the
+  project's `budget`. Sponsored, a roll settles by the player's wallet (a second, sponsored prompt) rather than a
+  funded settle key.
+- **`toKitInstruction` and `fromKitInstruction`** (`@xgamesfun/solana/client`): a builder's instruction in
+  `@solana/kit`'s shape and back.
+- **The skill as one zip** on every GitHub release (`scripts/skill-zip.mjs`), for apps that take a skill as an upload;
+  `npx skills add XGamesFun/solana-kit` installs it in any agent that reads skills.
+- **Easier to find:** the README's title, opening and "Questions people ask", the npm description and keywords, the
+  plugin keywords, a loot box tutorial (`docs/tutorial-loot-box.md`) and `glama.json` for Glama's MCP directory.
+
 ## 0.25.1: a security review (the JavaScript only; the program is still loot 0.25.0)
 
 - **Patch releases for the JavaScript alone.** The package's major.minor is its program's; a patch above it (0.25.1 on

@@ -7,4 +7,5 @@ export * from './sizes.js';
 export * from './policy.js';
 export * from './compressed.js';
 export * from './traits.js';
+export * from './kit.js';
 export * as random from './random.js';

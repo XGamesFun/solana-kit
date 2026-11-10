@@ -3,6 +3,7 @@
 // the same answer, for an agent (or a person) without MCP.
 //
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
+//   xsolana mcp --http [--port n] [--host h]   serve the hosted tools over HTTP at /mcp (127.0.0.1:8787 by default)
 //   xsolana guide [part] [--json]        what an economy can be made of, and what loot cannot do
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
@@ -31,6 +32,7 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana status [file]           a live economy on chain
   xsolana connect                 add the xsolana tools to Claude Code or Codex (--agent claude|codex, --scope user|project, --local, --remove, --dry-run)
   xsolana mcp                     serve the tools over MCP (stdio)
+  xsolana mcp --http              serve the hosted tools over HTTP at http://127.0.0.1:8787/mcp (--port n, --host h)
   xsolana tool --list             every tool; xsolana tool <name> '<json>' runs one (--args-file f)
   xsolana version                 this package's xsolana version and program
 
@@ -41,11 +43,11 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
 class UsageError extends Error {}
 
 /** The flags that take a value: `--name value` or `--name=value`. */
-const VALUED = new Set(['--args-file', '--agent', '--scope', '--port']);
+const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host']);
 /** The flags each command takes; any other is refused. */
 const TOOL_FLAGS = ['--json'];
 const FLAGS = {
-  mcp: [],
+  mcp: ['--http', '--port', '--host'],
   guide: TOOL_FLAGS,
   examples: TOOL_FLAGS,
   check: TOOL_FLAGS,
@@ -119,6 +121,12 @@ async function main(argv) {
 
   switch (command) {
     case 'mcp': {
+      if (flags.has('--http')) {
+        const { serveHttp } = await import('../js/mcp/http.mjs');
+        await serveHttp({ port: portOf(values.get('--port')) ?? 8787, host: values.get('--host') ?? '127.0.0.1' });
+        break;
+      }
+      if (flags.has('--port') || flags.has('--host')) throw new UsageError('--port and --host go with --http.');
       const { serveStdio } = await import('../js/mcp/server.mjs');
       await serveStdio();
       break;

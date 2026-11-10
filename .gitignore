@@ -20,3 +20,4 @@ node_modules
 
 # Type declarations, generated at pack time (npm run types)
 /types/
+xsolana-economy.zip

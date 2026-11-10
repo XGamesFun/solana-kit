@@ -6,13 +6,34 @@
 //
 // stdout is the protocol: everything else goes to stderr.
 import { validate } from '../economy/validate.mjs';
-import { PROGRAM_INFO, tools, VERSION } from './tools.mjs';
+import { PACKAGE_VERSION, PROGRAM_INFO, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
 
 export const INSTRUCTIONS = [
   'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live (they approve in their own wallet: you never sign or ask for a key).',
   `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
 ].join(' ');
+
+/**
+ * What a hosted server (js/mcp/http.mjs) tells the agent: the same work, with the spec passed whole in every call,
+ * and going live on the person's own computer, since a hosted server can neither write their files nor open a page there.
+ */
+export const REMOTE_INSTRUCTIONS = [
+  INSTRUCTIONS.split(' Start with')[0],
+  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec and pass it whole as "spec" to every tool (this hosted server reads no files); xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets).',
+  `To go live, give the person the spec as a file named xsolana.json and this command, run in its folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json. It opens a page on their own computer where they approve each transaction in their own wallet. Nobody else signs, and never ask for a key. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
+  `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
+].join(' ');
+
+/** A tool as tools/list shows it; on a hosted server, without the `file` argument it can't take. */
+function listed(t, remote) {
+  let inputSchema = t.inputSchema;
+  if (remote && inputSchema.properties?.file) {
+    const { file: _file, ...properties } = inputSchema.properties;
+    inputSchema = { ...inputSchema, properties };
+  }
+  return { name: t.name, description: t.description, inputSchema, annotations: t.annotations };
+}
 
 /**
  * The protocol versions this server speaks, newest first. A client that asks for one of them gets it; any other ask
@@ -36,6 +57,13 @@ export async function runTool(name, input = {}, ctx = {}) {
       text: `No tool ${name}.${near.length ? ` Did you mean ${near.join(', ')}?` : ''} Tools: ${tools.map(t => t.name).join(', ')}.`,
     };
   }
+  if (ctx.remote && !REMOTE_TOOLS.has(name))
+    return {
+      isError: true,
+      text: `${name} works on the person’s own files, so it runs only in the local server (npx -y --package=@xgamesfun/solana@${PACKAGE_VERSION} xsolana mcp).`,
+    };
+  if (ctx.remote && 'file' in input)
+    return { isError: true, text: 'This hosted server reads no files: pass the whole spec as "spec".' };
   const bad = inputProblems(tool.inputSchema, input);
   if (bad.length) return { isError: true, text: bad.join('; ') };
   try {
@@ -64,22 +92,18 @@ export async function handle(message, ctx = {}) {
         protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
         capabilities: { tools: {} },
         serverInfo: { name: 'xsolana', version: VERSION },
-        instructions: INSTRUCTIONS,
+        instructions: ctx.remote ? REMOTE_INSTRUCTIONS : INSTRUCTIONS,
       });
     }
     case 'ping':
       return reply({});
     case 'tools/list':
       return reply({
-        tools: tools.map(t => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema,
-          annotations: t.annotations,
-        })),
+        tools: tools.filter(t => !ctx.remote || REMOTE_TOOLS.has(t.name)).map(t => listed(t, ctx.remote)),
       });
     case 'tools/call': {
-      const result = await runTool(params?.name, params?.arguments ?? {}, { ...ctx, cwd: ctx.cwd ?? process.cwd() });
+      const input = params?.arguments ?? {};
+      const result = await runTool(params?.name, input, ctx.remote ? ctx : { ...ctx, cwd: ctx.cwd ?? process.cwd() });
       // A tool that failed says so (isError), and keeps whatever it found (a save's refusals, say) as structuredContent.
       const { text, isError, ...data } = jsonable(result);
       return reply({
