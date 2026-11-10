@@ -4069,11 +4069,13 @@ export function leastBid(auction) {
 
 /**
  * `seller` opens its auction `id` of `args.lot` ({ Item: [id] }, { Asset: [address] } or { Roll: [box id] }), alone,
- * and pays its rent: a player for an NFT of the project's own collection they hold; the project's owner or authority for an
- * NFT of any kind it holds (`piece`: `collection` a Core asset's own, `tokenMetadata`, or `compressed` after a
- * `proveLeafIx`), a new unit of its item, or a roll of one of its boxes (a mystery lot: the box must be written, burn
- * no share of its price, and make an order with the auction's shares within one call's growth: `LotRefused`). Its
- * address names the seller, so an id is the seller's own.
+ * and pays its rent: anyone for an NFT of any kind and any collection they hold (`piece`: `collection` a Core asset's
+ * own, `tokenMetadata`, or `compressed` after a `proveLeafIx`); the project's owner or authority also for a new unit
+ * of its item (one the shop has switched off too), or a roll of one of its boxes (a mystery lot: the box must be
+ * written and make an order with the auction's shares within one call's growth, `LotRefused`; the auction's shares
+ * split the winning bid, so a share of the box that burns burns nothing here). Its address names the seller, so an id
+ * is the seller's own. An NFT lot of another collection can be stopped or taken back by whoever controls that
+ * collection while the project holds it: its seller is paid only when it reaches the winner (`endAuctionIx`).
  */
 export function openAuctionIx({ seller, project, collection, tokenMetadata: tm, compressed, id, mint, args }) {
   stored(args.shares);

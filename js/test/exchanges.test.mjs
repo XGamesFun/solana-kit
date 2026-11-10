@@ -669,5 +669,16 @@ test(
     await assert.rejects(app.repay(lost, loans[1].due, { repay: 1_100n }), /no longer holds.*NotTheNft/);
     assert.equal(prompts, 0);
     assert.equal(w.balance(lender), 10_000n - 6_000n + 2n * 1_100n, 'two offers of three loans each, two repaid');
+    // Once it is due, the lender's claims flag that loan's hold: its NFT is gone, and its release can't be sent.
+    w.chain.warp(Number(loans[1].due) + 1);
+    const lenders = solanaApp({
+      spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } },
+      rpc: w.chain.rpc,
+      wallet: asWallet(lender),
+      now: () => w.chain.now(),
+    });
+    const flagged = (await lenders.claims()).find(c => c.asset === lost);
+    assert.deepEqual([flagged.kind, flagged.gone], ['release', true]);
+    await assert.rejects(lenders.claim(flagged), /no longer holds this NFT/);
   },
 );

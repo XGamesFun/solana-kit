@@ -2002,6 +2002,20 @@ export function solanaApp({
     return { signature, releases };
   }
 
+  /**
+   * A hold's claim, or, when the project no longer holds its NFT (whoever controls its collection took it back or
+   * burned it while it was held), the same claim flagged `gone`: the hold's record still says the NFT is held, and it
+   * is not, so nothing can be sent (W28, W30).
+   */
+  async function goneOr(asset, claim) {
+    if ((await heldNow(asset)).held !== false) return claim;
+    return {
+      ...claim,
+      gone: true,
+      says: 'The project no longer holds this NFT: whoever controls its collection took it back or burned it while it was held. Its hold says otherwise, but nothing can be sent, and nothing was paid against it.',
+    };
+  }
+
   /** Who holds each collectible a split's holder shares name now: { asset: holder }. */
   async function holdersOf(shares) {
     const holders = {};
@@ -4201,15 +4215,17 @@ export function solanaApp({
         // A repaid loan is a plain hold that is over (no debt, `free_at` 0): its NFT goes home whenever. An unpaid one's
         // is the lender's once due.
         if (!hold.debt && time >= BigInt(hold.free_at))
-          out.push({
-            kind: 'release',
-            asset: hold.asset,
-            hold: pubkey,
-            says:
-              hold.player === project
-                ? 'An NFT owed to the treasury: send it there.'
-                : 'Your collectible back: its hold is over.',
-          });
+          out.push(
+            await goneOr(hold.asset, {
+              kind: 'release',
+              asset: hold.asset,
+              hold: pubkey,
+              says:
+                hold.player === project
+                  ? 'An NFT owed to the treasury: send it there.'
+                  : 'Your collectible back: its hold is over.',
+            }),
+          );
       }
       // A loan this wallet made that is overdue and unpaid: its NFT is the lender's to take.
       for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [
@@ -4218,12 +4234,14 @@ export function solanaApp({
       ])) {
         const hold = loot.decode('Hold', account.data);
         if (hold.debt?.lender === me && time >= BigInt(hold.free_at))
-          out.push({
-            kind: 'release',
-            asset: hold.asset,
-            hold: pubkey,
-            says: 'A loan you made is overdue and unpaid: take its NFT.',
-          });
+          out.push(
+            await goneOr(hold.asset, {
+              kind: 'release',
+              asset: hold.asset,
+              hold: pubkey,
+              says: 'A loan you made is overdue and unpaid: take its NFT.',
+            }),
+          );
       }
       // A compressed NFT's proof record this wallet paid for and left open: closing it brings its rent back.
       for (const { account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Proven')])) {
@@ -4247,13 +4265,14 @@ export function solanaApp({
       auctions.forEach((a, i) => {
         const x = found[i] && loot.decode('Auction', found[i].data);
         if (!x || time < loot.auctionEnds(x)) return;
-        // The lot went at its end, and its seller's account couldn't take the money then: only the money is left to pay.
+        // The lot went first (an end too wide for one transaction, or a seller's account that couldn't take the money
+        // then): only the money is left to pay.
         if (BigInt(x.proceeds_owed) > 0n) {
           if (x.seller === me)
             out.push({
               kind: 'auction',
               key: a.key,
-              says: `The winner of “${a.name}” has the lot, and your account couldn’t take the money then: end it again once it can, and it is paid to you.`,
+              says: `The winner of “${a.name}” has the lot, and the winning bid is still to be paid to you: end it again, and it is paid (once your account can take it).`,
             });
           return;
         }
@@ -4502,6 +4521,7 @@ export function solanaApp({
         return contest.prize?.Roll && !build ? (await sendRolling(claimed)).signature : send(claimed);
       }
       if (c.kind === 'release') {
+        if (c.gone) throw new Error(c.says);
         const hold = await read('Hold', c.hold);
         const { before, hasAuthority: _, ...nft } = await nftOf(c.asset, me, { to: me });
         // An overdue loan's NFT goes to its lender.
@@ -4520,7 +4540,12 @@ export function solanaApp({
           }),
         ]);
       }
-      if (c.kind === 'auction') return (await this.endAuction(c.key)).signature;
+      if (c.kind === 'auction') {
+        const ended = await this.endAuction(c.key);
+        // A lot that can't move now: the sale waits, and nothing was sent.
+        if (ended.waiting) throw new Error(ended.says);
+        return ended.signature;
+      }
       if (c.kind === 'close-leaf') return send([loot.closeLeafIx({ asset: c.asset, tree: c.tree, payer: me })]);
       if (c.kind === 'walk') return this.walkFarm(c.key);
       if (c.kind === 'vest' || c.kind === 'schedule') return this.runSchedule(c.key);
