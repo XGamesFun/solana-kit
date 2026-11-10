@@ -6,10 +6,12 @@ import { describe, test } from 'node:test';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { slotHashes } from '../chain/lookup.js';
 import * as loot from '../client/index.js';
+import { namesOf, stepDetails } from '../approve/details.mjs';
 import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { freshAddresses, prepare } from '../economy/live.mjs';
 import {
+  model,
   boostedWeight,
   boostedWeights,
   MOST_WEIGHT,
@@ -434,7 +436,7 @@ describe('each warning, in the words a founder reads', () => {
     });
     assert.ok(check(spec, { now: NOW }).ok);
     const w = check(spec, { now: NOW }).warnings.find(
-      x => x.code === 'W-FARM-MINT' && /not the authority/.test(x.message),
+      x => x.code === 'W-FARM-AUTHORITY' && /not the authority/.test(x.message),
     );
     assert.match(w.message, /rewards for that time are lost, not paid later/);
     assert.match(w.message, /walk_farm/);
@@ -712,4 +714,56 @@ describe('the simulator’s arithmetic', () => {
       { pool: 'prizes', holds: 1700, wins: 2000, whenShort: 'inProportion', each: [850, 425] },
     ]);
   });
+});
+
+test('the approval page reads the new settings back from what it signs, a far date in words', { skip }, () => {
+  const spec = base({
+    boxes: [
+      {
+        key: 'b',
+        name: 'B',
+        price: 1,
+        whenOut: 'giveNothing',
+        outcomes: [
+          { gives: 'item', item: 'sword', weight: 1 },
+          { gives: 'nothing', weight: 1 },
+        ],
+      },
+    ],
+    lotteries: [
+      (({ every, ...once }) => once)({
+        ...lottery(),
+        closesBefore: '1d',
+        timeWeighted: true,
+        firstDraw: 'publish+2000d',
+        places: [
+          { percent: 0, prize: { gives: 'tokens', from: 'pool:prizes', amount: 10 }, whenShort: 'inProportion' },
+        ],
+      }),
+    ],
+  });
+  const w = world({ project: false, seed: 'economy-026-details' });
+  const r = plan(spec, { now: NOW });
+  assert.ok(r.ok, JSON.stringify(r.refusals ?? check(spec, { now: NOW }).refusals));
+  const p = prepare(spec, {
+    owner: w.creator,
+    keys: freshAddresses(plan(spec, { now: NOW }).freshKeys, w.random),
+    now: NOW,
+    rent: bytes => w.chain.rent(bytes),
+    slot: slotHashes(w.chain.get(SYSVAR_SLOT_HASHES)?.data)[0] ?? null,
+  });
+  assert.ok(p.ok, JSON.stringify(p.refusals));
+  const names = namesOf(model(spec, { now: NOW }), { owner: w.creator, now: NOW });
+  const lines = p.transactions.flatMap(t => stepDetails(t.instructions, names));
+  assert.ok(
+    lines.some(l => /a draw on it gives nothing, and a paid draw is not refunded/.test(l)),
+    lines.join('\n'),
+  );
+  assert.ok(lines.includes('Sales close 1 day before each draw'), lines.join('\n'));
+  assert.ok(lines.some(l => /^Tickets weighed by time/.test(l)));
+  assert.ok(lines.some(l => /holds less than they win: every place the same share of its prize/.test(l)));
+  assert.ok(
+    lines.some(l => /^The first draw on \d{1,2} [A-Z][a-z]+ \d{4}, 5 years from now/.test(l)),
+    lines.join('\n'),
+  );
 });

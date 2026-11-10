@@ -384,7 +384,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const free = price === 0;
     const ceiling = free
       ? `${b.perWallet ? `${b.perWallet} per wallet, and wallets are free: ` : ''}${it?.supply ? `all ${it.supply}` : 'as many as they like'}, for only the fees.`
-      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}`;
+      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
       key,
@@ -526,15 +526,21 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ].filter(Boolean),
       trusts: ['MagicBlock’s oracle (the draw)'],
       trust: null,
-      ceiling: `A place by chance: each ticket is one chance, and "perWallet" limits a wallet, not a person. Tickets are not weighted by time, so one buyer may take most of a round’s tickets just before the draw.`,
+      ceiling: l.timeWeighted
+        ? `A place by chance, by weight: each purchase counts its tickets times the seconds left until sales close, so a ticket held longer has a better chance; "perWallet" limits a wallet, not a person.`
+        : `A place by chance: each ticket is one chance, and "perWallet" limits a wallet, not a person. Tickets are not weighted by time, so one buyer may take most of a round’s tickets just before ${l.closesBefore ? 'sales close' : 'the draw'}.`,
       feeds: [...new Set((l.places ?? []).flatMap(p => feedsOf(p.prize)))],
     });
-    find(
-      'R-LOTTERY-LATE',
-      'info',
-      `lottery:${l.key}`,
-      `Anyone may buy most of ${label(l)}’s tickets right before the draw, risking only the price and fees; the draw itself is the oracle’s, which nobody steers.`,
-    );
+    if (!l.timeWeighted)
+      find(
+        'R-LOTTERY-LATE',
+        l.noLoss && !l.closesBefore ? 'low' : 'info',
+        `lottery:${l.key}`,
+        `Anyone may buy most of ${label(l)}’s tickets right before ${l.closesBefore ? `sales close (${l.closesBefore} before the draw)` : 'the draw'}, risking only ${l.noLoss ? 'the fees: every ticket’s price comes back' : 'the price and fees'}; the draw itself is the oracle’s, which nobody steers.`,
+        l.noLoss
+          ? 'Weigh tickets by the time they are held ("timeWeighted": true), or close sales a while before the draw ("closesBefore").'
+          : undefined,
+      );
   }
   for (const c of m.contests) {
     const deciders = c.deciders ?? [];
@@ -670,6 +676,42 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const key = /^economy\.tokens\.([^.]+)/.exec(w.where)?.[1];
     find('R-MINT-POWERS', 'low', key ? `token:${key}` : 'economy', w.message, w.fix);
   }
+  // What the program takes and a player, a partner or a typo can turn against the project (loot 0.26): each warning,
+  // as a finding on its route.
+  const routeOf = where => {
+    const [, list, key] = /^economy\.([a-z]+)\.([^.[]+)/.exec(where) ?? [];
+    const kinds = {
+      boxes: 'box',
+      lotteries: 'lottery',
+      auctions: 'auction',
+      contests: 'contest',
+      farms: 'farm',
+      schedules: 'schedule',
+      recipes: 'recipe',
+      grants: 'grant',
+      holds: 'hold',
+      stashes: 'stash',
+      tokens: 'token',
+    };
+    return kinds[list] ? `${kinds[list]}:${key}` : 'economy';
+  };
+  for (const [code, id, severity] of [
+    ['W-FARM-AUTHORITY', 'R-FARM-AUTHORITY', 'high'],
+    ['W-SCHEDULE-PAYEE', 'R-SCHEDULE-PAYEE', 'medium'],
+    ['W-FAR-TIME', 'R-FAR-TIME', 'medium'],
+    ['W-HOLD-UP', 'R-HOLD-UP', 'medium'],
+    ['W-AUCTION-OUTSIDE', 'R-AUCTION-OUTSIDE', 'medium'],
+    ['W-OUTSIDE-NFT', 'R-OUTSIDE-NFT', 'medium'],
+    ['W-COLLECTION-PARTNER', 'R-COLLECTION-PARTNER', 'medium'],
+    ['W-FARM-MISSION', 'R-FARM-MISSION', 'medium'],
+    ['W-CONTEST-PRIZE', 'R-CONTEST-PRIZE', 'medium'],
+    ['W-SHARED-SOURCE', 'R-SHARED-SOURCE', 'low'],
+    ['W-LOTTERY-POOL', 'R-LOTTERY-POOL', 'low'],
+    ['W-LOTTERY-WEIGHT', 'R-LOTTERY-WEIGHT', 'info'],
+    ['W-ZERO', 'R-ZERO', 'low'],
+    ['W-ANSWER', 'R-ANSWER', 'low'],
+  ])
+    for (const w of warned(code)) find(id, severity, routeOf(w.where), w.message, w.fix);
 
   findings.sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity));
   return {

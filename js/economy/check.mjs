@@ -4639,14 +4639,14 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       // not owed later (W15); the program takes it, so the mint can be handed over after (W33).
       if (f.rate.minted && rewardsToken && !rewardsToken.gameMints)
         warn(
-          'W-FARM-MINT',
+          'W-FARM-AUTHORITY',
           `${where}.rate.minted`,
           `${label(f)} mints its rewards, but the project is not the authority of ${rewardsToken.symbol}’s mint. It pays nothing until you set the mint’s authority to the project’s address; rewards for that time are lost, not paid later. When you hand the mint over, send \`walk_farm\` in the same transaction, just before it: then nothing from before the hand-over is ever paid; without it, the first move after the hand-over credits all the time since the farm’s last move.`,
           'Reward in a token the project makes (source "project"), pay the rate from its rewards vault ("minted": false), or hand the mint to the project before the farm opens.',
         );
       if (f.rate.minted && rewardsToken)
         warn(
-          'W-FARM-MINT',
+          'W-FARM',
           `${where}.rate.minted`,
           `${label(f)} mints ${rewardsToken.symbol}: if the project ever moves the mint’s authority away, stakers cannot harvest what they are owed and can only leave by giving it up.`,
         );

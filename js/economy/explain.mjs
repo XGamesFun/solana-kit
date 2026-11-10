@@ -338,8 +338,22 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       );
       continue;
     }
+    // Sales that close before the draw, tickets weighed by time, and places paid from a pool that may be short.
+    const timing = [
+      src.closesBefore && `sales close ${src.closesBefore} before each draw`,
+      src.timeWeighted &&
+        `each purchase weighs its tickets times the seconds left until sales close, and a place is won by weight: a ticket bought when a round opens counts about twice the average, one in its last hour next to nothing, so the buy screen shows what a purchase weighs before it is bought`,
+    ].filter(Boolean);
+    const short = (l.shortPools ?? []).map(
+      x =>
+        `its places paid from “${x.pool}” win ${num(x.wins)} and the pool starts with ${num(x.holds)}: a pool is read once, when the draw is asked, and the project can spend it until then; short, they get ${x.each.map(num).join(', ')} each ("whenShort": "${x.whenShort}")`,
+    );
+    const late =
+      src.noLoss && !src.timeWeighted
+        ? ` (tickets are not weighted by time: someone may buy most of them ${src.closesBefore ? 'just before sales close' : 'right before the draw'} and risk only the fees)`
+        : '';
     actions.push(
-      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map(num).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back (tickets are not weighted by time: someone may buy most of them right before the draw and risk only the fees)` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${src.perWallet ? `; at most ${src.perWallet} tickets per wallet a round` : ''}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
+      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map(num).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back${late}` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${src.perWallet ? `; at most ${src.perWallet} tickets per wallet a round` : ''}${[...timing, ...short].map(x => `; ${x}`).join('')}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
     );
   }
   for (const f of sim.farms) {
@@ -433,7 +447,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       continue;
     }
     actions.push(
-      `Bid on “${a.name}”, which sells ${lot}: bids in ${sym(a.token)}${a.reserve ? ` from ${num(a.reserve)}` : ''}, each topping the last by at least ${src.minRaise ?? 5}% (+ ${fee} SOL player fee a bid); a bid that is topped goes back to its bidder at once. It runs ${src.runs}${toSeconds(src.extendBy ?? '10m') > 0 ? `, and a bid in the last ${src.extendBy ?? '10m'} moves the end to ${src.extendBy ?? '10m'} after it` : ''}; anyone ends it then, the lot goes to the highest bidder and the money: ${splitOf(src.split)}.${src.lot?.asset ? ' A seller whose account can’t take the money then doesn’t hold up the winner: the lot goes, the auction stays open owing it, and the next end pays and closes it.' : ''} With no bid the lot goes home; an auction nobody ends waits, and sells to the highest bidder whenever anyone ends it.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
+      `Bid on “${a.name}”, which sells ${lot}: bids in ${sym(a.token)}${a.reserve ? ` from ${num(a.reserve)}` : ''}, each topping the last by at least ${src.minRaise ?? 5}% (+ ${fee} SOL player fee a bid); a bid that is topped goes back to its bidder at once. It runs ${src.runs}${toSeconds(src.extendBy ?? '10m') > 0 ? `, and a bid in the last ${src.extendBy ?? '10m'} moves the end to ${src.extendBy ?? '10m'} after it` : ''}; anyone ends it then, the lot goes to the highest bidder and the money: ${splitOf(src.split)}.${src.lot?.asset ? ' The end pays the seller and gives the lot together; while the lot can’t move (its collection froze it) the end waits and the winning bid stays in the project’s vault, until the lot can move or the project’s keys call the sale off (the bid back to its bidder, the lot home); a lot its collection took back or burned sends the bid back. A seller whose account can’t take the money doesn’t hold up the winner: the lot goes, the auction stays open owing it, and the next end pays and closes it.' : ''} With no bid the lot goes home; an auction nobody ends waits, and sells to the highest bidder whenever anyone ends it.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
     );
   }
   for (const h of m.holds)
