@@ -17,6 +17,7 @@ import { readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
 import { encodeBase58 } from '../chain/base58.js';
+import { parseCoreAsset } from '../chain/core.js';
 import { check } from '../economy/check.mjs';
 import { plan } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
@@ -542,7 +543,7 @@ describe('a loan whose token someone can freeze is shown as such, and needs the 
     assert.equal(w.balance(kp.address, frozen), PRICE);
     const loan = await app.borrow(maker, 1, b);
     assert.equal(w.balance(kp.address, w.mint), PRICE, 'a plain token needs no yes');
-    // Repaying: the wallet's one prompt repays and funds a throwaway key, which sends the NFT home and empties itself.
+    // Repaying: the wallet's one prompt repays and brings the NFT home in the same instruction.
     w.fund(kp.address, w.mint, PRICE);
     let prompts = 0;
     const counted = solanaApp({
@@ -558,15 +559,13 @@ describe('a loan whose token someone can freeze is shown as such, and needs the 
     await assert.rejects(counted.repay(b, due), /Say the debt the payer was shown/);
     await assert.rejects(counted.repay(b, due, { repay: shown.repay - 1n }), /now asks/);
     assert.equal(prompts, 0);
-    const { released } = await counted.repay(b, due, { repay: shown.repay });
-    assert.ok(released);
-    assert.equal(prompts, 1, 'one prompt: the key sends the release');
+    const { home } = await counted.repay(b, due, { repay: shown.repay });
+    assert.equal(home, true);
+    assert.equal(prompts, 1, 'one prompt, and no key');
     assert.equal(w.chain.get(loan.hold), null, 'the hold is closed');
+    assert.equal(parseCoreAsset(w.chain.get(b).data).owner, kp.address, 'the NFT is home');
     assert.equal(w.balance(maker, w.mint), 10n * PRICE - PRICE + 2n * PRICE, 'the lender is repaid');
-    assert.ok(
-      w.chain.get(kp.address).lamports > before - 1_000_000n,
-      'the key gave back what it was funded, less fees',
-    );
+    assert.ok(w.chain.get(kp.address).lamports > before - 1_000_000n, 'the hold’s rent came back, less fees');
   });
 });
 
