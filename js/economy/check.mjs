@@ -4275,7 +4275,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(l)}’s places add up to ${total / 100}% of the pot, more than all of it.`,
         'Make them add up to 100% or less.',
       );
-    else if (total < 10_000)
+    else if (total < 10_000 && !(l.noLoss && !keepsPot(l)))
       warn(
         'W-LOTTERY',
         `${where}.places`,

@@ -234,6 +234,94 @@ export function whenOutWords(b, { sold = b.active !== false } = {}) {
 /** Whether a box stops selling while an outcome is out (`whenOut` "stopSales", the default). */
 export const stopsSales = b => (b.whenOut ?? 'stopSales') === 'stopSales';
 
+/** The largest weight an outcome has (a `u32`). */
+export const MOST_WEIGHT = 4_294_967_295n;
+
+/**
+ * An outcome's weight grown by `bps` basis points (rules.rs `boosted`): rounded down, and never past the largest weight.
+ * Counted in BigInt: the largest weight times the largest boost passes 2^53. Two outcomes boosted past the largest
+ * weight are equally likely.
+ */
+export function boostedWeight(weight, bps) {
+  const grown = (BigInt(weight) * (10_000n + BigInt(bps))) / 10_000n;
+  return grown > MOST_WEIGHT ? MOST_WEIGHT : grown;
+}
+
+/**
+ * Box `b`'s weights for a player who passes every one of its odds rules at their most (order.rs): the rules' boosts on
+ * one outcome add up, and stop at the largest `u32`; each outcome's weight is then boosted (`boostedWeight`). A boost
+ * per point counts its `upTo` points. BigInt weights, outcome by outcome.
+ */
+export function boostedWeights(b) {
+  const bps = (b.outcomes ?? []).map(() => 0n);
+  for (const o of b.odds ?? []) {
+    if (!(o.outcome < bps.length)) continue;
+    const add = o.add ?? {};
+    const each =
+      add.addPercent !== undefined
+        ? BigInt(Math.round(Number(add.addPercent) * 100))
+        : BigInt(Math.round(Number(add.perPointPercent ?? 0) * 100)) * BigInt(add.upTo ?? 0);
+    const sum = bps[o.outcome] + each;
+    bps[o.outcome] = sum > MOST_WEIGHT ? MOST_WEIGHT : sum;
+  }
+  return weights(b).map((w, i) => boostedWeight(Math.round(w), bps[i]));
+}
+
+/**
+ * What places of tokens paid from one pool get when it holds `holds` and they win more (lottery.rs `WhenShort`), as a
+ * pull pays them: `runs` are [{ each, places }] in place order (base units, BigInt), `whenShort` the setting they all
+ * say. Each run gets [{ each, sent }]. "inOrder": whole prizes, first to last, while what is left covers one;
+ * "inProportion": every place the same share of its prize, rounded down; "nothing": no place, and the pool keeps it.
+ * Prizes of 1,000, 500 and 500 from a pool holding 1,700: 1,000, 500 and 0; 850, 425 and 425; or nothing.
+ */
+export function shortPays(runs, holds, whenShort = 'inOrder') {
+  const owed = runs.reduce((n, r) => n + BigInt(r.each) * BigInt(r.places), 0n);
+  let left = BigInt(holds);
+  return runs.map(r => {
+    const amount = BigInt(r.each);
+    const each =
+      BigInt(holds) >= owed
+        ? amount
+        : whenShort === 'inProportion'
+          ? (amount * BigInt(holds)) / owed
+          : whenShort === 'nothing'
+            ? 0n
+            : amount;
+    const whole = left / (each > 0n ? each : 1n);
+    const sent = each * (BigInt(r.places) < whole ? BigInt(r.places) : whole);
+    left -= sent;
+    return { each, sent };
+  });
+}
+
+/**
+ * What a purchase of `count` tickets at `at` weighs in a lottery that weighs tickets by time (lottery.rs
+ * `time_weighted`): each ticket the seconds from it to the close of sales (`drawsAt` less `closesBefore`), at least 1.
+ * Off, a ticket weighs one. BigInt.
+ */
+export function purchaseWeight(count, at, drawsAt, closesBefore = 0, weighted = true) {
+  if (!weighted) return BigInt(count);
+  const left = BigInt(drawsAt) - BigInt(closesBefore) - BigInt(at);
+  return BigInt(count) * (left > 1n ? left : 1n);
+}
+
+/**
+ * The entry that wins each place of a round (lottery.rs `ticket_of_place`): place `k` is at `first + k × (total /
+ * winners)`, rounding the end, and its winner is the entry whose slice of the draw holds that point. `entries` are each
+ * purchase's weight in order (BigInt), `first` the answer's point below the total. The entry's index for each place.
+ */
+export function placeWinners(entries, winners, first) {
+  const total = entries.reduce((n, w) => n + BigInt(w), 0n);
+  if (total === 0n) return [];
+  const step = total / BigInt(winners) > 0n ? total / BigInt(winners) : 1n;
+  const ends = [];
+  entries.reduce((n, w, i) => ((ends[i] = n + BigInt(w)), ends[i]), 0n);
+  return Array.from({ length: winners }, (_, k) => {
+    const point = (BigInt(first) + BigInt(k) * step) % total;
+    return ends.findIndex(end => point < end);
+  });
+}
+
 /**
  * What the end of a sharing farm that `runs` means, in words, or null (no end, or a fixed rate): its release keeps its
  * pace, so what it has not let go by the end stays in its vault, free for the authority to take back, and so does what

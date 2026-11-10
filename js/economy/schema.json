@@ -883,9 +883,9 @@
           "description": "Each item's chance shrinks with what is left of its supply."
         },
         "whenOut": {
-          "enum": ["stopSales", "drawLeft"],
+          "enum": ["stopSales", "drawLeft", "giveNothing"],
           "default": "stopSales",
-          "description": "What a box that rolls does once an outcome can't be given (an item sold out, a pool short of its prize, a stash empty). \"stopSales\" (the default): it isn't sold while any outcome couldn't cover this purchase's draws and those of purchases still waiting for their answer, so every roll is on the odds written, and the project restocks or edits the box to sell again. \"drawLeft\": it keeps selling, and a roll draws among the outcomes still there by their written weights, so the others' chances rise as one runs out: a player can empty a common outcome to make a rare one likelier. A box selling a rare prize keeps \"stopSales\"."
+          "description": "What a box that rolls does once an outcome can't be given (an item sold out, a pool short of its prize, a stash empty). \"stopSales\" (the default): it isn't sold while any outcome couldn't cover this purchase's draws and those of purchases still waiting for their answer, so every roll is on the odds written, a paid miss is refunded, and the project restocks or edits the box to sell again; a free roll (another box's, a recipe's, a grant's, a mission's, a lottery place's) is still given after it stops, and is asked again until it hits. \"drawLeft\": it keeps selling, and a roll draws among the outcomes still there by their written weights, so the others' chances rise as one runs out: a player can empty a common outcome to make a rare one likelier. \"giveNothing\": it keeps selling, a roll stays on the weights written, and a draw that lands on an outcome that is out gives nothing: a paid draw is not refunded, a free roll is over. A box selling a rare prize keeps \"stopSales\"."
         },
         "active": {
           "type": "boolean",
@@ -1397,7 +1397,7 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 15,
-          "description": "Pays its places from a pot it keeps from round to round, this one of its 16 (0 unless it moves to a fresh one): each place takes its percent of what the pot holds at the draw with the round's ticket money, so the seed, gifts and shares sent to it (\"lottery:<key>\"), yield, and what earlier rounds' places left all count, and the next round always starts with what the round before left. Write exactly one of \"pot\" or \"rest\". A no-loss lottery needs a pot. Changing the number between rounds starts a fresh pot; every pot it opened is emptied to the owner when it closes."
+          "description": "Pays its places from a pot it keeps from round to round, this one of its 16 (0 unless it moves to a fresh one): each place takes its percent of what the pot holds at the draw with the round's ticket money, so the seed, gifts and shares sent to it (\"lottery:<key>\"), yield, and what earlier rounds' places left all count, and the next round always starts with what the round before left. Write exactly one of \"pot\" or \"rest\". Changing the number between rounds starts a fresh pot; every pot it opened is emptied to the owner when it closes."
         },
         "rest": {
           "$ref": "#/$defs/destination",
@@ -1430,7 +1430,12 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 40960,
-                    "description": "How many places in a row are alike (a run): \"places 2 to 201 each take 1%\" is one { \"percent\": 1, \"times\": 200 }. Not for a named NFT or a roll, which one place gives. Default 1."
+                    "description": "How many places in a row are alike (a run): \"places 2 to 201 each take 1%\" is one { \"percent\": 1, \"times\": 200 }. Not for a named NFT, which one place gives; a run of rolls gives each place its own roll. Default 1."
+                  },
+                  "whenShort": {
+                    "enum": ["inOrder", "inProportion", "nothing"],
+                    "default": "inOrder",
+                    "description": "For a prize of tokens from a pool: what each place gets when the pool holds less than the places with a winner win, read once when the draw is asked. \"inOrder\" (the default): whole prizes, first place first, while the pool covers one; \"inProportion\": every place the same share of its prize; \"nothing\": no place gets anything, and the pool keeps it. Prizes of 1,000, 500 and 500 from a pool holding 1,700 give 1,000, 500 and 0 in order, 850, 425 and 425 in proportion, or nothing. Every place paid from one pool says the same."
                   }
                 }
               }
@@ -1444,6 +1449,14 @@
         },
         "firstDraw": {
           "$ref": "#/$defs/time"
+        },
+        "closesBefore": {
+          "$ref": "#/$defs/duration",
+          "description": "Sales close this long before each draw (default 0: at the draw); for a lottery that draws again, less than \"every\". A no-loss lottery wants one, so tickets bought just before the draw don't share the pot with tickets held all period."
+        },
+        "timeWeighted": {
+          "type": "boolean",
+          "description": "No-loss lotteries only: each purchase weighs its tickets times the seconds from it to the close of sales, and a place is won by weight, so a ticket held longer has a better chance. Set a sales close you mean (\"closesBefore\"); \"perWallet\" and \"minSold\" still count tickets. Off by default: every ticket counts one."
         },
         "gate": {
           "$ref": "#/$defs/gate"
@@ -1493,7 +1506,7 @@
         },
         "noLoss": {
           "type": "boolean",
-          "description": "A no-loss lottery: every ticket goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales: \"lottery:<key>\"). It needs \"pot\". No split, no cut and no `ticketCurrency`; NFT tickets come back too."
+          "description": "A no-loss lottery: every ticket goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales: \"lottery:<key>\"), or with \"rest\" only its places' prizes. No split, no cut and no `ticketCurrency`; NFT tickets come back too. Set \"closesBefore\", or \"timeWeighted\", so a late buyer doesn't share the pot with tickets held all period."
         },
         "minSold": {
           "type": "integer",
