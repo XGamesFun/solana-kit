@@ -4,6 +4,13 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.25.3: the hosted server in the MCP Registry (the JavaScript only; the program is still loot 0.25.0)
+
+- **`https://xgames.fun/mcp`**, the MCP server over HTTP that xgames.fun hosts, is in `server.json` under `remotes`,
+  so the MCP Registry lists it beside the npm package; the README names it for chat apps (claude.ai, ChatGPT, Claude
+  Desktop).
+- **The website is `https://xgames.fun/solana`** in `server.json`, `package.json` and both plugin manifests.
+
 ## 0.25.2: easier to find and to reach, and sponsored fees (the JavaScript only; the program is still loot 0.25.0)
 
 - **The MCP server over HTTP** (`js/mcp/http.mjs`, exported as `@xgamesfun/solana/mcp/http`; `xsolana mcp --http`):
