@@ -674,7 +674,7 @@ export const STAND_IN_OWNER = encodeBase58(sha256(utf8('loot-plan:owner')));
 /** The most places a run of a lottery's places given one by one holds (lottery.rs). */
 const MAX_RUN_PLACES = Number(IDL.constants.find(c => c.name === 'MAX_RUN_PLACES').value);
 
-/** How far off a time may land before the checker asks whether its unit is right (W12): three years. The program
+/** How far off a time may land before the checker asks whether its unit is right: three years. The program
  * takes any time a date holds; a time written in milliseconds lands thousands of years out and locks what waits on it. */
 export const FAR_SECONDS = 3 * 365 * 86_400;
 /** A Unix time in words, in English: "14 March 2031". Past what a date can show, the year alone. */
@@ -859,7 +859,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     return s;
   };
   /**
-   * A time that lands far off (W12): the program takes it, and what waits on it (bids, tickets, NFTs, a vault) is
+   * A time that lands far off: the program takes it, and what waits on it (bids, tickets, NFTs, a vault) is
    * locked until then. `at` is when it lands (Unix seconds), `written` what the spec says, `locks` what waits. Warned
    * with the date in words, and as milliseconds when the number written reads as a time in milliseconds.
    */
@@ -1046,7 +1046,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `“${t.key}” cannot be transferred: nothing can be paid in it, staked in a farm, lent, bid or sealed in a vault, and a prize of it can only be minted to its winner. A share of it, a refund or a payout that has to move it never arrives, and a split prize of it minted to a contest's winners must be given up by each one.`,
         'Use it only as points the project mints to players, or use another token.',
       );
-    // What each power lets its holder do to a farm's stakes, a vest's vault, a box's payments or a prize (W1).
+    // What each power lets its holder do to a farm's stakes, a vest's vault, a box's payments or a prize.
     const powers = [
       p.freeze &&
         'freeze any account holding it, including the game’s pools and the vault that holds open orders and bids (a frozen vault holds them until it thaws), and so block a repayment or a refund',
@@ -1241,7 +1241,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         );
       const p = poolKey ? pool(poolKey, `${at}.from`) : null;
       const t = minted ? token(line.currency, `${at}.currency`) : p ? m.tokens.get(p.currency) : null;
-      // A lottery's place passes over a prize it can't mint (W11): taken, and said. Elsewhere the claim or craft fails.
+      // A lottery's place passes over a prize it can't mint: taken, and said. Elsewhere the claim or craft fails.
       if (minted && t && !t.gameMints && code === 'E-LOTTERY')
         warn(
           'W-MINT-NOT-OURS',
@@ -1263,7 +1263,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           `${what} gives ${m.tokens.get(line.currency)?.symbol ?? line.currency} from “${p.key}”, which holds ${m.tokens.get(p.currency)?.symbol}.`,
           `Leave "currency" out: a pool’s prize is in what it holds.`,
         );
-      // A prize of 0 tokens is given with nothing moved, on every route (W19).
+      // A prize of 0 tokens is given with nothing moved, on every route.
       if (t && units(line.amount, t, `${at}.amount`, `What ${what} gives`) === 0n)
         warn(
           'W-ZERO',
@@ -1343,7 +1343,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     return line;
   };
   /**
-   * A token a player can hold up a payment in (W13, W14): its new accounts start frozen or can be switched to, its
+   * A token a player can hold up a payment in: its new accounts start frozen or can be switched to, its
    * holders can turn plain transfers away (confidential transfers), or it can't be transferred at all. The program
    * takes it in an auction, an offer, a loan, a lottery and a contest; this says what a player can then do, by `kind`.
    * Only when the spec says so (`powers`).
@@ -1412,7 +1412,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
   };
   /** Whether the words on a Token Metadata print were said (once a spec). */
   let printsSaid = false;
-  /** Whether the words on NFTs of a collection the project doesn't control were said (once a spec, W6). */
+  /** Whether the words on NFTs of a collection the project doesn't control were said (once a spec). */
   let outsideSaid = false;
   /** A rule on what an NFT says (rules.rs): an item of the game's must be a collectible; or a collection is named. */
   const rule = (r, where, what) => {
@@ -1428,7 +1428,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         'Nothing to change: tell holders of prints that only the original NFTs count.',
       );
     }
-    // An NFT whose creator kept a permanent delegate can be pulled back out of what the project holds (W6).
+    // An NFT whose creator kept a permanent delegate can be pulled back out of what the project holds.
     if (r.collection && isAddress(r.collection) && !m.collections.includes(r.collection) && !outsideSaid) {
       outsideSaid = true;
       warn(
@@ -1568,7 +1568,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       return;
     }
     // "One of" takes as many texts as the record that holds the rule fits (rules.rs): bounded where it is read, a
-    // lottery's NFT ticket and a box's gate and odds (W22, W32).
+    // lottery's NFT ticket and a box's gate and odds.
     if (r.oneOf !== undefined && (!Array.isArray(r.oneOf) || !r.oneOf.length))
       refuse('E-RULE', `${where}.oneOf`, `${what} lists no texts in "oneOf".`, 'List at least one text.');
     if (r.oneOf !== undefined && (r.equals !== undefined || r.atLeast !== undefined || r.time !== undefined))
@@ -1772,7 +1772,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
             `Send it to a farm whose rewards are ${tok.symbol}.`,
           );
       }
-      // A holder's share names the holder when it is paid (W10).
+      // A holder's share names the holder when it is paid.
       if ((s.kind === 'holder' || (s.kind === 'chosen' && s.key)) && !holderSaid) {
         holderSaid = true;
         warn(
@@ -1915,7 +1915,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       'economy.collections',
       `The project takes ${m.collections.length} collection${m.collections.length === 1 ? '' : 's'} you already have: going live passes ${m.collections.length === 1 ? 'it' : 'them'} to the program, which takes one whose update authority is your wallet, or a Core collection where the project is an update delegate (BadCollection otherwise). An item minted into one needs the project as an update delegate of it, which you add to the collection yourself.`,
     );
-  // A Core collection where the project is only an update delegate (W20, W31): its owner and every other delegate can
+  // A Core collection where the project is only an update delegate: its owner and every other delegate can
   // write to it, and what they make reads as the project's own.
   if (m.collections.length)
     warn(
@@ -2222,7 +2222,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     }
     const users = stashUsers.get(s.key);
     const named = directs.filter(p => p.prize.stash === s.key);
-    // NFTs of weight 0: never drawn, given only by name (W18).
+    // NFTs of weight 0: never drawn, given only by name.
     const light = stashNfts(s).filter(n => n.weight === 0);
     if (light.length)
       warn(
@@ -2313,7 +2313,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
 
   // ---- boxes (catalog.rs, order.rs)
   /**
-   * What one answer of the oracle's holds (W22): the program refuses a box when it is written (PackTooLarge) when one
+   * What one answer of the oracle's holds: the program refuses a box when it is written (PackTooLarge) when one
    * answer can't hold a draw of it, a box of one draw included. Each measured number (`ANSWER_HOLDS`) is the most of
    * one thing in a box otherwise small: past one, the box is refused here; a box that mixes several near their numbers
    * is warned of, since together they fit less.
@@ -2369,7 +2369,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(b)} is long: by the measured numbers it takes about ${Math.round(used * 100)}% of what one answer of the oracle’s holds. One answer holds 128 outcomes that give nothing, 29 of token amounts or 18 each of its own item; 41 slots; 72 odds rules; 16 token prizes or 18 collectibles in one outcome; 340 texts in a box’s gate. A box that mixes them fits less, and one that does not fit is refused when it is written (PackTooLarge). A box written from a wallet carries about 960 bytes; a longer one needs a program call (a multisig).`,
         'Put a long weighted list in a table or a stash, drawn by one outcome.',
       );
-    // An outcome of 15 to 18 collectibles fits an answer, but not a sale in one step (W22).
+    // An outcome of 15 to 18 collectibles fits an answer, but not a sale in one step.
     const many = parts.findIndex(p => p.filter(x => x.gives === 'item').length >= 15);
     if (many >= 0 && outs.length === 1 && boxBuys(b, m))
       warn(
@@ -2410,7 +2410,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         'BadEntries',
         'Give fewer, or make it two outcomes.',
       );
-      // What a roll changes on the NFT it is on is written by the settle, with the NFT's own attributes (W32).
+      // What a roll changes on the NFT it is on is written by the settle, with the NFT's own attributes.
       if ((o.shifts ?? []).length > 16)
         warn(
           'W-ANSWER',
@@ -2937,7 +2937,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
             : refuse('E-ODDS', at, `An outcome of ${label(b)} pays from a pool but does not say which.`, 'Add "pool".');
           if (p) {
             const amount = units(o.amount, m.tokens.get(p.currency), `${at}.amount`, `${label(b)}’s prize`);
-            // A prize of 0 tokens is given with nothing moved (W19).
+            // A prize of 0 tokens is given with nothing moved.
             if (amount === 0n)
               warn(
                 'W-ZERO',
@@ -3048,8 +3048,8 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(b)} sells in one step, all of it or nothing, so "whenOut" changes nothing.`,
         'Leave "whenOut" out.',
       );
-    // What a draw on an outcome that is out does, by the setting the project chose (W3), and who can make it happen by
-    // emptying a source this box shares with another route (W4).
+    // What a draw on an outcome that is out does, by the setting the project chose, and who can make it happen by
+    // emptying a source this box shares with another route.
     const runsDry = o =>
       outcomeParts(o).some(
         x =>
@@ -3204,7 +3204,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         };
       }
     })();
-    // A recipe takes any number of lines; what one craft can carry is measured (W22): past it, the recipe is written
+    // A recipe takes any number of lines; what one craft can carry is measured: past it, the recipe is written
     // and never crafts.
     {
       const pays = ins.filter(l => l.takes === 'pay');
@@ -3423,7 +3423,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const places = ins.flatMap(l =>
       l.takes === 'burn' ? Array(l.count ?? 1).fill('burn') : l.takes === 'pay' ? [] : [l.takes],
     );
-    // Each roll is its own order, at the craft's nonce plus its count (craft.rs); its receipts must fit the log (W32).
+    // Each roll is its own order, at the craft's nonce plus its count (craft.rs); its receipts must fit the log.
     const rolls = outs.filter(l => l.gives === 'roll');
     if (rolls.length > ANSWER_HOLDS.recipeRolls)
       warn(
@@ -3432,7 +3432,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(r)} gives ${rolls.length} rolls: past ${ANSWER_HOLDS.recipeRolls}, a craft’s receipts run past what a transaction’s log holds (10,000 bytes), and its Crafted receipt is cut, so an indexer or a results page can’t read what it made.`,
         `Give at most ${ANSWER_HOLDS.recipeRolls} rolls a craft, or roll a box that gives a pack.`,
       );
-    // Two rolls on one NFT whose box holds it while it rolls: the craft fails whole (W25).
+    // Two rolls on one NFT whose box holds it while it rolls: the craft fails whole.
     const held = rolls.filter(
       l =>
         l.on !== undefined &&
@@ -3702,7 +3702,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         );
       const d = destination(s.to ?? '');
       // A payee nobody signs for (an address off the curve): a multisig's vault is one, and so is an address of this
-      // program, where a record made later would make every run pass it over (W21). The program refuses only an
+      // program, where a record made later would make every run pass it over. The program refuses only an
       // account this program already owns (BadMove), which it checks when the schedule is written.
       if (d.kind === 'wallet' && isAddress(d.key) && !isOnCurve(addressBytes(d.key)))
         warn(
@@ -3711,7 +3711,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           `${label(s)} is sealed and pays ${d.key}, an address nobody holds a key of: a program's address. A multisig's vault is fine; an address of the loot program is not: a record made there later would make every run pass it over, and the vault would never empty. Nothing can change the payee once it is sealed.`,
           'Check the address is a wallet or a multisig vault you can spend from, before you sign.',
         );
-      // Its last run: far off is taken, and warned of with its date (W12).
+      // Its last run: far off is taken, and warned of with its date.
       if (s.maxRuns > 0) {
         let first = now + seconds(s.every, `${where}.every`);
         try {
@@ -3761,7 +3761,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           `${label(s)} is sealed in ${tok.symbol}, which cannot be transferred: no run could ever pay ${d.kind === 'treasury' ? 'the treasury' : 'the wallet'}, and the vault, which nobody can open, would keep it all for good.`,
           'Seal it in another token.',
         );
-      // A vest is only as safe as its token (W1).
+      // A vest is only as safe as its token.
       const p = tok?.powers ?? {};
       const powers = [
         p.permanentDelegate && 'a permanent delegate can take the tokens out of the vault',
@@ -4040,7 +4040,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(l)} draws once (no "every"), and the draw is due at go-live.`,
         'Give it a "firstDraw" (like "publish+1d"), or an "every" to draw again and again.',
       );
-    // A draw far off is taken, and warned of with its date (W12): the tickets wait until then.
+    // A draw far off is taken, and warned of with its date: the tickets wait until then.
     const every = seconds(l.every, `${where}.every`);
     let firstDraw = now + every;
     try {
@@ -4207,7 +4207,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `Raffle at most ${LIMITS.ownStashPlaces} NFTs a lottery: run a second lottery for the rest.`,
       );
     // Every run paying from one pool says the same about a short pool (lottery.rs, BadLottery), and the project hears
-    // what its setting does (W7).
+    // what its setting does.
     const byPool = new Map();
     for (const [i, p] of placed.entries()) {
       const key = p.prize?.gives === 'tokens' ? prizePool(p.prize) : null;
@@ -4231,7 +4231,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           'Keep the pool stocked for every place before the draw, or pay from the lottery’s own pot.',
         );
     }
-    // A named NFT of a stash the project holds: the first winner whose prize is pulled gets it (W9).
+    // A named NFT of a stash the project holds: the first winner whose prize is pulled gets it.
     const named = placed.filter(p => p.prize?.gives === 'nft' && !p.prize.held);
     const nftNames = named.map(p => p.prize.nft);
     if (named.length && (every > 0 || new Set(nftNames).size < nftNames.length))
@@ -4556,7 +4556,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       );
     for (const [i, t] of tiers.entries()) {
       fourByteSeconds(t.lock, `${where}.tiers[${i}].lock`);
-      // A mission with no lock is the project's choice (W17): one NFT can come and go and take it each time.
+      // A mission with no lock is the project's choice: one NFT can come and go and take it each time.
       if ((t.prize || t.roll) && !(toSeconds(t.lock ?? 0) > 0))
         warn(
           'W-FARM-MISSION',
@@ -4573,7 +4573,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           `${label(f)}’s tier ${i} multiplies by ${t.multiplier}: a tier is above 0 and at most x${LIMITS.maxTierBps / 10_000} (BadFarm).`,
           `Use a multiplier above 0, up to ${LIMITS.maxTierBps / 10_000}.`,
         );
-      // A heavy tier a seat can leave early for a fee: the weight is bought for the fee (W27).
+      // A heavy tier a seat can leave early for a fee: the weight is bought for the fee.
       else if (bps >= 30_000 && Number(t.exitFee ?? 0) > 0 && !ofCollectibles)
         warn(
           'W-FARM',
@@ -4636,7 +4636,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
           'Raise "perDay".',
         );
       // A farm that mints while the project is not the mint's authority credits nothing, and what it would have paid is
-      // not owed later (W15); the program takes it, so the mint can be handed over after (W33).
+      // not owed later; the program takes it, so the mint can be handed over after.
       if (f.rate.minted && rewardsToken && !rewardsToken.gameMints)
         warn(
           'W-FARM-AUTHORITY',
@@ -4705,7 +4705,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       if (!ofCollectibles && !(f.boosts ?? []).length)
         warn('W-FARM', at, `${label(f)} stakes a token: only a collectible put on a seat as its booster grows.`);
     }
-    // A farm whose seats stop earning at times of their own keeps one entry a different second (W23).
+    // A farm whose seats stop earning at times of their own keeps one entry a different second.
     if (tiers.some(t => t.earnsFor !== undefined) || f.upkeepAttribute !== undefined)
       warn(
         'W-FARM-ENDS',
@@ -4909,7 +4909,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(c)} has deciders, whose verdict is taken only once entries close, and its entries close when its result is due: the program refuses to open it (BadContest).`,
         'Close entries before the result is due, or leave one of "entriesClose" and "resultDue" out (an hour apart).',
       );
-    // A result far off is taken, and warned of with its date (W12): the stakes wait until then.
+    // A result far off is taken, and warned of with its date: the stakes wait until then.
     farTime(
       now + Math.max(closes, due),
       c.resultDue !== undefined ? `${where}.resultDue` : `${where}.entriesClose`,
@@ -4917,13 +4917,13 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       c.resultDue ?? c.entriesClose,
       'every entry’s stake waits in its pot',
     );
-    // Whoever names the winner, and how the pot is paid (W7).
+    // Whoever names the winner, and how the pot is paid.
     warn(
       'W-CONTEST',
       where,
       `${label(c)}’s winner is named by ${(c.deciders ?? []).length ? 'its deciders’ verdict' : 'the project’s keys'}, who can also enter it: players trust them with the result. The pot is the contest’s own account, paid only by each entry’s claim.`,
     );
-    // One prize a winning entry, and nothing that costs an entry anything: one person's many wallets take one each (W2).
+    // One prize a winning entry, and nothing that costs an entry anything: one person's many wallets take one each.
     const stakeUnits = c.stakeNft ? 1n : quietUnits(c.stake, tok);
     if (c.prize && !c.prize.split && !c.gate && !c.stakeNft && !(stakeUnits > 0n))
       warn(
@@ -5097,7 +5097,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         'Start it at "publish", or later.',
       );
     // Nothing but a higher bid hands a high bid back before the end: an end, or a push of it, far off holds the bid and
-    // the lot that long. The program takes it; the date is said in words (W12).
+    // the lot that long. The program takes it; the date is said in words.
     if (runs > 0)
       farTime(
         start + runs,
@@ -5114,7 +5114,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       'that bid and the lot are held',
     );
     // No extension or no least raise: two wallets topping each other by a unit in the last seconds keep every other bid
-    // out (W5).
+    // out.
     const raise = Number(a.minRaise ?? 5);
     if (!a.bidNfts && (extend < 60 || raise < 1))
       warn(
@@ -5142,7 +5142,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       );
       randomItems = true;
     } else if (a.lot?.asset) {
-      // An NFT outside the project's collections (W16): whoever controls its collection can stop it moving or take it
+      // An NFT outside the project's collections: whoever controls its collection can stop it moving or take it
       // back while the project holds it.
       if (a.lot.collection && !m.collections.includes(a.lot.collection))
         warn(
@@ -5203,7 +5203,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
         `${label(h)} holds ${label(it)}, which is ${it.soulbound ? 'soulbound' : 'not a collectible'}: only a collectible that can move can be held.`,
         'Hold a collectible that is not soulbound.',
       );
-    // While a hold runs, the project's authority alone decides where the NFT goes (W7); a far end is taken (W12).
+    // While a hold runs, the project's authority alone decides where the NFT goes; a far end is taken.
     farTime(
       now + seconds(h.for, `${where}.for`),
       `${where}.for`,
@@ -5255,7 +5255,7 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     const keys = g.keys ?? [];
     const l = g.limits ?? {};
     const open = !vouchers.length && !keys.length && !(g.list ?? []).length;
-    // A grant written again with the same list lets its wallets claim again (W11).
+    // A grant written again with the same list lets its wallets claim again.
     if ((g.list ?? []).length)
       warn(
         'W-GRANT',

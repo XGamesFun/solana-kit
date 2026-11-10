@@ -368,7 +368,7 @@ accounts (never a loot signature); required memos are sent; withheld fees are sw
 records an amount (a payment, a stake, a bid) it records what **arrived**; a payout receipt names what was **sent**.
 
 Any mint is the project's (or the player's) choice, its issuer's powers with it: the program refuses only what it
-could never carry out, and `xsolana_check` says what each power lets its holder do (W1, W13, W14).
+could never carry out, and `xsolana_check` says what each power lets its holder do.
 
 | Mint feature                                                | Refused for                                                                                                                                                                                                                                                        |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -713,9 +713,9 @@ SOL), a wallet this program doesn't own (a person's key, a multisig's vault; `up
 the vault's four accounts, `BadMove` when this program owns it), or the treasury; never a pool, a token account (a pot,
 a farm's vault), a collectible's holder or a chosen share (`BadMove`). A stream into a pool, a pot or a farm is an
 ordinary schedule. Its mint is the project's choice, its issuer's powers with it (a permanent delegate, a fee raised
-to 100%, a freeze: a vest is only as safe as its token, W1); only a schedule that burns refuses a mint whose issuer
+to 100%, a freeze: a vest is only as safe as its token); only a schedule that burns refuses a mint whose issuer
 keeps a burn authority (`BurnLocked`). A payee at an address of this program that has no record yet is warned of: a
-record made there later would make every run pass it over (W21). A run never pays more than the vault holds; the last pays all, and later deposits go to
+record made there later would make every run pass it over. A run never pays more than the vault holds; the last pays all, and later deposits go to
 the same place. Pause and suspend stop none of it. A cliff is a first run in the future; a timelock is one run.
 
 ## Lotteries
@@ -917,7 +917,7 @@ becomes the project's leaf.
 fixed at `open_contest` for good. `result_by` may be any time (after `closes_at` when there are deciders; a far one
 holds the stakes until then: `xsolana_check` says its date in words). Whoever names the winner can also enter it; the
 pot is paid only by a claim. A prize to each winning entry with no fixed stake and no gate pays one person with many
-wallets once a wallet (W2).
+wallets once a wallet.
 Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
 
 - **One list of entries** (`["entries", contest, incarnation, 0]`, `decodeEntries`): a record a player, one side a
@@ -959,7 +959,7 @@ Entries and decisions name the incarnation (`TermsChanged`). Sides are `u16`.
   vault, burning what is left (wrapped SOL to the opener); an account the issuer froze, or a burn authority blocks, is
   left behind and that id can't open again. Any mint: a winner who closes their own account of one whose new accounts
   start frozen (or can be made to) holds up their own claim and the contest's close, and a split prize minted in a
-  token that can't be transferred must be given up by each winner (W14).
+  token that can't be transferred must be given up by each winner.
 
 ## Auctions
 
@@ -1146,7 +1146,7 @@ A farm's gates are rules one NFT (or the player's profile) must all pass. A gran
 box's gate changes with an edit, a lottery's between rounds, others never.
 
 A rule's `OneOf` texts have no count of their own (one at least): the record that holds it bounds them. But a
-lottery's NFT ticket's rule holds at most 170, and a box's gate about 340 (`xsolana_check`, W22): the oracle's answer
+lottery's NFT ticket's rule holds at most 170, and a box's gate about 340 (`xsolana_check`): the oracle's answer
 reads them.
 
 **Odds** (a box, `Odds { entry, boost }`, any number) and **boosts** (a farm, `Boost { rule, effect }`, within
@@ -1165,7 +1165,7 @@ project's keys only, `NotAuthority`), after the accounts it took before: the ord
 player's own, whoever asks; anything else reads as nothing, and odds never stop a roll. Their boosts add to what the
 NFT the roll is on raised when it was made. A later ask reads nothing; after an edit of the box, the next ask reads
 them afresh. So a player may level up before asking, a profile rule can only add (a player may leave the profile out),
-and a roll asked without them stays at the odds it was made with (W29).
+and a roll asked without them stays at the odds it was made with.
 
 ## Farms
 
@@ -1187,7 +1187,7 @@ otherwise). No tokens move to credit a seat: only a payout moves them.
 multiplier above ×0 up to ×100 (`bps` up to 1,000,000, `BadFarm` past it; a seat's weight stays a million times inside
 128 bits, and near a quarter of 128 bits a seat weighs only what is left: read a seat's weight from the seat or its
 receipt, never from the formula alone), and a term (`earns_for`, below). A mission (a tier's `prize` or `roll`) may
-have no lock: then one NFT can stake and leave again and again and take it each time (W17). A
+have no lock: then one NFT can stake and leave again and again and take it each time. A
 token seat moves only to a tier that locks as long or longer; every stake and every booster put on restarts the lock.
 
 **Custody** (NFT farms):
@@ -1267,7 +1267,7 @@ really there. A farm that has passed more times than a transaction can walk (abo
 walked in parts by `walk_farm`, anyone's and free; every move then walks the rest. The record holds 238,312 different
 times at most (what an account holds); the first staker on a new second pays about 0.0003 SOL for it, and when it is
 full a stake at a new end time fails until older seats are touched (an insert took 145,279 compute units at the full
-list: ask for more than the default compute on a stake in a large farm, W23). Growth counts only up to the end. A mission's prize needs the fuel to last the tier's lock or its term, whichever is shorter: a lapse before then
+list: ask for more than the default compute on a stake in a large farm). Growth counts only up to the end. A mission's prize needs the fuel to last the tier's lock or its term, whichever is shorter: a lapse before then
 marks the seat `dry` for that stay. A tier whose term is shorter than its lock still gives its prize once the lock has
 run.
 
@@ -1464,18 +1464,18 @@ signed. **A box's lists have no cap of their own**: a box is written only when o
 of it (`PackTooLarge`, or `TooManyAccounts` past the answer's 21 accounts), a box of one draw included, so a box too
 long is refused when it is written, before anyone pays. Measured: 128 outcomes that give nothing, 29 of token amounts,
 18 each of its own item; 41 slots; 72 odds rules; 64 fates; 16 token prizes or 18 collectibles in one outcome (an
-outcome holds at most 255 prizes, `BadEntries`); 340 texts in a box's gate. A box that mixes them fits less (W22). A
+outcome holds at most 255 prizes, `BadEntries`); 340 texts in a box's gate. A box that mixes them fits less. A
 one-outcome box of 15 to 18 collectibles sells only through the oracle, and 19 or more can be written but never sold. A
 box written from a wallet carries about 960 bytes; a longer one needs a program call (a multisig). A long weighted list
 goes in a table or a stash, drawn by one outcome. **A recipe's lines have no cap**: one craft is one transaction that
 fails whole; measured, 60 payments in one coin, 26 in different coins, 59 outputs from a pool, 108 raises or needs, and
 past that it is written but never crafts. It may give several rolls (each its own order, at `nonce + k`, counting the
 rolls in the recipe's order from 0); past 15 its receipts run past what a transaction's log holds (10,000 bytes), and
-`Crafted` is cut (W32). **A rule's "one of" texts have no cap**: the record that holds it bounds them; a lottery's NFT
+`Crafted` is cut. **A rule's "one of" texts have no cap**: the record that holds it bounds them; a lottery's NFT
 ticket's rule holds at most 170 (`BadLottery`), since the oracle's answer reads it. **A raffle** has at most 256 places
 from its own stash (`BadLottery`). **Times have no cap**: a contest's result, an auction's end and extension, a
 lottery's draw, a loan or a rental, a sealed schedule's last run may be as far off as a date holds; `xsolana_check`
-says a far one's date in words (W12). **Values of 0 are the project's**: a price, a prize, a loan repaid for less, a
+says a far one's date in words. **Values of 0 are the project's**: a price, a prize, a loan repaid for less, a
 contest of NFTs whose winners take none, a stash NFT or a table row of weight 0. The other lists a record holds keep a
 cap, set where its whole flow still fits a transaction, and `xsolana_check` refuses a spec over one in words (`LIMITS`):
 an item's traits 64, each name 64 bytes; a farm's boosts, gates and growths 32 each and a growth's steps 128; a

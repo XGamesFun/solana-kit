@@ -157,7 +157,7 @@ test(
 );
 
 test(
-  'an auction takes a mint whose freeze authority could switch its default account state to frozen (the kit warns, W13)',
+  'an auction takes a mint whose freeze authority could switch its default account state to frozen (the kit warns)',
   { skip },
   () => {
     const w = world({ seed: 'guards-frozen' });
@@ -188,7 +188,7 @@ test(
         ]);
     };
     // The program no longer refuses it: the highest bidder could close their own account so every higher bid fails, which
-    // the kit tells the seller and every bidder (W13).
+    // the kit tells the seller and every bidder.
     const switchable = defaultStateMint(w);
     assert.ok(mayStartFrozen(switchable.account));
     open(switchable.mint, 1)();

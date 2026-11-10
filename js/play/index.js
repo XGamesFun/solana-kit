@@ -402,7 +402,7 @@ export function solanaApp({
   }
   /**
    * A token's own settings that let whoever is to be paid turn a payment away, for a page to say before a player puts
-   * money in (W13): accounts that start frozen or can be switched to it (a payee closes their own account, and the one
+   * money in: accounts that start frozen or can be switched to it (a payee closes their own account, and the one
    * opened again in its place is frozen), confidential transfers (a payee's account can refuse plain ones), and a token
    * that can't be transferred at all. `what`: the payment ("repaying", "a higher bid"); `who` and `then`: who could and
    * what they gain. Each is { power, says }.
@@ -2082,7 +2082,7 @@ export function solanaApp({
   /**
    * A hold's claim, or, when the project no longer holds its NFT (whoever controls its collection took it back or
    * burned it while it was held), the same claim flagged `gone`: the hold's record still says the NFT is held, and it
-   * is not, so nothing can be sent (W28, W30).
+   * is not, so nothing can be sent.
    */
   async function goneOr(asset, claim) {
     if ((await heldNow(asset)).held !== false) return claim;
@@ -2094,7 +2094,7 @@ export function solanaApp({
   }
 
   /**
-   * The records of this project an earlier owner of `asset` left behind (W6): its listing at
+   * The records of this project an earlier owner of `asset` left behind: its listing at
    * `["listing", project, asset]` (one read) and its holds (one search, by the asset's address), each that names a wallet
    * other than the player's. Each is { kind, address, says }. Such a record stays when whoever controls the NFT's
    * collection moved it out of the project's hands without the program, and the program hands out whatever the project
@@ -3517,7 +3517,7 @@ export function solanaApp({
           says: `${p.holder} can move anyone's tokens of the loan's token, the ones you would repay with too.${lender(p.holder)}`,
         };
       });
-      // What the token's own settings let a lender do (W13): the program no longer refuses these, so the kit says them.
+      // What the token's own settings let a lender do: the program no longer refuses these, so the kit says them.
       risks.push(...tokenSettings(account, 'repaying', 'the lender', 'and take your NFT when the loan is due'));
       const { amount, repay, lasts } = offer.deal.Lend;
       return { address, offer, mint: offer.mint, program: account.owner, amount, repay, lasts, risks };
@@ -3585,7 +3585,7 @@ export function solanaApp({
      * borrower in the same instruction: one prompt. `repay`: the debt the payer was shown (`loan()`'s, in base units);
      * the program refuses any other (`TermsChanged`). An NFT its collection took back or burned while the project held
      * it is refused here, before anything is signed: the program takes no repayment for it, and the borrower keeps what
-     * they borrowed (W28). When the NFT can't move now (frozen for now, or its collection refuses the move), or `home` is
+     * they borrowed. When the NFT can't move now (frozen for now, or its collection refuses the move), or `home` is
      * false, the money goes alone, so the loan does not fall due: the hold is then over, and anyone sends the NFT home
      * once it can move (`claims()` lists it). A compressed NFT is proven in the same transaction; the money alone for one
      * whose proof keeps going out of date goes without it. Returns { signature, home }, and `says` when the NFT waits.
@@ -3718,8 +3718,8 @@ export function solanaApp({
         ? show(new DataView(wrapped.data.buffer, wrapped.data.byteOffset).getBigUint64(64, true), 9)
         : '0';
       const auctions = accounts.map(x => x && loot.decode('Auction', x.data));
-      // What every bidder is told before a bid: what the bids' token lets the high bidder do (W13), and what whoever
-      // controls an NFT lot of another collection can do to it (W16).
+      // What every bidder is told before a bid: what the bids' token lets the high bidder do, and what whoever
+      // controls an NFT lot of another collection can do to it.
       const mints = [...new Set(auctions.filter(Boolean).map(x => x.mint))];
       const mintAccounts = Object.fromEntries((await client.accounts(mints)).map((m, k) => [mints[k], m]));
       const warningsOf = async x => {

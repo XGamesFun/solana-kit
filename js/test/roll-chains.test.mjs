@@ -400,7 +400,7 @@ test('the walk of moving prices is one budget a simulation, shared by its boxes 
 
 // Nothing but a higher bid hands a high bid back before an auction's end, so an end far off, or a push of it by a bid,
 // holds the bid and the lot that long. The program takes any time (loot 0.26); the checker says the date in words, and a
-// time written in milliseconds by mistake reads as such (W12).
+// time written in milliseconds by mistake reads as such.
 test('an auction that ends, or moves its end, far off is taken, and its date is said in words', () => {
   const auction = example('artwork-auction').spec;
   const at = a => {

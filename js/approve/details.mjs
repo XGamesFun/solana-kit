@@ -173,7 +173,7 @@ function readDetails(reads, names) {
           : treasury()
         : treasury();
     const to = v => (v === 'Burn' ? 'burned' : `to ${where(v)}`);
-    // A time more than three years after now (W12): the program takes it, and the owner sees its date before signing.
+    // A time more than three years after now: the program takes it, and the owner sees its date before signing.
     const far = v => Number(v) - (names.now ?? Math.floor(Date.now() / 1000)) > FAR_SECONDS;
     const isTo = v =>
       v === 'Burn' ||

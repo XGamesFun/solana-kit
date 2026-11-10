@@ -848,7 +848,7 @@ test(
   },
 );
 
-// ---------------------------------------------------------------- a record an earlier owner left (W6)
+// ---------------------------------------------------------------- a record an earlier owner left
 
 /** A Core collection of `maker`'s that the project does not name, and an asset of it for `owner` (Core CreateV2). */
 function outsideAsset(w, maker, owner) {

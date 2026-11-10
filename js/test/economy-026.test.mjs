@@ -257,7 +257,7 @@ describe('the bounds the program keeps are refused before signing, in words', ()
 });
 
 describe('each warning, in the words a founder reads', () => {
-  test('W1: a token whose issuer can raise its fee or take from a vault', () => {
+  test('a token whose issuer can raise its fee or take from a vault', () => {
     const spec = base({
       tokens: [
         {
@@ -276,7 +276,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(w, /only as safe as the token/);
   });
 
-  test('W2: a prize to each winning entry with no stake and no gate', () => {
+  test('a prize to each winning entry with no stake and no gate', () => {
     const spec = base({
       contests: [{ key: 'c', name: 'C', sides: 2, entriesClose: '1d', prize: { gives: 'item', item: 'sword' } }],
     });
@@ -299,7 +299,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.equal(refusal(base({ contests: [contest(5)] }), 'economy.contests.c.prize.amount'), undefined);
   });
 
-  test('W4: a box that draws from a pool another route takes from', () => {
+  test('a box that draws from a pool another route takes from', () => {
     const spec = base({
       boxes: [
         {
@@ -324,12 +324,12 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-SHARED-SOURCE').message, /be refunded every miss/);
   });
 
-  test('W5: an auction with no extension', () => {
+  test('an auction with no extension', () => {
     const spec = base({ auctions: [{ key: 'a', name: 'A', lot: { item: 'sword' }, runs: '1d', extendBy: 0 }] });
     assert.match(said(spec, 'W-AUCTION', 'economy.auctions.a.extendBy').message, /keep every other bid out/);
   });
 
-  test('W6 and W16: NFTs of a collection the project does not control', () => {
+  test('NFTs of a collection the project does not control', () => {
     const spec = base({
       auctions: [{ key: 'a', name: 'A', lot: { asset: WALLET, collection: OTHER }, runs: '1d', minRaise: 5 }],
       boxes: [
@@ -346,7 +346,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-AUCTION-OUTSIDE').message, /A bidder’s money can be tied up, not lost/);
   });
 
-  test('W7: a hold, and a contest’s judge', () => {
+  test('a hold, and a contest’s judge', () => {
     const spec = base({
       holds: [{ key: 'h', name: 'H', item: 'sword', for: '7d' }],
       contests: [{ key: 'c', name: 'C', sides: 2, entriesClose: '1d', stake: 1 }],
@@ -355,12 +355,12 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-CONTEST', 'economy.contests.c').message, /can also enter it/);
   });
 
-  test('W8: a no-loss lottery that sells until the draw', () => {
+  test('a no-loss lottery that sells until the draw', () => {
     const spec = base({ lotteries: [lottery()] });
     assert.match(said(spec, 'W-LOTTERY', 'economy.lotteries.save.closesBefore').message, /held all period/);
   });
 
-  test('W9: a lottery that draws again and names an NFT of a stash', () => {
+  test('a lottery that draws again and names an NFT of a stash', () => {
     const spec = base({
       stashes: [{ key: 's', name: 'S', collection: OTHER, nfts: [WALLET] }],
       lotteries: [
@@ -377,7 +377,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-LOTTERY', 'economy.lotteries.l.places').message, /later winners get nothing/);
   });
 
-  test('W10: a share to whoever holds a collectible', () => {
+  test('a share to whoever holds a collectible', () => {
     const spec = base({
       boxes: [
         {
@@ -392,7 +392,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-HOLDER-SHARE').message, /the settle fails and is sent again/);
   });
 
-  test('W11: a lottery’s minted prize the project cannot mint, and a grant’s list', () => {
+  test('a lottery’s minted prize the project cannot mint, and a grant’s list', () => {
     const spec = base({
       tokens: [
         { key: 'gem', source: 'project', symbol: 'GEM', decimals: 6 },
@@ -422,7 +422,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-GRANT', 'economy.grants.g.list').message, /they can claim again/);
   });
 
-  test('W13 and W14: an auction and a lottery in a token a player can hold up', () => {
+  test('an auction and a lottery in a token a player can hold up', () => {
     const spec = base({
       tokens: [
         {
@@ -442,7 +442,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-HOLD-UP', 'economy.lotteries.l.currency').message, /keep spare SOL in the lottery/);
   });
 
-  test('W15 and W33: a farm that mints a token the project is not the authority of', () => {
+  test('a farm that mints a token the project is not the authority of', () => {
     const spec = base({
       tokens: [
         { key: 'gem', source: 'project', symbol: 'GEM', decimals: 6 },
@@ -458,7 +458,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(w.message, /walk_farm/);
   });
 
-  test('W18: a stash whose NFTs weigh 0, and W19: a prize of 0', () => {
+  test('a stash whose NFTs weigh 0, and a prize of 0', () => {
     const spec = base({
       stashes: [{ key: 's', name: 'S', collection: OTHER, nfts: [{ asset: WALLET, weight: 0 }] }],
       boxes: [
@@ -483,12 +483,12 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-ZERO', 'economy.boxes.b.outcomes[1].amount').message, /its winner gets nothing/);
   });
 
-  test('W20 and W31: a collection the project may only be a delegate of', () => {
+  test('a collection the project may only be a delegate of', () => {
     const spec = base({ collections: [OTHER] });
     assert.match(said(spec, 'W-COLLECTION-PARTNER').message, /reads as any of the project’s items/);
   });
 
-  test('W22: a long box, and an outcome of 15 collectibles', () => {
+  test('a long box, and an outcome of 15 collectibles', () => {
     const many = n => Array.from({ length: n }, () => ({ gives: 'nothing', weight: 1 }));
     const long = base({ boxes: [{ key: 'b', name: 'B', price: 1, outcomes: many(110) }] });
     assert.match(said(long, 'W-ANSWER', 'economy.boxes.b').message, /128 outcomes that give nothing/);
@@ -511,14 +511,14 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(wide, 'W-ANSWER', 'economy.boxes.w.outcomes[0]').message, /sells only through the oracle/);
   });
 
-  test('W23: a term farm keeps an entry for each second a seat stops earning', () => {
+  test('a term farm keeps an entry for each second a seat stops earning', () => {
     const spec = base({
       farms: [{ key: 'f', name: 'F', stakes: 'gem', rewards: 'gem', seed: 1, tiers: [{ lock: '1d', earnsFor: '7d' }] }],
     });
     assert.match(said(spec, 'W-FARM-ENDS').message, /238,312 at most/);
   });
 
-  test('W27: a heavy tier that can leave early for a fee', () => {
+  test('a heavy tier that can leave early for a fee', () => {
     const spec = base({
       farms: [
         {
@@ -535,7 +535,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-FARM', 'economy.farms.f.tiers[0].exitFee').message, /leave for the fee/);
   });
 
-  test('W32: a recipe of more than 15 rolls', () => {
+  test('a recipe of more than 15 rolls', () => {
     const spec = base({
       boxes: [
         {
@@ -561,7 +561,7 @@ describe('each warning, in the words a founder reads', () => {
     assert.match(said(spec, 'W-ANSWER', 'economy.recipes.r.out').message, /10,000 bytes/);
   });
 
-  test('W3 in the explainer: the three settings of a box', () => {
+  test('the explainer: the three settings of a box', () => {
     assert.match(whenOutWords({ whenOut: 'giveNothing' }), /a paid draw is not refunded and a free roll is over/i);
     assert.match(whenOutWords({}), /is still given after the box has stopped, and is asked again until it hits/);
     const text = explainEconomy(

@@ -1043,7 +1043,7 @@ test('every cap refuses a spec over it, with a plain message', () => {
   const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
   const nothing = n => many(n, () => ({ gives: 'nothing', weight: 1 }));
   const rule = { attribute: 'level', atLeast: 1 };
-  // What one answer of the oracle's holds, as measured (W22): past one number alone, the box is refused when written.
+  // What one answer of the oracle's holds, as measured: past one number alone, the box is refused when written.
   const answer = {
     [`${ANSWER_HOLDS.entriesOfNothing + 1} outcomes`]: base({
       boxes: [{ key: 'b', name: 'B', price: 1, outcomes: nothing(ANSWER_HOLDS.entriesOfNothing + 1) }],

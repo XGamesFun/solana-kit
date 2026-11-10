@@ -6,8 +6,8 @@ tools see them.
 
 ## 0.26.0: loot 0.26.0 (on devnet since 2026-11-10, slot 520,815,761)
 
-The program's own changes are in its changelog (gamesfun-loot, `CHANGELOG.md`, 0.26.0): the fixes of the deep audit of
-0.25.0, and limits only where the chain sets them. What the tools do with them:
+The program, 0.26.0: the fixes of its audit of 0.25.0, and limits only where the chain sets them (`docs/program.md`).
+What the tools do with them:
 
 **Both sides of an exchange move together**
 
@@ -56,8 +56,7 @@ The program's own changes are in its changelog (gamesfun-loot, `CHANGELOG.md`, 0
 - What 0.26 no longer refuses is no longer refused here, and each is a warning in plain words: a time far out (with
   the date in words, and a hint when it looks like milliseconds), a token whose accounts can start frozen, a price or a
   prize of 0, a mission tier with no lock, a farm that mints a token the project can't mint yet, a player's auction of
-  any NFT, a collection the project only has delegate access to, a sealed schedule's payee, and the rest of the port's
-  list (W1 to W35 in the program's `docs/kit-0.26.md`).
+  any NFT, a collection the project only has delegate access to, and a sealed schedule's payee.
 - The bounds the program keeps are refused before anything is signed: 256 raffle places from a lottery's own stash,
   170 texts in an NFT ticket's rule, 255 prizes an entry, the farm caps, and what one answer of the oracle's holds.
   A contest that splits a prize of 0 is refused: the program opens it but can never name its winner.

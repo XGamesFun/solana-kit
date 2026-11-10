@@ -82,7 +82,7 @@ test('an unbid auction ends at its configured time even with a large extension',
   const id = 701;
   w.upsert({ Item: { id, args: collectible('Review', 1, { kind: 'Normal' }) } });
   const now = w.chain.now();
-  // The largest extension a u32 holds, about 136 years: the program no longer caps it (the kit warns, W12), and with no
+  // The largest extension a u32 holds, about 136 years: the program no longer caps it (the kit warns), and with no
   // bid it never moves the end.
   const args = {
     lot: { Item: [id] },

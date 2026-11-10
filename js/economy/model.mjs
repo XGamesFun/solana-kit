@@ -73,14 +73,14 @@ export const LIMITS = Object.freeze({
   ticketOneOf: 170,
 });
 /**
- * What one answer of the oracle's holds, as measured on the program (W22): a box is refused when it is written
+ * What one answer of the oracle's holds, as measured on the program: a box is refused when it is written
  * (PackTooLarge, or TooManyAccounts) when one answer can't hold a draw of it, a box of one draw included. Each number is
  * the most of that one thing in a box that is otherwise small: `entriesOfNothing` outcomes that give nothing,
  * `entriesOfTokens` outcomes of token amounts, `entriesOfItems` outcomes each of its own item, `slots`, `odds` rules,
  * `entryTokens` token prizes or `entryCollectibles` collectibles in one outcome, `gateTexts` "one of" texts in a box's
  * gate. A box that mixes them fits less. A recipe: `recipePayments` payments in one coin, `recipeCoins` in different
  * coins, `recipePoolOutputs` outputs from a pool, `recipeRaises` raises or needs; past those it is written but never
- * crafts. `recipeRolls`: the rolls whose receipts a transaction's log still holds (W32).
+ * crafts. `recipeRolls`: the rolls whose receipts a transaction's log still holds.
  */
 export const ANSWER_HOLDS = Object.freeze({
   entriesOfNothing: 128,
