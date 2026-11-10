@@ -107,6 +107,9 @@ const RECORDS = [
         // The totals, split at each purchase: what each share paid in common takes, the entries that own a part of
         // their own, and the parts owed now.
         ['sold', 'u64'],
+        // In a weighted round (`time_weighted`), the weight sold: each purchase's tickets times the seconds from it
+        // to the close of sales. Null: each ticket weighs one, and the draw is over `sold`.
+        ['weight', { option: 'u128' }],
         ['to_pot', 'u64'],
         ['common', { vec: 'u64' }],
         ['owns', 'u32'],
@@ -117,7 +120,8 @@ const RECORDS = [
         ['first_asked_at', 'i64'],
         ['asked_at', 'i64'],
         ['answer', { array: ['u8', 32] }],
-        ['first', 'u64'],
+        // First place's point: below the draw's total (`roundTotal`), so in a weighted round a point of its weight.
+        ['first', 'u128'],
         ['pot_total', 'u64'],
         ['pot_sent', 'u64'],
         ['pot_arrived', 'u64'],
@@ -506,39 +510,51 @@ export const lotteryPots = lottery =>
 /** A share the buyer chooses (a referrer, a collectible's holder): paid out of the price as they buy, from their own account. */
 export const chosenAtPurchase = share => Boolean(share.to?.Chosen);
 
-/** The bytes of one entry of a round: buyer, word, what arrived (`fee`: a fee mint, or a chosen share), the NFT ticket. */
-export const entryWidth = (fee, nft) => 40 + (fee ? 8 : 0) + (nft ? 32 : 0);
+/** The bytes of one entry of a round: buyer, word, what arrived (`fee`: a fee mint, a chosen share, or a weighted
+ * round of paid tickets), where its weight ends (`weighted`: a round that weighs its tickets by time), the NFT ticket. */
+export const entryWidth = (fee, nft, weighted = false) => 40 + (fee ? 8 : 0) + (weighted ? 16 : 0) + (nft ? 32 : 0);
+
+/** What a round's draw picks a point below: the weight sold in a weighted round, the tickets sold otherwise. */
+export const roundTotal = r => (r.weight != null ? BigInt(r.weight) : BigInt(r.sold));
 
 /**
  * A lottery round (`["round", lottery, incarnation, round]`): its header (`status` 'Open' | 'Drawing' | 'Drawn' |
- * 'Cancelled', the terms it copied, `sold`, `owed`, the draw and the money the ask fixed, `nfts` the NFT of the
- * lottery's own stash each such place got), and `entries`, one a purchase: { buyer, start, end (its tickets), paid (its
- * own part's bit), amount (what reached the round), nft (its NFT ticket) }.
+ * 'Cancelled', the terms it copied, `sold`, `weight` (null in a round that doesn't weigh its tickets), `owed`, the draw
+ * and the money the ask fixed, `nfts` the NFT of the lottery's own stash each such place got), and `entries`, one a
+ * purchase: { buyer, start, end (its slice of the draw: its tickets, or in a weighted round its weight), tickets (how
+ * many it bought), paid (its own part's bit), amount (what reached the round), nft (its NFT ticket) }.
  */
 export function decodeRound(data) {
   const r = decode('LotteryRound', data);
   const at = Number(r.head);
   const width = Number(readUintLE(data, at, 2));
   const count = Number(readUintLE(data, at + 2, 4));
-  if (width !== entryWidth(r.fee, r.terms.nft_ticket != null) || data.length !== at + 6 + width * count)
+  const weighted = r.weight != null;
+  if (width !== entryWidth(r.fee, r.terms.nft_ticket != null, weighted) || data.length !== at + 6 + width * count)
     throw new Error('LotteryRound entries do not match its header');
   let start = 0n;
+  let sold = 0n;
   const entries = Array.from({ length: count }, (_, i) => {
     const e = data.subarray(at + 6 + width * i, at + 6 + width * (i + 1));
     const word = readUintLE(e, 32, 8);
-    const end = word & END_BITS;
+    // Its tickets end at the word's low 48 bits; its slice of the draw ends there too, or at its weight's end.
+    const last = word & END_BITS;
+    const tickets = last - sold;
     let k = 40;
     const take = n => e.subarray((k += n) - n, k);
-    const amount = r.fee ? readUintLE(take(8), 0, 8) : (end - start) * BigInt(r.terms.price);
+    const amount = r.fee ? readUintLE(take(8), 0, 8) : tickets * BigInt(r.terms.price);
+    const end = weighted ? readUintLE(take(16), 0, 16) : last;
     const entry = {
       buyer: encodeBase58(e.subarray(0, 32)),
       start,
       end,
+      tickets,
       paid: word & ~END_BITS,
       amount,
       nft: r.terms.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS,
     };
     start = end;
+    sold = last;
     return entry;
   });
   return { ...r, entries };
@@ -550,11 +566,12 @@ export const placeCount = places => places.reduce((n, p) => n + Number(p.times ?
 /** The places of a round that have a winner: every place, but no more than tickets. */
 export const roundWinners = r => Math.min(placeCount(r.terms.places), Number(r.sold));
 
-/** The ticket that wins `place` of a drawn round: even steps around the list from first place's ticket. */
+/** The point that wins `place` of a drawn round: even steps of the draw's total around the list from first place's
+ * (a ticket's number, or in a weighted round a point of its weight). */
 export function ticketOfPlace(r, place) {
-  const sold = BigInt(r.sold);
-  const ahead = BigInt(place) * (sold / BigInt(roundWinners(r) || 1));
-  const toEnd = sold - BigInt(r.first);
+  const total = roundTotal(r);
+  const ahead = BigInt(place) * (total / BigInt(roundWinners(r) || 1));
+  const toEnd = total - BigInt(r.first);
   return ahead < toEnd ? BigInt(r.first) + ahead : ahead - toEnd;
 }
 
@@ -575,18 +592,18 @@ export function runPlaces(r, run) {
   return [Math.min(first, w), Math.min(first + Number(r.terms.places[run].times), w)];
 }
 
-/** The places of run `run` whose ticket is in `start..end` (an entry's), in order. */
+/** The places of run `run` whose point is in `start..end` (an entry's slice of the draw), in order. */
 export function placesIn(r, run, start, end) {
   const [from, to] = runPlaces(r, run);
   const out = [];
   if (from >= to || BigInt(start) >= BigInt(end)) return out;
-  const sold = BigInt(r.sold);
-  const step = sold / BigInt(roundWinners(r));
-  const d = (BigInt(start) + sold - BigInt(r.first)) % sold;
+  const total = roundTotal(r);
+  const step = total / BigInt(roundWinners(r));
+  const d = (BigInt(start) + total - BigInt(r.first)) % total;
   const len = BigInt(end) - BigInt(start);
   for (const [a, b] of [
-    [d, d + len < sold ? d + len : sold],
-    [0n, d + len > sold ? d + len - sold : 0n],
+    [d, d + len < total ? d + len : total],
+    [0n, d + len > total ? d + len - total : 0n],
   ]) {
     let p = Number((a + step - 1n) / step);
     for (p = Math.max(p, from); p < to && BigInt(p) * step < b; p++) out.push(p);

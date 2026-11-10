@@ -10,7 +10,7 @@
 // the day it stops, and one that draws among what is left ("drawLeft") the day each outcome runs out and the odds of
 // the rest from then (`stockWalk`). It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
-import { boxOrderBytes, roundRentOf } from './plan.mjs';
+import { boxOrderBytes, entryShape, roundRentOf } from './plan.mjs';
 import {
   boxBuys,
   COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS,
@@ -59,15 +59,7 @@ const NETWORK_FEE = sol(SIGNATURE_FEE);
 const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
  * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
-const ticketLine = l =>
-  sol(
-    BigInt(
-      entryWidth(
-        lotterySplit(l).some(x => String(x.to).startsWith('chosen')),
-        Boolean(l.ticketNft),
-      ),
-    ) * RENT_PER_BYTE,
-  );
+const ticketLine = l => sol(BigInt(entryWidth(...entryShape(l))) * RENT_PER_BYTE);
 /** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
 /** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps

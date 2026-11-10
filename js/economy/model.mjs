@@ -709,7 +709,7 @@ export function lifeLines(r, m) {
 /** A lottery's place as { percent, prize }: a number is a percent of what the round pays from, and no prize. */
 export const placeOf = p =>
   typeof p === 'object' && p !== null
-    ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1 }
+    ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1, whenShort: p.whenShort }
     : { percent: p, prize: null, times: 1 };
 
 /** "pool:house" → { kind: 'pool', key: 'house' }; "burn" → { kind: 'burn' }. */

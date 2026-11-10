@@ -2,7 +2,7 @@
   "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
   "metadata": {
     "name": "loot",
-    "version": "0.25.0",
+    "version": "0.26.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"
@@ -1954,7 +1954,8 @@
       "name": "end_auction",
       "docs": [
         "Anyone ends an auction that is over: the lot to the winner and the bid through the",
-        "shares, or the lot home. Its seller calls off one with no bid."
+        "shares (`ending`: together, or the lot first), or the lot home. Its seller calls off one with",
+        "no bid; anyone a sale whose lot or bid is proven gone, the project's keys any sale not delivered."
       ],
       "discriminator": [
         33
@@ -1964,8 +1965,8 @@
           "name": "signer",
           "docs": [
             "Anyone once it is over; the seller, to call off one with no bid (the project's keys pay the",
-            "project fee for it). Pays the rent of a collectible minted for the winner, and opens the",
-            "accounts the end pays into."
+            "project fee for it); the project's keys, to call off a sale whose lot is still there. Pays the",
+            "rent of a collectible minted for the winner, and opens the accounts the end pays into."
           ],
           "writable": true,
           "signer": true
@@ -2001,7 +2002,8 @@
         {
           "name": "proceeds",
           "docs": [
-            "treasury wallet for its item (`rail::split_to`)."
+            "NFT, or to the project's treasury wallet for its item (`rail::split_to`); the whole bid to the",
+            "winner when the sale is called off."
           ]
         },
         {
@@ -2192,7 +2194,8 @@
         {
           "name": "order",
           "docs": [
-            "whoever it goes to, its hold, `[\"hold\", asset, 0]` (`hold::owe`)."
+            "called off), passed to make it a hold for its seller, its hold, `[\"hold\", asset, 0]`",
+            "(`hold::owe`). Never for a lot that sold."
           ],
           "writable": true,
           "optional": true
@@ -2211,6 +2214,14 @@
         {
           "name": "nonce",
           "type": "u64"
+        },
+        {
+          "name": "ending",
+          "type": {
+            "defined": {
+              "name": "Ending"
+            }
+          }
         }
       ]
     },
@@ -2845,7 +2856,7 @@
         {
           "name": "seller",
           "docs": [
-            "Puts the lot up, the only signer: an NFT's holder (a player's in one of the project's collections), or",
+            "Puts the lot up, the only signer: an NFT's holder, or",
             "the project's owner or authority for a new unit of its item. Pays the rent and the fee."
           ],
           "writable": true,
@@ -5311,8 +5322,9 @@
     {
       "name": "repay",
       "docs": [
-        "Anyone repays a loan before it is due: the money goes to the lender and the hold becomes a",
-        "plain one that is over. The NFT goes home with `release`, whenever. `repay` is the amount the payer saw."
+        "Anyone repays a loan before it is due, the project shown to hold its NFT still: the money goes",
+        "to the lender and, with `home`, the NFT to the borrower, the hold closing; without, the hold",
+        "becomes a plain one that is over, for `release`. `repay` is the amount the payer saw."
       ],
       "discriminator": [
         39
@@ -5362,9 +5374,153 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "borrower",
+          "docs": [
+            "hold's rent and a Token Metadata NFT's emptied account's (a loan's hold names its borrower",
+            "as its payer and rent wallet too, `borrow`)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "piece",
+          "accounts": [
+            {
+              "name": "asset",
+              "docs": [
+                "Read by hand; Core, Token Metadata and Bubblegum check the rest."
+              ],
+              "writable": true
+            },
+            {
+              "name": "sheet",
+              "docs": [
+                "its Sheet's address (`sheet.rs`): read, and written by a farm with growth."
+              ],
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "collection",
+              "docs": [
+                "Core collection (left out for none). Not for a Token Metadata NFT. Writable where Core",
+                "writes it: a burn, a mint."
+              ],
+              "optional": true
+            },
+            {
+              "name": "mpl_core_program",
+              "optional": true
+            },
+            {
+              "name": "metadata",
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "edition",
+              "optional": true
+            },
+            {
+              "name": "token",
+              "docs": [
+                "receiver's (Token Metadata opens it). Any token account the receiver owns will do, not only",
+                "the associated one, so a receiver who gives that one away can't turn a hand-out back."
+              ],
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "token_record",
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "project_token",
+              "docs": [
+                "the project holds it."
+              ],
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "project_record",
+              "writable": true,
+              "optional": true
+            },
+            {
+              "name": "rule_set",
+              "docs": [
+                "none); Token Metadata checks them."
+              ],
+              "optional": true
+            },
+            {
+              "name": "rules_program",
+              "optional": true
+            },
+            {
+              "name": "token_metadata_program",
+              "optional": true
+            },
+            {
+              "name": "instructions",
+              "optional": true
+            },
+            {
+              "name": "spl_token_program",
+              "optional": true,
+              "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            {
+              "name": "spl_ata_program",
+              "optional": true,
+              "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+            },
+            {
+              "name": "leaf",
+              "docs": [
+                "tree's change log. Writable, with",
+                "the tree and its config, where Bubblegum changes the leaf (a lock, a move)."
+              ],
+              "optional": true
+            },
+            {
+              "name": "tree",
+              "docs": [
+                "checks it)."
+              ],
+              "optional": true
+            },
+            {
+              "name": "tree_config",
+              "optional": true
+            },
+            {
+              "name": "leaf_delegate",
+              "optional": true
+            },
+            {
+              "name": "bubblegum_program",
+              "optional": true
+            },
+            {
+              "name": "compression_program",
+              "optional": true
+            },
+            {
+              "name": "log_wrapper",
+              "optional": true
+            }
+          ]
         }
       ],
       "args": [
+        {
+          "name": "home",
+          "type": "bool"
+        },
         {
           "name": "repay",
           "type": "u64"
@@ -7376,6 +7532,10 @@
         {
           "name": "nonce",
           "type": "u64"
+        },
+        {
+          "name": "need_prize",
+          "type": "bool"
         }
       ]
     },
@@ -8071,6 +8231,19 @@
       ]
     },
     {
+      "name": "FeesCollected",
+      "discriminator": [
+        233,
+        23,
+        117,
+        225,
+        107,
+        178,
+        254,
+        8
+      ]
+    },
+    {
       "name": "GrantClaimed",
       "discriminator": [
         61,
@@ -8120,6 +8293,19 @@
         53,
         182,
         98
+      ]
+    },
+    {
+      "name": "LeftoverBurned",
+      "discriminator": [
+        28,
+        216,
+        145,
+        193,
+        156,
+        135,
+        159,
+        255
       ]
     },
     {
@@ -8344,6 +8530,19 @@
       ]
     },
     {
+      "name": "PrizeForgone",
+      "discriminator": [
+        247,
+        186,
+        13,
+        149,
+        109,
+        113,
+        177,
+        223
+      ]
+    },
+    {
       "name": "PrizeGiven",
       "discriminator": [
         57,
@@ -8380,6 +8579,19 @@
         132,
         161,
         159
+      ]
+    },
+    {
+      "name": "ProjectUpdated",
+      "discriminator": [
+        16,
+        110,
+        74,
+        3,
+        76,
+        227,
+        179,
+        225
       ]
     },
     {
@@ -8484,6 +8696,19 @@
         70,
         175,
         226
+      ]
+    },
+    {
+      "name": "SaleCalledOff",
+      "discriminator": [
+        19,
+        92,
+        244,
+        154,
+        127,
+        57,
+        87,
+        73
       ]
     },
     {
@@ -9095,243 +9320,243 @@
     },
     {
       "code": 6095,
+      "name": "CantCallOff",
+      "msg": "Only the sale of an NFT its seller handed in is called off, and only before the lot moves to its winner"
+    },
+    {
+      "code": 6096,
       "name": "NotOpenYet",
       "msg": "Not open yet: its window opens later"
     },
     {
-      "code": 6096,
+      "code": 6097,
       "name": "WindowClosed",
       "msg": "Its window has closed"
     },
     {
-      "code": 6097,
+      "code": 6098,
       "name": "PrizeNotCovered",
       "msg": "A prize this can't give whole: a pool short of it (or a share of it that comes to nothing), a mint the project can no longer mint, a contest's split not set aside, or the project has no vault for a prize's mint yet: open it first"
     },
     {
-      "code": 6098,
+      "code": 6099,
       "name": "BadChoice",
       "msg": "The choice a share needs: a wallet other than the buyer's own or the project's, or a collectible of the share's item that a player holds, passed as the chosen account; a contest's recipient only for its chosen share"
     },
     {
-      "code": 6099,
+      "code": 6100,
       "name": "BadStake",
       "msg": "This contest takes one entry per player, of exactly its stake"
     },
     {
-      "code": 6100,
+      "code": 6101,
       "name": "OverWindow",
       "msg": "Over this record's limit for one wallet in this window"
     },
     {
-      "code": 6101,
+      "code": 6102,
       "name": "WrongCounts",
       "msg": "This is not the list of counts, claims or rounds at the address its record, incarnation and subject name"
     },
     {
-      "code": 6102,
+      "code": 6103,
       "name": "BadLimits",
       "msg": "A grant's window needs times that are not before 1970"
     },
     {
-      "code": 6103,
+      "code": 6104,
       "name": "OverKey",
       "msg": "This voucher key has signed all the claims the grant allows one key"
     },
     {
-      "code": 6104,
+      "code": 6105,
       "name": "TooManyAccounts",
       "msg": "A box's roll would hand the oracle more accounts than its answer can carry: fewer entries, or fewer mints its prizes are in"
     },
     {
-      "code": 6105,
+      "code": 6106,
       "name": "NothingOwed",
       "msg": "This entry is owed nothing of this part: paid already, not owed, or not yet"
     },
     {
-      "code": 6106,
+      "code": 6107,
       "name": "BadPrize",
       "msg": "A prize this route can't give: a stash's NFT at random is a box's entry only"
     },
     {
-      "code": 6107,
+      "code": 6108,
       "name": "Rolls",
       "msg": "This box rolls (more than one entry, an NFT at random, a fresh item, several draws an open, or an NFT it rolls on): open it with open_box"
     },
     {
-      "code": 6108,
+      "code": 6109,
       "name": "OneTicket",
       "msg": "An NFT pays for one ticket at a time"
     },
     {
-      "code": 6109,
+      "code": 6110,
       "name": "CompressedBid",
       "msg": "A bid can't be a compressed NFT: bid Core or Token Metadata NFTs"
     },
     {
-      "code": 6110,
+      "code": 6111,
       "name": "OverPrize",
       "msg": "A claim's own amount is of a grant of a fixed amount of tokens, at most that amount, and named by a voucher or a list"
     },
     {
-      "code": 6111,
+      "code": 6112,
       "name": "NoSolForFee",
       "msg": "The signer holds too little SOL for the fee"
     },
     {
-      "code": 6112,
+      "code": 6113,
       "name": "BadOffer",
       "msg": "An offer takes a rule it can keep, at least one taker, a price or a loan above 0 (repaid with at least as much, within 5 years), shares only on a price, all its money as it arrives, and a mint whose accounts can't turn a payment away"
     },
     {
-      "code": 6113,
+      "code": 6114,
       "name": "WinnerPicks",
       "msg": "While losers' NFTs are left, only the winner claims, and picks which one they take"
     },
     {
-      "code": 6114,
+      "code": 6115,
       "name": "SubjectNonce",
       "msg": "A roll that moves an NFT's numbers is at the NFT's own nonce (its address's first 8 bytes): one at a time"
     },
     {
-      "code": 6115,
+      "code": 6116,
       "name": "NotALoan",
       "msg": "This hold is no loan, or it is repaid"
     },
     {
-      "code": 6116,
+      "code": 6117,
       "name": "LoanDue",
       "msg": "This loan is due: it can't be repaid, and its NFT goes to its lender"
     },
     {
-      "code": 6117,
+      "code": 6118,
       "name": "OwedToLender",
       "msg": "A loan that is due goes to its lender"
     },
     {
-      "code": 6118,
+      "code": 6119,
       "name": "Rented",
       "msg": "This NFT is rented: a rental runs until its end, and nobody takes the listing before (its maker may stop it)"
     },
     {
-      "code": 6119,
+      "code": 6120,
       "name": "BadListing",
       "msg": "A listing asks for a price above 0, and a rental for 1 period or more of a length above 0, all of them within 5 years"
     },
     {
-      "code": 6120,
+      "code": 6121,
       "name": "NotCompoundable",
       "msg": "Only a farm of tokens whose rewards are the staked token compounds"
     },
     {
-      "code": 6121,
+      "code": 6122,
       "name": "Sealed",
       "msg": "A sealed schedule is written once: nobody edits, switches off or re-seals it"
     },
     {
-      "code": 6122,
+      "code": 6123,
       "name": "NotInStash",
       "msg": "A lottery's held prize must be in its own stash when the lottery is written"
     },
     {
-      "code": 6123,
+      "code": 6124,
       "name": "Promised",
       "msg": "A lottery's place promises this NFT: it leaves its stash only as that prize, or once the lottery has ended and its places have taken theirs"
     },
     {
-      "code": 6124,
+      "code": 6125,
       "name": "ListingStopped",
       "msg": "Its maker stopped this listing: it takes no more renters, and closes once the rental runs out"
     },
     {
-      "code": 6125,
+      "code": 6126,
       "name": "NotAnNft",
       "msg": "Only an NFT is taken: one token of a mint that can never mint another, not a unit of a semi-fungible item"
     },
     {
-      "code": 6126,
+      "code": 6127,
       "name": "OtherSide",
       "msg": "A wallet backs one side of a contest: it already has an entry on another side"
     },
     {
-      "code": 6127,
+      "code": 6128,
       "name": "ExitWhileLocked",
       "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
     },
     {
-      "code": 6128,
+      "code": 6129,
       "name": "WalletMustSign",
       "msg": "A grant's claim needs its wallet's signature"
     },
     {
-      "code": 6129,
+      "code": 6130,
       "name": "BurnLocked",
       "msg": "This Token-2022 mint's issuer keeps a burn authority (permissioned burn), so the program could never burn it later: it is refused before any money comes in"
     },
     {
-      "code": 6130,
+      "code": 6131,
       "name": "WrongProfile",
       "msg": "This needs the player's own profile in this project: it is missing, or another wallet's or another project's"
     },
     {
-      "code": 6131,
+      "code": 6132,
       "name": "WrongTable",
       "msg": "This is not the project's table at the address its id names"
     },
     {
-      "code": 6132,
+      "code": 6133,
       "name": "BadTable",
       "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
     },
     {
-      "code": 6133,
+      "code": 6134,
       "name": "BadItem",
       "msg": "A trait's key is the project's own (not item_id, rarity, serial or made), each item names each key once and draws each table by one trait, and a range runs from its least to its most"
     },
     {
-      "code": 6134,
+      "code": 6135,
       "name": "BadList",
       "msg": "This is not a list of records of this width, or no record is at this place"
     },
     {
-      "code": 6135,
+      "code": 6136,
       "name": "GrantLive",
       "msg": "A grant's shards close only once the grant is closed or made again"
     },
     {
-      "code": 6136,
+      "code": 6137,
       "name": "ShardsFixed",
       "msg": "A grant keeps its shard bits (0 to 8) for its incarnation: an edit can't change them"
     },
     {
-      "code": 6137,
+      "code": 6138,
       "name": "BadRounds",
       "msg": "A claim by voucher or list names one round or more; an open claim names none"
     },
     {
-      "code": 6138,
+      "code": 6139,
       "name": "NotBurned",
       "msg": "This NFT is not burned: a Sheet closes once its Core asset is burned, its mint holds none, or a record proves its leaf burned"
     },
     {
-      "code": 6139,
+      "code": 6140,
       "name": "OutOfOrder",
       "msg": "Several NFTs, seats or holds in one call come in ascending order of their addresses, each once"
     },
     {
-      "code": 6140,
+      "code": 6141,
       "name": "PackTooLarge",
       "msg": "A pack's draws (each open's, times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
     },
     {
-      "code": 6141,
+      "code": 6142,
       "name": "WrongEnds",
       "msg": "A farm whose seats can stop earning takes its record of ends, and no other farm does"
-    },
-    {
-      "code": 6142,
-      "name": "TooManyEnds",
-      "msg": "This farm is waiting on as many different end times as it can keep"
     }
   ],
   "types": [
@@ -9501,15 +9726,14 @@
           {
             "name": "ends_at",
             "docs": [
-              "Unix time bids close, unless a late bid moved it (`ends`). Within `MAX_CONTEST_SECONDS` of",
-              "the opening (a time written in milliseconds is a mistake)."
+              "Unix time bids close, unless a late bid moved it (`ends`): any time the seller chooses."
             ],
             "type": "i64"
           },
           {
             "name": "extend",
             "docs": [
-              "A bid moves the end to at least this many seconds after it. At most `MAX_CONTEST_SECONDS`."
+              "A bid moves the end to at least this many seconds after it."
             ],
             "type": "u32"
           },
@@ -9517,7 +9741,7 @@
             "name": "shares",
             "docs": [
               "The parts of the winning bid taken at the end; the rest goes to the seller of an NFT, or",
-              "the treasury for the project's item."
+              "the treasury for the project's item. Emptied once they are paid and the seller is still owed."
             ],
             "type": {
               "vec": {
@@ -9580,8 +9804,9 @@
           {
             "name": "proceeds_owed",
             "docs": [
-              "Once the lot was delivered: what is still owed its seller, whose account couldn't take it then.",
-              "The next `end_auction` pays it, and closes the auction."
+              "Once the lot was delivered: what the winning bid still owes, the next `end_auction` paying it",
+              "and closing the auction. The whole bid (tokens, or its NFTs' count) when the lot went first",
+              "(`Ending::LotFirst`), its shares still to pay; or what its seller's account couldn't take."
             ],
             "type": "u64"
           },
@@ -9672,9 +9897,11 @@
     {
       "name": "AuctionEnded",
       "docs": [
-        "An auction ended and closed: sold to `winner` for `price` (the shares took it, less what",
-        "went to the lot's owner), or with no winner, its lot home. `asset` is the collectible that",
-        "moved or was minted (the default address for an item's serial voided, or a normal item)."
+        "An auction ended: sold to `winner` for `price` (the shares took it, less what went to the lot's",
+        "owner), or with no winner, its lot home. `asset` is the collectible that moved or was minted (the",
+        "default address for an item's serial voided, a normal item, an unsold lot proven gone, or an end",
+        "that paid what the bid still owed once the lot had moved). It closes unless something is still",
+        "owed (`Auction::proceeds_owed`): a lot sent first is paid by the next end, `remainder` 0 now."
       ],
       "type": {
         "kind": "struct",
@@ -9947,7 +10174,7 @@
           {
             "name": "shares",
             "docs": [
-              "Where the shares went, as the buyer's choice wrote them."
+              "The shares that were sent, as the buyer's choice wrote them (`Paid`'s rule)."
             ],
             "type": {
               "vec": {
@@ -10204,6 +10431,10 @@
           },
           {
             "name": "asset",
+            "docs": [
+              "The collectible rewritten or burned, or the wallet whose profile was written. The default",
+              "address for a `Make`: each one made, its owner and its serial are in its own `PrizeGiven`."
+            ],
             "type": "pubkey"
           },
           {
@@ -10213,17 +10444,6 @@
                 "name": "Change"
               }
             }
-          },
-          {
-            "name": "owner",
-            "docs": [
-              "For one made: who got it, and its serial number. The default address and 0 otherwise."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "serial",
-            "type": "u32"
           },
           {
             "name": "reference",
@@ -10641,7 +10861,8 @@
           {
             "name": "cap",
             "docs": [
-              "In a contest of NFTs, the most losers' NFTs one winner takes (`None`: no cap; never 0)."
+              "In a contest of NFTs, the most losers' NFTs one winner takes (`None`: no cap; 0: every",
+              "loser's NFT goes to the opener)."
             ],
             "type": {
               "option": "u32"
@@ -10685,7 +10906,8 @@
     {
       "name": "Crafted",
       "docs": [
-        "A player crafted a recipe. The tokens it took and gave are the recipe's own lines."
+        "A player crafted a recipe. The tokens it took and gave are the recipe's own lines, but for",
+        "`to_treasury`."
       ],
       "type": {
         "kind": "struct",
@@ -10735,6 +10957,17 @@
             "name": "made",
             "type": {
               "vec": "pubkey"
+            }
+          },
+          {
+            "name": "to_treasury",
+            "docs": [
+              "The payment lines (by their place among the recipe's inputs, the first 0) that nobody could",
+              "take where they say (a collectible nobody holds, an account of this program): the treasury got",
+              "them."
+            ],
+            "type": {
+              "vec": "u32"
             }
           }
         ]
@@ -11065,6 +11298,27 @@
                 "type": "u32"
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ending",
+      "docs": [
+        "Which end `end_auction` makes of an auction with a bid in. With no bid, each is the same: the lot",
+        "goes home."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Deliver"
+          },
+          {
+            "name": "LotFirst"
+          },
+          {
+            "name": "CallOff"
           }
         ]
       }
@@ -11614,6 +11868,25 @@
       }
     },
     {
+      "name": "FeesCollected",
+      "docs": [
+        "The platform took `amount` lamports of fees out of the fee boxes passed, to `to`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "to",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Gate",
       "docs": [
         "Who may use a box, a lottery, a contest, an auction or a grant."
@@ -12021,8 +12294,8 @@
           {
             "name": "at_least",
             "docs": [
-              "In a farm of tokens, a seat grows only while it stakes at least this much (base units), so a",
-              "dust stake earns no XP. 0 in a farm of collectibles (`BadFarm`)."
+              "A seat grows only while it stakes at least this much (base units), so a dust stake earns no",
+              "XP. A collectible stakes 1: in a farm of collectibles, more than 1 grows nothing."
             ],
             "type": "u64"
           }
@@ -12559,6 +12832,30 @@
       }
     },
     {
+      "name": "LeftoverBurned",
+      "docs": [
+        "A contest's or a lottery round's token account closed, and `amount` of `mint` it still held,",
+        "which was nobody's (`Tokens::retire`), was burned out of it."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "account",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Limits",
       "docs": [
         "Counts of claims, not amounts: each round paid is one. 0 switches a limit off."
@@ -13048,7 +13345,7 @@
             "docs": [
               "The NFT the box rolls on, when it rolls on one: one the player brings that passes this",
               "rule (an enchant, a forge, a mission's return), which its entries' `fates` act on. It is",
-              "also the NFT its gate and odds read."
+              "also the NFT its gate's and odds' rules on an NFT read."
             ],
             "type": {
               "option": {
@@ -13146,7 +13443,7 @@
           {
             "name": "every",
             "docs": [
-              "Seconds from one draw to the next. 0: it draws once, then ends."
+              "Seconds from one draw to the next. 0: it draws once more, round `last`, then ends."
             ],
             "type": "i64"
           },
@@ -13154,7 +13451,15 @@
             "name": "round",
             "docs": [
               "Counts the rounds: up by one as a round's draw is first asked, or it is cancelled short, or",
-              "nobody bought into it. A lottery that draws once has ended past round 0."
+              "nobody bought into it. A lottery that draws once has ended past round `last`."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "last",
+            "docs": [
+              "The round it was at when last written: for one that draws once, its last round. A repeating",
+              "lottery edited to draw once ends after the round it is at, whoever buys into it."
             ],
             "type": "u32"
           },
@@ -13302,10 +13607,11 @@
           {
             "name": "winning_ticket",
             "docs": [
-              "First place's ticket. The others follow at even steps (`LotteryRound::ticket_of_place`); each",
-              "place's winner is the buyer of the entry that holds its ticket."
+              "First place's ticket (in a weighted round, a point of its weight). The others follow at even",
+              "steps (`LotteryRound::ticket_of_place`); each place's winner is the buyer of the entry that",
+              "holds its ticket."
             ],
-            "type": "u64"
+            "type": "u128"
           },
           {
             "name": "randomness",
@@ -13463,7 +13769,8 @@
             "name": "returns",
             "docs": [
               "No loss: every ticket goes back to its buyer once the round is drawn, and the winners take",
-              "only the pot (what is paid into it: yield, a sponsor). No shares, no ticket mint; paid from a pot."
+              "only the pot (what is paid into it: yield, a sponsor) and their prizes. No shares, no ticket",
+              "mint. Paid from its own money, its places take no money: they give their prizes."
             ],
             "type": "bool"
           },
@@ -13474,6 +13781,23 @@
               "draw. 0: no least."
             ],
             "type": "u64"
+          },
+          {
+            "name": "closes_before",
+            "docs": [
+              "Sales close this many seconds before the draw, so every ticket is held at least that long",
+              "(in a no-loss lottery, a pot goes to money that stayed in). 0: they sell until the draw."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "time_weighted",
+            "docs": [
+              "Each ticket counts in the draw for the seconds from its purchase to the close of sales (the",
+              "round's own `draws_at` less its `closes_before`), so money held longer is likelier to win.",
+              "Only for a lottery that `returns` its tickets. Off: every ticket counts one."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -13626,8 +13950,10 @@
     {
       "name": "OddsRaised",
       "docs": [
-        "A purchase fixed the odds boosts from the collectible its player showed (`rules.rs`):",
-        "`raised` has the basis points added to each entry's weight, in entry order."
+        "A roll's odds boosts were fixed (`rules.rs`): at a purchase, from the collectible its player showed",
+        "and their profile; at a roll made on an NFT, from that NFT; at another roll's first ask (`ask_roll`),",
+        "from the profile and an NFT its player showed then, added to what the NFT it is on raised. `raised` has",
+        "all the basis points the order now adds to each entry's weight, in entry order."
       ],
       "type": {
         "kind": "struct",
@@ -13639,14 +13965,24 @@
           {
             "name": "requested_slot",
             "docs": [
-              "The purchase identity at this reusable order address. For a mission's or a recipe's roll,",
-              "the slot it was made in: `ask_roll` moves the order's to the slot it asks in, which its",
-              "`OrderRolled` and `OrderSettled` carry."
+              "The purchase identity at this reusable order address. For a roll made on an NFT, the slot it",
+              "was made in; at an ask, the slot it asks in, which its `OrderRolled` and `OrderSettled` carry."
             ],
             "type": "u64"
           },
           {
             "name": "asset",
+            "docs": [
+              "The NFT read (the default address for none): at an ask, the NFT shown, or the one the roll is on",
+              "when what it raised is in `raised`."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "profile",
+            "docs": [
+              "The player's profile read (the default address for none)."
+            ],
             "type": "pubkey"
           },
           {
@@ -13903,8 +14239,8 @@
           {
             "name": "odds_bps",
             "docs": [
-              "What each of the box's odds rules added at purchase, in basis points. `box_version`",
-              "binds each position to its rule; unused positions are zero. The roll still checks stock."
+              "What each of the box's odds rules added at purchase, or by the roll's first ask, in basis points.",
+              "`box_version` binds each position to its rule; unused positions are zero. The roll still checks stock."
             ],
             "type": {
               "vec": "u32"
@@ -14252,6 +14588,22 @@
             }
           },
           {
+            "name": "gave",
+            "docs": [
+              "How many of `won` each of `entries` set aside, in the same order: fewer than the entry names",
+              "when a prize of it turned out short."
+            ],
+            "type": "bytes"
+          },
+          {
+            "name": "missed",
+            "docs": [
+              "The draws made that landed on an entry that couldn't be given, and gave nothing",
+              "(`WhenOut::GiveNothing`): they are not in `entries`."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "won",
             "docs": [
               "What was set aside for the player: a collectible's serial, tokens, an NFT, a roll."
@@ -14318,8 +14670,9 @@
           {
             "name": "won",
             "docs": [
-              "What the player got, as the roll set it aside. What each became follows from it: a",
-              "collectible at `[\"asset\", item, serial]`, the NFT itself."
+              "What the roll set aside for the player: this call gave those from `from` on, but for any a",
+              "`PrizeForgone` names. What each became follows from it: a collectible at `[\"asset\", item,",
+              "serial]`, the NFT itself."
             ],
             "type": {
               "vec": {
@@ -14341,7 +14694,8 @@
           {
             "name": "shares",
             "docs": [
-              "The split fixed at purchase."
+              "The shares of the split fixed at purchase that this call sent (`Paid`'s rule): none when an",
+              "earlier part made the split."
             ],
             "type": {
               "vec": {
@@ -14356,6 +14710,14 @@
             "docs": [
               "Gross remainder routed to the treasury, excluding explicit shares and before transfer fees,",
               "by this call's split."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "back",
+            "docs": [
+              "What this call gave back to the player of what they paid: the worth of the draws the roll",
+              "didn't make (`Order::back`)."
             ],
             "type": "u64"
           }
@@ -14450,7 +14812,8 @@
           {
             "name": "shares",
             "docs": [
-              "Where the shares went. Each was sent `amount * bps / 10,000`, rounded down."
+              "The shares that were sent, each `amount * bps / 10,000`, rounded down. One nobody could take",
+              "(`rail.rs`) is left out, and its part is in `treasury_remainder`."
             ],
             "type": {
               "vec": {
@@ -14659,6 +15022,18 @@
             }
           },
           {
+            "name": "when_short",
+            "docs": [
+              "For tokens from a pool: what its places get when the pool holds less than they win",
+              "(`WhenShort`). Every run of one pool says the same."
+            ],
+            "type": {
+              "defined": {
+                "name": "WhenShort"
+              }
+            }
+          },
+          {
             "name": "times",
             "type": "u32"
           }
@@ -14791,6 +15166,40 @@
           },
           {
             "name": "Raffled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PrizeForgone",
+      "docs": [
+        "A prize an order's settle did not give (`OrderSettled` lists it, an `OrderPartSettled` spans it): the one at",
+        "`at` of the order's `won`. Its player, settling their own order, gave it up (tokens or a",
+        "collectible they can't receive, a stash's NFT put back), or a compressed one's collection can't",
+        "hold it (its serial voided)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "order",
+            "type": "pubkey"
+          },
+          {
+            "name": "requested_slot",
+            "type": "u64"
+          },
+          {
+            "name": "at",
+            "type": "u32"
+          },
+          {
+            "name": "won",
+            "type": {
+              "defined": {
+                "name": "Won"
+              }
+            }
           }
         ]
       }
@@ -15038,6 +15447,38 @@
       }
     },
     {
+      "name": "ProjectUpdated",
+      "docs": [
+        "The owner changed the project's settings (`update_project`): these are its keys and its pause",
+        "now."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
       "name": "Raise",
       "docs": [
         "A number a recipe moves on a collectible handed in and kept (`Shift::raise`): `by` more under",
@@ -15087,9 +15528,9 @@
           {
             "name": "mints",
             "docs": [
-              "Minted when a seat is paid (the project must be the rewards' mint authority), or paid from",
-              "what is free in the rewards vault while it lasts: what it can't cover, or the mint has no room",
-              "for, is not owed later."
+              "Minted when a seat is paid, while the project is the rewards' mint authority, or paid from what",
+              "is free in the rewards vault while it lasts: what it can't cover, or the mint has no room for",
+              "(none while the project is not its authority), is not owed later."
             ],
             "type": "bool"
           },
@@ -15399,8 +15840,8 @@
     {
       "name": "Released",
       "docs": [
-        "A held collectible left the project for `to`: given by the authority while its hold ran, or",
-        "sent home to its player by anyone once it was over."
+        "A held collectible left the project for `to`: given by the authority while its hold ran, sent",
+        "home to its player by anyone once it was over, or brought home by a loan's repayment (`Repaid`)."
       ],
       "type": {
         "kind": "struct",
@@ -15447,7 +15888,9 @@
     {
       "name": "Repaid",
       "docs": [
-        "A loan was repaid before it was due, by `by` (the borrower or anyone), and its NFT went home."
+        "A loan was repaid before it was due, by `by` (the borrower or anyone). `home`: its NFT went home",
+        "to the borrower in the same call (a `Released` beside it); otherwise it waits in a hold that is",
+        "over, for anyone to send home (`release`)."
       ],
       "type": {
         "kind": "struct",
@@ -15475,6 +15918,10 @@
           {
             "name": "repay",
             "type": "u64"
+          },
+          {
+            "name": "home",
+            "type": "bool"
           }
         ]
       }
@@ -15540,10 +15987,11 @@
     {
       "name": "RollMade",
       "docs": [
-        "A mission's return or a recipe made a roll (`waiting_order`): it waits for anyone to ask the",
-        "oracle (`ask_roll`). On `subject` (the default address for none), which the project holds until",
-        "it is settled when `held`. It names no slot: the order's `requested_slot` is set when it is",
-        "asked, and its `OrderRolled` and `OrderSettled` carry that one."
+        "A purchase (`open_box`), or a mission's return, a recipe or a prize, made a roll (`waiting_order`:",
+        "it waits for its player or the project's keys to ask the oracle, `ask_roll`). On `subject` (the",
+        "default address for none), which the project holds until it is settled when `held`. It names no",
+        "slot: a purchase's `requested_slot` is the slot of this receipt, a waiting roll's is set when it",
+        "is asked, and its `OrderRolled` and `OrderSettled` carry that one."
       ],
       "type": {
         "kind": "struct",
@@ -15571,6 +16019,25 @@
           {
             "name": "held",
             "type": "bool"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "What the order holds of what was paid for it (`paid` of `mint`, in the project's vault): a",
+              "purchase's price as it arrived, an auction's winning bid, 0 for a free roll."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "paid",
+            "type": "u64"
+          },
+          {
+            "name": "opens",
+            "docs": [
+              "The opens it is of (`open_box`'s `count`)."
+            ],
+            "type": "u32"
           }
         ]
       }
@@ -15664,6 +16131,62 @@
               "defined": {
                 "name": "Test"
               }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SaleCalledOff",
+      "docs": [
+        "A sale of an NFT lot called off after its end, the lot never having moved to `bidder`, and the",
+        "auction closed: `back` of the winning bid went back to them (tokens, or how many of its NFTs: one",
+        "proven gone stays gone); the `lot` went home to its seller (`home`: moved, or a hold for them), or",
+        "was proven gone. `gone`: called off on that evidence, by anyone (`by`); otherwise by the",
+        "project's keys."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "auction",
+            "type": "pubkey"
+          },
+          {
+            "name": "bidder",
+            "type": "pubkey"
+          },
+          {
+            "name": "back",
+            "type": "u64"
+          },
+          {
+            "name": "lot",
+            "type": "pubkey"
+          },
+          {
+            "name": "home",
+            "type": "bool"
+          },
+          {
+            "name": "gone",
+            "type": "bool"
+          },
+          {
+            "name": "by",
+            "type": "pubkey"
+          },
+          {
+            "name": "reference",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
             }
           }
         ]
@@ -16369,6 +16892,14 @@
             "type": "u32"
           },
           {
+            "name": "weight",
+            "docs": [
+              "What they weigh in the draw: `count`, or in a weighted round (`time_weighted`) `count` times",
+              "the seconds from the purchase to the close of sales."
+            ],
+            "type": "u128"
+          },
+          {
             "name": "entry",
             "docs": [
               "The entry these tickets are in the round's record (`LotteryRound`)."
@@ -16730,6 +17261,14 @@
               "What leaving early left behind (`Tier::exit_bps`)."
             ],
             "type": "u64"
+          },
+          {
+            "name": "prize_missed",
+            "docs": [
+              "The mission's prize was won but could not be given (a pool short of it, an item sold out),",
+              "and the NFT went home without it: no `PrizeGiven`, and nothing keeps it owed."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -16795,6 +17334,31 @@
           },
           {
             "name": "DrawLeft"
+          },
+          {
+            "name": "GiveNothing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WhenShort",
+      "docs": [
+        "What a pool's places get when the pool holds less, as the round's draw is first asked, than",
+        "every place of it with a winner wins: written down then, and paid from what was written. A",
+        "minted prize is never short."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "InOrder"
+          },
+          {
+            "name": "InProportion"
+          },
+          {
+            "name": "Nothing"
           }
         ]
       }
@@ -17067,29 +17631,12 @@
       "value": "604800"
     },
     {
-      "name": "MAX_CONTEST_SECONDS",
-      "docs": [
-        "The furthest off a contest's result may be due (5 years): a time written in milliseconds is",
-        "refused, as it would keep the contest from ever being off by itself."
-      ],
-      "type": "i64",
-      "value": "157680000"
-    },
-    {
       "name": "MAX_FEE_LAMPORTS",
       "docs": [
         "The most either flat fee can ever be: 0.01 SOL."
       ],
       "type": "u64",
       "value": "10000000"
-    },
-    {
-      "name": "MAX_ONE_OF",
-      "docs": [
-        "The most texts a rule's `Test::OneOf` matches."
-      ],
-      "type": "u32",
-      "value": "16"
     },
     {
       "name": "MAX_POTS",
@@ -17101,27 +17648,12 @@
     },
     {
       "name": "MAX_RUN_PLACES",
+      "docs": [
+        "The most places one run of a lottery's places holds when they are given one by one (an NFT, a",
+        "compressed NFT, a raffled one): a pull walks the run from its first place, and so fits."
+      ],
       "type": "u32",
       "value": "4096"
-    },
-    {
-      "name": "MAX_SCHEDULE_SECONDS",
-      "docs": [
-        "The latest a sealed schedule's last run may fall, from when it is written: 10 years (a cliff of a",
-        "year and years of vesting fit; a time written in milliseconds doesn't)."
-      ],
-      "type": "i64",
-      "value": "315360000"
-    },
-    {
-      "name": "MAX_SEALED_RUNS",
-      "docs": [
-        "The most runs a sealed schedule may have, so its last run comes within a few calls of being due",
-        "(`MAX_SCHEDULE_STEPS`) and its vault never keeps what is left: 100,000 runs is one an hour for",
-        "over 11 years."
-      ],
-      "type": "u32",
-      "value": "100000"
     },
     {
       "name": "NOTICE_SECONDS",

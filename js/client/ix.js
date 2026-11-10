@@ -867,7 +867,18 @@ export function withDefaults(def) {
   if (kind === 'Lottery') {
     // Its terms (`LotteryTerms`, what a round copies at its first purchase), given in `terms` or beside `every`.
     const { every, gate, per_wallet: perWallet, terms: given, ...flat } = args;
-    const terms = { nft_ticket: null, returns: false, min_sold: 0, ticket_mint: NO_ADDRESS, ...flat, ...given };
+    // Sales close `closes_before` seconds before the draw (0: at the draw). `time_weighted` (a lottery that returns its
+    // tickets only): a purchase counts for its tickets times the seconds from it to the close of sales.
+    const terms = {
+      nft_ticket: null,
+      returns: false,
+      min_sold: 0,
+      ticket_mint: NO_ADDRESS,
+      closes_before: 0n,
+      time_weighted: false,
+      ...flat,
+      ...given,
+    };
     // Where its places are paid from is the project's to name, never a default: `{ Pot: [id] }`, a pot kept from round
     // to round, or `{ Round: { rest } }`, each round's own ticket money with what its places leave going to `rest`.
     const pays = terms.pays_from;
@@ -877,9 +888,13 @@ export function withDefaults(def) {
       );
     if (pays.Pot && !(Number(pays.Pot[0]) >= 0 && Number(pays.Pot[0]) < MAX_POTS))
       throw new Error(`A lottery's pot id is below ${MAX_POTS}.`);
-    // A run of places alike is { bps, prize, times }; a number is one place's share of the pot that gives nothing else.
+    // A run of places alike is { bps, prize, when_short, times }; a number is one place's share of the pot that gives
+    // nothing else. `when_short`: what a place of tokens from a pool gets when the pool holds less than the places with
+    // a winner win: 'InOrder' (the first places in full, the default), 'InProportion' or 'Nothing'.
     terms.places = (terms.places ?? []).map(p =>
-      typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 },
+      typeof p === 'object'
+        ? { prize: null, when_short: 'InOrder', times: 1, ...p }
+        : { bps: p, prize: null, when_short: 'InOrder', times: 1 },
     );
     terms.shares = stored(terms.shares ?? []);
     return { [kind]: { ...body, args: { terms, every: every ?? 0n, gate: gate ?? null, per_wallet: perWallet ?? 0 } } };
@@ -913,12 +928,15 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
   // A new sealed schedule opens its own vault: its mint, the vault and both token programs.
   const vest = kind === 'Schedule' ? args.action?.from?.Vest?.[0] : null;
   if (vest) {
-    // It pays a wallet, the treasury or a burn: no account it pays is named.
+    // It pays a wallet, the treasury or a burn. A wallet it pays follows the vault's four: the program refuses one
+    // that is an account of its own (`BadMove`: every run would pass it over).
+    const payee = args.action.to?.Wallet?.[0];
     remaining = [
       meta(vest, false, false),
       meta(pda.vest(recordAddress(project, def)), false, true),
       meta(TOKEN_PROGRAM, false, false),
       meta(TOKEN_2022_PROGRAM, false, false),
+      ...(payee ? [meta(payee, false, false)] : []),
     ];
   }
   if (kind === 'Lottery') {
@@ -3233,7 +3251,9 @@ export const stakeNftIx = ({
 
 /**
  * `player` takes an NFT out once its lock has run: it grows on its way out (a farm with growth writes on it, or on its
- * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. Leaving a tier
+ * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. `needPrize` (true
+ * by default): a mission prize that can't be given refuses the unstake (`PrizeNotCovered`) and the seat stays; false
+ * lets the NFT go home without it (`Unseated.prize_missed`). Leaving a tier
  * that rolls (`roll`: its box id, `boxes` its decoded box by id), the NFT is rolled on that box, in an order named by
  * `nonce` (`namedRollNonce`: the NFT's own on a box that holds it; its player or the project's keys then ask the oracle,
  * `askRollIx`, and settles); a box that can burn it or give it away keeps it in the project's hands until then. `more`
@@ -3252,6 +3272,7 @@ export const unstakeNftIx = ({
   tokenMetadata: tm,
   compressed,
   forfeit = false,
+  needPrize = true,
   roll = null,
   nonce = 0n,
   tier,
@@ -3314,7 +3335,7 @@ export const unstakeNftIx = ({
   ]);
   return lootIx(
     'unstake_nft',
-    { forfeit, nonce },
+    { forfeit, nonce, need_prize: needPrize },
     {
       ...seat.accounts,
       loot_box: first.rolls.box,
@@ -4090,6 +4111,7 @@ export function endAuctionIx({
   compressed,
   held = [],
   hold = false,
+  ending = 'Deliver',
   reference: ref,
   nonce,
   holders,
@@ -4138,7 +4160,7 @@ export function endAuctionIx({
       : [];
   return lootIx(
     'end_auction',
-    { reference: reference(ref), nonce },
+    { reference: reference(ref), nonce, ending },
     {
       signer,
       project,
