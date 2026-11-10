@@ -9,7 +9,7 @@ import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { MAX_POTS } from '../client/accounts.js';
 import { vault } from '../client/pda.js';
-import { boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
+import { ASSUMED_TRIES, boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
@@ -685,10 +685,16 @@ export function dateWords(seconds) {
 }
 
 /**
- * Checks an economy spec. `now` (Unix seconds) dates "publish".
+ * Checks an economy spec. `now` (Unix seconds) dates "publish". `project`: the project's address, once a wallet is named
+ * (the plan for a real setup passes it; a live economy's file names it): a box's write searches for each of its pools'
+ * and stashes' addresses, and the checker counts each search exactly with it, else at an assumed 2 tries an address
+ * (`ASSUMED_TRIES`).
  * Returns { ok, refusals: [{ code, where, message, fix }], warnings: [{ code, where, message, fix? }] }.
  */
-export function check(economy, { network = 'devnet', now = Math.floor(Date.now() / 1000) } = {}) {
+export function check(
+  economy,
+  { network = 'devnet', now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {},
+) {
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
@@ -2398,7 +2404,9 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // rolls, or one outcome of items, with no outcome that burns the payment and no NFT to roll on (BadEntries).
     const slots = b.slots ?? [];
     const outs = b.outcomes ?? [];
+    const heldBefore = refusals.length;
     answerHolds(b, where);
+    const answerRefused = refusals.length > heldBefore;
     for (const [i, o] of outs.entries()) {
       const given = outcomeParts(o);
       tooMany(
@@ -2555,8 +2563,10 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
     // Every draw of one open fits one answer of the oracle's (PackTooLarge): a pack past it could only draw its first
     // cards, so the program refuses the box. A box that doesn't roll sells by `buy`, the whole purchase in one
     // transaction, or through the oracle when one `buy` can't carry it (`buyFits`): then the answer's heap counts, and it
-    // can't give a roll, which only `buy` gives (catalog.rs). The heap counts the box's own bytes too (`boxBytes`).
-    if (cards > 1 && outs.length) {
+    // can't give a roll, which only `buy` gives (catalog.rs). The heap counts the box's own bytes too (`boxBytes`), and
+    // the compute finding each pool's and stash's address its prizes name (exact with the project, else assumed).
+    // A box of one draw is held to the same count: past it the program refuses the box when it is written.
+    if (outs.length && (cards > 1 || !answerRefused)) {
       const args = (() => {
         try {
           return boxArgs(b, m);
@@ -2566,38 +2576,45 @@ export function check(economy, { network = 'devnet', now = Math.floor(Date.now()
       })();
       const entries = args?.entries;
       if (entries) {
-        const byBuy = boxRolls(b, m) || Boolean(b.rollsOn) || buyFits(args, cards);
+        const byBuy = boxRolls(b, m) || Boolean(b.rollsOn) || buyFits(args, Math.max(1, cards));
         const extras = {
           odds: args.odds.length,
           shares: args.shares.length,
           fates: args.fates.length,
           bytes: boxBytes(args),
           oracle: !byBuy,
+          project,
         };
+        const searches = entries.some(e => e.prizes.some(p => p.Tokens?.from?.Pool || p.Stash != null || p.Nft));
+        const searched = searches
+          ? project
+            ? ' (finding the address of each pool and stash it names counted for this project)'
+            : ` (finding the address of each pool and stash it names counted at ${ASSUMED_TRIES} tries each, as no wallet is named yet: the check with your wallet counts it exactly)`
+          : '';
+        const drawn = slots.length ? slots.map(s => ({ count: s.count, only: s.from ?? [] })) : 1;
         if (!byBuy && entries.some(e => e.prizes.some(p => p.Roll != null)))
           refuse(
             'E-ODDS',
             `${where}.slots`,
-            `${label(b)} gives a roll, which only a sale in one step gives, but ${cards} of what it gives don’t fit one transaction (its accounts, its instructions or its compute), so the program refuses the box (PackTooLarge).`,
+            `${label(b)} gives a roll, which only a sale in one step gives, but ${Math.max(1, cards)} of what it gives don’t fit one transaction (its accounts, its instructions or its compute), so the program refuses the box (PackTooLarge).`,
             'Fewer cards an open, fewer prizes in its outcome, or fewer shares in its split.',
           );
-        else if (
-          !drawsFit(
-            entries,
-            slots.map(s => ({ count: s.count, only: s.from ?? [] })),
-            1,
-            extras,
-          )
-        ) {
+        else if (cards > 1 && !drawsFit(entries, drawn, 1, extras)) {
           let most = cards - 1;
           while (most > 1 && !drawsFit(entries, most, 1, extras)) most -= 1;
           refuse(
             'E-ODDS',
             `${where}.slots`,
-            `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here), so the program refuses the box (PackTooLarge).`,
+            `${label(b)} draws ${cards} cards an open among ${outs.length} outcome${outs.length === 1 ? '' : 's'}: more than one answer of the oracle’s can draw (about ${most} here${searched}), so the program refuses the box (PackTooLarge).`,
             'Fewer cards an open (sell two packs instead of one), fewer outcomes, fewer prizes in an outcome, or a smaller box (fewer odds, shares, slots or outcomes that act on the NFT).',
           );
-        }
+        } else if (cards <= 1 && !drawsFit(entries, drawn, 1, extras))
+          refuse(
+            'E-ODDS',
+            `${where}.outcomes`,
+            `${label(b)} is too long for one answer of the oracle’s to draw it once${searched}, so the program refuses the box when it is written (PackTooLarge).`,
+            'Fewer outcomes, fewer prizes in an outcome, fewer pools or stashes named, or a smaller box (fewer odds, shares or slots). Put a long weighted list in a table or a stash, drawn by one outcome.',
+          );
       }
     }
     if (cards > 1 && b.rollsOn)

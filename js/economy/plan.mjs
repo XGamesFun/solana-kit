@@ -1828,7 +1828,8 @@ export function pack(steps, ctx) {
  * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing).
  */
 export function plan(economy, { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null } = {}) {
-  const checked = check(economy, { now });
+  // With a real context the project is known: a box's write is checked with its own address searches counted.
+  const checked = check(economy, { now, ...(ctx?.project ? { project: ctx.project } : {}) });
   if (!checked.ok) return { ok: false, refusals: checked.refusals, warnings: checked.warnings };
   const { steps, model: m } = setupSteps(economy, { now, only, live });
   if (ctx)

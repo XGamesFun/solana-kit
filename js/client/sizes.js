@@ -1,7 +1,10 @@
 // Rent sizes from the current IDL. Fixed allocations reserve the largest enum and option forms,
 // matching Anchor InitSpace. Dynamic records use their actual encoded fields.
+import { addressBytes } from '../chain/base58.js';
 import { encodeAccount, encodeBorsh } from '../chain/borsh.js';
+import { uintLE, utf8 } from '../chain/bytes.js';
 import IDL from './idl/loot.js';
+import { lootAddress } from './pda.js';
 
 const scalar = { bool: 1, u8: 1, u16: 2, u32: 4, i32: 4, u64: 8, i64: 8, u128: 16, pubkey: 32 };
 // What a fixed-size account reserves for its lists and strings: a roll's fate (`Fate.shifts`, each key at most 32 bytes).
@@ -170,7 +173,7 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
 
 // What one oracle answer's roll spends, counted at no less than each part costs (`order.rs`'s `RollCost`, measured by
 // the program's `tests/roll_costs.rs` and `tests/roll_heap.rs`), against the compute and the heap the oracle gives its
-// answer, less a margin.
+// answer, less a margin. Every number of the program's count is here, and only here: a change of one is one edit.
 const ROLL_BUDGET = 300_000n;
 const ROLL_HEAP = 32n * 1024n - 512n;
 const COST = {
@@ -184,7 +187,14 @@ const COST = {
   tokens: 6_000n,
   draw: 9_000n,
   group: 250n,
+  row: 10n,
+  // One try of an address search, what the runtime charges (`COST_TRY`).
+  try: 1_500n,
+  // Reading a prize of an entry after its first (`COST_PRIZE`).
+  prize: 300n,
   reread: 1_000n,
+  // A draw of an entry that gives nothing, beyond its weighing (`COST_NOTHING`).
+  nothing: 1_100n,
   finish: 15_000n,
   won: 150n,
   drawn: 50n,
@@ -195,6 +205,22 @@ const COST = {
   slotEntry: 350n,
   openSlot: 150n,
 };
+/** The most draws one `open_box` takes in all, its count times the box's draws: what one answer could weigh, each draw
+ * at its weighing at least (`ROLL_BUDGET / COST_WEIGH`, 300). More is refused before any price is added up
+ * (`PackTooLarge`). */
+export const MOST_DRAWS_A_PURCHASE = Number(ROLL_BUDGET / COST.weigh);
+/** The compute one transaction has, and what adding up one sale's price costs at most (`catalog.rs` `COST_SALE`). */
+const MAX_TX_CU = 1_400_000;
+const COST_SALE = 50;
+/** The most sales one `buy` takes (`count`): what one transaction can price (`MAX_TX_CU / COST_SALE`, 28,000). More is
+ * refused before any price is added up (`PackTooLarge`). */
+export const MOST_SALES_A_BUY = MAX_TX_CU / COST_SALE;
+/**
+ * The tries counted for finding a pool's or a stash's address when the project is not known yet (a spec checked before
+ * any wallet is named): 2, what an address takes on average (half are found at the first try, a quarter at the second,
+ * and so on). With the project known, the count is exact: `256 - bump` tries an address.
+ */
+export const ASSUMED_TRIES = 2;
 const BYTES = {
   start: 6_000n,
   prizeRead: 600n,
@@ -310,88 +336,152 @@ const accountOf = p => {
 };
 
 /**
- * Whether all of `opens` opens of `entries` by `slots` fit one oracle answer (`order::draws_fit`), each draw at the
- * dearest its slot could make, with what is known from the box alone (no table rows, a stash of one group), its `odds`,
- * `shares` and `fates` counted, and `bytes` (`boxBytes`) of heap reading the box takes beyond its entries. `slots` may
- * be a number: that many draws among every entry. The answer's heap counts for a box that rolls, or one sold through
- * the oracle (`oracle`: a box that doesn't roll but one `buy` can't carry, `buyFits`). The program refuses a box whose
- * one open doesn't fit at its upsert, and a purchase that doesn't at `open_box`, where it also reads what the accounts
- * hold (`PackTooLarge`).
+ * The tries finding a pool's (`pool` true) or a stash's address takes (`order::searched`: `256 - bump`), for `project`'s
+ * pool or stash `id`. With no project, `ASSUMED_TRIES`.
  */
-export function drawsFit(
-  entries,
-  slots,
-  opens = 1,
-  { odds = 0, shares = 0, fates = 0, bytes = 0n, oracle = false } = {},
-) {
-  const given = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
-  // A box with no slots draws once among every entry.
-  const list = given.length ? given : [{ count: 1, only: [] }];
-  const draws = list.reduce((n, s) => n + BigInt(s.count), 0n) * BigInt(opens);
-  // A box of one draw is held to the same answer: one past it would be refused at every purchase.
+export function searchTries(project, pool, id) {
+  if (!project) return ASSUMED_TRIES;
+  const [, bump] = pool ? lootAddress(pdaSeeds.pool(project, id)) : lootAddress(pdaSeeds.stash(project, id));
+  return 256 - bump;
+}
+const pdaSeeds = {
+  pool: (project, index) => [utf8('pool'), addressBytes(project), uintLE(index, 2)],
+  stash: (project, id) => [utf8('stash'), addressBytes(project), uintLE(id, 4)],
+};
+
+/**
+ * What a roll of `entries` spends, as the program's `RollCost::new` counts it from the box alone (no table rows, a
+ * stash of one group, a named NFT's stash of one row): `fixed` (reading the box, every entry's accounts, finding each
+ * pool's and stash's address), each entry's draw (`prizes`), its stock read again (`reread`), the prizes it gives, its
+ * heap, and the heap reading the box leaves used (`start`, the box's own `bytes` included). `project`: whose pools and
+ * stashes these are, to count each search exactly; without it, at `ASSUMED_TRIES` tries an address.
+ */
+function rollCost(entries, { odds = 0, shares = 0, fates = 0, bytes = 0n, project = null }) {
   const n = BigInt(entries.length);
+  // Each address is found by what finding it takes, once a prize names it (`draws_fit`'s `reads`): what a search cost is
+  // kept by the address's kind and id; once past the answer's budget nothing more is searched for (the box is refused).
+  const found = new Map();
+  let searched = 0n;
+  const reading = p => {
+    const pool = p.Tokens?.from?.Pool;
+    const stash = p.Stash ?? p.Nft?.stash;
+    if (pool == null && stash == null) return 0n;
+    const key = pool != null ? `pool ${pool[0] ?? pool}` : `stash ${stash[0] ?? stash}`;
+    let cost = found.get(key);
+    if (cost === undefined) {
+      if (searched > ROLL_BUDGET) cost = 0n;
+      else {
+        const id = Number(pool != null ? (pool[0] ?? pool) : (stash[0] ?? stash));
+        cost = COST.try * BigInt(searchTries(project, pool != null, id));
+        found.set(key, cost);
+      }
+    }
+    searched += cost;
+    return cost;
+  };
+  let fixed = COST.fixed + COST.odds * BigInt(odds) + COST.share * BigInt(shares) + COST.fate * BigInt(fates);
+  let start = BYTES.start + BigInt(outgrown(entries.length, ENTRY_BYTES)) + BigInt(bytes);
+  const prizes = [];
+  const reread = [];
+  const heap = [];
+  for (const e of entries) {
+    let [set, again, used] = [0n, 0n, BYTES.draw];
+    fixed += e.prizes.length ? COST.entry : COST.blank;
+    start += BYTES.entryRead;
+    e.prizes.forEach((p, k) => {
+      fixed += reading(p) + (k > 0 ? COST.prize : 0n);
+      start += BYTES.prizeRead;
+      if (p.Item != null || p.Compressed) [set, again] = [set + COST.item, again + COST.reread];
+      else if (p.Tokens) [set, again] = [set + COST.tokens, again + (p.Tokens.from.Pool ? COST.reread : 0n)];
+      else if (p.Stash != null) [set, again] = [set + COST.draw + COST.group, again + COST.reread];
+      else if (p.Nft) {
+        // A named NFT is searched for row by row: when its stock is read, again, and when it is taken (one row here).
+        fixed += COST.row;
+        [set, again] = [set + COST.item + COST.row, again + COST.reread + COST.row];
+      } else set += COST.item;
+      used += p.Tokens ? (p.Tokens.from.Pool ? BYTES.pooled : BYTES.minted) : BYTES.prize;
+    });
+    // A draw that gives nothing still draws, and keeps its draw's lists.
+    prizes.push(e.prizes.length ? set : COST.nothing);
+    reread.push(again);
+    heap.push(used);
+  }
   const weigh = COST.weigh + COST.weighEntry * n;
-  const reads = entries.map(e => e.prizes.map(accountOf));
-  const cost = entries.map(e =>
-    e.prizes.reduce(
-      (c, p) => {
-        if (p.Item != null || p.Compressed || p.Nft)
-          return { set: c.set + COST.item, again: c.again + COST.reread, bytes: c.bytes + BYTES.prize };
-        if (p.Tokens)
-          return {
-            set: c.set + COST.tokens,
-            again: c.again + (p.Tokens.from.Pool ? COST.reread : 0n),
-            bytes: c.bytes + (p.Tokens.from.Pool ? BYTES.pooled : BYTES.minted),
-          };
-        if (p.Stash != null)
-          return { set: c.set + COST.draw + COST.group, again: c.again + COST.reread, bytes: c.bytes + BYTES.prize };
-        return { set: c.set + COST.item, again: c.again, bytes: c.bytes + BYTES.prize };
-      },
-      { set: 0n, again: 0n, bytes: BYTES.draw },
-    ),
-  );
-  const next = entries.map(
-    (_, i) =>
-      weigh +
-      cost[i].set +
-      cost.reduce((sum, c, j) => (j === i || reads[i].some(a => a && reads[j].includes(a)) ? sum + c.again : sum), 0n),
-  );
   const most = BigInt(Math.max(1, ...entries.map(e => e.prizes.length)));
+  return { fixed, start, weigh, prizes, reread, heap, knowing: COST.pair * n * n * most * most };
+}
+
+/** The entries whose stock a draw of entry `i` reads again: itself, and each naming an account it names. */
+const sharing = (entries, i) => {
+  const reads = entries.map(e => e.prizes.map(accountOf));
+  return entries.map((_, j) => j).filter(j => j === i || reads[i].some(a => a && reads[j].includes(a)));
+};
+
+/**
+ * Whether `opens` opens by `list` (slots, never empty) fit one answer (`RollCost::fits`): each draw at the dearest its
+ * slot could make, which entries share accounts found first when there are several draws. `next`: each entry's draw.
+ * `heap`: the answer's heap counts too.
+ */
+function fitsOne(cost, entries, list, opens, next, heap) {
+  const n = BigInt(entries.length);
+  const draws = list.reduce((d, s) => d + BigInt(s.count), 0n) * BigInt(opens);
   let spent =
-    COST.fixed +
-    COST.pair * n * n * most * most +
-    entries.reduce((c, e) => c + (e.prizes.length ? COST.entry : COST.blank), 0n);
-  let used =
-    BYTES.start +
-    BigInt(outgrown(entries.length, ENTRY_BYTES)) +
-    BigInt(bytes) +
-    BYTES.entryRead * n +
-    BYTES.prizeRead * BigInt(entries.reduce((c, e) => c + e.prizes.length, 0));
-  let won = 0n;
-  spent +=
-    (COST.slot + COST.slotEntry * n) * BigInt(Math.max(1, list.length)) +
+    cost.fixed +
+    (COST.slot + COST.slotEntry * n) * BigInt(list.length) +
     COST.openSlot * BigInt(list.length) * BigInt(opens) +
-    COST.odds * BigInt(odds) +
-    COST.share * BigInt(shares) +
-    COST.fate * BigInt(fates);
+    (draws > 1n ? cost.knowing : 0n);
+  let used = cost.start;
+  let won = 0n;
   for (const s of list) {
     const count = BigInt(s.count) * BigInt(opens);
     const among = entries.map((_, i) => i).filter(i => !(s.only ?? []).length || (s.only ?? []).includes(i));
     const dearest = f => among.reduce((m, i) => (f(i) > m ? f(i) : m), 0n);
     spent += count * dearest(i => next[i]);
-    used += count * dearest(i => cost[i].bytes);
+    used += count * dearest(i => cost.heap[i]);
     won += count * dearest(i => BigInt(entries[i].prizes.length));
   }
-  const rolls = oracle || entries.length > 1 || entries.some(e => e.prizes.some(p => p.Stash != null));
   return (
     spent + COST.finish + COST.won * won + COST.drawn * draws <= ROLL_BUDGET &&
-    (!rolls || used + BYTES.finish + BYTES.won * won + draws <= ROLL_HEAP)
+    (!heap || used + BYTES.finish + BYTES.won * won + draws <= ROLL_HEAP)
   );
+}
+
+/**
+ * Whether all of `opens` opens of `entries` by `slots` fit one oracle answer (`order::draws_fit`), each draw at the
+ * dearest its slot could make, with what is known from the box alone (no table rows, a stash of one group, a named
+ * NFT's stash of one row), its `odds`, `shares` and `fates` counted, and `bytes` (`boxBytes`) of heap reading the box
+ * takes beyond its entries. `slots` may be a number: that many draws among every entry. The answer's heap counts for a
+ * box that rolls, or one sold through the oracle (`oracle`: a box that doesn't roll but one `buy` can't carry,
+ * `buyFits`). `project`: the project the box is in, whose pools' and stashes' addresses the write searches for (each
+ * search counted at `256 - bump` tries of 1,500 units); without it, at `ASSUMED_TRIES` tries an address. The program
+ * refuses a box whose one open doesn't fit at its upsert (`PackTooLarge`). `purchase`: counted as `open_box` counts a
+ * purchase of `opens` instead (the answer's heap always; a draw's own stock read again only when there are several; at
+ * most `MOST_DRAWS_A_PURCHASE` draws in all), from what the box alone tells: the program reads the accounts too.
+ */
+export function drawsFit(
+  entries,
+  slots,
+  opens = 1,
+  { odds = 0, shares = 0, fates = 0, bytes = 0n, oracle = false, project = null, purchase = false } = {},
+) {
+  const given = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
+  // A box with no slots draws once among every entry.
+  const list = given.length ? given : [{ count: 1, only: [] }];
+  const draws = list.reduce((d, s) => d + BigInt(s.count), 0n) * BigInt(opens);
+  if (purchase && draws > BigInt(MOST_DRAWS_A_PURCHASE)) return false;
+  const cost = rollCost(entries, { odds, shares, fates, bytes, project });
+  const heap = purchase || oracle || entries.length > 1 || entries.some(e => e.prizes.some(p => p.Stash != null));
+  // Reading the box alone already past the answer: refused before its entries are compared.
+  if (cost.fixed > ROLL_BUDGET || (heap && cost.start > ROLL_HEAP)) return false;
+  // Each entry's draw reads again the stock of the entries sharing its accounts; a purchase of one draw, its own alone.
+  const again = i => (purchase && draws <= 1n ? [] : sharing(entries, i)).reduce((s, j) => s + cost.reread[j], 0n);
+  const next = entries.map((_, i) => cost.weigh + cost.prizes[i] + again(i));
+  return fitsOne(cost, entries, list, opens, next, heap);
 }
 
 // What one `buy` takes, as the program counts it at the box's write (`catalog::buy_fits`): a transaction holds 64
 // accounts, 64 instructions and 1,400,000 compute units.
-const BUY = { accounts: 15, calls: 7, cu: 30_000, most: { accounts: 64, calls: 64, cu: 1_400_000 } };
+const BUY = { accounts: 15, calls: 7, cu: 30_000, most: { accounts: 64, calls: 64, cu: MAX_TX_CU } };
 const sameJson = (a, b) =>
   JSON.stringify(a, (_, v) => (typeof v === 'bigint' ? String(v) : v)) ===
   JSON.stringify(b, (_, v) => (typeof v === 'bigint' ? String(v) : v));
@@ -452,7 +542,8 @@ const RENT_PER_BYTE = 5_080n;
 const PLAYER_FEE = 2_000_000n;
 
 /**
- * The most opens of `lootBox` a client puts in one order: what one oracle answer draws (`drawsFit`), and what keeps the
+ * The most opens of `lootBox` a client puts in one order: what one oracle answer draws (`drawsFit` as a purchase counts
+ * it, the box's project's searches counted when the box names it: a box read from the chain does), and what keeps the
  * order's rent and the player's fee within `ORDER_COST_CAP` (`orderBytes` with `items`, so with the box's shares). At
  * least one: a box whose one open is over the cap is still bought one open an order. A purchase of more is several
  * orders, each its own answer.
@@ -467,10 +558,11 @@ export function opensAnOrder(
       shares,
       fates: (lootBox.fates ?? []).length,
       bytes: boxBytes(lootBox),
-      oracle: true,
+      project: lootBox.project ?? null,
+      purchase: true,
     }) && (BigInt(orderBytes(lootBox, shares, n, items)) + 128n) * rentPerByte + PLAYER_FEE <= ORDER_COST_CAP;
   let n = 1;
-  while (n < 4096 && fits(n + 1)) n += 1;
+  while (n < MOST_DRAWS_A_PURCHASE && fits(n + 1)) n += 1;
   return n;
 }
 
