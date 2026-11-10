@@ -74,13 +74,20 @@ are in [docs/harnesses.md](docs/harnesses.md).
 ### From a terminal
 
 ```bash
-npx -y @xgamesfun/solana@0.25.3 examples shop with loot boxes   # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.25.3 check xsolana.json                 # does it work? refusals and warnings
-npx -y @xgamesfun/solana@0.25.3 simulate xsolana.json              # where the money goes, day by day
-npx -y @xgamesfun/solana@0.25.3 cost xsolana.json                  # what going live and each action cost
-npx -y @xgamesfun/solana@0.25.3 explain xsolana.json               # the whole economy in plain words
-npx -y @xgamesfun/solana@0.25.3 review xsolana.json                # what a cheater could get, route by route
-npx -y @xgamesfun/solana@0.25.3 approve xsolana.json               # go live, approved in your own wallet
+# find a worked example close to your idea
+npx -y @xgamesfun/solana@0.25.3 examples shop with loot boxes
+
+# does it work? where does the money go? what does it cost?
+npx -y @xgamesfun/solana@0.25.3 check xsolana.json
+npx -y @xgamesfun/solana@0.25.3 simulate xsolana.json
+npx -y @xgamesfun/solana@0.25.3 cost xsolana.json
+
+# the whole economy in plain words, and what a cheater could get
+npx -y @xgamesfun/solana@0.25.3 explain xsolana.json
+npx -y @xgamesfun/solana@0.25.3 review xsolana.json
+
+# go live, approved in your own wallet
+npx -y @xgamesfun/solana@0.25.3 approve xsolana.json
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -94,9 +101,12 @@ npm install @xgamesfun/solana
 ```js
 import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 
-const app = solanaApp({ spec, wallet: walletStandardSigner(wallet, account) }); // spec: your live xsolana.json
+// spec: your live xsolana.json; wallet: the player's own (Phantom, Solflare, Backpack…)
+const app = solanaApp({ spec, wallet: walletStandardSigner(wallet, account) });
+
+// the player sees the price, then approves the purchase in their wallet
 const shop = await app.shop();
-await app.buy('potion', { listing: shop.find(item => item.key === 'potion') }); // the player approves in their wallet
+await app.buy('potion', { listing: shop.find(item => item.key === 'potion') });
 ```
 
 No Solana SDK needed: it runs in the browser and in Node 22 or later, with TypeScript types included. The player
