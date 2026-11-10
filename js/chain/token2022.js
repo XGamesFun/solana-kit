@@ -60,8 +60,9 @@ export function hookProgramOf(mintData) {
 /**
  * Whether a mint's new accounts start frozen, or can be made to (as the program judges it): a Token-2022
  * mint carrying `DefaultAccountState` set to frozen, or set to anything while it has a freeze authority, which can switch
- * it to frozen whenever it likes. An auction, a contest, a lottery, an offer and a sealed schedule refuse such a mint:
- * each reads the setting once, as it opens, and a refund or payout opened into a frozen account would never land.
+ * it to frozen whenever it likes. The program takes such a mint everywhere: it is the project's choice. A refund or a
+ * payout opened into an account that starts frozen does not land until its issuer thaws it, so the tools warn the
+ * project, and a bidder or a borrower before they sign.
  */
 export function mayStartFrozen({ owner, data }) {
   if (

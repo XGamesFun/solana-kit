@@ -92,10 +92,15 @@ test('a round paid from its own money sends its leftover where the project names
     'never its own pot',
   );
   assert.deepEqual(refusedFor({ rest: 'burn' }), ['E-WSOL-BURN economy.lotteries.draw.rest'], 'SOL is not burned');
-  assert.deepEqual(
-    refusedFor({ rest: 'treasury', noLoss: true }),
-    ['E-LOTTERY economy.lotteries.draw.noLoss'],
-    'a no-loss lottery needs a pot',
+  assert.deepEqual(refusedFor({ rest: 'treasury', noLoss: true }), [], 'a no-loss lottery may pay from its own money');
+  assert.ok(
+    said(solSpec({ pools, lotteries: [{ ...draw, rest: 'treasury', noLoss: true }] })).warnings.some(
+      x =>
+        x.code === 'W-LOTTERY' &&
+        x.where === 'economy.lotteries.draw.places' &&
+        /a place's percent wins nothing from it/.test(x.message),
+    ),
+    'and its places that name a share of the money are said to win nothing from it',
   );
   assert.deepEqual(
     refusedFor({ rest: 'treasury', seed: 1 }),
