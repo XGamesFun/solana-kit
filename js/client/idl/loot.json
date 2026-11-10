@@ -11576,7 +11576,7 @@
               "The carry: rounding of a share over the total weight, times `PRECISION`. The next move before",
               "the farm's end credits it to the seats there once it adds up to a share; a move that leaves no",
               "weight, or any move once the farm is over, frees its whole tokens (`FarmSide::settle`), and so",
-              "does a walk where the weight reaches 0 (`Farm::walk`)."
+              "does a walk that begins with no weight or where the weight reaches 0 (`Farm::walk`)."
             ],
             "type": "u128"
           },

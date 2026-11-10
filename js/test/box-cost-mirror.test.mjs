@@ -150,8 +150,8 @@ t('a count no answer or transaction could carry is refused before any price is a
     assert.equal(clientBuys(w, 1, n), false, `${n} opens`);
     assert.equal(buys(w, 1, n), null, `${n} opens: PackTooLarge`);
   }
-  // A `buy` of more sales than one transaction can price (28,000) is refused with the same error.
-  assert.equal(loot.MOST_SALES_A_BUY, 28_000);
+  // A `buy` of more sales than one transaction can price (25,454) is refused with the same error.
+  assert.equal(loot.MOST_SALES_A_BUY, 25_454);
   const gem = w.newMint(w.creator);
   w.upsert({ Box: { id: 2, args: boxArgs(1n, [drop([{ Tokens: { from: { Mint: [gem] }, amount: 1n } }])]) } });
   const box = w.read('LootBox', pda.box(w.project, 2));

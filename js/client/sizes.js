@@ -211,10 +211,10 @@ const COST = {
 export const MOST_DRAWS_A_PURCHASE = Number(ROLL_BUDGET / COST.weigh);
 /** The compute one transaction has, and what adding up one sale's price costs at most (`catalog.rs` `COST_SALE`). */
 const MAX_TX_CU = 1_400_000;
-const COST_SALE = 50;
-/** The most sales one `buy` takes (`count`): what one transaction can price (`MAX_TX_CU / COST_SALE`, 28,000). More is
- * refused before any price is added up (`PackTooLarge`). */
-export const MOST_SALES_A_BUY = MAX_TX_CU / COST_SALE;
+const COST_SALE = 55;
+/** The most sales one `buy` takes (`count`): what one transaction can price (`MAX_TX_CU / COST_SALE`, rounded down:
+ * 25,454). More is refused before any price is added up (`PackTooLarge`). */
+export const MOST_SALES_A_BUY = Math.floor(MAX_TX_CU / COST_SALE);
 /**
  * The tries counted for finding a pool's or a stash's address when the project is not known yet (a spec checked before
  * any wallet is named): 2, what an address takes on average (half are found at the first try, a quarter at the second,
