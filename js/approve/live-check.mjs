@@ -6,7 +6,6 @@
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { parseMint } from '../chain/mint.js';
-import { mayStartFrozen } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { BUBBLEGUM_PROGRAM, LOOT_PROGRAM, pda } from '../client/pda.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
@@ -128,16 +127,6 @@ export class MintMismatch extends Error {}
  */
 export async function checkMints({ m, chain }) {
   const named = [...m.tokens.values()].filter(t => t.mint && !t.mint.startsWith('@'));
-  // The routes that read a mint's default account state once, as they open, and refuse one that can start frozen.
-  const once = new Map();
-  const reads = (key, what) => key && !once.has(key) && once.set(key, what);
-  for (const l of m.lotteries)
-    (reads(l.currency ?? m.currencyKey, `the lottery ${l.name ?? l.key}`),
-      reads(l.ticketCurrency, `the lottery ${l.name ?? l.key}`));
-  for (const c of m.contests) reads(c.currency ?? m.currencyKey, `the contest ${c.name ?? c.key}`);
-  for (const a of m.auctions) reads(a.currency ?? m.currencyKey, `the auction ${a.name ?? a.key}`);
-  for (const s of m.schedules.filter(x => x.sealed))
-    reads(s.currency ?? m.currencyKey, `the sealed schedule ${s.name ?? s.key}`);
   for (const t of named) {
     const what = `the token ${t.symbol ?? t.key} (“${t.key}”)`;
     if (t.wsol) {
@@ -161,10 +150,6 @@ export async function checkMints({ m, chain }) {
     if (mint.program !== t.program)
       throw new MintMismatch(
         `The spec says ${what} is a ${t.program} token; its mint ${t.mint} is ${mint.program}. Write "program": "${mint.program}".`,
-      );
-    if (once.has(t.key) && mayStartFrozen(account))
-      throw new MintMismatch(
-        `The mint ${t.mint} of ${what} has a default account state that starts new accounts frozen, or that its freeze authority can switch to frozen, so ${once.get(t.key)} would be refused as it opens (the program refuses such a mint wherever a refund or a payout goes into an account opened for it). Use another token there.`,
       );
   }
   await checkTreasury({ m, chain });

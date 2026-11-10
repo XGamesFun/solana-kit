@@ -165,8 +165,16 @@ test('the checker keeps rolls a mission or a recipe makes from being bought or s
   assert.ok(
     edit(s => {
       s.farms[0].tiers[0].lock = 0;
-    }).includes('E-FARM economy.farms.expedition.tiers[0].roll'),
-    'a roll with no lock',
+    }).length === 0 &&
+      check(
+        (() => {
+          const s = structuredClone(spec);
+          s.farms[0].tiers[0].lock = 0;
+          return s;
+        })(),
+        { now },
+      ).warnings.some(w => w.code === 'W-FARM-MISSION' && w.where === 'economy.farms.expedition.tiers[0].lock'),
+    'a roll with no lock: the project’s choice, warned',
   );
   assert.ok(
     edit(s => {
@@ -174,10 +182,13 @@ test('the checker keeps rolls a mission or a recipe makes from being bought or s
     }).includes('E-RECIPE economy.recipes.risky-forge.out[0].on'),
     'it rolls on one it does not keep',
   );
+  const twice = structuredClone(spec);
+  twice.recipes[0].out.push({ gives: 'roll', box: 'forge', on: 0 });
   assert.ok(
-    edit(s => {
-      s.recipes[0].out.push({ gives: 'roll', box: 'forge', on: 0 });
-    }).includes('E-RECIPE economy.recipes.risky-forge.out'),
-    'one roll a craft',
+    !check(twice, { now }).refusals.some(e => e.where === 'economy.recipes.risky-forge.out') &&
+      check(twice, { now }).warnings.some(
+        w => w.code === 'W-RECIPE' && w.where === 'economy.recipes.risky-forge.out' && /fails whole/.test(w.message),
+      ),
+    'several rolls a craft are taken; two on one NFT its box holds fail whole, and are warned of',
   );
 });

@@ -398,68 +398,67 @@ test('the walk of moving prices is one budget a simulation, shared by its boxes 
   );
 });
 
-// Nothing but a higher bid hands a high bid back before an auction's end, so
-// open_auction refuses an end more than five years off, or a push of it by a bid of more than five years (BadAuction):
-// a time written in milliseconds held the bid and the lot for good. The checker refuses them first.
-test('an auction that ends, or moves its end, more than five years off is refused (BadAuction)', () => {
+// Nothing but a higher bid hands a high bid back before an auction's end, so an end far off, or a push of it by a bid,
+// holds the bid and the lot that long. The program takes any time (loot 0.26); the checker says the date in words, and a
+// time written in milliseconds by mistake reads as such (W12).
+test('an auction that ends, or moves its end, far off is taken, and its date is said in words', () => {
   const auction = example('artwork-auction').spec;
   const at = a => {
     const v = check({ ...auction, auctions: [{ ...auction.auctions[0], ...a }] }, { now: NOW });
-    return v.refusals.filter(r => r.code === 'E-AUCTION').map(r => `${r.where} ${/BadAuction/.test(r.message)}`);
+    assert.deepEqual(
+      v.refusals.filter(r => r.code === 'E-AUCTION').map(r => r.where),
+      [],
+      'never refused',
+    );
+    return v.warnings.filter(r => r.code === 'W-FAR-TIME').map(r => r.where);
   };
   assert.deepEqual(at({}), []);
-  assert.deepEqual(at({ runs: '1825d' }), [], 'five years to the day');
-  assert.deepEqual(at({ runs: '1826d' }), ['economy.auctions.sunset.runs true']);
-  assert.deepEqual(
-    at({ start: 'publish+1d', runs: '1825d' }),
-    ['economy.auctions.sunset.runs true'],
-    'from a later start',
-  );
-  assert.deepEqual(at({ runs: '1825d', extendBy: '1825d' }), [], 'an extension of five years');
-  assert.deepEqual(at({ extendBy: '1826d' }), ['economy.auctions.sunset.extendBy true']);
+  assert.deepEqual(at({ runs: '1095d' }), [], 'three years to the day');
+  assert.deepEqual(at({ runs: '1826d' }), ['economy.auctions.sunset.runs']);
+  assert.deepEqual(at({ runs: '1d', extendBy: '1826d' }), ['economy.auctions.sunset.extendBy']);
   // a time written in milliseconds by mistake
-  assert.deepEqual(at({ runs: 604_800_000 }), ['economy.auctions.sunset.runs true'], 'a week written in milliseconds');
+  assert.deepEqual(at({ runs: 604_800_000 }), ['economy.auctions.sunset.runs'], 'a week written in milliseconds');
+  const words = check(
+    { ...auction, auctions: [{ ...auction.auctions[0], runs: 604_800_000 }] },
+    { now: NOW },
+  ).warnings.find(r => r.code === 'W-FAR-TIME').message;
+  assert.match(words, /lands on \d{1,2} [A-Z][a-z]+ \d{4}, 19 years after go-live: 604800000 reads like milliseconds/);
 });
 
-test(
-  'the program takes an end and an extension of five years, and refuses one second more',
-  { skip: cannotRun() ?? false },
-  () => {
-    const MAX = BigInt(IDL.constants.find(c => c.name === 'MAX_CONTEST_SECONDS').value);
-    assert.equal(MAX, 157_680_000n, 'five years, as the checker counts them');
-    const w = world({ seed: 'roll-chains-auction' });
-    w.upsert({ Item: { id: 1, args: collectible('Painting') } });
-    const open = (id, ends, extend) => () => {
-      const now = BigInt(w.chain.now());
-      w.chain.send(w.authority, [
-        loot.openAuctionIx({
-          seller: w.authority,
-          project: w.project,
-          collection: w.collection,
-          id,
-          mint: w.mint,
-          programs: {},
-          args: {
-            lot: { Asset: [w.make(1, w.authority)] },
-            reserve: 0n,
-            min_raise_bps: 0,
-            starts_at: now,
-            ends_at: now + ends,
-            extend,
-            shares: [],
-            gate: null,
-          },
-        }),
-      ]);
-    };
-    const fails = fn =>
-      assert.throws(
-        fn,
-        e => (e.logs ?? []).some(l => l.includes('BadAuction')) || String(e.message).includes('BadAuction'),
-      );
-    fails(open(1, MAX + 1n, 600));
-    fails(open(2, 86_400n, Number(MAX) + 1));
-    open(3, MAX, Number(MAX))();
-    assert.ok(w.chain.get(loot.pda.auction(w.project, w.authority, 3)));
-  },
-);
+test('the program takes an end and an extension of five years, and more', { skip: cannotRun() ?? false }, () => {
+  const MAX = 157_680_000n;
+  assert.equal(
+    IDL.constants.find(c => c.name === 'MAX_CONTEST_SECONDS'),
+    undefined,
+    'the five-year cap left the program',
+  );
+  const w = world({ seed: 'roll-chains-auction' });
+  w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+  const open = (id, ends, extend) => () => {
+    const now = BigInt(w.chain.now());
+    w.chain.send(w.authority, [
+      loot.openAuctionIx({
+        seller: w.authority,
+        project: w.project,
+        collection: w.collection,
+        id,
+        mint: w.mint,
+        programs: {},
+        args: {
+          lot: { Asset: [w.make(1, w.authority)] },
+          reserve: 0n,
+          min_raise_bps: 0,
+          starts_at: now,
+          ends_at: now + ends,
+          extend,
+          shares: [],
+          gate: null,
+        },
+      }),
+    ]);
+  };
+  open(1, MAX + 1n, 600)();
+  open(2, 86_400n, Number(MAX) + 1)();
+  open(3, MAX, Number(MAX))();
+  for (const id of [1, 2, 3]) assert.ok(w.chain.get(loot.pda.auction(w.project, w.authority, id)));
+});
