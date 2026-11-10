@@ -1328,9 +1328,14 @@ export function solanaApp({
 
   /** The instructions that ask the oracle for the roll of `order` (at `orderAddress`), `payer` paying it. Each prize
    * mint's token program is read from the mint when the app wasn't given it (`programs`): the ask opens the project's
-   * vault of it. */
-  async function asksFor(payer, orderAddress, order, settler) {
+   * vault of it. Its first ask fixes its odds (`loot.askReads`): it passes the order's player's profile when the box's
+   * odds read one, and for a roll on no NFT, when they read an NFT, `shown` (an NFT the player holds, as `openBox` takes
+   * it), or else the player's collectible of this project that raises them the most (`loot.bestShown`). */
+  async function asksFor(payer, orderAddress, order, settler, shown = null) {
     const box = await read('LootBox', order.loot_box);
+    const player = order.player ?? payer;
+    if (!shown && loot.firstAsk(order, box) && loot.askReads(box, order).nft && player === wallet?.address)
+      shown = loot.bestShown(box, await owned(player)).best;
     const poolMints = await poolMintsOf(box);
     const mints = [
       ...Object.values(poolMints),
@@ -1341,20 +1346,22 @@ export function solanaApp({
     return loot.askRollIx({
       payer,
       orderAddress,
-      order,
+      order: { ...order, player },
       box,
       settler,
+      shown,
       poolMints,
       items: await itemsOf(box),
       programs: known,
     });
   }
 
-  /** Asks the oracle for a roll a mission, a recipe or a prize made (`Waiting`): the player pays the oracle. */
-  async function askRoll(orderAddress) {
+  /** Asks the oracle for a roll a mission, a recipe or a prize made (`Waiting`): the player pays the oracle. `shown`: an
+   * NFT the player shows for the box's odds at its first ask (by default the one of theirs that raises them most). */
+  async function askRoll(orderAddress, { shown = null } = {}) {
     return send([
       computeUnitLimit(400_000),
-      ...(await asksFor(wallet.address, orderAddress, await read('Order', orderAddress))),
+      ...(await asksFor(wallet.address, orderAddress, await read('Order', orderAddress), undefined, shown)),
     ]);
   }
 
@@ -2391,10 +2398,15 @@ export function solanaApp({
       return send([...before, loot.refundIx({ signer: wallet.address, orderAddress, order, subject, programs })]);
     },
 
-    /** Asks the oracle for a roll a mission, a recipe or a prize made (anyone may; the asker pays the oracle). On a box
-     * with nothing in stock only the order's player may ask, a slot after it was made or last asked, and that ends the
-     * roll there with nothing, no oracle (a lot its winner paid for fails, for its refund). */
-    askRoll: orderAddress => askRoll(orderAddress),
+    /** Asks the oracle for a roll a mission, a recipe or a prize made (its player or the project's keys may; the asker
+     * pays the oracle). Its first ask fixes its odds: the player's profile, and an NFT they show (`shown`; by default
+     * their collectible that raises the box's odds the most), count then. On a box with nothing in stock only the order's
+     * player may ask, a slot after it was made or last asked, and that ends the roll there with nothing, no oracle (a lot
+     * its winner paid for fails, for its refund). */
+    askRoll: (orderAddress, options = {}) => {
+      only(options, ['shown'], 'askRoll');
+      return askRoll(orderAddress, options);
+    },
 
     /**
      * Pays a payment of the economy (an entry, an attempt, a tip). `amount`: what the player chose, in whole units, for
@@ -3191,9 +3203,10 @@ export function solanaApp({
     /**
      * A lender's offer to borrow against: `maker`'s offer number `id` in this project. Returns { address, offer, mint,
      * amount, repay, lasts, risks }: `risks`, in words, each power over the loan's token that could make repaying fail
-     * (its freeze authority, a Token-2022 pause, a transfer hook, a permanent delegate) and who holds it. The program
-     * takes such tokens, and a lender who holds one can stop every repayment and take the NFT once it is due: show the
-     * risks before the player borrows.
+     * (its freeze authority, a Token-2022 pause, a transfer hook, a permanent delegate) and who holds it, and each setting
+     * of the token that lets the lender turn the repayment away (accounts that start frozen or can be made to,
+     * confidential transfers) or blocks it (a token that can't be transferred). The program takes such tokens, and a
+     * lender who can stop every repayment takes the NFT once it is due: show the risks before the player borrows.
      */
     async loanOffer(maker, id) {
       const address = loot.pda.offer(project, maker, id);
@@ -3235,8 +3248,9 @@ export function solanaApp({
     /**
      * Borrows against the player's NFT `asset` from `maker`'s offer `id`: the NFT is held until the loan is repaid, or
      * goes to the lender once it is due (`due`, Unix seconds; by default the longest the offer allows, less a minute).
-     * A loan whose token someone could freeze, pause, hook or move (`loanOffer`'s `risks`) is refused unless
-     * `acceptRisks` is true: the page shows the player who holds that power first. `extra`: a transfer hook's accounts.
+     * A loan whose token someone could freeze, pause, hook or move, or whose own settings let the lender turn the
+     * repayment away (`loanOffer`'s `risks`), is refused unless `acceptRisks` is true: the page shows the player each
+     * risk first. `extra`: a transfer hook's accounts.
      */
     async borrow(maker, id, asset, { due, acceptRisks = false, extra = [], ...others } = NO_OPTIONS) {
       only(others, ['due', 'acceptRisks', 'extra'], 'borrow');
@@ -3408,7 +3422,8 @@ export function solanaApp({
     /**
      * The auctions: each one's lot, high bid, the least the next bid must be, when it ends and how long is left, and
      * whether the player leads. One no longer on chain has ended. `waiting`: SOL that came back to the player's
-     * wrapped-SOL account from a bid that was topped (`unwrap` turns it into plain SOL).
+     * wrapped-SOL account from a bid that was topped (`unwrap` turns it into plain SOL). `warnings`: what to show every
+     * bidder before a bid (a token whose accounts can be frozen, a lot of another collection).
      */
     async auctions() {
       const list = spec.auctions ?? [];
@@ -3420,8 +3435,28 @@ export function solanaApp({
       const waiting = wrapped
         ? show(new DataView(wrapped.data.buffer, wrapped.data.byteOffset).getBigUint64(64, true), 9)
         : '0';
+      const auctions = accounts.map(x => x && loot.decode('Auction', x.data));
+      // What every bidder is told before a bid: what the bids' token lets the high bidder do (W13), and what whoever
+      // controls an NFT lot of another collection can do to it (W16).
+      const mints = [...new Set(auctions.filter(Boolean).map(x => x.mint))];
+      const mintAccounts = Object.fromEntries((await client.accounts(mints)).map((m, k) => [mints[k], m]));
+      const warningsOf = async x => {
+        const out = tokenSettings(
+          mintAccounts[x.mint],
+          'the refund of the bid a higher one tops',
+          'the high bidder',
+          'so every higher bid fails and they win at their price',
+        ).map(r => r.says);
+        const lot = x.lot.Asset?.[0];
+        if (lot && !ours(await collectionOf(lot)))
+          out.push(
+            'This lot is an NFT outside the project’s collections: whoever controls its collection can stop it moving or take it back while the project holds it. The seller is paid only when the lot reaches the winner; while it can’t move, the winning bid waits in the project’s vault, until it can or the project calls the sale off, and a lot taken back or burned sends the bid back. A bid can be tied up, not lost.',
+          );
+        return out;
+      };
+      const warned = await Promise.all(auctions.map(x => (x ? warningsOf(x) : [])));
       return list.map((a, i) => {
-        const x = accounts[i] && loot.decode('Auction', accounts[i].data);
+        const x = auctions[i];
         const base = {
           key: a.key,
           name: a.name,
@@ -3453,6 +3488,7 @@ export function solanaApp({
           // A bid of NFTs: a picker of 1 to `maxNfts` (and at least `nextBid`) of the player's NFTs.
           ...(x.nft_bids ? { nftBids: true, held: x.held, maxNfts: loot.MAX_BID_NFTS } : {}),
           ...(tokens.get(a.currency ?? currencyKey)?.source === 'sol' ? { waiting } : {}),
+          ...(warned[i].length ? { warnings: warned[i] } : {}),
         };
       });
     },
