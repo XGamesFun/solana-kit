@@ -1903,7 +1903,9 @@ export function solanaApp({
     return out;
   }
 
-  /** The nonce a pull of entry `i` of the round at `key` names: a place's roll is made at `prizeRollNonce(nonce + place)`. */
+  /** The nonce a pull of entry `i` of the round at `key` names: a place's roll is made at `prizeRollNonce(nonce + place)`.
+   * The one nonce of that entry: every pull of it (the winner's, a payout's, a cancel's, a run of rolls in parts) names
+   * this and no other, so no later pull lands on an order an earlier one made. */
   const pullNonce = (key, i) => loot.prizeNonce(key, BigInt(i));
 
   /** How many of a round's owed parts a pull of `part` (of entry `i`) settles. */
