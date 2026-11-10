@@ -217,3 +217,83 @@ test(
     assert.equal(nfts.filter(n => owner(n.asset) === w.player).length, won, 'every place the player won, its NFT');
   },
 );
+
+test(
+  'a buyer who wins 40 places of a raffle pulls them through claims(): each pull carries what one transaction can, the last closes the round',
+  { skip: skip ?? false },
+  async () => {
+    // Each place's NFT names its own accounts: 40 do not fit one transaction. A pull takes as many of the entry's places
+    // as one carries (sized by a dry run on the largest heap), and the next carries on while the round owes the entry.
+    const w = world({ seed: 'raffle-40' });
+    w.upsert({
+      Item: {
+        id: 1,
+        args: {
+          kind: 'Collectible',
+          rarity: 3,
+          soulbound: false,
+          burnable: false,
+          name: 'Art',
+          uri: 'https://example.invalid/art.json',
+          max_supply: 0,
+          active: true,
+        },
+      },
+    });
+    const PLACES = 40;
+    const t0 = w.chain.now();
+    const id = 3;
+    const nfts = Array.from({ length: PLACES }, () => ({ asset: w.make(1, w.authority), collection: w.collection }));
+    for (const [first, ...more] of loot.stashBatches(nfts))
+      w.chain.send(w.authority, [
+        computeUnitLimit(1_400_000),
+        loot.stashIx({ signer: w.authority, project: w.project, lottery: id, ...first, more }),
+      ]);
+    w.upsert({
+      Lottery: {
+        id,
+        args: {
+          price: 1000n,
+          mint: w.mint,
+          pays_from: { Pot: [0] },
+          shares: [],
+          places: [{ bps: 0, prize: 'Raffled', times: PLACES }],
+          ticket_mint: '11111111111111111111111111111111',
+          every: 0n,
+          draws_at: BigInt(t0 + 3600),
+          gate: null,
+        },
+      },
+    });
+    const lottery = w.read('Lottery', loot.pda.lottery(w.project, id));
+    w.chain.send(w.player, [
+      loot.buyTicketsIx({ player: w.player, project: w.project, id, lottery, mint: w.mint, count: BigInt(PLACES) }),
+    ]);
+    w.chain.warp(t0 + 3601);
+    w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]);
+    const app = solanaApp({
+      spec: {
+        version: 2,
+        currency: 'coin',
+        tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
+        live: { project: w.project, collection: w.collection },
+        lotteries: [{ key: 'raffle', name: 'Raffle', id }],
+      },
+      rpc: w.chain.rpc,
+      wallet: { address: w.player, signTransaction: async wire => wire },
+      now: () => w.chain.now(),
+    });
+    const r = w.round(id).round;
+    assert.equal(loot.prizePlacesOwed(r, 0, 0).length, PLACES, 'every place is the buyer’s');
+    let claims = 0;
+    for (; claims < 20; claims++) {
+      const step = (await app.claims()).find(c => c.key === 'raffle');
+      if (!step) break;
+      await app.claim(step);
+    }
+    const owner = asset => parseCoreAsset(w.chain.get(asset).data).owner;
+    assert.equal(nfts.filter(n => owner(n.asset) === w.player).length, PLACES, 'every NFT in the buyer’s hands');
+    assert.equal(w.round(id), null, 'the round closed');
+    assert.ok(claims >= 1 && claims < 20, `${claims} claims`);
+  },
+);

@@ -2331,8 +2331,8 @@ export function solanaApp({
     const out = [];
     const rolls = [];
     // Whether a pull here wants the largest heap (a run of rolls, or several NFTs out of the round's own stash), and
-    // whether one stops short of the part (a raffle's NFTs past what one pull takes out, a run of rolls past what one
-    // transaction carries): a next pull carries on.
+    // whether one stops short of the part (a raffle's NFTs past what one pull takes out or one transaction carries, a
+    // run of rolls past what one transaction carries): a next pull carries on.
     let heap = false;
     let partial = false;
     const g = await projectNow();
@@ -2362,9 +2362,6 @@ export function solanaApp({
           const owedPlaces = loot.prizePlacesOwed(r, i, run);
           const last = loot.placesIn(r, run, e.start, e.end).at(-1) ?? 0;
           if (owedPlaces.some(p => loot.nftSlot(r, p) >= loot.pullAssigns(r, stash, last))) partial = true;
-          // Several NFTs handed out of the round's own stash in one pull: each Core move takes heap the program does
-          // not give back, and 8 in a round of some 125 places or more run past the default 32 KiB.
-          if (owedPlaces.length > 1) heap = true;
           const predicted = loot.stashNfts(r, stash);
           for (const place of loot.prizePlacesOwed(r, i, run)) {
             const nft = predicted[loot.nftSlot(r, place)];
@@ -2391,10 +2388,12 @@ export function solanaApp({
           projectMint: mintOf(),
         };
         more.nonce = pullNonce(key, i);
-        // A run of places that each give a roll: two accounts a place, as many as one transaction carries, on the
-        // largest heap. The pull is sized from a dry run, largest first; the next pull carries on, and only the last
-        // carries the close.
-        if (given.Roll) {
+        // A run of places that each give a roll (two accounts a place), or several NFTs out of the round's own stash
+        // (each NFT's accounts, and heap the program does not give back: 8 Core moves in a round of some 125 places or
+        // more run past the default 32 KiB): as many places as one transaction carries, on the largest heap. The pull
+        // is sized from a dry run, largest first; the next pull carries on while the round still owes the entry, and
+        // only the last carries the close.
+        if (given.Roll || (stash && loot.prizePlacesOwed(r, i, run).length > 1)) {
           const owed = loot.prizePlacesOwed(r, i, run).length;
           const sized = async most => {
             const ix = loot.pullIx({

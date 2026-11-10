@@ -42,6 +42,9 @@ What the tools do with them:
   limit of 1,400,000 first (a box of sixteen stashes whose addresses take 80 tries needs more than 200,000).
 - **A raffle's pull of several NFTs out of the round's own stash asks for the largest heap** in js/play, as a run of
   rolls does: a pull of 8 Core NFTs in a round of some 125 places or more ran out of memory.
+- **A raffle's winner of many places pulls them through `claims()`**: a pull of the round's own stash's NFTs takes as
+  many of the entry's places as one transaction carries (`pullIx`'s `prize.most`, sized by a dry run on the largest
+  heap), and the next pull carries on while the round still owes the entry; only the last carries the close.
 - js/play refuses a `buy` of more than 25,454 sales in words.
 - The docs, the guide and the skill say the new numbers; the IDL is 0.26.1's (`PackTooLarge`'s sentence, a farm's carry).
 
