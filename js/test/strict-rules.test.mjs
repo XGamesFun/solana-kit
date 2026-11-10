@@ -625,7 +625,7 @@ test('the words on a schedule say a run missed is missed, and only a sealed fixe
 // ---------------------------------------------------------------- auctions
 
 test(
-  'a seller whose account can’t take the money: the lot goes, the auction stays open owing it, and the next end closes it',
+  'a sale too wide for one end, or a seller whose account can’t take the money: the lot goes first, the auction stays open owing the bid, and the next end pays it and closes it',
   { skip },
   async () => {
     const w = world({ seed: 'strict-owed' });
@@ -643,74 +643,89 @@ test(
     ]);
     w.upsert({ Item: { id: 1, args: collectible('Painting') } });
     const seller = w.who();
-    const painting = w.make(1, seller);
     const now = w.chain.now();
-    const open = loot.openAuctionIx({
-      seller,
-      project: w.project,
-      collection: w.collection,
-      id: 1,
-      mint: coin,
-      args: {
-        lot: { Asset: [painting] },
-        reserve: 1n,
-        min_raise_bps: 0,
-        starts_at: BigInt(now),
-        ends_at: BigInt(now + 60),
-        extend: 0,
-        shares: [],
-        gate: null,
-        nft_bids: null,
-      },
-    });
-    w.chain.send(seller, [computeUnitLimit(400_000), open]);
-    const address = pda.auction(w.project, seller, 1);
     const bidder = w.who();
-    w.fund(bidder, coin, 500n);
-    w.chain.send(bidder, [
-      loot.bidIx({ bidder, project: w.project, id: 1, auction: w.read('Auction', address), amount: 500n }),
-    ]);
+    w.fund(bidder, coin, 1_000n);
+    // Two paintings, each auctioned and won with 500.
+    const sales = [1, 2].map(id => {
+      const painting = w.make(1, seller);
+      const open = loot.openAuctionIx({
+        seller,
+        project: w.project,
+        collection: w.collection,
+        id,
+        mint: coin,
+        args: {
+          lot: { Asset: [painting] },
+          reserve: 1n,
+          min_raise_bps: 0,
+          starts_at: BigInt(now),
+          ends_at: BigInt(now + 60),
+          extend: 0,
+          shares: [],
+          gate: null,
+          nft_bids: null,
+        },
+      });
+      w.chain.send(seller, [computeUnitLimit(400_000), open]);
+      const address = pda.auction(w.project, seller, id);
+      w.chain.send(bidder, [
+        loot.bidIx({ bidder, project: w.project, id, auction: w.read('Auction', address), amount: 500n }),
+      ]);
+      return { id, painting, address };
+    });
     w.chain.warp(now + 61);
     // The seller's account of the coin, frozen by its issuer.
     const account = w.tokenAccount(seller, coin);
-    w.chain.send(w.creator, [
-      {
-        programId: TOKEN_PROGRAM,
-        keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
-        data: Uint8Array.of(10),
-      },
-    ]);
+    const freeze = op =>
+      w.chain.send(w.creator, [
+        {
+          programId: TOKEN_PROGRAM,
+          keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
+          data: Uint8Array.of(op),
+        },
+      ]);
+    freeze(10);
 
-    const end = auction =>
+    const end = ({ id, address }, ending) =>
       loot.endAuctionIx({
         signer: w.cranker,
         project: w.project,
         projectState: w.projectState(),
-        id: 1,
-        auction,
+        id,
+        auction: w.read('Auction', address),
         collection: w.collection,
+        ending,
       });
-    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(w.read('Auction', address))]);
-    const owed = w.read('Auction', address);
-    assert.equal(owed.proceeds_owed, 500n, 'still open, owing it');
     const { parseCoreAsset } = await import('../chain/core.js');
-    assert.equal(parseCoreAsset(w.chain.get(painting).data).owner, bidder, 'the winner has the lot');
-    assert.equal(w.chain.tokens(account), 0n);
-    assert.throws(
-      () => w.chain.send(w.cranker, [computeUnitLimit(800_000), end(owed)]),
-      'it fails while the account can’t take it',
+    // The first sends its lot first: the whole bid is owed, whatever the seller's account says.
+    const first = w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sales[0], 'LotFirst')]);
+    assert.deepEqual(
+      first.receipts.map(r => r.name),
+      ['AuctionEnded'],
     );
+    assert.equal(first.receipts[0].data.remainder, 0n, 'nothing paid yet');
+    // The second ends in one go: the lot goes, and what the seller's account can't take is owed.
+    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sales[1], 'Deliver')]);
+    for (const sale of sales) {
+      assert.equal(w.read('Auction', sale.address).proceeds_owed, 500n, 'still open, owing it');
+      assert.equal(parseCoreAsset(w.chain.get(sale.painting).data).owner, bidder, 'the winner has the lot');
+      // The lot moved: the sale stands.
+      assert.throws(() => end(sale, 'CallOff'), /CantCallOff/);
+    }
+    assert.equal(w.chain.tokens(account), 0n);
+    for (const sale of sales)
+      assert.throws(
+        () => w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sale, 'Deliver')]),
+        'it fails while the account can’t take it',
+      );
 
-    w.chain.send(w.creator, [
-      {
-        programId: TOKEN_PROGRAM,
-        keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
-        data: Uint8Array.of(11),
-      },
-    ]);
-    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(owed)]);
-    assert.equal(w.chain.tokens(account), 500n, 'paid');
-    assert.equal(w.chain.get(address), null, 'closed');
+    freeze(11);
+    for (const sale of sales) {
+      w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sale, 'Deliver')]);
+      assert.equal(w.chain.get(sale.address), null, 'closed');
+    }
+    assert.equal(w.chain.tokens(account), 1_000n, 'paid for both');
   },
 );
 
