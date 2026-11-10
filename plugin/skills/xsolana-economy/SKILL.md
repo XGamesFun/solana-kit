@@ -103,7 +103,15 @@ or `npx -y @xgamesfun/solana@0.25.4 tool <name> '<json>'` for any tool (always w
    don't say. `"pot": 0` keeps a pot from round to round: a seed, sponsors, shares of other sales and what earlier
    rounds left all count, and the next round starts with what the round before left (a jackpot that grows, a no-loss
    lottery). `"rest": "<destination>"` pays each round from its own ticket money alone, which nothing from outside can
-   change, and sends what the places leave there (`"treasury"`, a wallet, `"burn"`; never a pool or `"chosen"`).
+   change, and sends what the places leave there (`"treasury"`, a wallet, `"burn"`; never a pool or `"chosen"`). A
+   no-loss lottery closes its sales a while before each draw (`"closesBefore"`), and may weigh each purchase by the
+   time it is held (`"timeWeighted": true`). A place paid from a pool says what it gets when the pool is short
+   (`"whenShort"`): prizes of 1,000, 500 and 500 from a pool of 1,700 give 1,000, 500 and 0 `"inOrder"`, 850, 425 and
+   425 `"inProportion"`, or `"nothing"`.
+   A box says what a draw on an outcome that is out does (`"whenOut"`): stop selling and refund a paid miss (the
+   default), draw among what is left, or give nothing. The program takes much that only risks the project itself (a
+   price or prize of 0, a mission with no lock, a far date, a token a player can hold up): the checker warns of each
+   in words, and every warning goes to the person.
    Then say what stays the project's job (`references/telling-the-person.md`): the files behind every item's link
    (every value of a fresh item's `{attribute}`), a table's rent, and the collectible rent a pack's settle pays.
 6. **Iterate on what they say.** "Make legendaries 0.5%", "a bigger seed": change, check, simulate, explain again.
