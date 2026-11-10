@@ -4,7 +4,7 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## 0.26.1: loot 0.26.1 (DEVNET-LINE)
+## 0.26.1: loot 0.26.1 (on devnet since 2026-11-10, slot 520,911,720)
 
 The program, 0.26.1: nine small fixes, no layout changed (0.26.0's accounts and this client's builders work unchanged).
 
