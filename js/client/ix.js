@@ -2477,7 +2477,9 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  * round that owes nothing and waits only for its close is closed by any pull. A place's prize that is not tokens is
  * given as far as `prize.most` places a pull (a run of rolls: two accounts a place; size it from a dry run), and the
  * lottery's own stash's NFTs as far as one pull takes them out (`pullAssigns`): a pull that stops short carries no
- * close, and the next carries on.
+ * close, and the next carries on. Every pull of one entry's places names the same `nonce`: a place's roll is made at
+ * `prizeRollNonce(nonce + place)`, so a later pull with another nonce can land on an order an earlier pull made and fail
+ * ("already in use"). js/play names `prizeNonce(round, entry)` for every pull of an entry, whoever sends it.
  */
 export function pullIx({
   payer,
@@ -2638,7 +2640,9 @@ export function pullIx({
 
 /** The orders the rolls a `{ Prize: [run] }` pull of entry `entry` makes (a place's prize that is a roll), each with its
  * box: [{ order, box }], at `prizeRollNonce(nonce + place)` for the entry's buyer, the first `most` of its places owed
- * when the pull carries no more (`pullIx`'s `prize.most`). Ask each in the pull's transaction. */
+ * when the pull carries no more (`pullIx`'s `prize.most`). Ask each in the pull's transaction. Every pull of one entry's
+ * places names the same `nonce` (a different one can land on an order an earlier pull made, "already in use"): js/play
+ * names `prizeNonce(round, entry)` for all of them. */
 export function pullRolls({ project, round: r, entry, part, nonce = 0n, most = null }) {
   const run = Number(part?.Prize?.[0] ?? -1);
   const given = r.terms.places[run]?.prize;
