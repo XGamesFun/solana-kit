@@ -45,7 +45,7 @@ export const PARTS = {
   payments: {
     def: 'payment',
     nested: ['split'],
-    says: 'A player pays for something given off chain (an attempt, an entry, a tip), split up to four ways at once. With `any`, the player chooses the amount, at least `amount` (tips, donations). Its split may name one `"chosen"` share, a wallet the payer names each time they pay (a referrer: `app.pay(key, { chosenRecipient })`), never their own; not `"chosen:<item>"`.',
+    says: 'A player pays for something given off chain (an attempt, an entry, a tip), split up to four ways at once. With `any`, the player chooses the amount, at least `amount` (tips, donations). Its split may name one `"chosen"` share, a wallet the payer names each time they pay (a referrer: `app.pay(key, { chosenRecipient })`), their own too (so a chosen share is at most a rebate the payer controls: price it so); not `"chosen:<item>"`.',
     acts: `the player pays (${sol(FEES.player)} SOL)`,
   },
   recipes: {
