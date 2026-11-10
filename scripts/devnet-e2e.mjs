@@ -380,8 +380,8 @@ if (want('farms')) {
     () => null,
     e => String(e.message ?? e),
   );
-  // StillLocked, named in the logs or only by its number (0x1790) in a failed simulation.
-  if (!/StillLocked|0x1790/.test(kept ?? '')) throw new Error(`A bound piece left its farm: ${kept}`);
+  // StillLocked, named in the logs or only by its number (0x178d) in a failed simulation.
+  if (!/StillLocked|0x178d/.test(kept ?? '')) throw new Error(`A bound piece left its farm: ${kept}`);
   console.log("farms: a bound piece can't leave (StillLocked)");
   console.log(
     `farms: the badge staked ${await app.stakeNft('sanctum', badge)} and out ${await app.unstakeNft('sanctum', badge)}`,
@@ -889,7 +889,7 @@ if (want('exchanges')) {
         }),
       ],
     ).catch(e =>
-      /AuctionRunning|0x17b[0-9a-f]/i.test(`${e.message ?? e} ${(e.logs ?? []).join(' ')}`)
+      /AuctionRunning|0x17cd/i.test(`${e.message ?? e} ${(e.logs ?? []).join(' ')}`)
         ? sleep(5000).then(() => null)
         : Promise.reject(e),
     );
