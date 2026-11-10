@@ -8851,7 +8851,7 @@
     {
       "code": 6001,
       "name": "NotAuthority",
-      "msg": "Signer is not the project's authority"
+      "msg": "Signer is not the project's authority, nor another key this takes: the owner, the player or key the record names, or a contest's decider"
     },
     {
       "code": 6002,
@@ -8861,7 +8861,7 @@
     {
       "code": 6003,
       "name": "BadCollection",
-      "msg": "Collection is not a Core collection this signer controls"
+      "msg": "Not a collection the project can take: a Core collection its owner or the project controls, or where the project is an update delegate, each named once and 32 at most; a collectible's is one of them"
     },
     {
       "code": 6004,
@@ -8876,7 +8876,7 @@
     {
       "code": 6006,
       "name": "BadEntries",
-      "msg": "A box needs an entry or more, each of a weight above 0 and prizes above 0, and no roll among them in a box that rolls; its slots draw among its entries, each named once; and several draws an open, or several opens, need a box with no NFT it rolls on"
+      "msg": "A box needs an entry or more, each of a weight above 0 with at most 255 prizes, and no roll among them in a box that rolls; its slots draw among its entries, each named once; and several draws an open, or several opens, need a box with no NFT it rolls on"
     },
     {
       "code": 6007,
@@ -8886,7 +8886,7 @@
     {
       "code": 6008,
       "name": "KindLocked",
-      "msg": "An item's kind, soulbound and burnable flags can't change once one is issued"
+      "msg": "An item's kind, soulbound and burnable flags, collection and traits can't change once one is issued"
     },
     {
       "code": 6009,
@@ -8901,7 +8901,7 @@
     {
       "code": 6011,
       "name": "ZeroAmount",
-      "msg": "Amount must be above zero"
+      "msg": "Amount must be above zero, and a grant gives a prize it can give at once: not a stash's NFT at random, nor tokens from a sealed schedule's or a farm's vault"
     },
     {
       "code": 6012,
@@ -8926,7 +8926,7 @@
     {
       "code": 6016,
       "name": "NotTheirAccount",
-      "msg": "Money owed to a wallet goes to that wallet's associated token account of the mint"
+      "msg": "Money owed to a wallet goes to that wallet's associated token account of the mint, and a Token Metadata NFT moves through the associated token account of the project (on a pass, of its receiver)"
     },
     {
       "code": 6017,
@@ -8961,7 +8961,7 @@
     {
       "code": 6023,
       "name": "BadSchedule",
-      "msg": "A schedule needs a period above zero; a sealed one, a mint that moves, a last run within 10 years and at most 10,000 runs, and a destination every run can pay"
+      "msg": "A schedule needs a period above zero; a sealed one is switched on, with 1 run or more, its last at a time the clock can hold, each paying at most all its vault holds"
     },
     {
       "code": 6024,
@@ -8976,12 +8976,12 @@
     {
       "code": 6026,
       "name": "BadLottery",
-      "msg": "A lottery this program can't keep: its mints must move freely, an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares, places that each take something and together 100% or less, runs of places alike, a header that one instruction makes, and a held prize or a raffle in its own stash, on a lottery that draws once"
+      "msg": "A lottery this program can't keep: an NFT ticket takes no price, shares or ticket mint, one that gives tickets back takes no shares and alone may weigh tickets by time, sales close less than a rhythm before the draw, places that each take something and together 100% or less, runs of places alike, runs on one pool that say the same when it is short, a header that one instruction makes, and held prizes or a raffle, 256 at most, in its own stash, on a lottery that draws once"
     },
     {
       "code": 6027,
       "name": "RoundRunning",
-      "msg": "A lottery can't be closed or made again while its current round has a record"
+      "msg": "A lottery can't be closed, made again or switched to repeating while its current round has a record, its last round still owes NFTs of its stash, or an earlier round still owes its pot"
     },
     {
       "code": 6028,
@@ -9001,12 +9001,12 @@
     {
       "code": 6031,
       "name": "BadRecipe",
-      "msg": "A recipe takes up to 255 collectibles (a place is a byte), no line of it is zero, and its needs and keeps name collectibles it has"
+      "msg": "A recipe takes up to 255 collectibles (a place is a byte), no payment of it is zero, and its needs and keeps name collectibles it has"
     },
     {
       "code": 6032,
       "name": "OnceAtATime",
-      "msg": "A recipe that takes or makes a collectible is crafted once at a time"
+      "msg": "A recipe that takes or makes a collectible, gives anything but a fixed amount of tokens, or reads the player's profile is crafted once at a time"
     },
     {
       "code": 6033,
@@ -9041,12 +9041,12 @@
     {
       "code": 6039,
       "name": "StillHeld",
-      "msg": "This collectible is held until its time is up"
+      "msg": "This NFT is held until its time is up: only the project's authority releases a running hold, and nobody a running loan"
     },
     {
       "code": 6040,
       "name": "HoldOver",
-      "msg": "The hold on this collectible is over: it can only go back to its player"
+      "msg": "The hold on this NFT is over: it can only go back to its player"
     },
     {
       "code": 6041,
@@ -9101,7 +9101,7 @@
     {
       "code": 6051,
       "name": "SameAccount",
-      "msg": "The project can't pay into the account it pays from"
+      "msg": "A payment can't go into the account it comes from unless that account's owner signs it (never the project or a delegate), and an NFT moves between two different token accounts"
     },
     {
       "code": 6052,
@@ -9111,7 +9111,7 @@
     {
       "code": 6053,
       "name": "ToTheProject",
-      "msg": "The project's own address, or an account of this program, can't be given an NFT or a grant's prize: no record holds it, so nothing could move it again"
+      "msg": "The project's own address, or an account of this program, can't be given an NFT (no record holds it, so nothing could move it again), nor a hold's rent"
     },
     {
       "code": 6054,
@@ -9146,7 +9146,7 @@
     {
       "code": 6060,
       "name": "OverWallet",
-      "msg": "This wallet has claimed this grant as often as it may"
+      "msg": "This wallet, or the NFT it shows, has bought, crafted or claimed this as often as it may"
     },
     {
       "code": 6061,
@@ -9171,12 +9171,12 @@
     {
       "code": 6065,
       "name": "GateNotMet",
-      "msg": "This needs an NFT that passes its gate, held by the player and shown after the instruction's own accounts"
+      "msg": "This needs what its gate asks of the player, shown after the instruction's own accounts: an NFT that passes it, held by the player; a place on its list; a locked stake; or a profile that passes"
     },
     {
       "code": 6066,
       "name": "BadRule",
-      "msg": "A rule or a boost the program can't keep: a number test with no key, or a boost over +10,000%"
+      "msg": "A rule the program can't keep: a test with no key, a one-of test with no texts, a profile where only an NFT is read, or a stake gate of 0 tokens"
     },
     {
       "code": 6067,
@@ -9186,7 +9186,7 @@
     {
       "code": 6068,
       "name": "BadFarm",
-      "msg": "A farm this program can't keep: 1 to 256 lock tiers each above x0 and at most x11, boosts of at most +10,000% in all, and exits and missions only where its kind takes them"
+      "msg": "A farm this program can't keep: 1 to 256 lock tiers each above x0 and at most x100, boosts of at most +100,000% each and in all, and exits and missions only where its kind takes them"
     },
     {
       "code": 6069,
@@ -9216,7 +9216,7 @@
     {
       "code": 6074,
       "name": "NotTheNft",
-      "msg": "That is not the NFT this needs: not the one its record or stash names, not the project's, a compressed NFT where none is taken, or a tree that is not Bubblegum v2"
+      "msg": "That is not the NFT this needs: not the one its record or stash names, not the project's, one proven gone, one a move did not deliver, or a tree that is not Bubblegum v2"
     },
     {
       "code": 6075,
@@ -9226,7 +9226,7 @@
     {
       "code": 6076,
       "name": "NotProven",
-      "msg": "Prove the compressed NFT in this transaction first (prove_leaf): its record no longer reads (its leaf changed, or its root left the tree's change log)"
+      "msg": "Prove the compressed NFT in this transaction first (prove_leaf): its record no longer reads (its leaf changed, or its root left the tree's change log); or pass an account that shows who holds the NFT"
     },
     {
       "code": 6077,
@@ -9271,7 +9271,7 @@
     {
       "code": 6085,
       "name": "BadMove",
-      "msg": "A move this program can't make: new tokens move as a fixed amount and are never burned; a pool pays at most all it holds, never into itself; a sealed schedule's vault pays only its runs"
+      "msg": "A move this program can't make: new tokens move as a fixed amount and are never burned; a pool pays at most all it holds, never into itself; nothing pays into the project's vault; a sealed schedule's vault pays only its runs, and never a wallet this program owns"
     },
     {
       "code": 6086,
@@ -9286,17 +9286,17 @@
     {
       "code": 6088,
       "name": "CannotClose",
-      "msg": "Still needed: an item with units out, or a lottery with tickets sold this round. A box, a recipe or a sealed schedule is never closed, so its version or its terms never repeat"
+      "msg": "Still needed: an item with units out. A box, a recipe or a sealed schedule is never closed, so its version or its terms never repeat"
     },
     {
       "code": 6089,
       "name": "BadAuction",
-      "msg": "An auction needs an end after its start and after now but within five years, an extension of at most five years, and a mint whose new accounts do not start frozen and can't be switched to"
+      "msg": "An auction needs an end after its start and after now; one taking NFT bids takes a rule it can keep, no shares, a reserve of at most 3 NFTs, and no roll as its lot"
     },
     {
       "code": 6090,
       "name": "LotRefused",
-      "msg": "Not a lot an auction takes: a unit of an item on sale with one left, or an NFT its seller holds (a player's: a Core NFT in one of the project's collections)"
+      "msg": "Not a lot an auction takes: a unit of an item with one left (not one whose traits a roll draws), a roll of a written box, or an NFT its seller holds; only an NFT lot goes first, and a sold one moves to its winner, never into a hold"
     },
     {
       "code": 6091,
@@ -9341,7 +9341,7 @@
     {
       "code": 6099,
       "name": "BadChoice",
-      "msg": "The choice a share needs: a wallet other than the buyer's own or the project's, or a collectible of the share's item that a player holds, passed as the chosen account; a contest's recipient only for its chosen share"
+      "msg": "The choice a share needs: a wallet other than the project's, or a collectible of the share's item that a player holds, passed as the chosen account; a contest's recipient only for its chosen share"
     },
     {
       "code": 6100,
@@ -9381,12 +9381,12 @@
     {
       "code": 6107,
       "name": "BadPrize",
-      "msg": "A prize this route can't give: a stash's NFT at random is a box's entry only"
+      "msg": "A prize this route can't give: a stash's NFT at random is a box's entry only, and no prize comes from a sealed schedule's or a farm's vault"
     },
     {
       "code": 6108,
       "name": "Rolls",
-      "msg": "This box rolls (more than one entry, an NFT at random, a fresh item, several draws an open, or an NFT it rolls on): open it with open_box"
+      "msg": "This box rolls (more than one entry, an NFT at random, or an NFT it rolls on): open it with open_box"
     },
     {
       "code": 6109,
@@ -9411,7 +9411,7 @@
     {
       "code": 6113,
       "name": "BadOffer",
-      "msg": "An offer takes a rule it can keep, at least one taker, a price or a loan above 0 (repaid with at least as much, within 5 years), shares only on a price, all its money as it arrives, and a mint whose accounts can't turn a payment away"
+      "msg": "An offer takes a rule it can keep, at least one taker, a loan above 0 for a time above 0 (borrowed until a date within it), shares only on a price, and all its money as it arrives"
     },
     {
       "code": 6114,
@@ -9446,7 +9446,7 @@
     {
       "code": 6120,
       "name": "BadListing",
-      "msg": "A listing asks for a price above 0, and a rental for 1 period or more of a length above 0, all of them within 5 years"
+      "msg": "A rental asks for a length above 0 and 1 period or more, and is taken for 1 period or more, up to its most"
     },
     {
       "code": 6121,
@@ -9461,7 +9461,7 @@
     {
       "code": 6123,
       "name": "NotInStash",
-      "msg": "A lottery's held prize must be in its own stash when the lottery is written"
+      "msg": "A lottery's held prizes, and as many NFTs as it raffles, must be in its own stash when the lottery is written"
     },
     {
       "code": 6124,
@@ -9486,7 +9486,7 @@
     {
       "code": 6128,
       "name": "ExitWhileLocked",
-      "msg": "While its lock runs, a seat can't move to a tier with a larger early-exit fee"
+      "msg": "While its lock runs, a seat can't move to a tier it could leave early from more cheaply"
     },
     {
       "code": 6129,
@@ -9511,7 +9511,7 @@
     {
       "code": 6133,
       "name": "BadTable",
-      "msg": "A table takes rows of a weight and a stock above 0 (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
+      "msg": "A table takes rows (labels of 32 bytes at most, a table of labels only) until it is sealed, and is drawn from only once it is"
     },
     {
       "code": 6134,
@@ -9551,7 +9551,7 @@
     {
       "code": 6141,
       "name": "PackTooLarge",
-      "msg": "A pack's draws (each open's, times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
+      "msg": "A box's draws (one, or each open's times the opens bought together) must all fit one answer of the oracle's: fewer entries, prizes an entry or draws"
     },
     {
       "code": 6142,
