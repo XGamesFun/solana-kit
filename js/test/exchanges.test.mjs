@@ -5,13 +5,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addressBytes } from '../chain/base58.js';
-import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
-import { computeUnitLimit } from '../chain/programs.js';
+import { concat, uintLE, utf8 } from '../chain/bytes.js';
+import { createCollectionInstruction, MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
+import { sendPlan } from '../chain/lookup.js';
+import { ASSOCIATED_TOKEN_PROGRAM, SYSTEM_PROGRAM, TOKEN_2022_PROGRAM } from '../chain/pda.js';
+import { readMessage, readTransaction } from '../chain/tx.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent, meta } from '../chain/programs.js';
+import { mintToIx } from '../chain/token.js';
+import { EXECUTE_DISCRIMINATOR, MEMO_PROGRAM, validationAddress } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
+import { newAddress } from '../sim/chain.mjs';
 import { cnftTree, onChainRoot } from './cnft-chain.mjs';
 import { nftOf as tmNft, setup as tmSetup } from './tm-chain.mjs';
-import { boxArgs, cannotRun, cannotRunCompressed, collectible, itemDrop, world } from './world.mjs';
+import { boxArgs, cannotRun, cannotRunCompressed, collectible, itemDrop, pinned, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
 const skipCompressed = cannotRunCompressed() ?? false;
@@ -20,7 +27,7 @@ const NOBODY = '11111111111111111111111111111111';
 const names = record => record.receipts.map(r => r.name);
 const receipt = (record, name) => record.receipts.find(r => r.name === name)?.data;
 const coreOwner = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
-const tokens = (w, wallet, mint) => w.chain.tokens(loot.ata(wallet, mint));
+const tokens = (w, wallet, mint, program) => w.chain.tokens(loot.ata(wallet, mint, program));
 const fails = (fn, why) =>
   assert.throws(fn, e => String(e.message).includes(why) || (e.logs ?? []).join('\n').includes(why), why);
 
@@ -680,5 +687,268 @@ test(
     const flagged = (await lenders.claims()).find(c => c.asset === lost);
     assert.deepEqual([flagged.kind, flagged.gone], ['release', true]);
     await assert.rejects(lenders.claim(flagged), /no longer holds this NFT/);
+  },
+);
+
+// ---------------------------------------------------------------- an end too wide for one transaction
+
+const HOOK = 'Hook111111111111111111111111111111111111111';
+
+/** A Token-2022 coin whose transfer hook is the test hook, which counts each transfer in one account its list names
+ * (with a transfer fee of 0), the owner its mint authority. Returns the coin and what each transfer of it carries. */
+function hookedCoin(w) {
+  const mint = newAddress(w.random);
+  w.chain.svm.addProgram(HOOK, pinned('test_hook.so'));
+  const base = new Uint8Array(166);
+  base.set(uintLE(1, 4));
+  base.set(addressBytes(w.creator), 4);
+  base[44] = 6;
+  base[45] = 1;
+  base[165] = 1;
+  const fees = concat(new Uint8Array(72), new Uint8Array(16), uintLE(0, 2), new Uint8Array(16), uintLE(0, 2));
+  const hook = concat(new Uint8Array(32), addressBytes(HOOK));
+  const data = concat(base, uintLE(1, 2), uintLE(fees.length, 2), fees, uintLE(14, 2), uintLE(hook.length, 2), hook);
+  w.chain.put(mint, { owner: TOKEN_2022_PROGRAM, lamports: w.chain.rent(data.length), data });
+  const counter = newAddress(w.random);
+  const list = concat(
+    EXECUTE_DISCRIMINATOR,
+    uintLE(39, 4),
+    uintLE(1, 4),
+    Uint8Array.of(0),
+    addressBytes(counter),
+    Uint8Array.of(0, 1),
+  );
+  w.chain.put(validationAddress(mint, HOOK), { owner: HOOK, lamports: w.chain.rent(list.length), data: list });
+  w.chain.put(counter, { owner: HOOK, lamports: w.chain.rent(16), data: new Uint8Array(16) });
+  const extra = [
+    meta(MEMO_PROGRAM, false, false),
+    meta(HOOK, false, false),
+    meta(validationAddress(mint, HOOK), false, false),
+    meta(counter, false, true),
+  ];
+  return { mint, extra };
+}
+
+test(
+  'the player module ends a sale too wide for one transaction: the lot first, then the payees’ accounts opened, then the money',
+  { skip: skipCompressed },
+  async () => {
+    // The widest sale the test world makes: a compressed lot at a 17-node proof, eight shares to holders of collectibles,
+    // and a coin with a transfer hook.
+    const w = world({ seed: 'ex-widest', compressed: true });
+    w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+    const { mint: coin, extra } = hookedCoin(w);
+    const holders = Array.from({ length: loot.MAX_SHARES }, () => w.who());
+    const shares = holders.map(h => ({ to: { Holder: [w.make(1, h)] }, bps: 1_000 }));
+    const tree = cnftTree(w, { depth: 17, buffer: 64 });
+    const seller = w.who();
+    const lot = tree.mint(seller);
+    const now = w.chain.now();
+    w.chain.send(seller, [
+      computeUnitLimit(1_400_000),
+      ...loot.withLeafCloses([
+        loot.proveLeafIx({ signer: seller, compressed: tree.compressed(lot) }),
+        loot.openAuctionIx({
+          seller,
+          project: w.project,
+          id: 1,
+          mint: coin,
+          compressed: tree.compressed(lot),
+          args: {
+            lot: { Asset: [lot] },
+            reserve: 100n,
+            min_raise_bps: 0,
+            starts_at: BigInt(now),
+            ends_at: BigInt(now + 600),
+            extend: 0,
+            shares,
+            gate: null,
+            nft_bids: null,
+          },
+        }),
+      ]),
+    ]);
+    tree.moved(lot, w.project);
+    const bidder = w.who();
+    w.chain.send(w.creator, [
+      createAssociatedTokenAccountIdempotent(w.creator, bidder, coin, TOKEN_2022_PROGRAM),
+      mintToIx({
+        mint: coin,
+        to: loot.ata(bidder, coin, TOKEN_2022_PROGRAM),
+        authority: w.creator,
+        amount: 1_000_000n,
+        tokenProgram: TOKEN_2022_PROGRAM,
+      }),
+    ]);
+    const at = pda.auction(w.project, seller, 1);
+    const programs = { [coin]: TOKEN_2022_PROGRAM };
+    w.chain.send(bidder, [
+      loot.bidIx({
+        bidder,
+        project: w.project,
+        id: 1,
+        auction: w.read('Auction', at),
+        amount: 1_000_000n,
+        programs,
+        extra,
+      }),
+    ]);
+    w.chain.warp(now + 601);
+
+    // The end that delivers and pays together does not fit one transaction, even with a lookup table.
+    const holdersNow = Object.fromEntries(shares.map((x, i) => [x.to.Holder[0], holders[i]]));
+    const together = [
+      computeUnitLimit(1_400_000),
+      loot.proveLeafIx({ signer: w.cranker, compressed: tree.compressed(lot) }),
+      loot.endAuctionIx({
+        signer: w.cranker,
+        project: w.project,
+        projectState: w.projectState(),
+        id: 1,
+        auction: w.read('Auction', at),
+        compressed: tree.compressed(lot),
+        holders: holdersNow,
+        programs,
+        extra,
+      }),
+    ];
+    const isProve = ix => ix.programId === loot.LOOT_PROGRAM && loot.instructionOf(ix.data)?.name === 'prove_leaf';
+    assert.equal(sendPlan({ payer: w.cranker, instructions: together, alone: isProve }), null, 'too wide together');
+    for (const h of [...holders, seller]) assert.equal(w.chain.get(loot.ata(h, coin, TOKEN_2022_PROGRAM)), null);
+
+    // The module alone: the lot first, then the payees' accounts, then the money.
+    const sent = [];
+    const rpc = { ...tree.rpc, send: async wire => (sent.push(wire), tree.rpc.send(wire)) };
+    const app = solanaApp({
+      spec: {
+        version: 2,
+        tokens: [],
+        auctions: [{ key: 'lot', id: 1, seller }],
+        live: { project: w.project, collection: w.collection },
+      },
+      rpc,
+      wallet: asWallet(w.cranker),
+      now: () => w.chain.now(),
+    });
+    const ended = await app.endAuction('lot');
+    assert.equal(ended.lotFirst, true);
+    assert.ok(ended.signature && ended.paid, 'both ends sent');
+    tree.moved(lot, bidder);
+    assert.deepEqual(onChainRoot(w, tree), tree.root(), 'the winner holds the lot');
+    for (const h of holders) assert.equal(tokens(w, h, coin, TOKEN_2022_PROGRAM), 100_000n, 'each holder’s tenth');
+    assert.equal(tokens(w, seller, coin, TOKEN_2022_PROGRAM), 200_000n, 'the seller’s rest');
+    assert.equal(w.chain.get(at), null, 'closed');
+    // The payees' accounts were opened in a transaction of their own, before the money.
+    const programsOf = wire => {
+      const m = readMessage(readTransaction(wire).message);
+      return m.instructions.map(ix => m.keys[ix.programIndex]);
+    };
+    const opens = sent.findIndex(wire => programsOf(wire).every(p => p === ASSOCIATED_TOKEN_PROGRAM));
+    assert.ok(opens > 0 && opens < sent.length - 1, 'after the lot, before the money');
+  },
+);
+
+// ---------------------------------------------------------------- a record an earlier owner left (W6)
+
+/** A Core collection of `maker`'s that the project does not name, and an asset of it for `owner` (Core CreateV2). */
+function outsideAsset(w, maker, owner) {
+  const collection = newAddress(w.random);
+  w.chain.send(maker, [
+    createCollectionInstruction({
+      collection,
+      creator: maker,
+      name: 'Outside',
+      uri: 'https://example.invalid/o.json',
+      project: w.project,
+    }),
+  ]);
+  const asset = newAddress(w.random);
+  const str = x => concat(uintLE(utf8(x).length, 4), utf8(x));
+  w.chain.send(maker, [
+    {
+      programId: MPL_CORE_PROGRAM,
+      keys: [
+        meta(asset, true, true),
+        meta(collection, false, true),
+        meta(maker, true, false),
+        meta(maker, true, true),
+        meta(owner, false, false),
+        meta(MPL_CORE_PROGRAM, false, false),
+        meta(SYSTEM_PROGRAM, false, false),
+        meta(MPL_CORE_PROGRAM, false, false),
+      ],
+      data: concat(Uint8Array.of(20, 0), str('Outside #1'), str('https://example.invalid/1.json'), Uint8Array.of(0, 0)),
+    },
+  ]);
+  return { asset, collection };
+}
+
+test(
+  'a deposit of an NFT whose earlier owner left a listing or a hold in the project is refused in words, and goes ahead with acceptLeftover',
+  { skip },
+  async () => {
+    const w = world({ seed: 'ex-leftover' });
+    const maker = w.who();
+    const [earlier, next] = [w.who(), w.who()];
+    // An earlier owner lists one NFT and holds another; whoever controls their collection takes both out of the
+    // project's hands, and they reach the next owner.
+    const listed = outsideAsset(w, maker, earlier);
+    const held = outsideAsset(w, maker, earlier);
+    w.chain.send(earlier, [
+      loot.openListingIx({
+        maker: earlier,
+        project: w.project,
+        asset: listed.asset,
+        mint: w.mint,
+        deal: { Sell: { price: 100n } },
+        collection: listed.collection,
+        hasAuthority: false,
+      }),
+    ]);
+    const freeAt = BigInt(w.chain.now() + 60);
+    w.chain.send(earlier, [
+      loot.holdIx({ player: earlier, project: w.project, asset: held.asset, collection: held.collection, freeAt }),
+    ]);
+    takeCore(w, listed.asset, next);
+    takeCore(w, held.asset, next);
+    w.chain.warp(w.chain.now() + 61);
+
+    let prompts = 0;
+    const app = solanaApp({
+      spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } },
+      rpc: w.chain.rpc,
+      wallet: { address: next, signTransaction: async x => (prompts++, x) },
+      now: () => w.chain.now(),
+    });
+    await assert.rejects(
+      app.hold(listed.asset, 3600),
+      new RegExp(
+        `listing of this NFT .* left by an earlier owner, ${earlier}.*would be lost to you.*acceptLeftover: true`,
+      ),
+    );
+    await assert.rejects(
+      app.hold(held.asset, 3600),
+      /a hold that is over: anyone can send the NFT to .*acceptLeftover/,
+    );
+    // A listing: the program refuses a second one while the first is open, so no option sends it.
+    await assert.rejects(
+      app.listForSale(listed.asset, { price: 1, acceptLeftover: true }),
+      /refuses another listing of this NFT/,
+    );
+    assert.equal(prompts, 0, 'nothing signed');
+
+    // Given the option, the deposit goes: and the earlier owner's listing takes it, as the warning said.
+    const { freeAt: until } = await app.hold(listed.asset, 3600, { acceptLeftover: true });
+    assert.equal(coreOwner(w, listed.asset), w.project);
+    assert.ok(w.chain.get(pda.hold(listed.asset, until)));
+    w.chain.send(earlier, [
+      loot.closeListingIx({
+        maker: earlier,
+        project: w.project,
+        listing: w.read('Listing', pda.listing(w.project, listed.asset)),
+        collection: listed.collection,
+      }),
+    ]);
+    assert.equal(coreOwner(w, listed.asset), earlier, 'the earlier owner took the deposit');
   },
 );

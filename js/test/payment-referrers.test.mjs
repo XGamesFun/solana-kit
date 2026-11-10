@@ -1,5 +1,5 @@
 // A payment's split may name a share the payer chooses ("chosen": a referrer): `pay` takes its shares from the payer
-// each time, so the page passes the wallet (`app.pay(key, { chosenRecipient })`), never the payer's own. A
+// each time, so the page passes the wallet (`app.pay(key, { chosenRecipient })`), the payer's own too. A
 // "chosen:<item>" share stays a box's and a lottery's: `pay` can't check the collectible named is of the item. And
 // js/play refuses an option a method doesn't take, so a `{ choice }` meant as `chosenRecipient` fails instead of
 // sending the referrer's share to the treasury.

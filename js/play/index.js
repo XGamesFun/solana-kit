@@ -40,7 +40,7 @@ import {
   withSolWrap,
 } from '../chain/programs.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
-import { extension, mayStartFrozen, MEMO_PROGRAM, mintPowers, resolveTransfers } from '../chain/token2022.js';
+import { extension, mayStartFrozen, mintPowers, resolveTransfers } from '../chain/token2022.js';
 import {
   compileFitting,
   closeTableIx,
@@ -1459,7 +1459,17 @@ export function solanaApp({
     );
   }
   /** What `buy` and `openBox` take: a box bought at once (`buyBox`) or opened (`open`). */
-  const BOX_OPTIONS = ['shown', 'listProof', 'maxPrice', 'listing', 'chosenRecipient', 'on', 'oneSignature', 'count'];
+  const BOX_OPTIONS = [
+    'shown',
+    'listProof',
+    'maxPrice',
+    'listing',
+    'chosenRecipient',
+    'on',
+    'oneSignature',
+    'count',
+    'acceptLeftover',
+  ];
 
   /**
    * Buys `count` of a box that needs no roll (a shop item, a bundle, a fixed pack: one entry, nothing random, no NFT
@@ -1565,6 +1575,7 @@ export function solanaApp({
       chosenRecipient = null,
       listProof,
       count = 1,
+      acceptLeftover,
     } = {},
   ) {
     const g = await projectNow();
@@ -1578,6 +1589,8 @@ export function solanaApp({
     const items = await itemsOf(box);
     // A box that rolls on an NFT takes the one the player brings (`on`), whatever its kind.
     if (box.subject && !on) throw new Error('This box rolls on an NFT: say which (on).');
+    // A box that burns it, gives it away or moves its numbers takes it into the project's hands until the roll settles.
+    if (box.subject && loot.boxHolds(box)) await noLeftovers(on, acceptLeftover);
     const brought = box.subject ? await nftOf(on) : { before: [] };
     const { before: proving, hasAuthority, ...kind } = brought;
     const subject = box.subject
@@ -1824,14 +1837,21 @@ export function solanaApp({
     const at = auctionAt(a);
     let auction = await read('Auction', at);
     const g = await projectNow();
-    const memo =
-      programOf(auction.mint) === TOKEN_2022_PROGRAM
-        ? [{ pubkey: MEMO_PROGRAM, isSigner: false, isWritable: false }]
-        : [];
+    // What a transfer of the bids' coin carries: the Memo program for Token-2022, and a transfer hook's accounts.
+    const memo = await hookTail([auction.mint]);
     const sold = auction.high > 0n;
     const lot = auction.lot.Asset?.[0] ?? null;
     const owner = lot ? auction.seller : g.treasury;
-    const base = { signer: wallet.address, project, projectState: g, id: a.id, programs, extra: memo };
+    // The bids' coin's token program, read from the mint when the app wasn't told it.
+    const coin = programs[auction.mint] ?? (await client.account(auction.mint))?.owner ?? TOKEN_PROGRAM;
+    const base = {
+      signer: wallet.address,
+      project,
+      projectState: g,
+      id: a.id,
+      programs: { ...programs, [auction.mint]: coin },
+      extra: memo,
+    };
     if (callOff && (!sold || !lot))
       throw new Error('Only the sale of an NFT lot that has a bid is called off: end this auction with endAuction.');
     // The lot went at an earlier end: this one pays what the bid still owes and closes the auction.
@@ -1991,7 +2011,7 @@ export function solanaApp({
                 : [],
         ),
       ].filter(Boolean);
-      const program = programOf(auction.mint);
+      const program = base.programs[auction.mint];
       const accounts = await client.accounts(payees.map(w => loot.ata(w, auction.mint, program)));
       for (const [i, w] of payees.entries())
         if (!accounts[i]) opens.push(createAssociatedTokenAccountIdempotent(wallet.address, w, auction.mint, program));
@@ -2071,6 +2091,75 @@ export function solanaApp({
       gone: true,
       says: 'The project no longer holds this NFT: whoever controls its collection took it back or burned it while it was held. Its hold says otherwise, but nothing can be sent, and nothing was paid against it.',
     };
+  }
+
+  /**
+   * The records of this project an earlier owner of `asset` left behind (W6): its listing at
+   * `["listing", project, asset]` (one read) and its holds (one search, by the asset's address), each that names a wallet
+   * other than the player's. Each is { kind, address, says }. Such a record stays when whoever controls the NFT's
+   * collection moved it out of the project's hands without the program, and the program hands out whatever the project
+   * holds at that address: once this player's deposit puts the NFT back in the project's hands, the record can send it
+   * to the wallet it names. NFTs of the project's own collections are not read: those collections refuse the permanent
+   * delegates that take an NFT out.
+   */
+  async function leftovers(asset) {
+    if (ours(await collectionOf(asset))) return [];
+    const me = wallet.address;
+    const out = [];
+    const listingAt = loot.pda.listing(project, asset);
+    const listing = await readMaybe('Listing', listingAt);
+    if (listing && listing.maker !== me) {
+      const sale = Boolean(listing.deal.Sell);
+      out.push({
+        kind: 'listing',
+        address: listingAt,
+        says: `A listing of this NFT (${listingAt}) is still open in this project, left by an earlier owner, ${listing.maker}. Once the project holds the NFT again, ${listing.maker} can take it home by closing that listing${sale ? `, and anyone can buy it at the listing's price, which is paid to ${listing.maker}` : ''}.`,
+      });
+    }
+    const tag = { memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.Hold)) } };
+    const holds = await client.programAccounts(loot.LOOT_PROGRAM, [
+      tag,
+      { memcmp: { offset: 1, bytes: project } },
+      { memcmp: { offset: 33, bytes: asset } },
+    ]);
+    const time = BigInt(await chainNow());
+    for (const { pubkey, account } of holds) {
+      const hold = loot.decode('Hold', account.data);
+      const to = hold.player === project ? 'the project’s treasury' : hold.player;
+      const names = [hold.player, hold.debt?.lender].filter(Boolean);
+      if (names.every(x => x === me)) continue;
+      const due = time >= BigInt(hold.free_at);
+      const what = hold.debt
+        ? due
+          ? `a loan's hold whose loan is overdue: anyone can send the NFT to its lender, ${hold.debt.lender}`
+          : `a loan's hold: anyone who repays it (${hold.debt.repay} to ${hold.debt.lender}) sends the NFT to ${to}, and once it is due anyone sends it to the lender`
+        : due
+          ? `a hold that is over: anyone can send the NFT to ${to} at once`
+          : `a hold that runs until ${new Date(Number(hold.free_at) * 1000).toISOString()}: the project's authority decides where the NFT goes until then, and anyone sends it to ${to} after`;
+      out.push({
+        kind: 'hold',
+        address: pubkey,
+        says: `This project still has ${what} (${pubkey}), left from an earlier owner of this NFT. Once the project holds the NFT again, it can be sent there.`,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Refuses, in words, to hand `asset` to the project while a record an earlier owner left can take it (`leftovers`),
+   * unless the caller says the player accepts that (`accept` true). `listing`: the route is a listing, which the program
+   * refuses outright while a listing of the NFT is open (its address is taken), whatever the option says.
+   */
+  async function noLeftovers(asset, accept, { listing = false } = {}) {
+    const found = await leftovers(asset);
+    if (listing && found.some(x => x.kind === 'listing'))
+      throw new Error(
+        `${found.find(x => x.kind === 'listing').says} The program refuses another listing of this NFT while that one is open (its address is taken): nothing was sent.`,
+      );
+    if (!found.length || accept === true) return;
+    throw new Error(
+      `${found.map(x => x.says).join(' ')} This deposit would put the NFT where that record can take it: it would be lost to you. Nothing was sent. Go ahead only if the player accepts this: pass acceptLeftover: true.`,
+    );
   }
 
   /** Who holds each collectible a split's holder shares name now: { asset: holder }. */
@@ -2673,9 +2762,22 @@ export function solanaApp({
     async buyTickets(
       lotteryKey,
       count = 1,
-      { shown, chosenRecipient = null, listProof, nft: paidWith, listing, maxPrice, ...others } = NO_OPTIONS,
+      {
+        shown,
+        chosenRecipient = null,
+        listProof,
+        nft: paidWith,
+        listing,
+        maxPrice,
+        acceptLeftover,
+        ...others
+      } = NO_OPTIONS,
     ) {
-      only(others, ['shown', 'chosenRecipient', 'listProof', 'nft', 'listing', 'maxPrice'], 'buyTickets');
+      only(
+        others,
+        ['shown', 'chosenRecipient', 'listProof', 'nft', 'listing', 'maxPrice', 'acceptLeftover'],
+        'buyTickets',
+      );
       const l = part('lotteries', lotteryKey);
       const name = l.name ?? lotteryKey;
       if (listing && listing.key !== undefined && listing.key !== l.key)
@@ -2733,6 +2835,8 @@ export function solanaApp({
       if (terms.nft_ticket) {
         if (!paidWith) throw new Error(`A ticket of “${l.name}” costs an NFT: say which (nft).`);
         if (BigInt(count) !== 1n) throw new Error('An NFT pays for one ticket at a time.');
+        // The project holds an NFT ticket until the round is drawn.
+        await noLeftovers(paidWith, acceptLeftover);
         const { before: proof, ...kind } = await nftOf(paidWith);
         nft = { asset: paidWith, ...kind };
         before.push(...proof);
@@ -2896,10 +3000,13 @@ export function solanaApp({
      * Core asset, a Token Metadata NFT's mint (legacy or pNFT), or a compressed NFT's asset id. In a farm that watches,
      * an NFT whose last staker sold it takes their seat over. A farm with an end takes none at its end or after it.
      */
-    async stakeNft(farmKey, asset, tier = 0, { extra, transfers, ...others } = NO_OPTIONS) {
-      only(others, ['extra', 'transfers'], 'stakeNft');
+    async stakeNft(farmKey, asset, tier = 0, { extra, transfers, acceptLeftover, ...others } = NO_OPTIONS) {
+      only(others, ['extra', 'transfers', 'acceptLeftover'], 'stakeNft');
       const f = part('farms', farmKey);
       const farm = await read('Farm', loot.pda.farm(project, f.id));
+      // A farm that keeps its NFTs in escrow hands this one to the project; one that freezes or watches leaves it in the
+      // wallet, where no record of the project's can move it.
+      if (farm.custody === 'Escrow') await noLeftovers(asset, acceptLeftover);
       await openFor(f, farm, tier);
       const token = await farmTokens([farm.rewards_mint], [], { extra, transfers });
       const { before, ...nft } = await nftOf(asset);
@@ -2936,8 +3043,12 @@ export function solanaApp({
      * leaves without it (the receipt says `prize_missed`). Returns the signature, or { signature, roll } when it makes a roll (a mission's result on the NFT, or a chest),
      * which `collect` then finishes.
      */
-    async unstakeNft(farmKey, asset, { forfeit = false, needPrize = true, extra, transfers, ...others } = NO_OPTIONS) {
-      only(others, ['forfeit', 'needPrize', 'extra', 'transfers'], 'unstakeNft');
+    async unstakeNft(
+      farmKey,
+      asset,
+      { forfeit = false, needPrize = true, extra, transfers, acceptLeftover, ...others } = NO_OPTIONS,
+    ) {
+      only(others, ['forfeit', 'needPrize', 'extra', 'transfers', 'acceptLeftover'], 'unstakeNft');
       const f = part('farms', farmKey);
       const farm = await read('Farm', loot.pda.farm(project, f.id));
       const token = await farmTokens(
@@ -2960,6 +3071,10 @@ export function solanaApp({
       // `prizeRollNonce` of the one named (`namedRollNonce`).
       const nonce = roll != null ? loot.nonceOn(asset) : freshNonce();
       const boxes = roll != null ? { [roll]: await read('LootBox', loot.pda.box(project, roll)) } : {};
+      // A mission whose box holds the NFT it rolls on takes it into the project's hands on the way out, from a farm that
+      // left it in the wallet.
+      if (roll != null && farm.custody !== 'Escrow' && loot.boxHolds(boxes[roll]))
+        await noLeftovers(asset, acceptLeftover);
       // A roll still at the NFT's order address blocks the leave, unless it was asked and came back with nothing to give
       // (Waiting, asked once): that one stands in for this. Any other is asked (its player or the project's keys), answered and settled first.
       if (roll != null) {
@@ -3344,7 +3459,9 @@ export function solanaApp({
      * Hands an NFT of any kind to the project until a time (a hold): `seconds` from now, or `{ until }` (Unix seconds).
      * The hold's address names its end. Returns { signature, freeAt }.
      */
-    async hold(asset, seconds) {
+    async hold(asset, seconds, { acceptLeftover, ...others } = NO_OPTIONS) {
+      only(others, ['acceptLeftover'], 'hold');
+      await noLeftovers(asset, acceptLeftover);
       const freeAt = BigInt(typeof seconds === 'object' ? seconds.until : now() + Number(seconds));
       const { before, hasAuthority: _, ...nft } = await nftOf(asset);
       const signature = await send([
@@ -3413,9 +3530,11 @@ export function solanaApp({
      * repayment away (`loanOffer`'s `risks`), is refused unless `acceptRisks` is true: the page shows the player each
      * risk first. `extra`: a transfer hook's accounts.
      */
-    async borrow(maker, id, asset, { due, acceptRisks = false, extra = [], ...others } = NO_OPTIONS) {
-      only(others, ['due', 'acceptRisks', 'extra'], 'borrow');
+    async borrow(maker, id, asset, { due, acceptRisks = false, acceptLeftover, extra, ...others } = NO_OPTIONS) {
+      only(others, ['due', 'acceptRisks', 'acceptLeftover', 'extra'], 'borrow');
+      await noLeftovers(asset, acceptLeftover);
       const loan = await this.loanOffer(maker, id);
+      extra ??= await hookTail([loan.mint]);
       if (loan.risks.length && acceptRisks !== true)
         throw new Error(
           `Repaying this loan can be blocked. ${loan.risks.map(r => r.says).join(' ')} Borrow only if the player accepts this: pass acceptRisks: true.`,
@@ -3471,11 +3590,12 @@ export function solanaApp({
      * once it can move (`claims()` lists it). A compressed NFT is proven in the same transaction; the money alone for one
      * whose proof keeps going out of date goes without it. Returns { signature, home }, and `says` when the NFT waits.
      */
-    async repay(asset, due, { repay, home = true, extra = [], ...others } = NO_OPTIONS) {
+    async repay(asset, due, { repay, home = true, extra, ...others } = NO_OPTIONS) {
       only(others, ['repay', 'home', 'extra'], 'repay');
       const at = loot.pda.hold(asset, due);
       const hold = await read('Hold', at);
       if (!hold.debt) throw new Error('This NFT is held for no loan left to repay.');
+      extra ??= await hookTail([hold.debt.mint]);
       if (repay === undefined || repay === null)
         throw new Error(
           'Say the debt the payer was shown (repay, from loan()): the amount read now is never paid in its place.',
@@ -3537,13 +3657,14 @@ export function solanaApp({
      * of NFTs takes one of the player's NFTs that passes its rule instead (`nft`, its address), held until it is
      * claimed. `listProof`: for a list gate.
      */
-    async enter(id, side, amount, { shown, listProof, nft: staked, ...others } = NO_OPTIONS) {
-      only(others, ['shown', 'listProof', 'nft'], 'enter');
+    async enter(id, side, amount, { shown, listProof, nft: staked, acceptLeftover, ...others } = NO_OPTIONS) {
+      only(others, ['shown', 'listProof', 'nft', 'acceptLeftover'], 'enter');
       const contest = await read('Contest', loot.pda.contest(project, id));
       shown ??= await passing(contest.gate, 'enter');
       listProof = listProofOf(contest.gate, null, listProof);
       if (contest.nft) {
         if (!staked) throw new Error('This contest takes an NFT: say which (nft).');
+        await noLeftovers(staked, acceptLeftover);
         const { before, ...kind } = await nftOf(staked);
         return send([
           ...before,
@@ -3660,8 +3781,8 @@ export function solanaApp({
      * wrapped-SOL account does not hold already is wrapped, and the account stays open: if this bid is topped, it comes
      * back there.
      */
-    async bid(auctionKey, amount, { shown, listProof, nfts, ...others } = NO_OPTIONS) {
-      only(others, ['shown', 'listProof', 'nfts'], 'bid');
+    async bid(auctionKey, amount, { shown, listProof, nfts, acceptLeftover, ...others } = NO_OPTIONS) {
+      only(others, ['shown', 'listProof', 'nfts', 'acceptLeftover'], 'bid');
       const a = part('auctions', auctionKey);
       const auction = await read('Auction', auctionAt(a));
       shown ??= await passing(auction.gate, 'bid');
@@ -3674,6 +3795,7 @@ export function solanaApp({
         if (bundle.length > loot.MAX_BID_NFTS) throw new Error(`A bid holds at most ${loot.MAX_BID_NFTS} NFTs.`);
         if (auction.held.length >= loot.MAX_BID_NFTS)
           throw new Error(`The high bid holds ${loot.MAX_BID_NFTS} NFTs, the most a bid holds: it can't be topped.`);
+        for (const asset of bundle) await noLeftovers(asset, acceptLeftover);
         const before = [];
         const kindOf = async (asset, to) => {
           const { before: proof, ...kind } = await nftOf(asset, wallet.address, { to });
@@ -3709,9 +3831,11 @@ export function solanaApp({
         if (value > held)
           instructions.push(transferLamports(wallet.address, wrapped, value - held), syncNative(wrapped));
       }
-      // A Token-2022 account can ask for a memo on every transfer into it: the Memo program rides along.
-      const memo =
-        programOf(mint) === TOKEN_2022_PROGRAM ? [{ pubkey: MEMO_PROGRAM, isSigner: false, isWritable: false }] : [];
+      // A Token-2022 account can ask for a memo on every transfer into it: the Memo program rides along, and a transfer
+      // hook's accounts.
+      const memo = await hookTail([mint]);
+      // The coin's token program, read from the mint when the app wasn't told it.
+      const coin = programs[mint] ?? (await client.account(mint))?.owner ?? TOKEN_PROGRAM;
       instructions.push(
         loot.bidIx({
           bidder: wallet.address,
@@ -3721,7 +3845,7 @@ export function solanaApp({
           amount: value,
           shown,
           listProof,
-          programs,
+          programs: { ...programs, [mint]: coin },
           extra: memo,
         }),
       );
@@ -3804,8 +3928,9 @@ export function solanaApp({
      * Lists one of the player's NFTs (any kind) for sale at `price` (whole units of `currency`, the economy's by
      * default), `shares` taken first (a royalty, a platform's cut). The project holds it until it sells or is unlisted.
      */
-    async listForSale(asset, { price, currency, shares = [], ...others } = NO_OPTIONS) {
-      only(others, ['price', 'currency', 'shares'], 'listForSale');
+    async listForSale(asset, { price, currency, shares = [], acceptLeftover, ...others } = NO_OPTIONS) {
+      only(others, ['price', 'currency', 'shares', 'acceptLeftover'], 'listForSale');
+      await noLeftovers(asset, acceptLeftover, { listing: true });
       const mint = mintOf(currency);
       const { before, ...nft } = await nftOf(asset);
       return send([
@@ -3826,8 +3951,12 @@ export function solanaApp({
      * Lists one of the player's NFTs for rent: `price` (whole units) a period of `lasts` seconds, a renter taking 1 to
      * `maxPeriods` at once. Nobody can end a rental early; the next renter takes it once one is over, until it is unlisted.
      */
-    async listForRent(asset, { price, lasts, maxPeriods = 1, currency, shares = [], ...others } = NO_OPTIONS) {
-      only(others, ['price', 'lasts', 'maxPeriods', 'currency', 'shares'], 'listForRent');
+    async listForRent(
+      asset,
+      { price, lasts, maxPeriods = 1, currency, shares = [], acceptLeftover, ...others } = NO_OPTIONS,
+    ) {
+      only(others, ['price', 'lasts', 'maxPeriods', 'currency', 'shares', 'acceptLeftover'], 'listForRent');
+      await noLeftovers(asset, acceptLeftover, { listing: true });
       const mint = mintOf(currency);
       const { before, ...nft } = await nftOf(asset);
       return send([
