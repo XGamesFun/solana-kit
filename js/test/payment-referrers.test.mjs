@@ -133,7 +133,10 @@ test(
     assert.equal(await balance(referrer.address), 1_000_000n, 'none named: no referrer is paid');
     assert.equal((await balance(treasury)) - before, 15_000_000n, 'and the treasury takes the chosen share');
 
-    await assert.rejects(app.pay('entry', { chosenRecipient: player.address }), /their own wallet/);
+    // The payer may name their own wallet: the share comes back to them (the program takes it, and so does the kit).
+    await app.pay('entry', { chosenRecipient: player.address });
+    assert.equal(await balance(referrer.address), 1_000_000n, 'the referrer is not paid');
+    assert.equal((await balance(treasury)) - before, 22_000_000n, 'the treasury the rest, as when another is named');
     await assert.rejects(
       app.pay('entry', { choice: referrer.address }),
       /pay doesn’t take “choice” \(a buyer’s choice is `chosenRecipient`\)/,

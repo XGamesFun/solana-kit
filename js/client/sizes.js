@@ -244,6 +244,27 @@ function borshLength(type, value) {
 
 const defined = name => ({ defined: { name } });
 
+/** The heap reading a list of `n` values of `size` bytes takes (`order::list_bytes`): Borsh makes room for as many as
+ * 4,096 bytes hold, then doubles it each time it fills, and every room it outgrew stays used beside the last. */
+function listBytes(n, size) {
+  if (n * size <= 4096) return n * size;
+  let room = Math.min(Math.max(1, Math.floor(4096 / size)), n);
+  let rooms = room;
+  while (room < n) {
+    room *= 2;
+    rooms += room;
+  }
+  return rooms * size;
+}
+/** What `listBytes` takes beyond the `n` values themselves (`order::outgrown`). */
+const outgrown = (n, size) => listBytes(n, size) - n * size;
+/** The bytes a program `String` and a `DropEntry` take in memory, and an address. */
+const STRING_BYTES = 24;
+const ENTRY_BYTES = 32;
+const ADDRESS_BYTES = 32;
+/** The heap a rule's "one of" list of texts takes, read whole. */
+const textsBytes = rule => (rule?.test?.OneOf ? listBytes(rule.test.OneOf.texts.length, STRING_BYTES) : 0);
+
 /**
  * The heap reading a box takes beyond its entries (`order::box_bytes`): its odds, gate, shares, subject, slots and
  * fates, read whole with it, by their bytes and their number. `box`: the box's args, as `upsertBoxIx` takes them.
@@ -261,12 +282,20 @@ export function boxBytes({ odds = [], gate = null, shares = [], subject = null, 
     borshLength({ option: defined('Rule') }, subject) +
     borshLength({ vec: defined('Slot') }, slotsWritten) +
     borshLength({ vec: defined('Fate') }, fatesWritten);
+  // Each "one of" list of texts (a gate's rule, each odds rule, the subject), read whole; a gate's wallets' room past
+  // what they fill.
+  const rules =
+    (gate?.Holds ? textsBytes(gate.Holds[0]) : 0) +
+    odds.reduce((n, o) => n + textsBytes(o.boost?.rule), 0) +
+    textsBytes(subject) +
+    (gate?.Wallets ? outgrown(gate.Wallets[0].length, ADDRESS_BYTES) : 0);
   return (
     BYTES.boxByte * BigInt(bytes) +
     BYTES.gateByte * BigInt(borshLength({ option: defined('Gate') }, gate)) +
     BYTES.odds * BigInt(odds.length) +
     BYTES.fate * BigInt(fates.length) +
-    BYTES.slot * BigInt(slots.length)
+    BYTES.slot * BigInt(slots.length) +
+    BigInt(rules)
   );
 }
 
@@ -295,9 +324,11 @@ export function drawsFit(
   opens = 1,
   { odds = 0, shares = 0, fates = 0, bytes = 0n, oracle = false } = {},
 ) {
-  const list = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
+  const given = typeof slots === 'number' || typeof slots === 'bigint' ? [{ count: slots, only: [] }] : (slots ?? []);
+  // A box with no slots draws once among every entry.
+  const list = given.length ? given : [{ count: 1, only: [] }];
   const draws = list.reduce((n, s) => n + BigInt(s.count), 0n) * BigInt(opens);
-  if (draws <= 1n) return true;
+  // A box of one draw is held to the same answer: one past it would be refused at every purchase.
   const n = BigInt(entries.length);
   const weigh = COST.weigh + COST.weighEntry * n;
   const reads = entries.map(e => e.prizes.map(accountOf));
@@ -332,6 +363,7 @@ export function drawsFit(
     entries.reduce((c, e) => c + (e.prizes.length ? COST.entry : COST.blank), 0n);
   let used =
     BYTES.start +
+    BigInt(outgrown(entries.length, ENTRY_BYTES)) +
     BigInt(bytes) +
     BYTES.entryRead * n +
     BYTES.prizeRead * BigInt(entries.reduce((c, e) => c + e.prizes.length, 0));

@@ -927,6 +927,11 @@ export function withDefaults(def) {
   return { [kind]: { ...body, args } };
 }
 
+/** The most "one of" texts a lottery's NFT ticket rule holds: the oracle's answer reads it (`lottery.rs`). */
+export const MAX_TICKET_TEXTS = 170;
+/** The most places of a lottery that give NFTs of its own stash (`MOST_OWN`): the oracle's answer loads their list. */
+export const MAX_OWN_STASH_PLACES = 256;
+
 /**
  * The owner writes one record (`def`: { Item: { id, args } }, { Box: … }, …), at its own address. A lottery names
  * its mint, the pot its terms pay from (which a write opens when it isn't open; pot 0's address for a lottery whose
@@ -960,6 +965,18 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
     ];
   }
   if (kind === 'Lottery') {
+    // The oracle's answer reads the round on the default 32 KiB of memory: an NFT ticket's rule holds at most 170 "one
+    // of" texts, and a raffle at most 256 places from its own stash (BadLottery past either).
+    const texts = args.terms.nft_ticket?.rule?.test?.OneOf?.texts?.length ?? 0;
+    if (texts > MAX_TICKET_TEXTS)
+      throw new Error(
+        `A lottery's NFT ticket rule holds at most ${MAX_TICKET_TEXTS} "one of" texts; this one has ${texts} (BadLottery).`,
+      );
+    const own = args.terms.places.filter(ownStash).reduce((n, p) => n + Number(p.times ?? 1), 0);
+    if (own > MAX_OWN_STASH_PLACES)
+      throw new Error(
+        `A lottery gives at most ${MAX_OWN_STASH_PLACES} places from its own stash; this one gives ${own} (BadLottery).`,
+      );
     remaining = [
       meta(args.terms.mint, false, false),
       meta(pda.lotteryPot(recordAddress(project, def), potIdOf(args.terms) ?? 0), false, true),

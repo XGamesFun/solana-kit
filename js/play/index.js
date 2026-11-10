@@ -2206,7 +2206,7 @@ export function solanaApp({
     /**
      * Pays a payment of the economy (an entry, an attempt, a tip). `amount`: what the player chose, in whole units, for
      * a payment with `any` (at least its `amount`). `chosenRecipient`: the wallet the player names for a share the
-     * payment lets them choose (a referrer), never their own. `holders`: asset → holder, for a holder's share (read
+     * payment lets them choose (a referrer; their own wallet too, which then pays them back their share). `holders`: asset → holder, for a holder's share (read
      * now when not given).
      */
     async pay(paymentKey, { amount: chosen, holders, chosenRecipient = null, ...others } = NO_OPTIONS) {
@@ -2221,8 +2221,6 @@ export function solanaApp({
       const pools = new Map((spec.pools ?? []).map(x => [x.key, x.index]));
       // `pay` takes its shares from the payer each time: a "chosen" share pays the wallet they name, and with none named
       // it is left out, so what it would pay goes to the treasury with the rest (as a purchase's does).
-      if (chosenRecipient && chosenRecipient === wallet.address)
-        throw new Error('A payer can’t name their own wallet for a share they choose.');
       const shares = (p.split ?? []).flatMap(s => {
         const [kind, key] = s.to.split(':');
         const bps = Math.round(s.percent * 100);
@@ -2404,7 +2402,9 @@ export function solanaApp({
         );
       if (loot.lotteryEnded(lottery)) throw new Error(`“${l.name}” has drawn and ended.`);
       // Sales close `closes_before` seconds before the draw (SalesClosed after).
-      if (!due && BigInt(await chainNow()) >= loot.salesCloseAt(terms))
+      // (A repeating lottery's current round nobody bought into moves to its next date as this purchase opens it.)
+      const movesOn = !round && Number(lottery.every) > 0 && BigInt(now()) >= BigInt(terms.draws_at);
+      if (!due && !movesOn && BigInt(now()) >= loot.salesCloseAt(terms))
         throw new Error(
           `Sales of “${name}” closed at ${new Date(Number(loot.salesCloseAt(terms)) * 1000).toISOString()}, before its draw: wait for the next round.`,
         );
@@ -4391,9 +4391,10 @@ export function solanaApp({
         const nfts = [];
         const kinds = {};
         if (contest.nft) {
+          const proofs = {};
           const kindOf = async (asset, to) => {
             const { before, hasAuthority: _, ...kind } = await nftOf(asset, me, { to });
-            given.before.push(...before);
+            proofs[asset] = before;
             kinds[asset] = kind;
           };
           if (Number(own.amount) === 1) {
@@ -4415,6 +4416,10 @@ export function solanaApp({
             nfts.push(j);
             await kindOf(e.nft, me);
           }
+          // A compressed NFT's proof is long (up to 17 nodes): such a claim moves one NFT, as a v0 transaction with a
+          // lookup table (`send`), and the next claim takes the next.
+          if (nfts.length > 1 && nfts.some(j => kinds[entries[j].nft]?.compressed)) nfts.splice(1);
+          for (const j of nfts) given.before.push(...proofs[entries[j].nft]);
         }
         const claimed = [
           computeUnitLimit(800_000),
