@@ -3,17 +3,17 @@
   "name": "io.github.XGamesFun/solana-kit",
   "title": "xsolana",
   "description": "Design, check, simulate and launch Solana game economies on loot, one shared program, no contract.",
-  "version": "0.25.2",
+  "version": "0.25.3",
   "repository": {
     "url": "https://github.com/XGamesFun/solana-kit",
     "source": "github"
   },
-  "websiteUrl": "https://github.com/XGamesFun/solana-kit#readme",
+  "websiteUrl": "https://xgames.fun/solana",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@xgamesfun/solana",
-      "version": "0.25.2",
+      "version": "0.25.3",
       "transport": {
         "type": "stdio"
       },
@@ -23,6 +23,12 @@
           "value": "mcp"
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://xgames.fun/mcp"
     }
   ]
 }

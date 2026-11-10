@@ -11,7 +11,7 @@ each harness's own format, from one source.
 | Skill                     | `plugin/skills/xsolana-economy/`                                                                          | the same folder                                                                           |
 | Marketplace               | `.claude-plugin/marketplace.json`                                                                         | `.agents/plugins/marketplace.json`                                                        |
 | Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                       | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
-| Without the plugin        | `npx -y @xgamesfun/solana@0.25.2 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
+| Without the plugin        | `npx -y @xgamesfun/solana@0.25.3 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
 | Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                 | `AGENTS.md`                                                                               |
 
 The marketplace is named `xgamesfun` in both marketplace files, so the plugin is `xsolana@xgamesfun` whichever
@@ -33,7 +33,7 @@ its text names no harness. `xsolana connect` knows Claude Code and Codex only. F
   `REMOTE_TOOLS` (the tools that read nothing but their arguments and the chain), no `file` argument, and instructions
   that hand the person the spec and the `approve` command instead of `xsolana_save` and `xsolana_publish`. A host
   mounts `mcpHttp` (exported as `@xgamesfun/solana/mcp/http`); `xsolana mcp --http` serves it on 127.0.0.1, answering
-  only pages on localhost. Once a hosted URL is live, `server.json` names it under `remotes`.
+  only pages on localhost. xgames.fun hosts it at `https://xgames.fun/mcp` (games.fun `creator-studio/app/mcp/route.ts`, its pin moved with each release), which `server.json` names under `remotes`.
 
 ## Releasing a version
 
