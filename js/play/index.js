@@ -1920,7 +1920,7 @@ export function solanaApp({
    * `signer`, and the rolls they make ([{ order, box }], `loot.pullRolls`). With `closes`, the last pull carries the
    * round's close (when the parts it pays are the last owed).
    */
-  async function pulls(key, r, i, parts, signer, { closes = false } = {}) {
+  async function pulls(key, r, i, parts, signer, { closes = false, lotteryClosed = false } = {}) {
     const e = i == null ? null : r.entries[i];
     const out = [];
     const rolls = [];
@@ -2043,6 +2043,7 @@ export function solanaApp({
           entry: i ?? 0,
           part,
           projectState: g,
+          lotteryClosed,
           programs,
           extra,
           ...more,
@@ -4510,6 +4511,8 @@ export function solanaApp({
         return build ? steps : send(steps);
       }
       if (!r) return null;
+      // A round whose lottery was closed since: its lent rent is the owner's, on the owner's own close.
+      const lotteryClosed = !lottery;
       // Pulls: this wallet's own parts, or (`payout`) everyone's and the parts owed in common, a few to a transaction;
       // when they are the last owed, the last pull closes the round. A round that owes nothing is only closed.
       // A named stash NFT that is gone refuses a stranger's pull: only its winner or a project key passes it over.
@@ -4540,7 +4543,10 @@ export function solanaApp({
         c.kind === 'pull' ? c.pulls : [...loot.commonOwed(r).map(p => ({ entry: null, parts: [p] })), ...theirs];
       if (!owed.length) {
         if (!loot.roundFinished(r)) return null;
-        const close = [loot.pullIx({ payer: me, project, roundAddress: key, round: r, projectState: g, programs })];
+        // Rent the lottery lent goes to the owner once it is closed, and only on the owner's own close.
+        const close = [
+          loot.pullIx({ payer: me, project, roundAddress: key, round: r, projectState: g, lotteryClosed, programs }),
+        ];
         return build ? close : send(close);
       }
       const batch = owed.slice(0, 4);
@@ -4554,7 +4560,10 @@ export function solanaApp({
       let heap = false;
       let partial = false;
       for (const [k, { entry, parts }] of batch.entries()) {
-        const built = await pulls(key, r, entry, parts, me, { closes: closes && k === batch.length - 1 });
+        const built = await pulls(key, r, entry, parts, me, {
+          closes: closes && k === batch.length - 1,
+          lotteryClosed,
+        });
         instructions.push(...built.instructions.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM));
         rolls.push(...built.rolls);
         heap ||= built.heap;
