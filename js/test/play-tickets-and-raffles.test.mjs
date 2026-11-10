@@ -11,7 +11,8 @@ import { freshKeypair } from '../approve/ed25519.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { associatedTokenAddress, NATIVE_MINT } from '../chain/pda.js';
-import { createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
+import { parseCoreAsset } from '../chain/core.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { solanaApp } from '../play/index.js';
 import * as loot from '../client/index.js';
@@ -129,5 +130,90 @@ test(
       'everyone paid, the round closed',
     );
     assert.equal((await app.lotteries()).find(l => l.key === 'raffle').status, 'Ended');
+  },
+);
+
+test(
+  'a raffle of 130 NFTs from its own stash: its winner pulls them through claims(), each pull on the largest heap',
+  { skip: skip ?? false },
+  async () => {
+    // A pull that takes several Core NFTs out of a round's own stash outgrows the default heap from about 125 raffled
+    // places (8 NFTs a pull): js/play asks for the largest heap for it, as for a run of rolls.
+    const w = world({ seed: 'raffle-130' });
+    w.upsert({
+      Item: {
+        id: 1,
+        args: {
+          kind: 'Collectible',
+          rarity: 3,
+          soulbound: false,
+          burnable: false,
+          name: 'Art',
+          uri: 'https://example.invalid/art.json',
+          max_supply: 0,
+          active: true,
+        },
+      },
+    });
+    const PLACES = 130;
+    const t0 = w.chain.now();
+    const id = 2;
+    const address = loot.pda.lottery(w.project, id);
+    const nfts = Array.from({ length: PLACES }, () => ({ asset: w.make(1, w.authority), collection: w.collection }));
+    for (const [first, ...more] of loot.stashBatches(nfts))
+      w.chain.send(w.authority, [
+        computeUnitLimit(1_400_000),
+        loot.stashIx({ signer: w.authority, project: w.project, lottery: id, ...first, more }),
+      ]);
+    w.upsert({
+      Lottery: {
+        id,
+        args: {
+          price: 1000n,
+          mint: w.mint,
+          pays_from: { Pot: [0] },
+          shares: [],
+          places: [{ bps: 0, prize: 'Raffled', times: PLACES }],
+          ticket_mint: '11111111111111111111111111111111',
+          every: 0n,
+          draws_at: BigInt(t0 + 3600),
+          gate: null,
+        },
+      },
+    });
+    // A rival holds most tickets; the player holds 16 of 136, and wins 8 places or more.
+    const lottery = w.read('Lottery', address);
+    const rival = w.who();
+    w.fund(rival, w.mint, 1_000_000n);
+    for (const [who, count] of [
+      [rival, 120n],
+      [w.player, 16n],
+    ])
+      w.chain.send(who, [loot.buyTicketsIx({ player: who, project: w.project, id, lottery, mint: w.mint, count })]);
+    w.chain.warp(t0 + 3601);
+    w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id, lottery })]);
+    const app = solanaApp({
+      spec: {
+        version: 2,
+        currency: 'coin',
+        tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
+        live: { project: w.project, collection: w.collection },
+        lotteries: [{ key: 'raffle', name: 'Raffle', id }],
+      },
+      rpc: w.chain.rpc,
+      wallet: { address: w.player, signTransaction: async wire => wire },
+      now: () => w.chain.now(),
+    });
+    const r = w.round(id).round;
+    const mine = r.entries.findIndex(e => e.buyer === w.player);
+    const won = loot.prizePlacesOwed(r, mine, 0).length;
+    assert.ok(won >= 8, `the player won ${won} places`);
+    const owner = asset => parseCoreAsset(w.chain.get(asset).data).owner;
+    for (let i = 0; i < 8; i++) {
+      const step = (await app.claims()).find(c => c.kind === 'pull' && c.key === 'raffle');
+      if (!step) break;
+      await app.claim(step);
+    }
+    assert.equal(nfts.filter(n => owner(n.asset) === w.player).length, won, 'every place the player won, its NFT');
   },
 );
