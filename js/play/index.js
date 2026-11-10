@@ -1489,6 +1489,11 @@ export function solanaApp({
     const g = await projectNow();
     const box = await read('LootBox', loot.pda.box(project, boxId));
     if (!Number.isInteger(count) || count < 1) throw new Error('Buy a whole number, one at least (count).');
+    // One `buy` prices at most so many sales (`PackTooLarge` past it): more is several purchases.
+    if (count > loot.MOST_SALES_A_BUY)
+      throw new Error(
+        `One purchase buys at most ${loot.MOST_SALES_A_BUY.toLocaleString('en-US')} (count): buy the rest in another.`,
+      );
     const bound =
       boundOf({ ...box, currencyKey: part?.currency }, part?.name ?? `box ${boxId}`, { maxPrice, listing }, part?.key) *
       BigInt(count);
