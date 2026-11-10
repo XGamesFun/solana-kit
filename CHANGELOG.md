@@ -20,6 +20,12 @@ The program's own changes are in its changelog (gamesfun-loot, `CHANGELOG.md`, 0
 - **A roll's odds at its first ask**: `askRollIx` passes the player's profile, and an NFT they hold for a roll on no
   NFT (`askReads`, `firstAsk`, `bestShown`); `app.askRoll` picks the collectible that raises the odds most.
 - A Token Metadata NFT's move always names two different token accounts (`twoAccounts`).
+- **A record an earlier owner left on an NFT stops a deposit, in words**: before a player hands an NFT of another
+  collection to the project (a stake in escrow, a loan, a hold, an NFT bid, ticket or stake), the player module reads
+  the listing and the holds that name it; one left by another wallet refuses the deposit and says what it could do,
+  and `acceptLeftover: true` goes ahead.
+- An auction's end, a bid, a loan and a repayment read their coin's token program and its transfer hook's accounts
+  from the mint.
 
 **Boxes, recipes, settles**
 
