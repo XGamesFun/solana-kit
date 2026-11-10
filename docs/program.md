@@ -1,10 +1,10 @@
 # The loot program: how it behaves
 
-**Version 0.26.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 520,815,761
-(2026-11-10). Nothing runs on mainnet. **Not independently
+**Version 0.26.1**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet**: 0.26.0 since slot
+520,815,761 (2026-11-10), until 0.26.1 replaces it (no layout changed). Nothing runs on mainnet. **Not independently
 audited** (`SECURITY.md`). No accounts carry over from older versions: make fresh economies for this one.
 
-This page describes 0.26.0, the build its IDL comes from. Its rule: **the program restricts a project only where it
+This page describes 0.26.1, the build its IDL comes from. Its rule: **the program restricts a project only where it
 must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that
 only guarded a project against itself are out (token screens, time limits, caps on lists, values of 0), each bounded by
 what the chain allows ([Limits](#limits)). **Both sides of an exchange move in one instruction**: an auction's seller is

@@ -4,6 +4,43 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.26.1: loot 0.26.1 (DEVNET-LINE)
+
+The program, 0.26.1: nine small fixes, no layout changed (0.26.0's accounts and this client's builders work unchanged).
+
+- **A farm's carry is freed when a walk empties the farm**: before, the first stake after every seat had stopped
+  earning was credited all of it (at most the farm's weight divided by 10^12 reward units).
+- **What a box's write and purchase accept, the oracle's answer can finish**: a draw of an entry that gives nothing is
+  counted at its cost (a pack of such draws is written up to 116 draws, a purchase takes 109 opens of one; 230 and 203
+  were sold and never answered); the answer counts the lists the next draw may outgrow, so a roll of a box sold by
+  `buy` stops for room and lands, its undrawn draws given back; and the write counts finding each pool's and stash's
+  address, as the purchase does, so a box written at its edge is not refused at every purchase.
+- **A pool never opened is out of stock, whatever the amount**: a prize of 0 tokens from one beside another prize
+  made every open of that box give the other prize and the whole price back.
+- **A wrong account in a profile's or a Sheet's place reads as nothing**, and an account that is not a tree, passed as
+  a compressed NFT's tree, is refused (`NotTheNft`).
+- **A count no transaction could carry is refused before any loop over it**: `open_box` of more than 300 draws in all,
+  a `buy` of more than 28,000 sales (`PackTooLarge`).
+- Said in the spec, left as they are: a farm that mints does not keep its unpaid rewards' room in the mint against
+  other things that mint it; a box naming an item never written is refused at the purchase, not at the write.
+
+What the tools do with them:
+
+- **The box cost check follows the program's** (`drawsFit`, `opensAnOrder`; new: `boxFits`, `searchTries`,
+  `MOST_DRAWS_A_PURCHASE`, `MOST_SALES_A_BUY`, `ASSUMED_TRIES`): a draw of nothing at its cost, the reading of each
+  prize after an entry's first (the 0.26.0 client left it out), a named NFT's stash at one row, and each pool's and stash's search at 1,500 units a try, exact from the
+  project's address (`drawsFit`'s and `boxFits`' `project`, a box read from the chain names it) or at 2 tries an address
+  before a wallet is named. `drawsFit` with `purchase` counts as `open_box` does. A test holds the client's verdict
+  against the program's at every edge the program's changelog and spec name.
+- **The checker counts with the project once it is known** (`check`'s `project`, passed by the plan for a real setup,
+  or the live section's), says when it assumed the searches, and holds a box of one draw to the same count.
+- **A box's write asks for all the compute a transaction has**: the plan's transaction carrying one names a compute
+  limit of 1,400,000 first (a box of sixteen stashes whose addresses take 80 tries needs more than 200,000).
+- **A raffle's pull of several NFTs out of the round's own stash asks for the largest heap** in js/play, as a run of
+  rolls does: a pull of 8 Core NFTs in a round of some 125 places or more ran out of memory.
+- js/play refuses a `buy` of more than 28,000 sales in words.
+- The docs, the guide and the skill say the new numbers; the IDL is 0.26.1's (`PackTooLarge`'s sentence, a farm's carry).
+
 ## 0.26.0: loot 0.26.0 (on devnet since 2026-11-10, slot 520,815,761)
 
 The program, 0.26.0: the fixes of its audit of 0.25.0, and limits only where the chain sets them (`docs/program.md`).
