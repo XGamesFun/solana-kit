@@ -1794,6 +1794,13 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent 
 export const stepBytes = (instructions, ctx) =>
   transactionSize(compileMessage({ payer: ctx.owner, blockhash: placeholderKey('blockhash'), instructions }));
 
+/** `instructions`, led by a compute limit of all a transaction can have when `compute` (a box's write is in them). */
+const budgeted = (instructions, compute) =>
+  compute ? [computeUnitLimit(MAX_COMPUTE_UNITS), ...instructions] : instructions;
+
+/** The bytes of a transaction of `step` alone, as `pack` sends it (its compute limit included). */
+export const stepAloneBytes = (step, ctx) => stepBytes(budgeted(step.build(ctx), Boolean(step.compute)), ctx);
+
 /**
  * Packs steps into transactions under the size budget, one signer set at a time; each step whole. A transaction that
  * carries a step needing more compute than an instruction has by default (`compute`: a box's write) asks for all a
@@ -1803,8 +1810,6 @@ export function pack(steps, ctx) {
   const transactions = [];
   let current = null;
   const sizeOf = instructions => stepBytes(instructions, ctx);
-  const budgeted = (instructions, compute) =>
-    compute ? [computeUnitLimit(MAX_COMPUTE_UNITS), ...instructions] : instructions;
   for (const step of steps) {
     const instructions = step.build(ctx);
     // A step with nothing to send (the lookup table of a plan built with no recent slot) is left out.

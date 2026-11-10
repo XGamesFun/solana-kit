@@ -59,7 +59,7 @@ import {
   weights,
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
-import { boxArgs, boxOrderBytes, placeholderContext, recipeArgs, setupSteps, stepBytes } from './plan.mjs';
+import { boxArgs, boxOrderBytes, placeholderContext, recipeArgs, setupSteps, stepAloneBytes } from './plan.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
@@ -5717,7 +5717,7 @@ export function check(
     for (const step of setup?.steps ?? []) {
       let bytes;
       try {
-        bytes = stepBytes(step.build(ctx), ctx);
+        bytes = stepAloneBytes(step, ctx);
       } catch {
         continue;
       }
