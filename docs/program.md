@@ -1,7 +1,7 @@
 # The loot program: how it behaves
 
-**Version 0.26.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`. **Not on devnet yet**: devnet runs
-0.25.0 (since slot 519,994,814, 2026-11-08) until this build is deployed. Nothing runs on mainnet. **Not independently
+**Version 0.26.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 520,815,761
+(2026-11-10). Nothing runs on mainnet. **Not independently
 audited** (`SECURITY.md`). No accounts carry over from older versions: make fresh economies for this one.
 
 This page describes 0.26.0, the build its IDL comes from. Its rule: **the program restricts a project only where it
