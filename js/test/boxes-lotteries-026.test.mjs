@@ -7,8 +7,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit, requestHeapFrame } from '../chain/programs.js';
+import { createAccountIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
-import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, world } from './world.mjs';
+import { newAddress } from '../sim/chain.mjs';
+import {
+  boxArgs,
+  cannotRun,
+  cannotRunCompressed,
+  collectible,
+  drop,
+  fromPool,
+  itemDrop,
+  PRICE,
+  world,
+} from './world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
@@ -19,6 +31,23 @@ const receipt = (record, name) => record.receipts.find(r => r.name === name)?.da
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
 const fails = (fn, code) => assert.throws(fn, e => new RegExp(code).test(`${e.message} ${(e.logs ?? []).join(' ')}`));
 const recipeArgs = (inputs, outputs) => ({ active: true, inputs, outputs, needs: [], keeps: [], raises: [] });
+
+/** The owner makes an empty tree account and opens it as the project's tree. */
+function openTree(w, maxDepth = 14, maxBufferSize = 64) {
+  const tree = newAddress(w.random);
+  const space = loot.treeSize(maxDepth, maxBufferSize, 0);
+  w.chain.send(w.creator, [
+    createAccountIx({
+      from: w.creator,
+      address: tree,
+      lamports: w.chain.rent(space),
+      space,
+      owner: loot.COMPRESSION_PROGRAM,
+    }),
+    loot.openTreeIx({ signer: w.creator, project: w.project, tree, maxDepth, maxBufferSize }),
+  ]);
+  return tree;
+}
 
 /** The authority writes `lines` on `wallet`'s profile. */
 function writeProfile(w, wallet, lines) {
@@ -427,3 +456,194 @@ t(
     assert.equal(ownerOf(w, hero), w.player, 'home without the prize');
   },
 );
+
+test(
+  'the authority makes compressed NFTs with attributes: each one’s Sheet follows its prize accounts',
+  { skip: cannotRunCompressed() ?? false },
+  () => {
+    const w = world({ seed: 'k026-compressed-make', compressed: true });
+    w.upsert({ Item: { id: 60, args: collectible('Badge') } });
+    const tree = openTree(w);
+    const itemState = w.read('Item', pda.item(w.project, 60));
+    const attributes = [
+      { key: 'level', value: '1' },
+      { key: 'item_id', value: '99' },
+      { key: 'level', value: '3' },
+      { key: 'gone', value: '' },
+    ];
+    assert.deepEqual(loot.madeAttributes(attributes), [{ key: 'level', value: '3' }], 'as the program patches them');
+    assert.throws(
+      () =>
+        loot.makeIx({
+          authority: w.authority,
+          project: w.project,
+          item: 60,
+          itemState,
+          owners: [w.player],
+          tree,
+          attributes,
+        }),
+      /treeMinted/,
+    );
+    const owners = [w.player, w.who()];
+    const r = w.chain.send(w.authority, [
+      computeUnitLimit(1_000_000),
+      loot.makeIx({
+        authority: w.authority,
+        project: w.project,
+        item: 60,
+        itemState,
+        owners,
+        tree,
+        treeMinted: 0n,
+        attributes,
+      }),
+    ]);
+    assert.deepEqual(receipt(r, 'Changed').change.Make.attributes, [{ key: 'level', value: '3' }]);
+    for (const k of [0n, 1n]) {
+      const sheet = loot.decodeSheet(w.chain.get(pda.sheet(w.project, pda.compressedAsset(tree, k))).data);
+      assert.deepEqual(sheet.attributes, [{ key: 'level', value: '3' }], `the Sheet of the NFT minted at ${k}`);
+    }
+  },
+);
+
+t('a raffle’s NFTs come out of its stash at most 64 a pull: the pulls carry on until every place has its NFT', () => {
+  const w = world({ seed: 'k026-raffle-64' });
+  w.upsert({ Item: { id: 1, args: collectible('Prize') } });
+  const PLACES = 70;
+  const t0 = w.chain.now();
+  const args = places => ({
+    price: 1000n,
+    mint: w.mint,
+    pays_from: { Pot: [0] },
+    shares: [],
+    places: [{ bps: 0, prize: 'Raffled', times: places }],
+    ticket_mint: NOBODY,
+    every: 0n,
+    draws_at: BigInt(t0 + 3600),
+    gate: null,
+  });
+  // At most 256 places from its own stash: refused before signing past that.
+  assert.throws(
+    () => loot.upsertIx({ owner: w.creator, project: w.project, def: { Lottery: { id: 2, args: args(257) } } }),
+    /at most 256 places/,
+  );
+  // Its stash is stocked first, in batches: the write reads what it holds.
+  const address = pda.lottery(w.project, 2);
+  const nfts = Array.from({ length: PLACES }, () => ({ asset: w.make(1, w.authority), collection: w.collection }));
+  for (const [first, ...more] of loot.stashBatches(nfts))
+    w.chain.send(w.authority, [
+      computeUnitLimit(1_400_000),
+      loot.stashIx({ signer: w.authority, project: w.project, lottery: 2, ...first, more }),
+    ]);
+  assert.equal(loot.decodeStash(w.chain.get(pda.lotteryStash(address)).data).nfts.length, PLACES);
+  w.upsert({ Lottery: { id: 2, args: args(PLACES) } });
+  const lottery = w.read('Lottery', address);
+  w.chain.send(w.player, [
+    loot.buyTicketsIx({ player: w.player, project: w.project, id: 2, lottery, mint: w.mint, count: BigInt(PLACES) }),
+  ]);
+  w.chain.warp(t0 + 3601);
+  w.chain.send(w.cranker, [loot.drawLotteryIx({ payer: w.cranker, project: w.project, id: 2, lottery })]);
+  const kinds = Object.fromEntries(nfts.map(n => [n.asset, { collection: w.collection }]));
+  const assigned = [];
+  for (let at = w.round(2); at && at.round.status === 'Drawn'; at = w.round(2)) {
+    const r = at.round;
+    const part = loot.partsOwed(r, 0)[0];
+    if (!part) break;
+    const stash = loot.decodeStash(w.chain.get(pda.lotteryStash(address))?.data ?? null);
+    if (part.Prize) {
+      const last = loot.placesIn(r, 0, r.entries[0].start, r.entries[0].end).at(-1);
+      assert.ok(loot.pullAssigns(r, stash, last) - Number(r.assigned) <= loot.ASSIGN_DRAWS);
+    }
+    w.chain.send(w.cranker, [
+      computeUnitLimit(1_400_000),
+      loot.pullIx({
+        payer: w.cranker,
+        project: w.project,
+        roundAddress: at.address,
+        round: r,
+        entry: 0,
+        part,
+        projectState: w.projectState(),
+        prize: { stash, nfts: kinds, most: 6 },
+      }),
+    ]);
+    const after = w.round(2)?.round;
+    if (after) assigned.push(Number(after.assigned));
+  }
+  assert.equal(assigned[0], 64, 'the first pull takes 64 out');
+  assert.ok(assigned.includes(PLACES), 'a later pull the rest');
+  // What is owed in common (the ticket money the places leave), and the close.
+  w.finishRound(2, { kinds });
+  assert.equal(w.round(2), null, 'every place given, the round closed');
+  for (const n of nfts) assert.equal(ownerOf(w, n.asset), w.player);
+});
+
+test('the builders follow a lottery’s last round, a closing pull’s owner, and an unheld NFT’s first settle', () => {
+  const project = pda.project(NOBODY, 0);
+  const address = pda.lottery(project, 1);
+  // A lottery edited to draw once ends after the round it was at (`last`): it waits on that round, not round 0.
+  const repeating = { every: 3600n, round: 5, last: 0, incarnation: 0n };
+  const ending = { ...repeating, every: 0n, last: 5 };
+  assert.deepEqual([loot.lotteryEnded(repeating), loot.lotteryEnded(ending)], [false, false]);
+  assert.equal(loot.idleRound(address, ending), pda.round(address, 0n, 5));
+  const ended = { ...ending, round: 6 };
+  assert.ok(loot.lotteryEnded(ended));
+  assert.equal(loot.idleRound(address, ended), pda.round(address, 0n, 5), 'its last round, not round 0');
+
+  // A round the lottery lent rent to, once the lottery is gone: only the owner's closing pull carries the close.
+  const owner = pda.box(project, 1);
+  const stranger = pda.box(project, 2);
+  const r = {
+    lottery: address,
+    opener: address,
+    status: 'Drawn',
+    owed: 0,
+    accounts: [],
+    entries: [],
+    terms: { places: [], shares: [] },
+  };
+  const close = payer =>
+    loot
+      .pullIx({
+        payer,
+        project,
+        roundAddress: pda.round(address, 0n, 0),
+        round: r,
+        projectState: { owner, treasury: owner },
+        lotteryClosed: true,
+      })
+      .keys.map(k => k.pubkey);
+  assert.ok(close(owner).includes(owner), 'the owner’s pull closes it, its rent to them');
+  assert.ok(!close(stranger).includes(owner), 'anyone else’s leaves the close off');
+
+  // An order on an NFT the project doesn't hold: its first call (the one that splits) carries the NFT and its Sheet,
+  // the last none; one the project holds goes with the last.
+  const asset = pda.box(project, 3);
+  const order = {
+    project,
+    player: stranger,
+    mint: NOBODY,
+    won: [],
+    shares: [],
+    subject: asset,
+    held: false,
+    drew: 1,
+    fate: { entry: 0, then: null, shifts: [{ key: 'level', by: 1n, from_now: false }] },
+  };
+  const settle = (o, upto) =>
+    loot
+      .settleIx({
+        signer: stranger,
+        orderAddress: pda.order(project, stranger, 1n),
+        order: o,
+        projectState: { treasury: owner },
+        subject: { collection: NOBODY, hasAuthority: false },
+        upto,
+      })
+      .keys.map(k => k.pubkey);
+  assert.ok(settle(order, 0).includes(asset) && settle(order, 0).includes(pda.sheet(project, asset)));
+  assert.ok(!settle({ ...order, drew: 0 }, loot.SETTLE_LAST).includes(asset), 'the last part, after the split: none');
+  assert.ok(!settle({ ...order, held: true }, 0).includes(asset), 'a held one: not on the first call');
+  assert.ok(settle({ ...order, held: true, drew: 0 }, loot.SETTLE_LAST).includes(asset), 'but on the last');
+});
