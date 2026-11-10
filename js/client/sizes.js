@@ -534,6 +534,28 @@ export function buyFits(box, draws = box.slots?.length ? box.slots.reduce((n, s)
   return accounts <= BUY.most.accounts && calls <= BUY.most.calls && cu <= BUY.most.cu;
 }
 
+/**
+ * Whether the program writes `box` (its args, as `upsertBoxIx` takes them, or a box read from the chain) as far as what
+ * it costs goes (`catalog::loot_box`, `PackTooLarge`): a box that doesn't roll sells by `buy` when one transaction carries
+ * the whole purchase (`buyFits`), else through the oracle, whose heap then counts and which can't give a roll; and every
+ * draw of one open fits one answer (`drawsFit`). `project`: whose pools and stashes the box names (a box read from the
+ * chain says); without it, each search at `ASSUMED_TRIES` tries.
+ */
+export function boxFits(box, { project = box.project ?? null } = {}) {
+  const entries = box.entries ?? [];
+  const rolls = entries.length > 1 || entries.some(e => e.prizes.some(p => p.Stash != null));
+  const byBuy = rolls || box.subject != null || buyFits(box);
+  if (!byBuy && entries.some(e => e.prizes.some(p => p.Roll != null))) return false;
+  return drawsFit(entries, box.slots?.length ? box.slots : 1, 1, {
+    odds: (box.odds ?? []).length,
+    shares: (box.shares ?? []).length,
+    fates: (box.fates ?? []).length,
+    bytes: boxBytes(box),
+    oracle: !byBuy,
+    project,
+  });
+}
+
 /** The most program rent and fee one order takes from its player, in lamports (0.01 SOL): a client cap (`opensAnOrder`). */
 export const ORDER_COST_CAP = 10_000_000n;
 /** Rent a byte, as devnet and mainnet-beta charge it ((bytes + 128) × 5,080 lamports). */
