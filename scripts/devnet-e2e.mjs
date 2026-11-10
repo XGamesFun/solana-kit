@@ -716,27 +716,34 @@ if (want('weighted')) {
     version: 2,
     network: 'devnet',
     name: 'Savers draw',
-    prompt: 'A no-loss draw: 0.001 SOL a ticket, back after the draw; tickets held longer weigh more.',
+    prompt: 'A no-loss draw: 0.01 SOL a ticket, back after the draw; tickets held longer weigh more.',
     currency: 'sol',
     tokens: [{ key: 'sol', source: 'sol' }],
     lotteries: [
       {
         key: 'savers',
         name: 'Savers draw',
-        price: 0.001,
+        price: 0.01,
         noLoss: true,
         timeWeighted: true,
         closesBefore: '20s',
         perWallet: 10,
         places: [100],
         pot: 0,
-        seed: 0.003,
+        seed: 0.01,
         firstDraw: 'publish+150s',
       },
     ],
   });
   const players = [freshKeypair(), freshKeypair()];
-  for (const k of players) await send([funder], [transferLamports(funder.address, k.address, 30_000_000n)]);
+  for (const k of players) await send([funder], [transferLamports(funder.address, k.address, 40_000_000n)]);
+  // What a wallet holds in all, as SOL and as wrapped SOL: a pull the player sends unwraps what it pays them.
+  const holds = async k => {
+    const held = await rpc.account(loot.ata(k.address, NATIVE_MINT));
+    const wrapped = held ? new DataView(held.data.buffer, held.data.byteOffset).getBigUint64(64, true) : 0n;
+    return BigInt(await rpc.balance(k.address)) + wrapped;
+  };
+  const before = await Promise.all(players.map(holds));
   const apps = players.map(k => solanaApp({ spec: live, rpc, wallet: asWallet(k) }));
   const lotteryAddress = loot.pda.lottery(live.live.project, live.lotteries[0].id);
   const roundAddress = loot.currentRound(
@@ -779,19 +786,18 @@ if (want('weighted')) {
       for (const c of (await app.claims()).filter(x => x.key === 'savers' && ['pull', 'payout'].includes(x.kind)))
         console.log(`weighted: ${players[i].address} ${c.kind}s: ${await app.claim(c)}`);
   if (await rpc.account(roundAddress)) throw new Error('The weighted round is still open after every pull.');
-  const back = await Promise.all(
-    players.map(async k => {
-      const held = await rpc.account(loot.ata(k.address, NATIVE_MINT));
-      return held ? new DataView(held.data.buffer, held.data.byteOffset).getBigUint64(64, true) : 0n;
-    }),
-  );
-  // Each ticket's price back (0.002 SOL each player); the winner has the seed on top.
+  // Every ticket's price is back: a player is down only the fees of buying and claiming (under 0.008 SOL; the two
+  // tickets were 0.02), and the winner is up by the pot (the 0.01 SOL seed) less those fees.
+  const after = await Promise.all(players.map(holds));
   for (const [i, k] of players.entries()) {
-    const least = 2_000_000n + (k.address === winner ? 3_000_000n : 0n);
-    if (back[i] < least) throw new Error(`${k.address} holds ${back[i]} wrapped lamports, less than ${least}.`);
+    const least = before[i] - 8_000_000n + (k.address === winner ? 10_000_000n : 0n);
+    if (after[i] < least)
+      throw new Error(
+        `${k.address} holds ${after[i]} lamports in all, less than ${least}: a ticket did not come back.`,
+      );
   }
   console.log(
-    `weighted: every ticket's price is back and the winner has the pot; wrapped SOL: ${players.map((k, i) => `${k.address} ${back[i]}`).join(', ')}`,
+    `weighted: every ticket's price is back and the winner has the pot; in all, against before the purchases: ${players.map((k, i) => `${k.address} ${after[i] - before[i]}`).join(', ')} lamports`,
   );
 }
 // 11. Both sides of an exchange move together (loot 0.26). A player auctions a collectible they hold, another bids,
