@@ -82,31 +82,18 @@ test('an unbid auction ends at its configured time even with a large extension',
   const id = 701;
   w.upsert({ Item: { id, args: collectible('Review', 1, { kind: 'Normal' }) } });
   const now = w.chain.now();
-  // the largest extension the program takes: five years (it refuses more, BadAuction)
+  // The largest extension a u32 holds, about 136 years: the program no longer caps it (the kit warns), and with no
+  // bid it never moves the end.
   const args = {
     lot: { Item: [id] },
     reserve: 1n,
     min_raise_bps: 0,
     starts_at: BigInt(now),
     ends_at: BigInt(now + 60),
-    extend: 157_680_000,
+    extend: 4_294_967_295,
     shares: [],
     gate: null,
   };
-  assert.throws(
-    () =>
-      w.chain.send(w.authority, [
-        loot.openAuctionIx({
-          seller: w.authority,
-          project: w.project,
-          collection: w.collection,
-          id,
-          mint: w.mint,
-          args: { ...args, extend: 4_294_967_295 },
-        }),
-      ]),
-    /BadAuction/,
-  );
   w.chain.send(w.authority, [
     loot.openAuctionIx({ seller: w.authority, project: w.project, collection: w.collection, id, mint: w.mint, args }),
   ]);

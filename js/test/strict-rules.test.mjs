@@ -11,7 +11,7 @@ import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
-import { LIMITS } from '../economy/model.mjs';
+import { ANSWER_HOLDS, LIMITS } from '../economy/model.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
@@ -625,7 +625,7 @@ test('the words on a schedule say a run missed is missed, and only a sealed fixe
 // ---------------------------------------------------------------- auctions
 
 test(
-  'a seller whose account can’t take the money: the lot goes, the auction stays open owing it, and the next end closes it',
+  'a sale too wide for one end, or a seller whose account can’t take the money: the lot goes first, the auction stays open owing the bid, and the next end pays it and closes it',
   { skip },
   async () => {
     const w = world({ seed: 'strict-owed' });
@@ -643,74 +643,89 @@ test(
     ]);
     w.upsert({ Item: { id: 1, args: collectible('Painting') } });
     const seller = w.who();
-    const painting = w.make(1, seller);
     const now = w.chain.now();
-    const open = loot.openAuctionIx({
-      seller,
-      project: w.project,
-      collection: w.collection,
-      id: 1,
-      mint: coin,
-      args: {
-        lot: { Asset: [painting] },
-        reserve: 1n,
-        min_raise_bps: 0,
-        starts_at: BigInt(now),
-        ends_at: BigInt(now + 60),
-        extend: 0,
-        shares: [],
-        gate: null,
-        nft_bids: null,
-      },
-    });
-    w.chain.send(seller, [computeUnitLimit(400_000), open]);
-    const address = pda.auction(w.project, seller, 1);
     const bidder = w.who();
-    w.fund(bidder, coin, 500n);
-    w.chain.send(bidder, [
-      loot.bidIx({ bidder, project: w.project, id: 1, auction: w.read('Auction', address), amount: 500n }),
-    ]);
+    w.fund(bidder, coin, 1_000n);
+    // Two paintings, each auctioned and won with 500.
+    const sales = [1, 2].map(id => {
+      const painting = w.make(1, seller);
+      const open = loot.openAuctionIx({
+        seller,
+        project: w.project,
+        collection: w.collection,
+        id,
+        mint: coin,
+        args: {
+          lot: { Asset: [painting] },
+          reserve: 1n,
+          min_raise_bps: 0,
+          starts_at: BigInt(now),
+          ends_at: BigInt(now + 60),
+          extend: 0,
+          shares: [],
+          gate: null,
+          nft_bids: null,
+        },
+      });
+      w.chain.send(seller, [computeUnitLimit(400_000), open]);
+      const address = pda.auction(w.project, seller, id);
+      w.chain.send(bidder, [
+        loot.bidIx({ bidder, project: w.project, id, auction: w.read('Auction', address), amount: 500n }),
+      ]);
+      return { id, painting, address };
+    });
     w.chain.warp(now + 61);
     // The seller's account of the coin, frozen by its issuer.
     const account = w.tokenAccount(seller, coin);
-    w.chain.send(w.creator, [
-      {
-        programId: TOKEN_PROGRAM,
-        keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
-        data: Uint8Array.of(10),
-      },
-    ]);
+    const freeze = op =>
+      w.chain.send(w.creator, [
+        {
+          programId: TOKEN_PROGRAM,
+          keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
+          data: Uint8Array.of(op),
+        },
+      ]);
+    freeze(10);
 
-    const end = auction =>
+    const end = ({ id, address }, ending) =>
       loot.endAuctionIx({
         signer: w.cranker,
         project: w.project,
         projectState: w.projectState(),
-        id: 1,
-        auction,
+        id,
+        auction: w.read('Auction', address),
         collection: w.collection,
+        ending,
       });
-    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(w.read('Auction', address))]);
-    const owed = w.read('Auction', address);
-    assert.equal(owed.proceeds_owed, 500n, 'still open, owing it');
     const { parseCoreAsset } = await import('../chain/core.js');
-    assert.equal(parseCoreAsset(w.chain.get(painting).data).owner, bidder, 'the winner has the lot');
-    assert.equal(w.chain.tokens(account), 0n);
-    assert.throws(
-      () => w.chain.send(w.cranker, [computeUnitLimit(800_000), end(owed)]),
-      'it fails while the account can’t take it',
+    // The first sends its lot first: the whole bid is owed, whatever the seller's account says.
+    const first = w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sales[0], 'LotFirst')]);
+    assert.deepEqual(
+      first.receipts.map(r => r.name),
+      ['AuctionEnded'],
     );
+    assert.equal(first.receipts[0].data.remainder, 0n, 'nothing paid yet');
+    // The second ends in one go: the lot goes, and what the seller's account can't take is owed.
+    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sales[1], 'Deliver')]);
+    for (const sale of sales) {
+      assert.equal(w.read('Auction', sale.address).proceeds_owed, 500n, 'still open, owing it');
+      assert.equal(parseCoreAsset(w.chain.get(sale.painting).data).owner, bidder, 'the winner has the lot');
+      // The lot moved: the sale stands.
+      assert.throws(() => end(sale, 'CallOff'), /CantCallOff/);
+    }
+    assert.equal(w.chain.tokens(account), 0n);
+    for (const sale of sales)
+      assert.throws(
+        () => w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sale, 'Deliver')]),
+        'it fails while the account can’t take it',
+      );
 
-    w.chain.send(w.creator, [
-      {
-        programId: TOKEN_PROGRAM,
-        keys: [meta(account, false, true), meta(coin, false, false), meta(w.creator, true, false)],
-        data: Uint8Array.of(11),
-      },
-    ]);
-    w.chain.send(w.cranker, [computeUnitLimit(800_000), end(owed)]);
-    assert.equal(w.chain.tokens(account), 500n, 'paid');
-    assert.equal(w.chain.get(address), null, 'closed');
+    freeze(11);
+    for (const sale of sales) {
+      w.chain.send(w.cranker, [computeUnitLimit(800_000), end(sale, 'Deliver')]);
+      assert.equal(w.chain.get(sale.address), null, 'closed');
+    }
+    assert.equal(w.chain.tokens(account), 1_000n, 'paid for both');
   },
 );
 
@@ -887,45 +902,61 @@ test('a raise with no cap works, again and again', { skip }, () => {
   assert.ok(!check(spec, { now: NOW }).warnings.some(x => x.code === 'W-RECIPE' && /maxed out/.test(x.message)));
 });
 
-test('a tier with a prize needs a lock', { skip }, () => {
-  const spec = lock =>
-    base({
-      farms: [
-        {
-          key: 'f',
-          name: 'F',
-          stakes: 'collectibles',
-          rewards: 'gem',
-          rate: { perDay: 1, minted: true },
-          tiers: [{ lock, multiplier: 1, prize: { gives: 'item', item: 'shard' } }],
-        },
-      ],
-    });
-  assert.ok(refused(spec(0)).some(r => r.code === 'E-FARM' && /BadFarm/.test(r.message) && /lock/.test(r.fix)));
-  assert.ok(!refused(spec('1d')).some(r => /no lock/.test(r.message)));
-  const w = world({ seed: 'strict-tier-prize' });
-  w.upsert({ Item: { id: 1, args: collectible('Hero') } });
-  const open = lock =>
-    w.chain.send(w.creator, [
-      computeUnitLimit(600_000),
-      loot.openFarmIx({
-        owner: w.creator,
-        project: w.project,
-        id: lock + 1,
-        rewardsMint: w.mint,
-        args: {
-          custody: 'Escrow',
-          tiers: [{ lock, bps: 10_000, prize: { Item: [1] } }],
-          boosts: [],
-          max_boost_bps: 0,
-          gates: [],
-          rate: { per_day: 0n, mints: false },
-        },
-      }),
-    ]);
-  fails(() => open(0), 'BadFarm');
-  open(60);
-});
+test(
+  'a tier with a prize and no lock is taken, and warned of (one NFT could take it again and again)',
+  { skip },
+  () => {
+    const spec = lock =>
+      base({
+        farms: [
+          {
+            key: 'f',
+            name: 'F',
+            stakes: 'collectibles',
+            rewards: 'gem',
+            rate: { perDay: 1, minted: true },
+            tiers: [{ lock, multiplier: 1, prize: { gives: 'item', item: 'shard' } }],
+          },
+        ],
+      });
+    assert.ok(
+      !refused(spec(0)).some(r => r.code === 'E-FARM'),
+      refused(spec(0))
+        .map(r => r.message)
+        .join(),
+    );
+    const said = check(spec(0), { now: NOW }).warnings.find(w => w.code === 'W-FARM-MISSION');
+    assert.match(
+      said?.message ?? '',
+      /No lock on .*mission tier 0: one player can stake and leave one NFT again and again/,
+    );
+    assert.ok(!check(spec('1d'), { now: NOW }).warnings.some(w => w.code === 'W-FARM-MISSION'));
+    const w = world({ seed: 'strict-tier-prize' });
+    w.upsert({ Item: { id: 1, args: collectible('Hero') } });
+    const open = lock =>
+      w.chain.send(w.creator, [
+        computeUnitLimit(600_000),
+        loot.openFarmIx({
+          owner: w.creator,
+          project: w.project,
+          id: lock + 1,
+          rewardsMint: w.mint,
+          args: {
+            custody: 'Escrow',
+            tiers: [{ lock, bps: 10_000, prize: { Item: [1] } }],
+            boosts: [],
+            max_boost_bps: 0,
+            gates: [],
+            rate: { per_day: 0n, mints: false },
+          },
+        }),
+      ]);
+    open(0);
+    open(60);
+    assert.equal(w.read('Farm', pda.farm(w.project, 1)).tiers[0].lock, 0, 'a tier with a prize and no lock, taken');
+    assert.ok(w.chain.get(pda.farm(w.project, 61)));
+  },
+);
 
 test('a number-moving roll on an NFT a recipe shows warns that only a Core NFT can be held', () => {
   const spec = base({
@@ -956,41 +987,55 @@ test(
   'the program’s caps are the checker’s, and a spec over one is refused in words',
   { skip: program ? false : 'no program build (XSOLANA_PROGRAM_DIR)' },
   () => {
-    const text = readFileSync(path.join(program, 'programs/loot/src/constants.rs'), 'utf8');
-    const cap = name =>
-      Number(text.match(new RegExp(`pub const ${name}: [a-z0-9]+ = ([0-9_]+);`))[1].replaceAll('_', ''));
+    const source = file => readFileSync(path.join(program, 'programs/loot/src', file), 'utf8');
+    const text = source('constants.rs');
+    const cap = (name, from = text) =>
+      Number(from.match(new RegExp(`(?:pub )?const ${name}: [a-z0-9]+ = ([0-9_]+);`))[1].replaceAll('_', ''));
     assert.deepEqual(
       [
-        LIMITS.boxEntries,
-        LIMITS.boxSlots,
-        LIMITS.boxOdds,
-        LIMITS.boxFates,
-        LIMITS.entryPrizes,
-        LIMITS.recipeLines,
+        LIMITS.itemTraits,
+        LIMITS.traitKeyBytes,
         LIMITS.farmRules,
         LIMITS.growthSteps,
         LIMITS.contestSides,
         LIMITS.deciders,
         LIMITS.collections,
         LIMITS.lotteryRuns,
-        LIMITS.farmEnds,
+        LIMITS.callbackAccounts,
       ],
       [
-        'MAX_BOX_ENTRIES',
-        'MAX_BOX_SLOTS',
-        'MAX_BOX_ODDS',
-        'MAX_BOX_FATES',
-        'MAX_ENTRY_PRIZES',
-        'MAX_RECIPE_LINES',
+        'MAX_ITEM_TRAITS',
+        'MAX_TRAIT_KEY',
         'MAX_FARM_RULES',
         'MAX_GROWTH_STEPS',
         'MAX_CONTEST_SIDES',
         'MAX_DECIDERS',
         'MAX_COLLECTIONS',
         'MAX_LOTTERY_RUNS',
-        'MAX_FARM_ENDS',
-      ].map(cap),
+        'MAX_CALLBACK_ACCOUNTS',
+      ].map(name => cap(name)),
     );
+    // The caps that stayed outside constants.rs: a raffle's places from its own stash, a farm's tier and boost.
+    assert.equal(LIMITS.ownStashPlaces, cap('MOST_OWN', source('instructions/lottery.rs')));
+    assert.equal(LIMITS.maxTierBps, cap('MAX_TIER_BPS', source('instructions/farm.rs')));
+    assert.equal(LIMITS.maxBoostBps, cap('MAX_BOOST_BPS', source('rules.rs')));
+    // A ticket rule's texts are read into room for 4,096 bytes, a text's handle 24 bytes: 170 of them.
+    assert.match(source('instructions/lottery.rs'), /texts\.len\(\) \* core::mem::size_of::<String>\(\) > 4_096/);
+    assert.equal(LIMITS.ticketOneOf, Math.floor(4096 / 24));
+    // The caps the program dropped are gone from the checker too.
+    for (const name of [
+      'MAX_BOX_ENTRIES',
+      'MAX_BOX_SLOTS',
+      'MAX_BOX_ODDS',
+      'MAX_BOX_FATES',
+      'MAX_ENTRY_PRIZES',
+      'MAX_RECIPE_LINES',
+      'MAX_FARM_ENDS',
+      'MAX_ONE_OF',
+    ])
+      assert.doesNotMatch(text, new RegExp(`const ${name}:`), name);
+    for (const key of ['boxEntries', 'boxSlots', 'boxOdds', 'boxFates', 'recipeLines', 'farmEnds'])
+      assert.equal(LIMITS[key], undefined, key);
   },
 );
 
@@ -998,42 +1043,34 @@ test('every cap refuses a spec over it, with a plain message', () => {
   const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
   const nothing = n => many(n, () => ({ gives: 'nothing', weight: 1 }));
   const rule = { attribute: 'level', atLeast: 1 };
-  const over = {
-    [`${LIMITS.boxEntries + 1} outcomes`]: base({
-      boxes: [{ key: 'b', name: 'B', price: 1, outcomes: nothing(LIMITS.boxEntries + 1) }],
+  // What one answer of the oracle's holds, as measured: past one number alone, the box is refused when written.
+  const answer = {
+    [`${ANSWER_HOLDS.entriesOfNothing + 1} outcomes`]: base({
+      boxes: [{ key: 'b', name: 'B', price: 1, outcomes: nothing(ANSWER_HOLDS.entriesOfNothing + 1) }],
     }),
-    [`${LIMITS.boxSlots + 1} slots`]: base({
-      boxes: [
-        { key: 'b', name: 'B', price: 1, outcomes: nothing(2), slots: many(LIMITS.boxSlots + 1, () => ({ count: 1 })) },
-      ],
-    }),
-    'odds that read an NFT': base({
+    [`${ANSWER_HOLDS.slots + 1} slots`]: base({
       boxes: [
         {
           key: 'b',
           name: 'B',
           price: 1,
           outcomes: nothing(2),
-          odds: many(LIMITS.boxOdds + 1, () => ({ outcome: 0, when: rule, add: { addPercent: 1 } })),
+          slots: many(ANSWER_HOLDS.slots + 1, () => ({ count: 1 })),
         },
       ],
     }),
-    'act on the NFT': base({
+    [`${ANSWER_HOLDS.odds + 1} odds rules`]: base({
       boxes: [
         {
           key: 'b',
           name: 'B',
           price: 1,
-          rollsOn: rule,
-          outcomes: many(LIMITS.boxFates + 1, () => ({
-            gives: 'nothing',
-            weight: 1,
-            shifts: [{ attribute: 'level', by: 1, upTo: 2 }],
-          })),
+          outcomes: nothing(2),
+          odds: many(ANSWER_HOLDS.odds + 1, () => ({ outcome: 0, when: rule, add: { addPercent: 1 } })),
         },
       ],
     }),
-    [`gives ${LIMITS.entryPrizes + 1} prizes`]: base({
+    [`${ANSWER_HOLDS.entryCollectibles + 1} items in outcome 0`]: base({
       boxes: [
         {
           key: 'b',
@@ -1043,18 +1080,34 @@ test('every cap refuses a spec over it, with a plain message', () => {
             {
               gives: 'bundle',
               weight: 1,
-              prizes: many(LIMITS.entryPrizes + 1, () => ({ gives: 'item', item: 'shard' })),
+              prizes: many(ANSWER_HOLDS.entryCollectibles + 1, () => ({ gives: 'item', item: 'shard' })),
             },
             { gives: 'nothing', weight: 1 },
           ],
         },
       ],
     }),
-    [`${LIMITS.recipeLines + 1} lines out`]: base({
-      recipes: [
-        { key: 'r', name: 'R', in: [], out: many(LIMITS.recipeLines + 1, () => ({ gives: 'item', item: 'shard' })) },
-      ],
-    }),
+  };
+  for (const [words, spec] of Object.entries(answer)) {
+    const said = refused(spec).filter(r => /one answer of the oracle’s holds at most/.test(r.message));
+    assert.ok(
+      said.some(r => r.message.includes(words) && /PackTooLarge/.test(r.message) && r.fix),
+      `${words}: ${JSON.stringify(refused(spec).map(r => r.message.slice(0, 80)))}`,
+    );
+  }
+  // At the measured number, nothing of that is refused; and a recipe of more lines than 0.25 took is not refused.
+  assert.ok(
+    !refused(
+      base({ boxes: [{ key: 'b', name: 'B', price: 1, outcomes: nothing(ANSWER_HOLDS.entriesOfNothing) }] }),
+    ).some(r => /answer of the oracle/.test(r.message)),
+  );
+  assert.ok(
+    !refused(
+      base({ recipes: [{ key: 'r', name: 'R', in: [], out: many(49, () => ({ gives: 'item', item: 'shard' })) }] }),
+    ).some(r => /lines out|BadRecipe/.test(r.message)),
+    '49 lines out: no cap of its own',
+  );
+  const over = {
     [`${LIMITS.farmRules + 1} boosts`]: base({
       farms: [
         {

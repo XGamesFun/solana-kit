@@ -7,7 +7,7 @@ import { addressBytes } from '../chain/base58.js';
 import { concat, uintLE } from '../chain/bytes.js';
 import { SYSTEM_PROGRAM, TOKEN_2022_PROGRAM } from '../chain/pda.js';
 import { mayStartFrozen } from '../chain/token2022.js';
-import { checkMints, MintMismatch } from '../approve/live-check.mjs';
+import { checkMints } from '../approve/live-check.mjs';
 import { check } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import * as loot from '../client/index.js';
@@ -157,7 +157,7 @@ test(
 );
 
 test(
-  'an auction refuses a mint whose freeze authority could switch its default account state to frozen',
+  'an auction takes a mint whose freeze authority could switch its default account state to frozen (the kit warns)',
   { skip },
   () => {
     const w = world({ seed: 'guards-frozen' });
@@ -187,10 +187,13 @@ test(
           }),
         ]);
     };
+    // The program no longer refuses it: the highest bidder could close their own account so every higher bid fails, which
+    // the kit tells the seller and every bidder.
     const switchable = defaultStateMint(w);
     assert.ok(mayStartFrozen(switchable.account));
-    fails(open(switchable.mint, 1), 'BadAuction');
-    // With no freeze authority, nobody can switch it: the auction opens.
+    open(switchable.mint, 1)();
+    assert.ok(w.chain.get(loot.pda.auction(w.project, w.authority, 1)));
+    // With no freeze authority, nobody can switch it: the auction opens all the same.
     const fixed = defaultStateMint(w, { freezer: null });
     assert.equal(mayStartFrozen(fixed.account), false);
     open(fixed.mint, 2)();
@@ -198,30 +201,33 @@ test(
   },
 );
 
-test('the checker and the approval refuse such a mint on a route that reads it once', { skip }, async () => {
-  const w = world({ seed: 'guards-frozen-check', platform: false });
-  const { mint } = defaultStateMint(w);
-  const spec = powers => ({
-    version: 2,
-    network: 'devnet',
-    name: 'Frozen',
-    currency: 'gem',
-    tokens: [{ key: 'gem', source: 'existing', mint, decimals: 6, program: 'token-2022', ...(powers && { powers }) }],
-    collection: { name: 'Studio' },
-    items: [{ key: 'art', name: 'Art', supply: 1, uri: 'https://example.invalid/art.json' }],
-    auctions: [{ key: 'art', name: 'Art', lot: { item: 'art' }, reserve: 1, runs: '24h' }],
-  });
-  const codes = s => check(s).refusals.map(r => r.code);
-  assert.ok(codes(spec({ defaultState: true, freeze: true })).includes('E-AUCTION'));
-  assert.ok(
-    !codes(spec({ defaultState: true })).includes('E-AUCTION'),
-    'with no freeze authority it cannot be switched',
-  );
-  await assert.rejects(
-    checkMints({ m: model(spec(null)), chain: { account: async a => w.chain.get(a) } }),
-    e => e instanceof MintMismatch && /auction/.test(e.message),
-  );
-});
+test(
+  'the checker warns of such a mint on a route a player can hold up, and the approval takes it',
+  { skip },
+  async () => {
+    const w = world({ seed: 'guards-frozen-check', platform: false });
+    const { mint } = defaultStateMint(w);
+    const spec = powers => ({
+      version: 2,
+      network: 'devnet',
+      name: 'Frozen',
+      currency: 'gem',
+      tokens: [{ key: 'gem', source: 'existing', mint, decimals: 6, program: 'token-2022', ...(powers && { powers }) }],
+      collection: { name: 'Studio' },
+      items: [{ key: 'art', name: 'Art', supply: 1, uri: 'https://example.invalid/art.json' }],
+      auctions: [{ key: 'art', name: 'Art', lot: { item: 'art' }, reserve: 1, runs: '24h' }],
+    });
+    const said = s => check(s).warnings.filter(r => r.code === 'W-HOLD-UP');
+    const frozen = check(spec({ defaultState: true, freeze: true }));
+    assert.ok(frozen.ok, frozen.refusals.map(r => r.message).join());
+    assert.match(
+      said(spec({ defaultState: true, freeze: true }))[0]?.message ?? '',
+      /the highest bidder can close their own account of it so that every higher bid fails/,
+    );
+    assert.equal(said(spec({ defaultState: true })).length, 0, 'with no freeze authority it cannot be switched');
+    await checkMints({ m: model(spec(null)), chain: { account: async a => w.chain.get(a) } });
+  },
+);
 
 test('the tools say a sharing farm releases what lands in its vault over its longest lock, a day at least', async () => {
   const { simulate } = await import('../economy/simulate.mjs');

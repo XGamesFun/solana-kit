@@ -19,7 +19,7 @@ import { compareBytes, concat, fromHex, intLE, readUintLE, toBigInt, uintLE, utf
 import { meta } from '../chain/programs.js';
 import { sha256 } from '../chain/sha256.js';
 import { recordKey16 } from './accounts.js';
-import { ASSOCIATED_TOKEN_PROGRAM, gateAccounts, lootIx, prizeMetas, prizeNonce, tailOf } from './ix.js';
+import { ASSOCIATED_TOKEN_PROGRAM, gateAccounts, lootIx, prizeMetas, prizeNonce, shownFor, tailOf } from './ix.js';
 import { LOOT_PROGRAM, pda } from './pda.js';
 import IDL from './idl/loot.js';
 
@@ -400,7 +400,12 @@ export function claimGrantIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: grant.gate, wallet, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: grant.gate,
+          wallet,
+          shown: shownFor(project, grant.gate, wallet, shown),
+          listProof,
+        }),
         ...shards,
         ...prizes,
         ...tailOf(extra),

@@ -354,7 +354,7 @@ export const tools = [
     name: 'xsolana_check',
     annotations: READ,
     description:
-      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers). Run it after every change. Give the spec inline (`spec`), a file, or an example.',
+      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so tell the person each warning in plain words. Run it after every change. Give the spec inline (`spec`), a file, or an example.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -376,7 +376,7 @@ export const tools = [
     name: 'xsolana_simulate',
     annotations: READ,
     description:
-      'The quick simulation (expected values from the spec, instant): what each box, ticket and craft gives back against its price, the house edge, each pool’s money in and out per day and whether it runs dry, settles or grows, farm rewards per unit staked, what players, the treasury and the platform get each day. `scenario` overrides the spec’s own ({"perDay": {"box:flip": 1000}, "days": 30, "staked": {"<farm>": 1000}}). Quote its numbers; never your own arithmetic.',
+      'The quick simulation (expected values from the spec, instant): what each box, ticket and craft gives back against its price, the house edge, each pool’s money in and out per day and whether it runs dry, settles or grows, farm rewards per unit staked, what players, the treasury and the platform get each day; a box’s chances with its odds rules at their most, what a box that gives nothing for a miss misses as its outcomes run out, what a ticket weighs in a lottery weighed by time, and what places get from a pool that starts short. `scenario` overrides the spec’s own ({"perDay": {"box:flip": 1000}, "days": 30, "staked": {"<farm>": 1000}}). Quote its numbers; never your own arithmetic.',
     inputSchema: {
       type: 'object',
       properties: {

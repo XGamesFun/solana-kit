@@ -52,6 +52,7 @@ import {
   nftSlot,
   ownStash,
   paymentMint,
+  placesIn,
   placesPulled,
   potIdOf,
   prizePlacesOwed,
@@ -492,6 +493,25 @@ export const gateAccounts = (project, { gate, wallet, shown, listProof = [] } = 
   ...shownAccounts(project, shown),
 ];
 
+/** Whether a rule reads the player's profile (`Of::Profile`), not an NFT. */
+export const readsProfile = rule => rule?.of === 'Profile' || rule?.of?.Profile !== undefined;
+
+/**
+ * Whether a box's gate or odds read the player's profile (`profile` true) or an NFT (false), as the program's
+ * `LootBox::reads` tells: a gate on a rule, then each odds rule. A box may read both.
+ */
+export const boxReads = (box, profile) =>
+  [...(box.gate?.Holds ? [box.gate.Holds[0]] : []), ...(box.odds ?? []).map(o => o.boost.rule)].some(
+    rule => readsProfile(rule) === profile,
+  );
+
+/**
+ * What a player shows a gate with (`rules::shown_for`): their own profile, `["profile", project, wallet]`, for a gate on
+ * a rule that reads one; the NFT `shown` otherwise.
+ */
+export const shownFor = (project, gate, wallet, shown) =>
+  gate?.Holds && readsProfile(gate.Holds[0]) ? pda.profile(project, wallet) : shown;
+
 /**
  * A nonce a prize route names (its `nonce` argument), from what names the prize: a grant, its wallet and rounds, a
  * contest and its player, an auction and its last bid. Any nonce works (the sender picks it); the roll's order
@@ -867,7 +887,18 @@ export function withDefaults(def) {
   if (kind === 'Lottery') {
     // Its terms (`LotteryTerms`, what a round copies at its first purchase), given in `terms` or beside `every`.
     const { every, gate, per_wallet: perWallet, terms: given, ...flat } = args;
-    const terms = { nft_ticket: null, returns: false, min_sold: 0, ticket_mint: NO_ADDRESS, ...flat, ...given };
+    // Sales close `closes_before` seconds before the draw (0: at the draw). `time_weighted` (a lottery that returns its
+    // tickets only): a purchase counts for its tickets times the seconds from it to the close of sales.
+    const terms = {
+      nft_ticket: null,
+      returns: false,
+      min_sold: 0,
+      ticket_mint: NO_ADDRESS,
+      closes_before: 0n,
+      time_weighted: false,
+      ...flat,
+      ...given,
+    };
     // Where its places are paid from is the project's to name, never a default: `{ Pot: [id] }`, a pot kept from round
     // to round, or `{ Round: { rest } }`, each round's own ticket money with what its places leave going to `rest`.
     const pays = terms.pays_from;
@@ -877,9 +908,13 @@ export function withDefaults(def) {
       );
     if (pays.Pot && !(Number(pays.Pot[0]) >= 0 && Number(pays.Pot[0]) < MAX_POTS))
       throw new Error(`A lottery's pot id is below ${MAX_POTS}.`);
-    // A run of places alike is { bps, prize, times }; a number is one place's share of the pot that gives nothing else.
+    // A run of places alike is { bps, prize, when_short, times }; a number is one place's share of the pot that gives
+    // nothing else. `when_short`: what a place of tokens from a pool gets when the pool holds less than the places with
+    // a winner win: 'InOrder' (the first places in full, the default), 'InProportion' or 'Nothing'.
     terms.places = (terms.places ?? []).map(p =>
-      typeof p === 'object' ? { prize: null, times: 1, ...p } : { bps: p, prize: null, times: 1 },
+      typeof p === 'object'
+        ? { prize: null, when_short: 'InOrder', times: 1, ...p }
+        : { bps: p, prize: null, when_short: 'InOrder', times: 1 },
     );
     terms.shares = stored(terms.shares ?? []);
     return { [kind]: { ...body, args: { terms, every: every ?? 0n, gate: gate ?? null, per_wallet: perWallet ?? 0 } } };
@@ -892,11 +927,16 @@ export function withDefaults(def) {
   return { [kind]: { ...body, args } };
 }
 
+/** The most "one of" texts a lottery's NFT ticket rule holds: the oracle's answer reads it (`lottery.rs`). */
+export const MAX_TICKET_TEXTS = 170;
+/** The most places of a lottery that give NFTs of its own stash (`MOST_OWN`): the oracle's answer loads their list. */
+export const MAX_OWN_STASH_PLACES = 256;
+
 /**
  * The owner writes one record (`def`: { Item: { id, args } }, { Box: … }, …), at its own address. A lottery names
  * its mint, the pot its terms pay from (which a write opens when it isn't open; pot 0's address for a lottery whose
  * rounds pay from their own money, where any account will do), its ticket mint, both token programs and the round it waits on
- * (`lotteryState`: the lottery as it is, null for a new one; `idleRound`: its current round's record, or round 0's once
+ * (`lotteryState`: the lottery as it is, null for a new one; `idleRound`: its current round's record, or its last round's once
  * it drew once and ended: a lottery made again, edited once ended or made to repeat waits while that round runs or
  * still owes NFTs of its own stash), then its own stash when a place holds or draws an NFT of it. A box, a recipe, a grant or a lottery that
  * names a box to roll later passes that box after (`boxesAccounts`), which must be written: a box is written before
@@ -913,15 +953,30 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
   // A new sealed schedule opens its own vault: its mint, the vault and both token programs.
   const vest = kind === 'Schedule' ? args.action?.from?.Vest?.[0] : null;
   if (vest) {
-    // It pays a wallet, the treasury or a burn: no account it pays is named.
+    // It pays a wallet, the treasury or a burn. A wallet it pays follows the vault's four: the program refuses one
+    // that is an account of its own (`BadMove`: every run would pass it over).
+    const payee = args.action.to?.Wallet?.[0];
     remaining = [
       meta(vest, false, false),
       meta(pda.vest(recordAddress(project, def)), false, true),
       meta(TOKEN_PROGRAM, false, false),
       meta(TOKEN_2022_PROGRAM, false, false),
+      ...(payee ? [meta(payee, false, false)] : []),
     ];
   }
   if (kind === 'Lottery') {
+    // The oracle's answer reads the round on the default 32 KiB of memory: an NFT ticket's rule holds at most 170 "one
+    // of" texts, and a raffle at most 256 places from its own stash (BadLottery past either).
+    const texts = args.terms.nft_ticket?.rule?.test?.OneOf?.texts?.length ?? 0;
+    if (texts > MAX_TICKET_TEXTS)
+      throw new Error(
+        `A lottery's NFT ticket rule holds at most ${MAX_TICKET_TEXTS} "one of" texts; this one has ${texts} (BadLottery).`,
+      );
+    const own = args.terms.places.filter(ownStash).reduce((n, p) => n + Number(p.times ?? 1), 0);
+    if (own > MAX_OWN_STASH_PLACES)
+      throw new Error(
+        `A lottery gives at most ${MAX_OWN_STASH_PLACES} places from its own stash; this one gives ${own} (BadLottery).`,
+      );
     remaining = [
       meta(args.terms.mint, false, false),
       meta(pda.lotteryPot(recordAddress(project, def), potIdOf(args.terms) ?? 0), false, true),
@@ -943,7 +998,7 @@ export function upsertIx({ owner, project, def: given, lotteryState = null }) {
  * The owner closes the record at `target`, and its rent comes back: a grant's with the funds it held. A lottery
  * (`lottery`: its decoded record) sends what every pot it opened holds (`Lottery::pots`) to `to`, a token account of its
  * mint (the owner's own by default), and closes each, once its current round has no record (one that drew once and
- * ended: once its round 0 gave out every NFT of its own stash, `idleRound`), and once the round its `owing` names has
+ * ended: once its last round gave out every NFT of its own stash, `idleRound`), and once the round its `owing` names has
  * moved in what it owes its pot (pull it first, `Part::Common`). One that never opened a pot names only those rounds.
  */
 export function closeRecordIx({ owner, project, target, lottery, schedule, programs, to, extra = [] }) {
@@ -1016,7 +1071,8 @@ export function payIx({
  * numbers of the NFT it rolls on: at that NFT's, `nonceOn`, whatever `nonce` says). `poolMints` maps each pool its
  * prizes take tokens from to its mint (a pool's tokens won wait in the project's vault for that mint); one not given
  * is taken to be in the box's currency, one given as null is closed. `shown`: an NFT the player shows for the box's
- * gate or odds; `listProof`: for a list gate, the proof's nodes. `chosenRecipient`: the wallet (or, for a share with an
+ * gate or odds; the player's profile goes before it whenever the box's gate or odds read one (`boxReads`); `listProof`:
+ * for a list gate, the proof's nodes. `chosenRecipient`: the wallet (or, for a share with an
  * item, the collectible, `chosen`) the buyer names for a share the box lets them choose. Every open asks the oracle,
  * even of a box with nothing random (which sells in one step with `buyIx`, when it rolls on no NFT).
  * The player opens the project's vault for the price's mint, and for each prize's, when it is not there. A box that
@@ -1032,6 +1088,7 @@ export function openBoxIx({
   count = 1,
   items = {},
   shown,
+  profile,
   listProof,
   subject,
   chosenRecipient = null,
@@ -1058,11 +1115,13 @@ export function openBoxIx({
     ? piece({ project, wallet: player, ...subject, moves: holds, locks: false, writes: false })
     : standIn(address);
   if (box.subject && holds) nonce = nonceOn(on.accounts.asset);
-  // A list's proof, then the NFT shown for the gate and the odds (for a box that rolls on an NFT, a compressed one's
-  // proof instead: that NFT is the piece).
+  // A list's proof (or a stake gate's seat and farm); then the player's own profile, for a box whose gate or odds read
+  // one (`profile`: its address, the player's by default); then the NFT shown, for one whose gate or odds read an NFT
+  // (for a box that rolls on an NFT, a compressed one's proof instead: that NFT is the piece).
   const gate = [
     ...gateAccounts(project, { gate: box.gate, wallet: player, listProof }),
-    ...(box.subject ? on.proof : shownAccounts(project, shown)),
+    ...(boxReads(box, true) ? [meta(profile ?? pda.profile(project, player), false, false)] : []),
+    ...(box.subject ? on.proof : boxReads(box, false) ? shownAccounts(project, shown) : []),
   ];
   return lootIx(
     'open_box',
@@ -1173,7 +1232,13 @@ export function buyIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: box.gate, wallet: player, shown, listProof }),
+        // Only the gate's own account: the player's profile for a gate that reads one, else the NFT shown.
+        ...gateAccounts(project, {
+          gate: box.gate,
+          wallet: player,
+          shown: shownFor(project, box.gate, player, shown),
+          listProof,
+        }),
         ...shareAccounts(project, shares, mint, { holders, programs, treasury }),
         ...prizes,
         ...tailOf(extra),
@@ -1248,6 +1313,8 @@ export function callbackRollIx({
  *   Item    the item; for a collectible (`items[id]` its decoded Item), its collection, its address, Metaplex Core;
  *           for a fresh one (`drawn` set), then the table of each of its table traits
  *   Tokens  the mint, the project's vault for it, the player's account of it (`prizeTo`, when given)
+ * `giveUp`: the places in `won` of the prizes the player, settling their own order, gives up (tokens they can't receive
+ * stay in the project's vault; a collectible's serial is voided): the vault, or the item, goes in the receiver's place.
  *   Nft     the NFT as `piece` takes it (`nfts[nft]` its kind), going to the player, then a compressed NFT's proof
  *   Compressed  the item, the tree's config, the tree, the collection, Bubblegum's programs; for a fresh one, then its
  *           tables and the Sheet of the NFT it mints
@@ -1258,6 +1325,7 @@ export function wonAccounts({
   nfts = {},
   prizeTo,
   putBack = [],
+  giveUp = [],
   programs,
   from = 0,
   upto = order.won.length,
@@ -1271,7 +1339,11 @@ export function wonAccounts({
   // lacks Bubblegum's plugin (`unminted`: those collections) gives nothing and mints nothing: the next takes its place.
   let minted = BigInt(treeMinted);
   const skips = new Set(unminted);
-  return order.won.slice(from, upto).flatMap(won => {
+  // The player, settling their own order, gives up the prizes at these places in `won` (tokens: the project's vault in
+  // their account's place, so they stay there; a collectible: the item in its address's place, its serial voided).
+  const givesUp = new Set(giveUp.map(Number));
+  return order.won.slice(from, upto).flatMap((won, k) => {
+    const up = givesUp.has(from + k);
     if (won.Compressed) {
       const { item: id, drawn } = won.Compressed;
       const address = pda.item(project, id);
@@ -1307,7 +1379,7 @@ export function wonAccounts({
       return [
         meta(address, false, true),
         meta(item.collection, false, true),
-        meta(pda.itemAsset(address, serial), false, true),
+        meta(up ? address : pda.itemAsset(address, serial), false, true),
         meta(MPL_CORE_PROGRAM, false, false),
         ...tables,
       ];
@@ -1315,10 +1387,11 @@ export function wonAccounts({
     if (won.Tokens) {
       const { mint } = won.Tokens;
       const program = tokenProgramOf(programs, mint);
+      const kept = vault(project, mint, program);
       return [
         meta(mint, false, false),
-        meta(vault(project, mint, program), false, true),
-        meta(prizeTo ?? ata(order.player, mint, program), false, true),
+        meta(kept, false, true),
+        meta(up ? kept : (prizeTo ?? ata(order.player, mint, program)), false, true),
       ];
     }
     if (won.Nft) {
@@ -1428,14 +1501,18 @@ export const SETTLE_LAST = 4_294_967_295;
  * the settle opens or mints (Core assets, token accounts, Sheets, a stash's row, the fate's writes: the order lends
  * nothing, `settleRent`). `order` is the decoded Order; `projectState` the decoded Project; `items` and `nfts` as
  * `wonAccounts` takes them. `putBack`: NFTs won that the player, signing, puts back into their stash in place of taking
- * them (one its collection won't let move). `handBack`: the wallet the box's fate gives the NFT rolled on to
+ * them (one its collection won't let move). `giveUp`: the places in `won` of tokens or collectibles the player,
+ * signing, gives up because they can't receive them (an account its issuer froze, a collection that refuses the mint),
+ * so the rest of the order is not held up: tokens given up stay in the project's vault (`PrizeForgone` says which).
+ * `handBack`: the wallet the box's fate gives the NFT rolled on to
  * (`receiverOf`) is an account of the loot program (`handsBack` of it as read), so the program gives it back to the
  * player, and a Token Metadata NFT's `token` is the player's. `extra`: a hook's or a memo's accounts.
  *
  * `upto`, the part (`settle.rs`): `SETTLE_LAST` (the default, past the end) is the last part, all that is left (maybe
  * nothing); 0 gives no prize and only splits the payment; any other gives the prizes from where the last part stopped
  * (`settled`) up to it, and nothing more. The first call, whichever it is, splits the payment (its shares' accounts
- * ride on it).
+ * ride on it whenever `order.drew` is above 0, a roll that gave nothing included), and moves the numbers on an NFT
+ * rolled on that the project does not hold (that NFT's accounts ride on it, not on the last part).
  */
 export function settleIx({
   signer,
@@ -1446,6 +1523,7 @@ export function settleIx({
   nfts,
   prizeTo,
   putBack,
+  giveUp,
   subject,
   handBack = false,
   holders,
@@ -1468,6 +1546,7 @@ export function settleIx({
     nfts,
     prizeTo,
     putBack,
+    giveUp,
     programs,
     from,
     upto: end,
@@ -1478,9 +1557,11 @@ export function settleIx({
   const tokenProgram = tokenProgramOf(programs, order.mint);
   // The NFT it rolled on, as the settle moves it: given to a wallet that is an account of the loot program, it goes
   // back to its player (`handsBack`), into the player's token account for a Token Metadata NFT.
-  // A part before the last gives only its prizes (and the first, the split): no NFT rolled on (its piece a stand-in).
+  // One the project holds goes with the last part; one it doesn't hold has its numbers moved by the first call (the one
+  // that splits), its Sheet with it when they go there. Any other part's piece is a stand-in.
+  const carries = order.held ? last : splits;
   const receiver = last ? receiverOf(order) : null;
-  const on = last
+  const on = carries
     ? orderPiece(project, orderAddress, order, subject, handBack && order.fate?.then?.Give ? order.player : receiver)
     : standIn(orderAddress);
   return lootIx(
@@ -1611,11 +1692,32 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
  * a free roll back to waiting (`Waiting`), for a restock or for its player to end it so. Once asked, every later ask
  * comes in a later slot than the last (`SameSlot`, `rollAskable`).
  */
-export function askRollIx({ payer, orderAddress, order, box, settler = NOBODY_KEY, poolMints, items = {}, programs }) {
+export function askRollIx({
+  payer,
+  orderAddress,
+  order,
+  box,
+  settler = NOBODY_KEY,
+  poolMints,
+  items = {},
+  programs,
+  shown = null,
+  first = firstAsk(order, box),
+}) {
   poolMints = boxPoolMints(box, poolMints);
   const opens = prizeMints(box.entries, poolMints).map(({ mint }) =>
     createAssociatedTokenAccountIdempotent(payer, order.project, mint, tokenProgramOf(programs, mint)),
   );
+  // A roll's odds are fixed at its first ask: then its player's profile, when the box's odds read one, and an NFT its
+  // player shows, when they read an NFT and the roll is on none. A later ask reads nothing.
+  const reads = askReads(box, order);
+  const player = order.player ?? payer;
+  const odds = first
+    ? [
+        ...(reads.profile ? [meta(pda.profile(order.project, player), false, false)] : []),
+        ...(reads.nft ? shownAccounts(order.project, shown) : []),
+      ]
+    : [];
   const ask = lootIx(
     'ask_roll',
     { settler },
@@ -1624,10 +1726,69 @@ export function askRollIx({ payer, orderAddress, order, box, settler = NOBODY_KE
       remaining: [
         ...entryAccounts(order.project, box.entries, items),
         ...prizeAccounts(order.project, box.entries, poolMints, programs),
+        ...odds,
       ],
     },
   );
   return [...opens, ask];
+}
+
+/**
+ * What a roll's first ask reads for its box's odds (`ask_roll`): `profile`, the order's player's profile, when any odds
+ * rule of the box reads a profile; `nft`, an NFT the player shows, when any reads an NFT and the roll is on none (neither
+ * the box nor the order names one). Unlike a purchase, a gate is not read at the ask.
+ */
+export function askReads(box, order = {}) {
+  const rules = (box.odds ?? []).map(o => o.boost.rule);
+  const onNft = Boolean(box.subject) || (Boolean(order.subject) && order.subject !== NO_ADDRESS);
+  return {
+    profile: rules.some(r => r.of === 'Profile' || r.of?.Profile !== undefined),
+    nft: !onNft && rules.some(r => !(r.of === 'Profile' || r.of?.Profile !== undefined)),
+  };
+}
+
+/**
+ * Whether the next ask of `order` is its first, the one that reads the odds' accounts: it was never asked
+ * (`asked_first` 0, or an order not made yet), or its box was edited since (the edit cleared what it read).
+ */
+export const firstAsk = (order, box) =>
+  !order.asked_first ||
+  BigInt(order.asked_first) === 0n ||
+  (order.box_version != null && order.box_version !== box.version);
+
+/**
+ * How much each NFT of `nfts` would raise a box's odds at a roll's first ask, by the box's rules on an NFT, and the one
+ * that raises the most: { best, raised }. `nfts`: [{ asset, itemId, attributes }] as read (a Core collectible of the
+ * project's: its item and its attributes). `raised` maps each asset to the basis points its rules add in all. A rule
+ * on time (`Ahead`, `Passed`, `Within`, `Older`) or on another collection counts nothing here; pass such an NFT by name.
+ */
+export function bestShown(box, nfts) {
+  const value = (nft, key) => (key === 'item_id' ? nft.itemId : nft.attributes?.[key]);
+  const passes = (rule, nft) => {
+    if (rule.of?.Item !== undefined && Number(nft.itemId) !== Number(rule.of.Item[0])) return false;
+    if (rule.of?.Collection !== undefined || rule.of === 'Profile' || rule.of?.Profile !== undefined) return false;
+    const v = value(nft, rule.key);
+    const t = rule.test;
+    if (t === 'Any' || t?.Any !== undefined) return true;
+    if (t?.AtLeast) return v !== undefined && Number(v) >= Number(t.AtLeast[0]);
+    if (t?.AtMost) return v !== undefined && Number(v) <= Number(t.AtMost[0]);
+    if (t?.OneOf) return v !== undefined && t.OneOf.texts.map(String).includes(String(v));
+    return false;
+  };
+  const raise = (boost, nft) => {
+    const e = boost.effect;
+    if (e.Flat) return BigInt(e.Flat[0]);
+    const points = BigInt(Math.max(0, Math.floor(Number(value(nft, boost.rule.key)) || 0)));
+    return BigInt(e.PerPoint.bps) * (points < BigInt(e.PerPoint.most) ? points : BigInt(e.PerPoint.most));
+  };
+  const raised = {};
+  let best = null;
+  for (const nft of nfts) {
+    const total = (box.odds ?? []).reduce((n, o) => n + (passes(o.boost.rule, nft) ? raise(o.boost, nft) : 0n), 0n);
+    raised[nft.asset] = total;
+    if (total > 0n && (best === null || total > raised[best])) best = nft.asset;
+  }
+  return { best, raised };
 }
 
 // ---------------------------------------------------------------- out: the project's tokens move
@@ -1711,23 +1872,63 @@ export function collectibleIx({
   );
 }
 
+/** The program's own keys on a collectible (`asset::FIXED`): which item it is. A make never writes them. */
+const FIXED_KEYS = ['item_id', 'rarity', 'serial'];
+
+/**
+ * The attributes a make writes, as the program patches them onto nothing (`write_attributes`): the program's own keys
+ * dropped, a repeated key once with its last value, an empty value taking the key off.
+ */
+export function madeAttributes(attributes = []) {
+  const out = [];
+  for (const a of attributes) {
+    if (FIXED_KEYS.includes(a.key)) continue;
+    const at = out.findIndex(x => x.key === a.key);
+    if (a.value === '') {
+      if (at >= 0) out.splice(at, 1);
+    } else if (at >= 0) out[at] = a;
+    else out.push(a);
+  }
+  return out;
+}
+
 /**
  * The authority makes one of item `item` (`itemState`: its decoded Item, for its collection and next serial) for each
  * of `owners`, in serial order (an owner may come more than once), with `attributes` written over the program's own: a
  * collectible at `pda.itemAsset(item, serial)` (`madeAssets` says which), or with `tree`, a compressed NFT minted into
- * that tree of the project's (no attributes: they go in its Sheet). A switched-off item still makes; one sold out
- * refuses the whole call (`PrizeNotCovered`).
+ * that tree of the project's, whose attributes go in its Sheet (`["sheet", project, asset id]`, after its 9 prize
+ * accounts): `treeMinted` is how many the tree has minted, so the first is `pda.compressedAsset(tree, treeMinted)`. A
+ * switched-off item still makes; one sold out refuses the whole call (`PrizeNotCovered`).
  */
-export function makeIx({ authority, project, item, itemState, owners, attributes = [], tree = null, reference: ref }) {
+export function makeIx({
+  authority,
+  project,
+  item,
+  itemState,
+  owners,
+  attributes = [],
+  tree = null,
+  treeMinted,
+  reference: ref,
+}) {
   if (!itemState)
     throw new Error(
       `a make of item ${item} needs the item (itemState: its decoded Item), for its collection and next serial`,
     );
   if (!owners?.length || owners.some(o => !o)) throw new Error('A make names who gets each one (`owners`).');
   const prize = tree ? { Compressed: { item, tree } } : { Item: [item] };
+  // A compressed one with attributes: its Sheet, at the asset id it is minted at.
+  const sheets = Boolean(tree) && madeAttributes(attributes).length > 0;
+  if (sheets && treeMinted == null)
+    throw new Error(
+      "A make of compressed NFTs with attributes writes each one's Sheet: pass how many the tree has minted (`treeMinted`).",
+    );
   const remaining = owners.flatMap((owner, made) => [
     meta(owner, false, false),
     ...prizeMetas({ project, prize, winner: owner, items: { [item]: itemState }, made }),
+    ...(sheets
+      ? [meta(pda.sheet(project, pda.compressedAsset(tree, BigInt(treeMinted) + BigInt(made))), false, true)]
+      : []),
   ]);
   return lootIx(
     'collectible',
@@ -2068,7 +2269,12 @@ export function buyTicketsIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: lottery.gate, wallet: player, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: lottery.gate,
+          wallet: player,
+          shown: shownFor(project, lottery.gate, player, shown),
+          listProof,
+        }),
         ...recipients,
         ...(held ? [...pieceMetas(held), ...held.proof] : []),
         ...tailOf(extra),
@@ -2213,6 +2419,38 @@ export function stashNfts(r, stash) {
   return nfts.map(n => n ?? null);
 }
 
+/** The most of the lottery's own stash's NFTs one pull takes out for its places (`ASSIGN_DRAWS`), counted in draws: a
+ * named NFT's search counts one, and one more for each `ASSIGN_ROWS_A_DRAW` rows of the stash. A pull after carries on. */
+export const ASSIGN_DRAWS = 64;
+export const ASSIGN_ROWS_A_DRAW = 1_000;
+
+/**
+ * How many of a drawn round's places that win an NFT of the lottery's own stash have theirs out of the stash after one
+ * more pull for a place up to `upto` (`LotteryRound::assign`): `r.assigned`, plus as many as one pull takes, in place
+ * order. `stash` is the lottery's own stash, decoded as it is now (its rows count for a named NFT's search). A pull
+ * stops at a place whose NFT is not out yet, so it carries accounts only for places below this.
+ */
+export function pullAssigns(r, stash, upto) {
+  const rows = BigInt(stash?.nfts?.length ?? 0);
+  const end = Math.min(roundWinners(r), Number(upto) + 1);
+  let [k, first, work, assigned] = [0, 0, 0n, Number(r.assigned)];
+  for (const p of r.terms.places) {
+    const times = Number(p.times);
+    const run = [first, first + times];
+    first += times;
+    if (!ownStash(p)) continue;
+    for (let place = run[0]; place < run[1]; place++, k++) {
+      if (place >= end) return assigned;
+      if (k !== assigned) continue;
+      const cost = p.prize?.Held ? 1n + rows / BigInt(ASSIGN_ROWS_A_DRAW) : 1n;
+      if (work > 0n && work + cost > BigInt(ASSIGN_DRAWS)) return assigned;
+      work += cost;
+      assigned += 1;
+    }
+  }
+  return assigned;
+}
+
 /** The program's rule for where a part nobody can take goes: the treasury's wallet, then its account of the mint. */
 const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, mint, programs);
 
@@ -2233,9 +2471,15 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  *                    cancel (past it), paid where it goes (`holders`, `programs`); `toTreasury` when that can't take it
  *                    (a pool never opened, the pot closed since or made again in another mint, an account gone: a
  *                    holder nobody is is found here).
- * The pull that leaves nothing owed closes the round (`projectState`: its treasury and owner; `lotteryClosed` when the
- * lottery is gone, so rent it lent goes to the owner). A round that owes nothing and waits only for its close is closed
- * by any pull.
+ * The pull that leaves nothing owed closes the round (`projectState`: its treasury and owner). While the lottery is
+ * there, the close names it for the rent it lent; once it is gone (`lotteryClosed`), that rent goes to the project's
+ * owner, and only the owner's own closing pull may send it: anyone else's leaves the close off and the round waits. A
+ * round that owes nothing and waits only for its close is closed by any pull. A place's prize that is not tokens is
+ * given as far as `prize.most` places a pull (a run of rolls: two accounts a place; size it from a dry run), and the
+ * lottery's own stash's NFTs as far as one pull takes them out (`pullAssigns`): a pull that stops short carries no
+ * close, and the next carries on. Every pull of one entry's places names the same `nonce`: a place's roll is made at
+ * `prizeRollNonce(nonce + place)`, so a later pull with another nonce can land on an order an earlier pull made and fail
+ * ("already in use"). js/play names `prizeNonce(round, entry)` for every pull of an entry, whoever sends it.
  */
 export function pullIx({
   payer,
@@ -2312,6 +2556,11 @@ export function pullIx({
     const places = prizePlacesOwed(r, entry, run);
     const own = ownStash(r.terms.places[run]);
     const nfts = own ? stashNfts(r, prize.stash) : [];
+    // A pull takes out at most `ASSIGN_DRAWS` of the stash's NFTs, up to the entry's last place in the run, and stops at
+    // a place whose NFT is not out yet: accounts only for the places out after it (`pullAssigns`).
+    const out = own
+      ? pullAssigns(r, prize.stash, placesIn(r, run, r.entries[entry].start, r.entries[entry].end).at(-1) ?? 0)
+      : 0;
     if (own) rest.push(meta(pda.lotteryStash(r.lottery), false, true));
     const handed = asset =>
       prize.hold
@@ -2322,6 +2571,10 @@ export function pullIx({
           })();
     let [carried, made, stashed] = [0, 0, false];
     for (const place of places) {
+      if (own && nftSlot(r, place) >= out) {
+        partial = true;
+        break;
+      }
       if (own && nfts[nftSlot(r, place)] == null) continue;
       if (prize.most != null && carried >= prize.most) {
         partial = true;
@@ -2357,8 +2610,13 @@ export function pullIx({
     }
     settled = places.length;
   }
+  // Rent the lottery lent goes back to it, or once it is closed, to the project's owner, and only when the owner sends
+  // the close: anyone else's closing pull of such a round leaves the close off, and the round waits for the owner.
+  const lent = r.opener === r.lottery || r.accounts.some(o => o.mint !== NO_ADDRESS && o.by === r.lottery);
+  const waitsForOwner = lotteryClosed && lent && payer !== projectState?.owner;
   const closes =
-    finished || (!partial && (r.status === 'Drawn' || r.status === 'Cancelled') && Number(r.owed) <= settled);
+    !waitsForOwner &&
+    (finished || (!partial && (r.status === 'Drawn' || r.status === 'Cancelled') && Number(r.owed) <= settled));
   const owner = lotteryClosed ? projectState?.owner : null;
   if (closes) rest.push(...roundCloseMetas(key, r, owner));
   const opener = owner && r.opener === r.lottery ? owner : r.opener;
@@ -2381,13 +2639,17 @@ export function pullIx({
 }
 
 /** The orders the rolls a `{ Prize: [run] }` pull of entry `entry` makes (a place's prize that is a roll), each with its
- * box: [{ order, box }], at `prizeRollNonce(nonce + place)` for the entry's buyer. Ask each in the pull's transaction. */
-export function pullRolls({ project, round: r, entry, part, nonce = 0n }) {
+ * box: [{ order, box }], at `prizeRollNonce(nonce + place)` for the entry's buyer, the first `most` of its places owed
+ * when the pull carries no more (`pullIx`'s `prize.most`). Ask each in the pull's transaction. Every pull of one entry's
+ * places names the same `nonce` (a different one can land on an order an earlier pull made, "already in use"): js/play
+ * names `prizeNonce(round, entry)` for all of them. */
+export function pullRolls({ project, round: r, entry, part, nonce = 0n, most = null }) {
   const run = Number(part?.Prize?.[0] ?? -1);
   const given = r.terms.places[run]?.prize;
   if (!given?.Roll) return [];
   const buyer = r.entries[entry].buyer;
-  return prizePlacesOwed(r, entry, run).map(place => ({
+  const places = prizePlacesOwed(r, entry, run);
+  return (most == null ? places : places.slice(0, most)).map(place => ({
     order: pda.order(project, buyer, prizeRollNonce(BigInt.asUintN(64, toBigInt(nonce) + BigInt(place)))),
     box: given.Roll[0],
   }));
@@ -3233,7 +3495,9 @@ export const stakeNftIx = ({
 
 /**
  * `player` takes an NFT out once its lock has run: it grows on its way out (a farm with growth writes on it, or on its
- * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. Leaving a tier
+ * Sheet), and from its own seat takes its tier's prize. `forfeit` gives up the rewards and the prize. `needPrize` (true
+ * by default): a mission prize that can't be given refuses the unstake (`PrizeNotCovered`) and the seat stays; false
+ * lets the NFT go home without it (`Unseated.prize_missed`). Leaving a tier
  * that rolls (`roll`: its box id, `boxes` its decoded box by id), the NFT is rolled on that box, in an order named by
  * `nonce` (`namedRollNonce`: the NFT's own on a box that holds it; its player or the project's keys then ask the oracle,
  * `askRollIx`, and settles); a box that can burn it or give it away keeps it in the project's hands until then. `more`
@@ -3252,6 +3516,7 @@ export const unstakeNftIx = ({
   tokenMetadata: tm,
   compressed,
   forfeit = false,
+  needPrize = true,
   roll = null,
   nonce = 0n,
   tier,
@@ -3314,7 +3579,7 @@ export const unstakeNftIx = ({
   ]);
   return lootIx(
     'unstake_nft',
-    { forfeit, nonce },
+    { forfeit, nonce, need_prize: needPrize },
     {
       ...seat.accounts,
       loot_box: first.rolls.box,
@@ -3459,9 +3724,14 @@ export const refreshSeatIx = ({
  * (`items[id].collection`, the decoded Items; `collection` when not given), written for a burn: Core writes it as it
  * burns a collectible. A recipe's `raises` write on the kept ones, in their Sheet when the project has no
  * authority over them. The player opens any account a line pays into that is not there. A roll it makes (a
- * `Prize::Roll` or a `RollOn`) passes its box and its order, nothing more; a `RollOn`'s order is where `namedRollNonce`
- * says, which reads the rolled box (`boxes`: a box's id to its decoded LootBox). Its player or the project's keys then ask for the roll
- * (`askRollIx`, in the same transaction when it fits).
+ * `Prize::Roll` or a `RollOn`) passes its box and its order, nothing more. A recipe may give several rolls: each is at
+ * the craft's `nonce` plus the rolls before it in the recipe's order (`craftRollNonces`); a `RollOn`'s order is where
+ * `namedRollNonce` says of that, which reads the rolled box (`boxes`: a box's id to its decoded LootBox). Its player or
+ * the project's keys then ask for the roll (`askRollIx`, in the same transaction when it fits).
+ * A payment line nobody can take goes to the treasury (`Crafted.to_treasury`): a collectible nobody holds or the project
+ * holds (`holders`: who holds each now, as read when building; if it changes hands before the craft lands, the craft
+ * fails cleanly), the project's own address, or an address `lootAccounts` names (wallets read as accounts of the loot
+ * program). The treasury's wallet and its account then follow that line's accounts (`treasury`).
  * A craft makes several Core calls: raise the compute limit. `extra`: a token's hook accounts.
  */
 export function craftIx({
@@ -3480,6 +3750,7 @@ export function craftIx({
   items = {},
   nfts = {},
   boxes = {},
+  lootAccounts = [],
   extra = [],
 }) {
   const remaining = [];
@@ -3527,10 +3798,16 @@ export function craftIx({
       }
     } else if (input.Pay) {
       const { mint, to } = input.Pay;
+      if (!treasury && paysNowhere(project, to, { holders, lootAccounts }))
+        throw new Error(
+          "craft: a payment line nobody can take goes to the project's treasury: pass its wallet (`treasury`).",
+        );
       remaining.push(
         meta(mint, false, true),
         meta(tokens(mint), false, true),
         ...destinationAccounts(project, to, mint, { holders, programs, treasury }),
+        // A line nobody can take goes to the treasury: its wallet and its account follow the line's own.
+        ...(paysNowhere(project, to, { holders, lootAccounts }) ? treasuryAccounts(treasury, mint, programs) : []),
       );
     } else if (input.Trade) {
       // Any NFT of the line's collection, traded in: burned, given on or stashed (`nftPaid`).
@@ -3583,6 +3860,10 @@ export function craftIx({
     }
   }
   const made = {};
+  // Each roll the recipe gives (a `Prize::Roll` or a `RollOn`) is at the craft's nonce plus the rolls before it, in the
+  // recipe's order: the first at `nonce`, the next at `nonce + 1`.
+  let rolls = 0n;
+  const nextRoll = () => BigInt.asUintN(64, toBigInt(nonce) + rolls++);
   for (const output of recipe.outputs) {
     if (output.Prize) {
       // A prize (`prizeMetas`): collectibles of one item made in order, each at the next serial.
@@ -3594,7 +3875,7 @@ export function craftIx({
           collection,
           prize,
           winner: player,
-          nonce,
+          nonce: prize.Roll ? nextRoll() : nonce,
           poolMints,
           items,
           nft: nfts[prize.Nft?.nft],
@@ -3604,7 +3885,8 @@ export function craftIx({
       );
       if (item !== undefined) made[item] = (made[item] ?? 0) + 1;
     } else if (output.RollOn) {
-      // The box, then the order its roll is made in (`namedRollNonce` of the craft's `nonce`).
+      // The box, then the order its roll is made in (`namedRollNonce` of its nonce: on an NFT its box holds, that NFT's
+      // own, though it still counts in the numbering).
       const on = assets[output.RollOn.place];
       const order = pda.order(
         project,
@@ -3612,7 +3894,7 @@ export function craftIx({
         namedRollNonce(
           boxes[output.RollOn.box_id],
           typeof on === 'string' ? on : (on?.asset ?? on?.mint ?? on?.compressed),
-          nonce,
+          nextRoll(),
         ),
       );
       remaining.push(meta(pda.box(project, output.RollOn.box_id), false, false), meta(order, false, true));
@@ -3625,6 +3907,33 @@ export function craftIx({
     { version: recipe.version, times, nonce },
     { player, project, recipe: address, counts },
     { remaining: [...remaining, ...tailOf(extra)] },
+  );
+}
+
+/**
+ * Whether a payment to `to` finds nobody to take it (`rail::Target::Nowhere`), so a recipe's line goes to the treasury:
+ * a collectible nobody holds, or the project holds (`holders`: who holds each now); a wallet that is the project's own
+ * address or an account of the loot program (`lootAccounts`, as read). A pool or a token account always takes it.
+ */
+export function paysNowhere(project, to, { holders = {}, lootAccounts = [] } = NO_OPTIONS) {
+  const program = wallet => wallet === project || lootAccounts.includes(wallet);
+  if (to?.Wallet) return program(to.Wallet[0]);
+  if (to?.Holder) {
+    const holder = holders[to.Holder[0]];
+    return !holder || holder === NO_ADDRESS || program(holder);
+  }
+  return false;
+}
+
+/**
+ * The nonce each roll a craft of `recipe` makes is named at, in the recipe's outputs' order: [{ output, nonce }], the
+ * first at `nonce`, each next one more. A `RollOn` on an NFT its box holds is made at that NFT's own nonce
+ * (`namedRollNonce`), but counts all the same.
+ */
+export function craftRollNonces(recipe, nonce = 0n) {
+  let k = 0n;
+  return recipe.outputs.flatMap((output, i) =>
+    output.RollOn || output.Prize?.[0]?.Roll ? [{ output: i, nonce: BigInt.asUintN(64, toBigInt(nonce) + k++) }] : [],
   );
 }
 
@@ -3754,6 +4063,55 @@ export function stashIx({
   );
 }
 
+/**
+ * How many NFTs of one kind one `stash` call puts in, measured on the program (`tests/v026_stash_batch.rs`): in a legacy
+ * transaction, with a lookup table, and with a lookup table and the most memory asked for. A compressed NFT needs its
+ * proof in the same transaction (`proveLeafIx`): one a call.
+ */
+export const STASH_BATCH = Object.freeze({
+  own: [19, 26, 29],
+  core: [10, 24, 27],
+  tokenMetadata: [3, 7, 7],
+  programmable: [2, 4, 4],
+  compressed: [1, 1, 1],
+});
+
+/** The kind of an NFT as `stashIx` takes it, for `STASH_BATCH`: the project's own Core collectible ('own'), another
+ * collection's Core NFT ('core', `hasAuthority` false), a Token Metadata NFT ('tokenMetadata', or 'programmable' for a
+ * pNFT) or a compressed one ('compressed'). */
+export const stashKind = n =>
+  n.compressed
+    ? 'compressed'
+    : n.tokenMetadata
+      ? n.tokenMetadata.programmable
+        ? 'programmable'
+        : 'tokenMetadata'
+      : n.hasAuthority === false
+        ? 'core'
+        : 'own';
+
+/**
+ * A long list of NFTs to put in a stash (each { asset, weight, collection, hasAuthority, tokenMetadata, compressed }, as
+ * `stashIx` takes them), split into calls of one kind each, as many a call as the measured sizes allow (`STASH_BATCH`):
+ * `lookupTable` when the transactions carry one, `heap` when they also ask for the most memory. Returns the calls, each
+ * a list of NFTs: the first is a call's own (`asset`…), the rest its `more`. Each call is one project fee.
+ */
+export function stashBatches(nfts, { lookupTable = false, heap = false } = NO_OPTIONS) {
+  const column = lookupTable ? (heap ? 2 : 1) : 0;
+  const byKind = new Map();
+  for (const n of nfts) {
+    const kind = stashKind(n);
+    if (!byKind.has(kind)) byKind.set(kind, []);
+    byKind.get(kind).push(n);
+  }
+  const calls = [];
+  for (const [kind, list] of byKind) {
+    const size = STASH_BATCH[kind][column];
+    for (let i = 0; i < list.length; i += size) calls.push(list.slice(i, i + size));
+  }
+  return calls;
+}
+
 // ---------------------------------------------------------------- contests
 
 /**
@@ -3792,7 +4150,12 @@ export function enterIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: contest.gate, wallet: player, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: contest.gate,
+          wallet: player,
+          shown: shownFor(project, contest.gate, player, shown),
+          listProof,
+        }),
         ...(staked ? [...pieceMetas(staked), ...staked.proof] : []),
         ...tailOf(extra),
       ],
@@ -3968,11 +4331,13 @@ export function leastBid(auction) {
 
 /**
  * `seller` opens its auction `id` of `args.lot` ({ Item: [id] }, { Asset: [address] } or { Roll: [box id] }), alone,
- * and pays its rent: a player for an NFT of the project's own collection they hold; the project's owner or authority for an
- * NFT of any kind it holds (`piece`: `collection` a Core asset's own, `tokenMetadata`, or `compressed` after a
- * `proveLeafIx`), a new unit of its item, or a roll of one of its boxes (a mystery lot: the box must be written, burn
- * no share of its price, and make an order with the auction's shares within one call's growth: `LotRefused`). Its
- * address names the seller, so an id is the seller's own.
+ * and pays its rent: anyone for an NFT of any kind and any collection they hold (`piece`: `collection` a Core asset's
+ * own, `tokenMetadata`, or `compressed` after a `proveLeafIx`); the project's owner or authority also for a new unit
+ * of its item (one the shop has switched off too), or a roll of one of its boxes (a mystery lot: the box must be
+ * written and make an order with the auction's shares within one call's growth, `LotRefused`; the auction's shares
+ * split the winning bid, so a share of the box that burns burns nothing here). Its address names the seller, so an id
+ * is the seller's own. An NFT lot of another collection can be stopped or taken back by whoever controls that
+ * collection while the project holds it: its seller is paid only when it reaches the winner (`endAuctionIx`).
  */
 export function openAuctionIx({ seller, project, collection, tokenMetadata: tm, compressed, id, mint, args }) {
   stored(args.shares);
@@ -4065,18 +4430,89 @@ export function bidIx({
   );
 }
 
+/** How an auction's end goes, as `end_auction`'s `ending` takes it. With no bid each is the same: the lot goes home. */
+export const ENDINGS = Object.freeze(['Deliver', 'LotFirst', 'CallOff']);
+
 /**
- * Anyone ends auction `id` once it is over (its seller calls off one with no bid). Sold: the lot goes to the high
- * bidder (an item that is a collectible is minted to them at `pda.itemAsset(item, serial)`; a roll of a box is made
- * for them in an order at `prizeRollNonce(nonce)`, `nonce` being `prizeNonce(auction, last_bid_at)` by default, which `signer` pays for), the price
- * through the shares, the rest to whoever owned the lot (the seller of an NFT, the treasury for the project's item or
- * roll), however long after the end it is sent. With no bid, the lot goes home. `signer` opens any account the end pays into that is
- * not there. `item` is the decoded Item of an item lot; for an NFT lot, `collection` its Core collection now (the
- * project's when left out), `tokenMetadata` for a Token Metadata NFT, or `compressed` (after a `proveLeafIx`).
- * `hold` (anyone may; true for all, or a list of assets): an end that wouldn't fit otherwise (a compressed lot's long
- * proof, a hooked mint, many shares) makes the NFT lot a hold for whoever it goes to (its hold passed as `order`, no
- * piece nor proof), and a winning NFT of a bid a hold for `proceeds` (its hold's address in its piece's place); anyone
- * then delivers each with `releaseIx`, and the end's sender gets the rent back then.
+ * A Token Metadata NFT's move names two different token accounts, the one it leaves and the one it goes into: Token
+ * Metadata takes a move from an account to itself as done and moves nothing, so the program refuses it (`SameAccount`).
+ * Throws, in words, before anything is signed.
+ */
+function twoAccounts(p) {
+  const { token, project_token: other } = p.accounts;
+  if (token && other && token === other)
+    throw new Error(
+      `The NFT ${p.accounts.asset} would move from the token account ${token} to itself: a move names two different accounts (SameAccount).`,
+    );
+  return p;
+}
+
+/**
+ * What shows whether the project still holds an NFT, for a route that reads it and moves nothing (`piece::held`): a Core
+ * asset by its own address; a Token Metadata NFT by the project's token account of it (`project_token`), and, once it
+ * left, the account that holds it now or its mint when it was burned (`evidence`, in `token`'s place); a compressed NFT
+ * by its record and tree (`proveLeafIx` first, in the same transaction), its proof first after the instruction's own
+ * accounts, as the program reads it whenever the record and tree are passed.
+ */
+function heldPiece({ project, asset, tokenMetadata: tm, compressed: c, evidence = null }) {
+  if (c)
+    return {
+      kind: 'compressed',
+      accounts: { ...NO_PIECE, asset: c.id, leaf: pda.leaf(c.id), tree: c.tree },
+      proof: c.proof.map(node => meta(typeof node === 'string' ? node : encodeBase58(node), false, false)),
+      writable: [],
+    };
+  if (tm)
+    return twoAccounts({
+      kind: 'tokenMetadata',
+      accounts: { ...NO_PIECE, asset, project_token: ata(project, asset, TOKEN_PROGRAM), token: evidence },
+      proof: [],
+      writable: [],
+    });
+  return { kind: 'core', ...standIn(asset) };
+}
+
+/**
+ * An NFT lot's or bid's piece on its way to `wallet`, with `evidence` (a Token Metadata NFT's account that holds it now,
+ * or its mint when burned) in the receiver's account's place: the end reads the project's account first, and only when
+ * that shows nothing does it read this one, which then shows the NFT gone.
+ */
+function evidencedPiece({ project, asset, wallet, collection, tokenMetadata: tm, compressed, evidence = null }) {
+  const p = piece({ project, asset, wallet, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES });
+  if (tm && evidence) p.accounts.token = evidence;
+  return twoAccounts(p);
+}
+
+/**
+ * Anyone ends auction `id` once it is over (its seller calls off one with no bid). `auction` is the decoded Auction,
+ * `ending` one of `ENDINGS` (with no bid each is the same: the lot goes home to its seller, or stays where it is when it
+ * is proven gone). With a bid in:
+ *   'Deliver' (the default): the lot goes to the high bidder and the winning bid through the shares to whoever owned the
+ *     lot (the seller of an NFT, the treasury for the project's item or roll), in one instruction, however long after the
+ *     end it is sent. An item that is a collectible is minted to the winner at `pda.itemAsset(item, serial)`; a roll of a
+ *     box is made for them in an order at `prizeRollNonce(nonce)`, `nonce` being `prizeNonce(auction, last_bid_at)` by
+ *     default, which `signer` pays for. An NFT lot that can't move now fails the end, which waits: send it again later.
+ *     Once the lot went first (`auction.proceeds_owed` above 0), it pays what the bid still owes and closes the auction:
+ *     the auction's address stands in for the lot, then the shares' accounts, then a bid's NFTs to the seller.
+ *   'LotFirst': an NFT lot only, for an end too wide for one transaction (a compressed lot's long proof with many shares
+ *     and a hooked coin): the lot goes to the winner now and the whole bid is written as owed; a later 'Deliver' pays it.
+ *     Its accounts are the lot's piece and proof, then the tail: no shares, no winning NFT.
+ *   'CallOff': an NFT lot's sale, before the lot moved (`CantCallOff` after): the winning bid goes back to its bidder
+ *     (tokens into their account, or its NFTs, each moved or made a hold for them) and the lot home to its seller (moved,
+ *     or made a hold for them). Anyone may when the lot or an NFT of the bid is proven gone (its collection took it back
+ *     or burned it): that one stays gone. Otherwise only the project's owner or authority, for the project fee.
+ * `signer` opens any account the end pays into that is not there. `item` is the decoded Item of an item lot; for an NFT
+ * lot, `collection` its Core collection now, `tokenMetadata` for a Token Metadata NFT, or `compressed` (after a
+ * `proveLeafIx`: a compressed lot's record must be current whenever it is read, with no bid too). The lot's accounts
+ * also show whether the project still holds it: for a Token Metadata lot that left, `evidence` names the token account
+ * that holds it now, or its mint when it was burned. `held`: the kinds of a winning bid's NFTs (`auction.held`, in order:
+ * { collection, tokenMetadata, evidence }).
+ * `hold` (true for every NFT it may apply to, or a list of assets): a lot going home (no bid, or the sale called off) is
+ * made a hold for its seller (its hold passed as `order`, the lot's accounts only showing it is held); an NFT of a bid
+ * going back on a call-off, or paid to the seller after the lot went first, or to the treasury for the project's own
+ * lot, is made a hold for whoever it goes to (its hold's address in its piece's place). Anyone then delivers each with
+ * `releaseIx`, and the end's sender gets the rent back then. A sold lot is never made a hold (`LotRefused`), nor an NFT
+ * of a bid that buys a player's lot: the two move together, or the end waits.
  */
 export function endAuctionIx({
   signer,
@@ -4088,57 +4524,88 @@ export function endAuctionIx({
   collection,
   tokenMetadata: tm,
   compressed,
+  evidence = null,
   held = [],
   hold = false,
+  ending = 'Deliver',
   reference: ref,
   nonce,
   holders,
   programs,
   extra = [],
 }) {
-  // The lot went at an earlier end, and its seller's account couldn't take the money then (`proceeds_owed`): this end pays
-  // it and closes the auction, naming no lot, share or winning NFT.
+  if (!ENDINGS.includes(ending)) throw new Error(`An auction ends as one of ${ENDINGS.join(', ')}, not “${ending}”.`);
+  // The lot went at an earlier end (`LotFirst`, or a seller's account that couldn't take the money): this end pays what
+  // the bid still owes and closes the auction.
   const owed = BigInt(auction.proceeds_owed ?? 0) > 0n;
-  const lotHeld = !owed && Boolean(auction.lot.Asset) && holds(hold, auction.lot.Asset[0]);
-  const tokenProgram = tokenProgramOf(programs, auction.mint);
   const sold = BigInt(auction.high) > 0n;
+  const lot = auction.lot.Asset?.[0] ?? null;
+  if (sold && owed && ending === 'CallOff')
+    throw new Error(
+      'The lot went to its winner already: the sale stands, and only Deliver pays what it owes (CantCallOff).',
+    );
+  if (sold && !owed && ending !== 'Deliver' && !lot)
+    throw new Error(
+      `Only an NFT lot is sent first or called off: an item's or a roll's sale ends with Deliver (${ending === 'CallOff' ? 'CantCallOff' : 'LotRefused'}).`,
+    );
+  const calledOff = sold && !owed && ending === 'CallOff';
+  const first = sold && !owed && ending === 'LotFirst';
+  // The lot goes home: no bid, or the sale called off.
+  const home = !sold || calledOff;
+  const nfts = sold && auction.nft_bids && !first ? (auction.held ?? []) : [];
+  // Where a hold may stand in: the lot going home; a bid's NFTs going back, paid after the lot went first, or to the
+  // treasury for the project's own lot.
+  const mayHold = new Set([
+    ...(lot && home && !owed ? [lot] : []),
+    ...(calledOff || owed || (sold && !lot) ? nfts : []),
+  ]);
+  if (hold && (Array.isArray(hold) ? hold.some(a => !mayHold.has(a)) : !mayHold.size))
+    throw new Error(
+      'A sold lot is never made a hold, nor an NFT of the bid that buys a player’s lot: the two move together, or the end waits (LotRefused). Only a lot going home, or a bid’s NFTs going back or paid after the lot went first, may be held.',
+    );
+  const holding = asset => Boolean(hold) && mayHold.has(asset) && holds(hold, asset);
+  const tokenProgram = tokenProgramOf(programs, auction.mint);
   const itemId = owed ? undefined : auction.lot.Item?.[0];
   const made =
     !owed && sold && item?.kind === 'Collectible' ? pda.itemAsset(pda.item(project, itemId), auction.pin) : null;
-  const asset = owed ? null : (auction.lot.Asset?.[0] ?? made);
-  const proceeds = auction.lot.Asset ? auction.seller : projectState.treasury;
+  // What the shares leave, to whoever owned the lot; called off, the whole bid back to its bidder.
+  const owner = lot ? auction.seller : projectState.treasury;
+  const proceeds = calledOff ? auction.high_bidder : owner;
   const address = pda.auction(project, auction.seller, id);
-  const receiver = sold ? auction.high_bidder : auction.seller;
+  const receiver = home ? auction.seller : auction.high_bidder;
   // A roll lot sold: its box, and the order the winner's roll is made in. The winning bid stays in the vault as that
   // order's payment, split by the auction's shares when it settles (no shares' accounts here).
   const roll = sold && !owed ? auction.lot.Roll?.[0] : undefined;
   nonce = toBigInt(nonce ?? prizeNonce(address, BigInt(auction.last_bid_at)));
-  // An NFT lot is sent on; a collectible sold is minted into its item's collection, which Core writes.
-  // With `hold`, an NFT lot is its address alone (no proof), and becomes a hold for whoever it goes to.
+  const nft = { project, asset: lot, collection, tokenMetadata: tm, compressed, evidence };
+  // An NFT lot is sent on (and shows whether the project still holds it); made a hold, it only shows that. A
+  // collectible sold is minted into its item's collection, which Core writes. After the lot went first, the auction's
+  // own address stands in for it.
   const p = owed
     ? standIn(address)
-    : lotHeld
-      ? standIn(asset)
-      : auction.lot.Asset
-        ? piece({ project, asset, wallet: receiver, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES })
-        : asset
-          ? {
-              ...piece({ project, asset, collection: item.collection, moves: false, locks: false, reads: false }),
-              writable: ['collection'],
-            }
-          : standIn(address);
-  // A winning bid of NFTs: each to where the rest of a bid in tokens would go (`held`, their kinds in order).
-  const winning =
-    !owed && sold && auction.nft_bids
-      ? (auction.held ?? []).flatMap((nft, i) => {
-          if (holds(hold, nft)) return [meta(pda.hold(nft, 0), false, true)];
-          const q = piece({ project, asset: nft, wallet: proceeds, ...held[i], ...ONLY_MOVES });
-          return [...pieceMetas(q), ...q.proof];
-        })
-      : [];
+    : lot
+      ? holding(lot)
+        ? heldPiece(nft)
+        : evidencedPiece({ ...nft, wallet: receiver })
+      : made
+        ? {
+            ...piece({ project, asset: made, collection: item.collection, moves: false, locks: false, reads: false }),
+            writable: ['collection'],
+          }
+        : standIn(address);
+  // A bid's NFTs: each to where the rest of a bid in tokens would go, or back to its bidder on a call-off.
+  const to = calledOff ? auction.high_bidder : owner;
+  const bid = nfts.flatMap((asset, i) => {
+    if (holding(asset)) return [meta(pda.hold(asset, 0), false, true)];
+    const q = evidencedPiece({ project, asset, wallet: to, ...held[i] });
+    return [...pieceMetas(q), ...q.proof];
+  });
+  // Money moves on a Deliver of a bid in tokens (the shares' accounts, but for a roll lot's, whose order splits it
+  // later; after the lot went first, every end is the one that pays) and on a call-off (back to the bidder, no shares).
+  const pays = sold && !auction.nft_bids && (ending === 'Deliver' || owed);
   return lootIx(
     'end_auction',
-    { reference: reference(ref), nonce },
+    { reference: reference(ref), nonce, ending },
     {
       signer,
       project,
@@ -4151,26 +4618,26 @@ export function endAuctionIx({
       proceeds_token: ata(proceeds, auction.mint, tokenProgram),
       item: itemId !== undefined ? pda.item(project, itemId) : null,
       ...p.accounts,
-      loot_box: roll !== undefined ? pda.box(project, roll) : null,
+      loot_box: roll !== undefined && ending === 'Deliver' ? pda.box(project, roll) : null,
       order:
-        roll !== undefined
+        roll !== undefined && ending === 'Deliver'
           ? pda.order(project, auction.high_bidder, prizeRollNonce(nonce))
-          : lotHeld
-            ? pda.hold(asset, 0)
+          : lot && holding(lot)
+            ? pda.hold(lot, 0)
             : null,
     },
     {
       remaining: [
         ...p.proof,
-        ...(!owed && sold && roll === undefined
+        ...(pays && roll === undefined
           ? shareAccounts(project, auction.shares, auction.mint, { holders, programs, treasury: projectState.treasury })
           : []),
-        ...winning,
+        ...bid,
         ...tailOf(extra),
       ],
       writable: [
-        ...(!owed && sold && sharesBurn(auction.shares) ? ['mint'] : []),
-        ...(sold && !auction.nft_bids ? ['vault'] : []),
+        ...(pays && sharesBurn(auction.shares) ? ['mint'] : []),
+        ...(pays || (calledOff && !auction.nft_bids) ? ['vault'] : []),
         ...p.writable,
       ],
     },
@@ -4253,18 +4720,21 @@ export function sellToOfferIx({
   extra = [],
 }) {
   const tokenProgram = tokenProgramOf(programs, offer.mint);
-  const p = passedOn({
-    project,
-    owner: seller,
-    receiver: offer.maker,
-    burns: false,
-    asset,
-    collection,
-    hasAuthority,
-    tokenMetadata: tm,
-    compressed,
-    reads: true,
-  });
+  // A Token Metadata NFT goes straight from the seller's account into the maker's: never one account in both places.
+  const p = twoAccounts(
+    passedOn({
+      project,
+      owner: seller,
+      receiver: offer.maker,
+      burns: false,
+      asset,
+      collection,
+      hasAuthority,
+      tokenMetadata: tm,
+      compressed,
+      reads: true,
+    }),
+  );
   return lootIx(
     'sell_to_offer',
     { terms: offerTerms(offer) },
@@ -4341,29 +4811,63 @@ export function borrowIx({
 
 /**
  * Anyone (`payer`: the borrower, a friend) repays a loan before it is due (`hold` the decoded Hold, with its debt): the
- * debt's `repay` goes to the lender, and the NFT is the borrower's again. Only money moves: anyone then sends the NFT
- * home with `releaseIx` (in the same transaction, or later: a repaid loan's release has no deadline). Free. `repay`: the
- * debt the payer was shown (`hold.debt.repay` as read): any other amount is refused (`TermsChanged`). `extra`: a
- * transfer hook's accounts.
+ * debt's `repay` goes to the lender. With `home` (the default), the NFT goes home to its borrower in the same
+ * instruction and the hold closes, its rent (and a Token Metadata NFT's emptied account's) to the borrower; an NFT that
+ * can't move now (frozen, its collection's rule refuses, a proof out of date) fails the whole call, and nobody pays.
+ * Without `home`, only the money moves: the hold becomes a plain one that is over, and anyone sends the NFT home with
+ * `releaseIx` whenever it can move (for an NFT frozen for now, so the loan does not fall due meanwhile). Free.
+ * The NFT is any kind: `collection` for a Core asset, `tokenMetadata` for a Token Metadata NFT (`into`: the borrower's
+ * account it goes into, when their associated one can't take it), `compressed` for a compressed one. Either way its
+ * accounts must show the project still holds it: the program takes no repayment for an NFT its collection took back
+ * or burned (`NotTheNft`), nor one nothing shows (`NotProven`). Going home, a compressed NFT is proven
+ * (`proveLeafIx`, in the same transaction) and its proof goes first after the repayment's accounts; the money alone
+ * passes its record and tree, and goes through when the record shows nothing, so prove it in the same transaction when
+ * that fits and the repayment of an NFT that is gone is refused. `repay`: the debt the payer was shown
+ * (`hold.debt.repay` as read): any other amount is refused (`TermsChanged`). `address`: the hold's, when its `free_at`
+ * changed since its loan named it. `extra`: a transfer hook's accounts.
  */
-export function repayIx({ payer, project, hold, repay, payerToken, programs, extra = [] }) {
+export function repayIx({
+  payer,
+  project,
+  hold,
+  repay,
+  home = true,
+  address = null,
+  collection,
+  tokenMetadata: tm,
+  compressed,
+  payerToken,
+  programs,
+  extra = [],
+}) {
   if (repay === undefined || repay === null)
     throw new Error('A repay names the debt the payer was shown (repay: hold.debt.repay as read).');
   const { lender, mint } = hold.debt;
   const tokenProgram = tokenProgramOf(programs, mint);
+  const asset = hold.asset;
+  // Going home, all its move takes (a Token Metadata NFT's `token` the borrower's); the money alone, only what shows
+  // the project holds it: the Core asset, the mint and the project's token account of it, a compressed NFT's record and
+  // tree (no proof: nothing moves, and the program reads the proof only for a move).
+  const p = home
+    ? twoAccounts(
+        piece({ project, asset, wallet: hold.player, collection, tokenMetadata: tm, compressed, ...ONLY_MOVES }),
+      )
+    : { ...heldPiece({ project, asset, tokenMetadata: tm, compressed }), proof: [] };
   return lootIx(
     'repay',
-    { repay: toBigInt(repay) },
+    { home, repay: toBigInt(repay) },
     {
       payer,
       project,
-      hold: pda.hold(hold.asset, hold.free_at),
+      hold: address ?? pda.hold(asset, hold.free_at),
       lender,
       lender_token: ata(lender, mint, tokenProgram),
       payer_token: payerToken ?? ata(payer, mint, tokenProgram),
       mint,
+      borrower: hold.player,
+      ...p.accounts,
     },
-    { remaining: tailOf(extra) },
+    { remaining: [...p.proof, ...tailOf(extra)], writable: p.writable },
   );
 }
 

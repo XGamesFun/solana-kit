@@ -72,9 +72,14 @@ money; it holds no files and serves nothing.
   the project restocks or edits the box to sell again (a pool holds its prize for every draw waiting; a named NFT is in
   one waiting purchase at a time). With `"drawLeft"` the box keeps selling and draws among what is left, by the written
   weights: the others' chances rise as one runs out, so anyone watching the stock can empty a common outcome and then
-  open for the rare at better odds. Put it as: "stop selling keeps your odds honest; keep selling never stalls but lets
-  a player tilt the odds". A box selling a rare prize keeps the default; `drawLeft` suits a box of alike prizes, or one
-  only other routes roll (a grant's, a mission's), where nothing is sold. `xsolana_check` says what each does to the
+  open for the rare at better odds. With `"giveNothing"` the box keeps selling on the odds written, and a draw that lands
+  on an outcome that is out gives nothing: a paid draw is not refunded, a free roll is over, and anyone who empties a
+  source the box shares makes its rolls miss. Put it as: "stop selling keeps your odds honest and refunds a miss; keep
+  selling never stalls but lets a player tilt the odds; give nothing keeps the odds and never refunds". Under
+  `"stopSales"`, a roll another route gives (a grant, a mission, a recipe, a lottery's place) is still given after the
+  box has stopped, and is asked again until it hits, so with one outcome dry it always ends on what is left. A box
+  selling a rare prize keeps the default; `drawLeft` suits a box of alike prizes, or one only other routes roll (a
+  grant's, a mission's), where nothing is sold. `xsolana_check` says what each does to the
   box (W-WHEN-OUT, W-OUT-OF-STOCK, W-PRIZE-SEED, W-STASH) and `xsolana_simulate` the day it stops or each outcome runs out.
 - **A prize the program can't give right now is out of stock, not an error.** A prize in a token with a transfer hook
   (or confidential transfers) is never moved by a roll. An outcome emptied by another route after a purchase (another
@@ -83,7 +88,19 @@ money; it holds no files and serves nothing.
   free roll waits to be asked again, and a box with nothing in stock is refused (SoldOut).
 - **The oracle's answer reads at most 21 accounts**, so a box's distinct prize accounts (its items, pools, stashes,
   the mints and vaults of its tokens, a fresh item's tables) are bounded by that, however many outcomes it has.
-  `xsolana_check` counts them.
+  `xsolana_check` counts them. One answer also holds only so much of a box (measured: 128 outcomes that give
+  nothing, 29 of token amounts, 18 each of its own item; 41 slots; 72 odds rules; 16 token prizes or 18 collectibles
+  in one outcome; 340 texts in a gate): a box past that is refused when written. Put a long weighted list in a table
+  or a stash, drawn by one outcome.
+- **The program takes any time, and the checker says a far one's date in words (W-FAR-TIME).** A time that looks like
+  milliseconds, or lands more than three years out, locks the bids, tickets, NFTs or vault that wait on it until then.
+  Read the date to the person before they sign.
+- **Much of what the program used to refuse is the project's own choice now, warned of in words, never refused**: a
+  price or a prize of 0, a mission with no lock, a contest of NFTs whose winners take none of the losers' NFTs, a
+  sealed schedule of any length paying any address the program doesn't own, a lottery, contest or auction in a token a
+  player can hold a payment up in (a frozen default, confidential transfers), a farm that mints a token the project is
+  not yet the authority of (it pays nothing until it is, and that time is never paid). Tell the person each warning
+  `xsolana_check` gives, in its own words.
 
 Don'ts:
 

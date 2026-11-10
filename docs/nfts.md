@@ -6,7 +6,11 @@ it.
 ## NFTs
 
 The project has authority over the NFTs of its collection: the Core collection named at `create_project`, where the
-project is the collection's update delegate. It mints them (an item's units) and writes their attributes on them. Every other
+project is the collection's update authority, or one of its update delegates. A project that is only a delegate trusts
+its partner: anyone who can write to that collection (its owner, and every other delegate they named) can mint an NFT
+there that reads as any of the project's items, passing the project's gates, boosts and odds for that item and taking
+its missions' prizes, and can take the project's access away at any time. Two projects that name one shared collection
+read each other's items of the same number as their own. Name only a collection whose every writer the project trusts. It mints them (an item's units) and writes their attributes on them. Every other
 NFT, a Core asset of any other collection, a Token Metadata NFT or a compressed NFT, it can read but not write.
 
 | NFT                                         | Shown to a rule as                                                            | Read                                              | Staked, held or auctioned                                                                                                           |
@@ -46,9 +50,21 @@ rolled where it is. A recipe's roll that can lose the NFT takes only a Core asse
 
 **Custody follows the NFT's own rules.** Staked, held or auctioned, an NFT moves or locks by its own program (Core,
 Token Metadata, Bubblegum), and its collection's controls (royalty rules, a pNFT's rule set, oracles, permanent
-delegates) still apply to it, whoever controls them. So a player auctions only an NFT of the project's own collection: a
-seller who controlled the lot's collection could make it refuse to move once bids were in, and keep the winning bid
-locked. The project's owner or authority may auction an NFT of any kind.
+delegates) still apply to it, whoever controls them. The creator of an NFT with a permanent delegate can pull it back
+out of a hold, a stake, a loan or a listing, and a record it leaves behind can later take the next owner's deposit of
+the same NFT: before a deposit, an app looks for this project's records that name the NFT (a listing at
+`["listing", project, asset]`, holds by the asset's address) and warns when one is left from an earlier owner.
+
+**Any NFT can be auctioned**, a player's too. The seller is paid only when the lot reaches the winner: while the lot
+can't move (its collection froze it) the winning bid waits in the project's vault, until it can or until the project's
+keys call the sale off, and a lot taken back or burned sends the bid back. So a bidder's money can be tied up, not
+lost: tell every bidder, before a bid, when the lot is outside the project's collections.
+
+**A loan's NFT that is gone** (taken back or burned by whoever controls its collection while the project held it) can't
+be repaid: the borrower keeps what they borrowed, the lender's release at the due date fails, and the loan's record
+stays open with the borrower's rent in it. A hold can outlive its NFT the same way (a lottery place's NFT, a contest's,
+an outbid NFT bid, a loan's): its receipt says the NFT is held for the player when it is not, and nothing was paid
+against it. The results server and the kit read the NFT's owner and flag such a hold.
 
 ## Tokens
 

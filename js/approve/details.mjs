@@ -6,10 +6,31 @@ import { decodeBorsh } from '../chain/borsh.js';
 import { equalBytes, toHex } from '../chain/bytes.js';
 import { accountKind, decode, IDL, instructionOf, keyLeaf, merkleRoot } from '../client/index.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
+import { dateWords, FAR_SECONDS } from '../economy/check.mjs';
 import { fromUnits } from '../economy/model.mjs';
 import { grantArgs } from '../economy/plan.mjs';
 
 const NOBODY = '11111111111111111111111111111111';
+/** What places of tokens from a short pool get, by their `when_short`. */
+const SHORT = {
+  InOrder: 'whole prizes, first place first, while the pool covers one',
+  InProportion: 'every place the same share of its prize',
+  Nothing: 'no place gets anything, and the pool keeps it',
+};
+/** What a far time is, by the field that holds it. */
+const FAR = {
+  draws_at: 'The first draw',
+  ends_at: 'The auction ends',
+  result_by: 'The result is due',
+  next_at: 'The first run',
+};
+/** A number of seconds in words: "1 day", "36 hours", "90 seconds". */
+const duration = v => {
+  const n = Number(v);
+  if (n % 86_400 === 0) return `${n / 86_400} day${n === 86_400 ? '' : 's'}`;
+  if (n % 3_600 === 0) return `${n / 3_600} hours`;
+  return `${n} seconds`;
+};
 const ZERO = new Uint8Array(32);
 
 /** An instruction's accounts by name, nested groups flattened, in the order the program takes them. */
@@ -32,11 +53,12 @@ function readLootInstruction(ix) {
  * connected; `treasury`: the treasury's address when it is known (else "your wallet" stands for it, as the setup
  * makes it).
  */
-export function namesOf(m, { owner = null, treasury = null } = {}) {
+export function namesOf(m, { owner = null, treasury = null, now = null } = {}) {
   return {
     m,
     owner,
     treasury,
+    now,
     pools: new Map(m.pools.map(p => [p.index, p.key])),
     stashes: new Map(m.stashes.map(s => [s.id, s.name ?? s.key])),
     grants: new Map(m.grants.map(g => [g.id, g])),
@@ -151,6 +173,8 @@ function readDetails(reads, names) {
           : treasury()
         : treasury();
     const to = v => (v === 'Burn' ? 'burned' : `to ${where(v)}`);
+    // A time more than three years after now: the program takes it, and the owner sees its date before signing.
+    const far = v => Number(v) - (names.now ?? Math.floor(Date.now() / 1000)) > FAR_SECONDS;
     const isTo = v =>
       v === 'Burn' ||
       v === 'Treasury' ||
@@ -176,7 +200,33 @@ function readDetails(reads, names) {
               ? `Places paid from: its pot ${v.Pot[0]}, kept from round to round (what anyone sends it, yield and what earlier rounds left all count)`
               : `Places paid from: each round’s own ticket money alone; what they leave is ${v.Round.rest === 'Burn' ? 'burned' : `sent to ${where(v.Round.rest)}`}`,
           );
-        } else if (k === 'to' && isTo(v))
+        } else if (k === 'when_out' && v === 'GiveNothing')
+          lines.push(
+            'When an outcome is out: a draw on it gives nothing, and a paid draw is not refunded (the box keeps selling)',
+          );
+        else if (k === 'closes_before' && BigInt(v ?? 0) > 0n)
+          lines.push(`Sales close ${duration(v)} before each draw`);
+        else if (k === 'time_weighted' && v === true)
+          lines.push(
+            'Tickets weighed by time: each purchase counts its tickets times the seconds left until sales close, so a ticket bought early has a better chance',
+          );
+        else if (k === 'places' && Array.isArray(v)) {
+          // What places of tokens from a pool get when it is short, read once when the draw is asked.
+          const short = [...new Set(v.filter(p => p?.prize?.Tokens?.from?.Pool).map(p => p.when_short))];
+          if (short.length)
+            lines.push(
+              `If a pool its places are paid from holds less than they win: ${short.map(x => SHORT[x] ?? x).join('; ')}`,
+            );
+          walk(v);
+        } else if (['draws_at', 'ends_at', 'result_by', 'next_at'].includes(k) && far(v))
+          lines.push(
+            `${FAR[k]} on ${dateWords(Number(v))}, ${Math.floor((Number(v) - (names.now ?? Math.floor(Date.now() / 1000))) / 31_536_000)} years from now: what waits on it is locked until then. Check the unit before approving`,
+          );
+        else if (k === 'extend' && read.name === 'open_auction' && Number(v) > FAR_SECONDS)
+          lines.push(
+            `A late bid moves the end by ${duration(v)}: one bid holds the lot and itself that long. Check the unit before approving`,
+          );
+        else if (k === 'to' && isTo(v))
           lines.push(v === 'Burn' ? 'Burns the tokens it takes' : `Sends tokens to ${where(v)}`);
         else if (k === 'Give' && Array.isArray(v) && typeof v[0] === 'string')
           lines.push(`Gives the NFT to ${address(v[0])}`);

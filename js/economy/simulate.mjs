@@ -10,8 +10,9 @@
 // the day it stops, and one that draws among what is left ("drawLeft") the day each outcome runs out and the odds of
 // the rest from then (`stockWalk`). It is a guide, not a promise: the full simulation (js/sim) runs the real program.
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
-import { boxOrderBytes, roundRentOf } from './plan.mjs';
+import { boxOrderBytes, entryShape, roundRentOf } from './plan.mjs';
 import {
+  boostedWeights,
   boxBuys,
   COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS,
   drawsOf,
@@ -41,6 +42,11 @@ import {
   toBps,
   toSeconds,
   toTime,
+  purchaseWeight,
+  shortPays,
+  stashNfts,
+  stopsSales,
+  toUnits,
   weights,
   whenOutWords,
 } from './model.mjs';
@@ -59,15 +65,7 @@ const NETWORK_FEE = sol(SIGNATURE_FEE);
 const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
  * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
-const ticketLine = l =>
-  sol(
-    BigInt(
-      entryWidth(
-        lotterySplit(l).some(x => String(x.to).startsWith('chosen')),
-        Boolean(l.ticketNft),
-      ),
-    ) * RENT_PER_BYTE,
-  );
+const ticketLine = l => sol(BigInt(entryWidth(...entryShape(l))) * RENT_PER_BYTE);
 /** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
 /** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps
@@ -369,9 +367,13 @@ export function simulate(economy, { now = 0 } = {}) {
     const stockOf = x => {
       const supply = Number(m.item.get(x.item)?.supply ?? 0);
       if (x.gives === 'item' && supply > 0 && !b.stockOdds) return [`item:${x.item}`, supply];
+      // A stash with nothing that weighs is out of stock: an NFT of weight 0 is never drawn (stash.rs `drawable`).
       if (x.gives === 'stash' && m.stash.get(x.stash))
-        return [`stash:${x.stash}`, (m.stash.get(x.stash).nfts ?? []).length];
+        return [`stash:${x.stash}`, stashNfts(m.stash.get(x.stash)).filter(n => n.weight > 0).length];
       if (x.gives === 'nft') return [`nft:${x.nft}`, 1];
+      // A minted prize is out of stock when the mint can't take it: a token the project can't mint (a fixed supply, or
+      // another's mint) mints nothing.
+      if (x.gives === 'mint' && !m.tokens.get(x.currency ?? game)?.gameMints) return [`mint:${x.currency ?? game}`, 0];
       return null;
     };
     const needs = (b.outcomes ?? []).map(o => {
@@ -383,7 +385,7 @@ export function simulate(economy, { now = 0 } = {}) {
       return need;
     });
     if (!left.size || !(opens > 0)) return null;
-    const stops = b.whenOut !== 'drawLeft';
+    const stops = stopsSales(b);
     const out = i => ({
       outcome: i,
       gives: (b.outcomes[i].gives === 'bundle'
@@ -416,6 +418,32 @@ export function simulate(economy, { now = 0 } = {}) {
         : null;
     }
     const there = i => [...needs[i]].every(([k, n]) => left.get(k) >= n);
+    if (b.whenOut === 'giveNothing') {
+      // A draw stays on the weights as written: one on an outcome that is out is made and gives nothing, never refunded
+      // (order.rs `WhenOut::GiveNothing`). The box keeps selling; what misses grows as outcomes run out.
+      const all = w.reduce((n, x) => n + x, 0);
+      if (!all) return null;
+      let alive = w.map((_, i) => i).filter(there);
+      let day = 0;
+      const runsOut = [];
+      const miss = () => round((w.reduce((n, x, i) => n + (alive.includes(i) ? 0 : x), 0) / all) * 100, 6);
+      const gone = w.map((_, i) => i).filter(i => !alive.includes(i));
+      if (gone.length) runsOut.push({ inDays: 0, outcomes: gone.map(out), missPercent: miss() });
+      while (alive.length) {
+        const rate = new Map();
+        for (const i of alive)
+          for (const [k, n] of needs[i]) rate.set(k, (rate.get(k) ?? 0) + (opens * draws * w[i] * n) / all);
+        const next = [...rate].map(([k, r]) => ({ k, t: left.get(k) / r })).sort((a, z) => a.t - z.t)[0];
+        if (!next || day + next.t > days) break;
+        day += next.t;
+        for (const [k, r] of rate) left.set(k, Math.max(0, left.get(k) - r * next.t));
+        left.set(next.k, 0);
+        const ended = alive.filter(i => !there(i));
+        alive = alive.filter(there);
+        runsOut.push({ inDays: round(day, 4), outcomes: ended.map(out), missPercent: miss() });
+      }
+      return runsOut.length ? { whenOut: 'giveNothing', runsOut } : null;
+    }
     const chances = alive => {
       const sum = alive.reduce((n, i) => n + w[i], 0);
       return w.map((x, i) => (sum && alive.includes(i) ? round((x / sum) * 100, 6) : 0));
@@ -449,6 +477,15 @@ export function simulate(economy, { now = 0 } = {}) {
   /** The walk of a box's stock in words (`stockWalk`). */
   const stockNote = (b, walk) => {
     const named = list => list.map(x => `outcome ${x.outcome} (${x.gives})`).join(', ');
+    if (walk.whenOut === 'giveNothing')
+      return `“${b.name}” keeps selling as its outcomes run out ("whenOut": "giveNothing"; its own opens alone): ${walk.runsOut
+        .map(
+          r =>
+            `${named(r.outcomes)} ${r.inDays ? `in about ${r.inDays} days` : 'from the start'}, then ${r.missPercent}% of draws give nothing`,
+        )
+        .join(
+          '; ',
+        )}. A draw on an outcome that is out is made and gives nothing: a paid one is not refunded, a free roll is over.`;
     if (walk.whenOut === 'stopSales')
       return `“${b.name}” stops selling ${walk.stopsSellingInDays ? `in about ${walk.stopsSellingInDays} days` : 'from the start'}, when ${named(walk.by)} runs out (its own opens alone): it isn’t sold while an item, a stash or a named NFT couldn’t cover, at the most any outcome takes of it in one draw, the draws of a purchase and of those still waiting for the oracle ("whenOut": "stopSales"), so every roll is on the odds as written. Restock it, or edit the box, to sell again; "drawLeft" would keep selling, the rest’s chances rising.`;
     const steps = walk.runsOut.map(
@@ -567,6 +604,16 @@ export function simulate(economy, { now = 0 } = {}) {
     // What it gives that runs out, as the box says (`whenOut`): it stops selling, or draws among what is left.
     const walk = !bought && b.active !== false ? stockWalk(b, opens) : null;
     if (walk) notes.push(stockNote(b, walk));
+    // Each outcome's chance for a player who passes every odds rule at its most (order.rs, rules.rs `boosted`): counted
+    // in BigInt, each weight stopping at the largest. The rules count on every route, read when a roll is first asked.
+    const raised = (b.odds ?? []).length ? boostedWeights(b) : null;
+    const raisedSum = raised ? raised.reduce((n, x) => n + x, 0n) : 0n;
+    const oddsBoosted =
+      raised && raisedSum > 0n ? raised.map(x => round(Number((x * 100_000_000n) / raisedSum) / 1_000_000, 6)) : null;
+    if (oddsBoosted)
+      notes.push(
+        `“${b.name}”’s odds rules raise its chances to ${oddsBoosted.map((c, i) => `outcome ${i} ${c}%`).join(', ')} for a player who passes them all at their most. They count on every route: on a purchase, and on a roll another route gives, read when the roll is first asked, not when it was won.`,
+      );
     return {
       key: b.key,
       name: b.name,
@@ -596,7 +643,8 @@ export function simulate(economy, { now = 0 } = {}) {
         )
         ? { limitedStock: true }
         : {}),
-      ...(!bought ? { whenOut: b.whenOut === 'drawLeft' ? 'drawLeft' : 'stopSales' } : {}),
+      ...(!bought ? { whenOut: b.whenOut ?? 'stopSales' } : {}),
+      ...(oddsBoosted ? { oddsBoosted } : {}),
       ...(walk ? { stock: walk } : {}),
       ...(isSol && known && price ? { returnOfRealCostPercent: round((value / (price + extrasSol)) * 100, 4) } : {}),
     };
@@ -877,6 +925,58 @@ export function simulate(economy, { now = 0 } = {}) {
       return null;
     };
     const prized = placed.filter(p => prizeLine(p.prize)).map(p => worthOf(prizeLine(p.prize)));
+    // A weighted round (`timeWeighted`): each purchase weighs its tickets times the seconds from it to the close of
+    // sales, and a place is won by weight. With purchases spread evenly over the selling time, a ticket bought at the
+    // open counts twice the average, one bought halfway the average, one in the last hour next to nothing.
+    const closesBefore = toSeconds(l.closesBefore ?? 0);
+    const selling = Math.max(1, every - closesBefore);
+    const weighted = l.timeWeighted
+      ? {
+          sellsForDays: round(selling / DAY, 4),
+          atOpen: 2,
+          halfway: 1,
+          lastHour: round(Number(purchaseWeight(1, selling - Math.min(3_600, selling), selling)) / (selling / 2), 6),
+        }
+      : null;
+    if (weighted)
+      notes.push(
+        `“${l.name}” weighs each purchase by its tickets times the seconds left until sales close: a ticket bought when a round opens counts about twice the average, one bought halfway the average, one in the last hour about ${weighted.lastHour} of it. A buyer sees what their purchase weighs before they buy.`,
+      );
+    // Places of tokens from a pool read it once, when the draw is asked: one that starts short pays as "whenShort" says.
+    const shortPools = [];
+    const fromPools = new Map();
+    for (const p of placed) {
+      const line = prizeLine(p.prize);
+      const key = line?.gives === 'tokens' ? prizePool(line) : null;
+      if (key) fromPools.set(key, [...(fromPools.get(key) ?? []), p]);
+    }
+    for (const [key, runs] of fromPools) {
+      const decimals = m.tokens.get(m.pool.get(key)?.currency)?.decimals ?? 0;
+      const units = v => {
+        try {
+          return toUnits(v ?? 0, decimals);
+        } catch {
+          return 0n;
+        }
+      };
+      const holds = units(m.pool.get(key)?.seed);
+      const rows = runs.map(p => ({ each: units(prizeLine(p.prize).amount), places: p.times ?? 1 }));
+      const wins = rows.reduce((n, r) => n + r.each * BigInt(r.places), 0n);
+      if (holds >= wins) continue;
+      const whenShort = runs[0].whenShort ?? 'inOrder';
+      const pays = shortPays(rows, holds, whenShort);
+      const scale = 10 ** decimals;
+      shortPools.push({
+        pool: key,
+        holds: Number(holds) / scale,
+        wins: Number(wins) / scale,
+        whenShort,
+        each: pays.map(x => Number(x.each) / scale),
+      });
+      notes.push(
+        `“${l.name}”’s places paid from “${key}” win ${Number(wins) / scale} and the pool starts with ${Number(holds) / scale}: if it holds no more when a draw is asked, they get ${pays.map(x => Number(x.each) / scale).join(', ')} each ("whenShort": "${whenShort}").`,
+      );
+    }
     // One ticket bought on its own: the fee and the record are per purchase, so a bundle of tickets shares them. The
     // record's rent comes back once the round is done with it, and a no-loss ticket's price after the draw: both held.
     const realCost = realCostOf({
@@ -918,6 +1018,9 @@ export function simulate(economy, { now = 0 } = {}) {
       roundRentSol: round(Number(roundRentOf(l, m)) / 1e9),
       ...(l.ticketNft ? { ticketNft: true } : {}),
       ...(l.noLoss ? { noLoss: true } : {}),
+      ...(closesBefore ? { closesBeforeDays: round(closesBefore / DAY, 4) } : {}),
+      ...(weighted ? { weighted } : {}),
+      ...(shortPools.length ? { shortPools } : {}),
       realCost,
     };
   });

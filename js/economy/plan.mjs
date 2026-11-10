@@ -187,7 +187,7 @@ export function boxArgs(b, m) {
     rise: rise(b.rise, t),
     fall: fall(b.fall, t, m.now),
     stock_odds: !!b.stockOdds,
-    when_out: b.whenOut === 'drawLeft' ? 'DrawLeft' : 'StopSales',
+    when_out: WHEN_OUT[b.whenOut ?? 'stopSales'],
     active: b.active !== false,
     shares: shares(b.split, m),
     // What one open draws: each slot so many draws among the outcomes it names (all, when none), no outcome twice
@@ -371,9 +371,13 @@ export function lotteryArgs(l, m) {
       shares: shares(lotterySplit(l), m),
       // A place takes a share of the pot, a prize for its winner, or both.
       // A run of `times` places alike: "places 2 to 201 each take 1%" is one.
-      places: (l.places ?? [])
-        .map(placeOf)
-        .map(p => ({ bps: Math.round(p.percent * 100), prize: prizeOrNull(p.prize, m), times: p.times })),
+      places: (l.places ?? []).map(placeOf).map(p => ({
+        bps: Math.round(p.percent * 100),
+        prize: prizeOrNull(p.prize, m),
+        // What a place of tokens from a pool gets when the pool holds less than the places with a winner win.
+        when_short: WHEN_SHORT[p.whenShort ?? 'inOrder'],
+        times: p.times,
+      })),
       ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : '11111111111111111111111111111111',
       draws_at: BigInt(l.firstDraw ? toTime(l.firstDraw, m.now) : m.now + every),
       // A ticket paid with one NFT that passes the rule, in place of tokens.
@@ -382,12 +386,24 @@ export function lotteryArgs(l, m) {
       returns: Boolean(l.noLoss),
       // A least sale: a round that sold fewer tickets is cancelled at its draw and refunded.
       min_sold: BigInt(l.minSold ?? 0),
+      // Sales close this long before the draw (0: at the draw).
+      closes_before: BigInt(toSeconds(l.closesBefore ?? 0)),
+      // A no-loss lottery's purchase counts for its tickets times the seconds from it to the close of sales.
+      time_weighted: Boolean(l.timeWeighted),
     },
     every: BigInt(every),
     gate: gateOf(l.gate, m),
     per_wallet: l.perWallet ?? 0,
   };
 }
+
+/** A box's `whenOut` in the spec, and the program's `WhenOut`: stop selling while an outcome is out (a paid miss is
+ * refunded), draw among what is left, or give nothing for a draw on an outcome that is out. */
+export const WHEN_OUT = { stopSales: 'StopSales', drawLeft: 'DrawLeft', giveNothing: 'GiveNothing' };
+/** A place's `whenShort` in the spec, and the program's `WhenShort`: what places of tokens from one pool get when the
+ * pool holds less than they win. Prizes of 1,000, 500 and 500 from a pool holding 1,700: 1,000, 500 and 0 in order;
+ * 850, 425 and 425 in proportion; or nothing. */
+export const WHEN_SHORT = { inOrder: 'InOrder', inProportion: 'InProportion', nothing: 'Nothing' };
 
 /**
  * A lottery round's header as its first purchase sizes it (`LotteryRound::new`: its `head`), and the token accounts a
@@ -405,15 +421,17 @@ export function roundSize(l, m) {
     .reduce((n, p) => n + Number(p.times ?? 1), 0);
   const termsBytes = encodeBorsh(IDL, { defined: { name: 'LotteryTerms' } }, terms).length;
   // The tag; project, lottery, id, incarnation, round, bump, opener, lent, head, status, revision; the terms; fee, sold,
-  // to_pot; common; owns, owed, the draw's slots and times, answer and first ticket, the pot's four numbers; paid; prizes (59
+  // to_pot; the weight sold (1 byte in a round that doesn't weigh, 17 in one that does); common; owns, owed, the draw's
+  // slots and times, answer and first place's point (16), the pot's four numbers; paid; prizes (59
   // bytes each); accounts (64 each); nfts; assigned.
   const head =
     1 +
     130 +
     termsBytes +
     17 +
+    (terms.time_weighted ? 17 : 1) +
     (4 + 8 * terms.shares.length) +
-    112 +
+    120 +
     (4 + Math.ceil((2 * places) / 8)) +
     (4 + 59 * tokens) +
     (4 + 64 * (2 + pools)) +
@@ -423,6 +441,15 @@ export function roundSize(l, m) {
   const accounts = (l.ticketNft ? 1 : payment === (l.currency ?? m.currencyKey) ? 1 : 2) + pools;
   return { head, accounts };
 }
+
+/** What decides the bytes of a purchase's entry in a lottery's round (`loot.entryWidth`'s arguments): whether it keeps
+ * what arrived (a share the buyer chooses, or a weighted round of paid tickets), whether the ticket is an NFT, and
+ * whether the round weighs its tickets by time. */
+export const entryShape = l => {
+  const weighted = Boolean(l.timeWeighted);
+  const chosen = lotterySplit(l).some(s => String(s.to).startsWith('chosen'));
+  return [chosen || (weighted && !l.ticketNft), Boolean(l.ticketNft), weighted];
+};
 
 /** How many rounds of a lottery are open or still paying out at once, and how many purchases a round takes, as the
  * spec expects them (`expect`): by default two rounds of a lottery that draws again (one selling, one paying out) and
@@ -449,10 +476,7 @@ export function roundRentOf(l, m) {
   if (l.roundRent !== undefined) return toUnits(l.roundRent, 9);
   const { head, accounts } = roundSize(l, m);
   const { rounds, entries } = roundsExpected(l, m);
-  const width = loot.entryWidth(
-    lotterySplit(l).some(s => String(s.to).startsWith('chosen')),
-    Boolean(l.ticketNft),
-  );
+  const width = loot.entryWidth(...entryShape(l));
   // The header and its entries' list head (6 bytes), each token account, each entry's bytes.
   const one = rent(head + 6) + BigInt(accounts) * rent(165) + BigInt(entries * width) * RENT_PER_BYTE;
   const all = BigInt(rounds) * one;
@@ -496,7 +520,7 @@ export function contestArgs(c, m, at = m.now) {
     // Each entry stakes one NFT that passes this rule, and the NFTs are the pot: each winner shares the losers', at most
     // `losersEach` of them (none: no cap).
     nft: c.stakeNft ? ruleOf(c.stakeNft, m) : null,
-    cap: c.stakeNft && c.losersEach ? c.losersEach : null,
+    cap: c.stakeNft && c.losersEach !== undefined ? c.losersEach : null,
   };
 }
 
@@ -1598,6 +1622,7 @@ export const recordBytesOf = (kind, body) => {
       revision: 0,
       ...placeholders(loot.withDefaults({ Lottery: { args } }).Lottery.args),
       round: 0,
+      last: 0,
       pots: 0,
       owing: NOBODY,
     }),

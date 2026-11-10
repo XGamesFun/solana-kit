@@ -3,7 +3,7 @@
 //
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
-import { boxOrderBytes, plan as compile, contestBytes, farmEnds, roundRentOf } from './plan.mjs';
+import { boxOrderBytes, plan as compile, contestBytes, entryShape, farmEnds, roundRentOf } from './plan.mjs';
 import {
   ACCOUNT_BYTES,
   CONTEST_ENTRY_BYTES,
@@ -26,7 +26,6 @@ import {
   RENT_PER_BYTE,
   SIGNATURE_FEE,
   model,
-  lotterySplit,
   prizeLine,
   prizeRolls,
   prizes,
@@ -219,8 +218,7 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
     // (`roundRent`, on by default) pays them, back to it at the close: the buyer pays only the fee and the price. Without
     // it, or once it runs short, the buyer pays them (to the treasury at the close), and a round's first buyer fronts its
     // header. A share the buyer chooses makes each entry keep what arrived.
-    const chosen = lotterySplit(l).some(s => String(s.to).startsWith('chosen'));
-    const entry = BigInt(entryWidth(chosen, Boolean(l.ticketNft))) * RENT_PER_BYTE;
+    const entry = BigInt(entryWidth(...entryShape(l))) * RENT_PER_BYTE;
     const held = roundRentOf(l, m);
     const funded = held > 0n;
     row(

@@ -92,10 +92,15 @@ test('a round paid from its own money sends its leftover where the project names
     'never its own pot',
   );
   assert.deepEqual(refusedFor({ rest: 'burn' }), ['E-WSOL-BURN economy.lotteries.draw.rest'], 'SOL is not burned');
-  assert.deepEqual(
-    refusedFor({ rest: 'treasury', noLoss: true }),
-    ['E-LOTTERY economy.lotteries.draw.noLoss'],
-    'a no-loss lottery needs a pot',
+  assert.deepEqual(refusedFor({ rest: 'treasury', noLoss: true }), [], 'a no-loss lottery may pay from its own money');
+  assert.ok(
+    said(solSpec({ pools, lotteries: [{ ...draw, rest: 'treasury', noLoss: true }] })).warnings.some(
+      x =>
+        x.code === 'W-LOTTERY' &&
+        x.where === 'economy.lotteries.draw.places' &&
+        /a place's percent wins nothing from it/.test(x.message),
+    ),
+    'and its places that name a share of the money are said to win nothing from it',
   );
   assert.deepEqual(
     refusedFor({ rest: 'treasury', seed: 1 }),
@@ -298,15 +303,13 @@ test(
       per_wallet: 0,
       ...more,
     });
-    // The program takes a pool (the project's choice, as for a share), and refuses a share the buyer chooses and a no-loss
-    // lottery paid from its rounds.
+    // The program takes a pool (the project's choice, as for a share), and refuses a share the buyer chooses. A no-loss
+    // lottery may pay from its rounds' own money: its places then take no money, and give their prizes.
     w.pool(1);
     w.upsert({ Lottery: { id: 9, args: args(9, { Pool: [1] }) } });
     fails(() => w.upsert({ Lottery: { id: 8, args: args(8, { Chosen: { item: null } }) } }), 'BadLottery');
-    fails(
-      () => w.upsert({ Lottery: { id: 9, args: args(9, 'Treasury', { returns: true, shares: [] }) } }),
-      'BadLottery',
-    );
+    w.upsert({ Lottery: { id: 7, args: args(7, 'Treasury', { returns: true, shares: [] }) } });
+    assert.deepEqual(w.read('Lottery', pda.lottery(w.project, 7)).terms.pays_from, { Round: { rest: 'Treasury' } });
     for (const [id, rest] of [
       [1, { Wallet: [charity] }],
       [2, 'Burn'],

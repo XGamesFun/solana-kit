@@ -1,5 +1,5 @@
 // A payment's split may name a share the payer chooses ("chosen": a referrer): `pay` takes its shares from the payer
-// each time, so the page passes the wallet (`app.pay(key, { chosenRecipient })`), never the payer's own. A
+// each time, so the page passes the wallet (`app.pay(key, { chosenRecipient })`), the payer's own too. A
 // "chosen:<item>" share stays a box's and a lottery's: `pay` can't check the collectible named is of the item. And
 // js/play refuses an option a method doesn't take, so a `{ choice }` meant as `chosenRecipient` fails instead of
 // sending the referrer's share to the treasury.
@@ -133,7 +133,10 @@ test(
     assert.equal(await balance(referrer.address), 1_000_000n, 'none named: no referrer is paid');
     assert.equal((await balance(treasury)) - before, 15_000_000n, 'and the treasury takes the chosen share');
 
-    await assert.rejects(app.pay('entry', { chosenRecipient: player.address }), /their own wallet/);
+    // The payer may name their own wallet: the share comes back to them (the program takes it, and so does the kit).
+    await app.pay('entry', { chosenRecipient: player.address });
+    assert.equal(await balance(referrer.address), 1_000_000n, 'the referrer is not paid');
+    assert.equal((await balance(treasury)) - before, 22_000_000n, 'the treasury the rest, as when another is named');
     await assert.rejects(
       app.pay('entry', { choice: referrer.address }),
       /pay doesn’t take “choice” \(a buyer’s choice is `chosenRecipient`\)/,
