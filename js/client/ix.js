@@ -2172,7 +2172,12 @@ export function buyTicketsIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: lottery.gate, wallet: player, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: lottery.gate,
+          wallet: player,
+          shown: shownFor(project, lottery.gate, player, shown),
+          listProof,
+        }),
         ...recipients,
         ...(held ? [...pieceMetas(held), ...held.proof] : []),
         ...tailOf(extra),
@@ -4044,7 +4049,12 @@ export function enterIx({
     },
     {
       remaining: [
-        ...gateAccounts(project, { gate: contest.gate, wallet: player, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: contest.gate,
+          wallet: player,
+          shown: shownFor(project, contest.gate, player, shown),
+          listProof,
+        }),
         ...(staked ? [...pieceMetas(staked), ...staked.proof] : []),
         ...tailOf(extra),
       ],

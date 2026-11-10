@@ -560,6 +560,32 @@ export function decodeRound(data) {
   return { ...r, entries };
 }
 
+/** When a lottery's sales close (`terms`: a Lottery's or a round's): `closes_before` seconds before its draw. */
+export const salesCloseAt = terms => BigInt(terms.draws_at) - BigInt(terms.closes_before ?? 0);
+
+/**
+ * What a purchase of `count` tickets at `now` (Unix seconds, the chain's clock) weighs in a round's draw: one a ticket,
+ * or in a lottery that weighs tickets by time (`terms.time_weighted`) each ticket the seconds from the purchase to the
+ * close of sales (`salesCloseAt`). 0 once sales have closed: nothing more is sold. The same tickets bought later weigh less.
+ */
+export function ticketWeight(terms, count, now) {
+  const left = salesCloseAt(terms) - BigInt(now);
+  if (left <= 0n) return 0n;
+  return BigInt(count) * (terms.time_weighted ? left : 1n);
+}
+
+/**
+ * A buyer's chance before they buy: { weight, total, share } of a purchase of `count` tickets at `now` into `round` (its
+ * decoded record, null when nobody bought into it yet; `terms` the lottery's then): what it would weigh, the round's
+ * weight with it, and its share of that (a number from 0 to 1). Each place is drawn over the round's whole weight, so a
+ * share is the purchase's chance at one place as things stand: later purchases make it smaller.
+ */
+export function purchaseOdds(round, terms, count, now) {
+  const weight = ticketWeight(round?.terms ?? terms, count, now);
+  const total = (round ? roundTotal(round) : 0n) + weight;
+  return { weight, total, share: total > 0n ? Number((weight * 1_000_000n) / total) / 1_000_000 : 0 };
+}
+
 /** How many places a lottery's (or a round's) `places` are, every run counted (`Place.times`). */
 export const placeCount = places => places.reduce((n, p) => n + Number(p.times ?? 1), 0);
 
