@@ -387,6 +387,21 @@ describe('xsolana approve --keypair', () => {
     assert.ok(shown.text.includes(`the key holds no SOL. Send devnet SOL to ${address} first`));
   });
 
+  test('a key that holds less than a new setup takes starts nothing', { skip: skip ?? false }, async () => {
+    // (the example's setup takes about 5.33 SOL: one SOL would land its first transactions and stop at its seeds)
+    const { run, sends, saved, address } = await setup(example('coin-flip-arena'), { fund: 1_000_000_000n });
+    const short = await run({ yes: true });
+    assert.equal(short.ok, false);
+    assert.equal(sends(), 0);
+    assert.equal(saved().live, undefined);
+    assert.match(
+      short.text,
+      new RegExp(
+        `Nothing was sent: the key holds 1 SOL, less than the about 5\\.\\d+ SOL going live takes\\. Send ${address} at least 4\\.\\d+ SOL more`,
+      ),
+    );
+  });
+
   test('another key than the owner’s cannot change a live economy', { skip: skip ?? false }, async () => {
     const { w, run, saved, sends, file } = await setup(example('coin-flip-arena'));
     assert.equal((await run({ yes: true })).done, true);
@@ -403,6 +418,13 @@ describe('xsolana approve --keypair', () => {
     assert.equal(refused.ok, false);
     assert.equal(sends(), before);
     assert.match(refused.text, /^Nothing can be sent: /);
+    // It is told whose key this is, and not to make a key or cut the file to get past it.
+    assert.ok(refused.text.includes(`This key file’s address is ${stranger.address}.`));
+    assert.match(
+      refused.text,
+      /A live project is signed only by the key that owns it; xsolana\.json is not to be changed/,
+    );
+    assert.match(refused.text, /If another key owns this project, sign with that key/);
     assert.equal(
       saved().live.published.pools.some(p => p.key === 'bonus'),
       false,
@@ -447,6 +469,7 @@ describe('xsolana approve --keypair', () => {
       approvalCode({ ...state, warnings: [] }, spec),
       approvalCode({ ...state, legal: [] }, spec),
       approvalCode({ ...state, steps: [] }, spec),
+      approvalCode({ ...state, steps: [{ ...state.steps[0], details: ['Pays: 5% to someone else'] }] }, spec),
       approvalCode({ ...state, read: 'r1' }, spec),
       approvalCode(state, { ...spec, name: 'y' }),
     ])
@@ -463,7 +486,14 @@ describe('the command line', () => {
     assert.equal(r.status, 1);
     assert.match(r.stderr, /say how going live is signed/);
     assert.match(r.stderr, /--keypair <keyfile>/);
-    assert.match(r.stderr, /--browser .*Only when the person\s+whose economy it is asks for that/s);
+    assert.match(
+      r.stderr,
+      /--keypair <keyfile> .*sends nothing; run again with --yes <code>, it sends exactly\s+that/s,
+    );
+    assert.match(
+      r.stderr,
+      /--browser .*Only\s+when the person whose economy it is asks for that; they run it themselves/s,
+    );
     assert.equal(r.stdout, '');
   });
 
@@ -484,7 +514,12 @@ describe('the command line', () => {
     assert.ok(!r.stdout.includes(bytes.slice(0, 4).join(',')) && !r.stdout.includes('['));
     assert.match(r.stdout, /Its address:\n {2}[1-9A-HJ-NP-Za-km-z]{32,44}\n/);
     assert.match(r.stdout, /anyone who can read that file controls the project/);
-    assert.ok(r.stdout.includes(`xsolana approve xsolana.json --keypair ${file}`));
+    assert.match(r.stdout, /nothing can change the project or move what its address holds/);
+    const { version } = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    assert.ok(r.stdout.includes(`npx -y @xgamesfun/solana@${version} approve xsolana.json --keypair ${file}`));
+    // A path a shell would split is in quotes; one given from the home folder is said as it was given.
+    const spaced = path.join(folder(), 'my games', 'game.json');
+    assert.ok(xsolana(['keygen', spaced]).stdout.includes(`--keypair "${spaced}"`));
     const again = xsolana(['keygen', file]);
     assert.equal(again.status, 1);
     assert.match(again.stderr, /already there/);

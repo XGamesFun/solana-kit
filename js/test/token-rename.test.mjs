@@ -185,6 +185,17 @@ test(
     const said = await runTool('xsolana_publish', { spec: next }, { now: NOW });
     assert.equal(said.transactions, 1);
     assert.match(said.text, /at most 1 transaction, about 0\.000005002 SOL/);
+    // A live economy is changed only by the key that owns it: no command here makes another key.
+    assert.equal(said.keygen, undefined);
+    assert.doesNotMatch(said.text, / keygen /);
+    assert.match(said.text, /Only the key that owns the project can change it: the key file it went live with/);
+    assert.match(said.text, /Never make a new key for a live project/);
+    assert.match(said.text, /never remove the file’s live section because a key was refused/);
+    assert.match(
+      said.text,
+      /For a project a browser wallet owns: give them this to run in their own terminal: .* --browser \(/,
+    );
+    assert.match(said.text, /A project a key file owns can’t be signed in a browser wallet\./);
     assert.match(
       said.text,
       /Change what the token BUBL \(mint \w+\) is called on chain.*\(sent only if the token has a name record its owner can still change, read when approving\)/,

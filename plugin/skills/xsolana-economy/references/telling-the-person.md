@@ -18,9 +18,11 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    the odds players are shown don't hold until then (`W-PRIZE-SEED`).
 4. **What going live costs, and who signs it.** "About 12.51 SOL on devnet: 12.5 SOL is the pond's seed, the rest is
    rent and fees. A key file on your computer signs it, once you have read what it sends and said yes." Then what the
-   key file is, once: "That key owns the project, so whoever can read its file controls it: keep the file where it is,
-   back it up like a password, and never paste it anywhere. Unless we name another wallet as the treasury, what the
-   game earns for you lands at the key's address."
+   key file is, once: "That key owns the project, so whoever can read its file controls it, and it is the key for
+   good: every later change is signed by it. Keep the file where it is and never paste it anywhere. Copy it yourself
+   to a USB stick or a password manager (I won't open or copy it): if it is lost, nobody can change the game's
+   economy or move what its address holds. Unless we name another wallet as the treasury, what the game earns for you
+   lands at the key's address, and moving it from there takes a script signed by the key file."
 5. **Who does what while it runs** (`after-launch.md` has the table): what anyone can send (a draw, an
    auction's end, claims), what only they can (a contest's result, a payout, a held item, a collectible's new level, each run of a schedule that isn't sealed: without them or a server holding a project key, an emission stops)
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,

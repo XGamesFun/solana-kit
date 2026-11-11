@@ -59,7 +59,9 @@ server and the skill with Claude Code and Codex (`--remove` takes them out again
 
 ## Rules that don't bend
 
-- Nothing signs with a person's key, and no tool asks for one.
+- No tool asks for a seed phrase or for the key of a wallet a person already has, and none prints a key. Going live is
+  signed by a key file on the owner's machine, shown first and sent only with the code of what was shown; the page
+  for a browser wallet is served only when asked for (`AGENTS.md` has the whole rule).
 - Devnet only: nothing sends to mainnet until the program is independently audited.
 
 ## Security

@@ -39,17 +39,20 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 1. **Describe it.** In a sentence to your agent, or as a spec file (`xsolana.json`).
 2. **Check it.** `check` refuses anything the program would refuse; `simulate` shows where the money goes, day by
    day; `cost` prices going live and each player action; `review` shows what a cheater could get.
-3. **Put it live.** `approve` lists every transaction with what it pays and trusts, and sends nothing until you say
-   yes. A key file on your own computer signs (`keygen` makes one for the project). Nothing here asks for a seed
-   phrase or for the key of a wallet you already have, and no page opens unless you ask for your browser wallet.
+3. **Put it live.** `approve` lists every transaction with what it pays and trusts, ends with a code, and sends
+   nothing; run again with that code, it sends exactly what it listed. A key file on your own computer signs
+   (`keygen` makes one for the project). Nothing here asks for a seed phrase or for the key of a wallet you already
+   have, and no page opens unless you ask for your browser wallet.
 
-**Why a key file and not a browser wallet?** Setting an economy up is several transactions. A key file made for the
-project signs each one exactly as it was prepared and shown, holds only the SOL you send it, and needs no page; a
-browser wallet may add to a transaction before signing it, and it is the wallet that holds everything else you own.
-The key file is the project's owner, so keep it like one: outside any repository (the tools refuse one inside), never
-pasted anywhere, backed up. Unless your spec names a `treasury`, what the economy earns for you lands at the key's
-address: name a wallet you hold (`"treasury": "wallet:<address>"`) before going live. To sign in a browser wallet
-anyway, `approve --browser` serves the page for it.
+**Why a key file and not a browser wallet?** A key file made for the project is a new key that has never held
+anything else, so the wallet that holds what you own is never connected or asked to sign; it signs each transaction
+exactly as it was prepared and shown; and nothing opens in your browser. What it costs: the key is a plain file, so
+anything on your machine that can read it can sign as the project. It is the project's owner, for good (these tools
+can't hand a project to another owner), so keep it like one: outside any repository (the tools refuse one inside,
+unless git ignores it there), never pasted anywhere, and backed up by you, because nothing restores a lost one.
+Unless your spec names a `treasury`, what the economy earns for you lands at the key's address: name a wallet you
+hold (`"treasury": "wallet:<address>"`) before going live. To sign in a browser wallet instead, `approve --browser`
+serves the page for it.
 
 New here? The [loot box tutorial](docs/tutorial-loot-box.md) walks through all three with real output.
 
@@ -100,8 +103,10 @@ npx -y @xgamesfun/solana@0.27.2 review xsolana.json
 
 # go live: a key file for the project (it prints the address to send devnet SOL to, never the key)…
 npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/my-game.json
-# …then everything going live sends; nothing is sent until you say yes
+# …then everything going live would send, and a code; nothing is sent
 npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+# …and with that code, exactly what it listed is sent
+npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -133,6 +138,7 @@ module covers buying, opening boxes, staking, crafting, tickets, bids and claims
 | `@xgamesfun/solana/client`       | one builder per instruction, every address, account and receipt decoders              |
 | `@xgamesfun/solana/sponsor`      | your server pays players' fees (never their price), so players with no SOL can play   |
 | `@xgamesfun/solana/results`      | results and vouchers your game's server signs                                         |
+| `@xgamesfun/solana/keyfile`      | the project's key file as a signer, for a script of the owner's own steps (Node)      |
 | `@xgamesfun/solana`              | the tools themselves: `check`, `simulate`, `cost`, `review`, `explainEconomy`, `plan` |
 | `@xgamesfun/solana/mcp/http`     | the MCP server as a web handler, to host it yourself                                  |
 | `@xgamesfun/solana/chain/*`      | small browser-safe Solana building blocks: base58, Borsh, transactions, tokens, Core  |
@@ -143,7 +149,7 @@ Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction
 
 ## Good to know
 
-- **Devnet only, not yet audited.** Use a devnet wallet. Mainnet waits for an independent audit.
+- **Devnet only, not yet audited.** Mainnet waits for an independent audit.
 - **Upgrades can mean setting up again.** No program version so far has carried accounts over. Pin the package version.
 - **Players trust the project.** Your keys can mint and move your project's pools. The program protects players from
   each other and from mistakes, not from the project they chose.

@@ -77,8 +77,15 @@ describe('the xsolana MCP server', () => {
     // A key file signs, after the person's yes; the page is only for one who asks.
     assert.match(text(pub), /you run these; nothing opens, and nothing is sent before the person’s yes/);
     assert.match(text(pub), /run the same command with --yes <code>/);
-    assert.match(text(pub), /Only if the person asks to sign in a browser wallet instead: .* --browser serves a page/);
-    assert.match(text(pub), /Don’t open it otherwise\./);
+    assert.match(text(pub), /run it again without --yes: it prints what is left and a new code/);
+    assert.match(text(pub), /which key goes live is for good/);
+    assert.match(text(pub), /Everything the setup takes from the owner must be at that address first/);
+    assert.match(text(pub), /set "treasury": "wallet:<address>" first/);
+    assert.match(
+      text(pub),
+      /Only if the person asks to sign in a browser wallet instead: give them this to run in their own terminal: .* --browser \(/,
+    );
+    assert.match(text(pub), /Don’t run or open it otherwise\./);
   });
 
   // Every npx line a person or an agent is handed names this exact version.

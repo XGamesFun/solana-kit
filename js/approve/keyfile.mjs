@@ -138,6 +138,8 @@ function parseKey(file, text) {
  * Makes a new key and writes it to `file`, which must not exist: the folder is made if need be (for its user alone),
  * the file is readable and writable by its user alone, and a path inside a git repository is refused. Returns
  * { file, address }: the whole path and the key's address, never the key.
+ * @param {string} file
+ * @param {{ run?: Function }} [options] `run`: how git is run (for tests).
  */
 export async function makeKeyFile(file, { run } = {}) {
   const target = keyFilePath(file);
@@ -184,6 +186,8 @@ export async function makeKeyFile(file, { run } = {}) {
  * Reads the key in `file` to sign with: { file, address, sign(message), signTransaction(wire), drop() }, which is
  * also what `@xgamesfun/solana/play` takes as a wallet. Refused: a file other users of the machine can read, one
  * inside a git repository, and anything that is not a whole key. No refusal quotes the file.
+ * @param {string} file
+ * @param {{ run?: Function, platform?: string }} [options] `run`: how git is run; `platform`: the system's name (for tests).
  */
 export async function readKeyFile(file, { run, platform = process.platform } = {}) {
   const target = keyFilePath(file);
@@ -192,7 +196,9 @@ export async function readKeyFile(file, { run, platform = process.platform } = {
     info = await stat(target);
   } catch (e) {
     if (e.code === 'ENOENT')
-      throw new KeyFileError(`${target} does not exist. \`xsolana keygen ${file}\` makes a new key there.`);
+      throw new KeyFileError(
+        `${target} does not exist. A new project’s key file is made with \`xsolana keygen\`; a project that is live is signed only by the key it went live with.`,
+      );
     throw e;
   }
   if (!info.isFile()) throw new KeyFileError(`${target} is not a file.`);

@@ -5673,7 +5673,7 @@ export function check(
     warn(
       'W-AUTHORITY',
       'economy.keys.authority',
-      `This economy needs the authority while it runs, for what only the game knows: ${needs.join('; ')}. ${m.authority === 'owner' ? 'That is your wallet, approving each one.' : `That is the key ${m.authority}.`}`,
+      `This economy needs the authority while it runs, for what only the game knows: ${needs.join('; ')}. ${m.authority === 'owner' ? 'That is the project’s owner key, which signs each one.' : `That is the key ${m.authority}.`}`,
     );
   const voucherKeys = [...new Set(m.grants.flatMap(g => [...(g.vouchers ?? []), ...(g.keys ?? [])]))];
   if (voucherKeys.length)

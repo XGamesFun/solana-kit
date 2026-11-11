@@ -223,7 +223,7 @@ export async function createApproval({
       if (!(e instanceof MintMismatch)) throw e;
       throw new ApproveError(
         409,
-        `${e.message} Nothing was sent: correct ${path.basename(file)}, then run \`xsolana approve\` again.`,
+        `${e.message} Nothing was sent: correct ${path.basename(file)}, then run the same approve command again.`,
       );
     }
     try {
@@ -246,7 +246,7 @@ export async function createApproval({
       if (!(e instanceof LiveMismatch)) throw e;
       throw new ApproveError(
         409,
-        `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file \`xsolana approve\` wrote, or remove its live section to start a new setup.`,
+        `${e.message} Nothing was sent. If another key owns this project, sign with that key (its key file, or \`approve --browser\` when a browser wallet owns it): the file is right as it is, and a new key can change nothing. Otherwise ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.`,
       );
     }
   }
@@ -955,7 +955,7 @@ function checkSigned(prepared, signed, wallet) {
     if (!equalBytes(mine.message, theirs.message))
       throw new ApproveError(
         400,
-        `The wallet changed the transaction before signing it${walletChange(mine.message, theirs.message)}, so nothing was sent: only what was prepared and shown here is ever sent. A wallet that adds to what it signs can’t approve this way. Sign with a key file instead, which signs each transaction as it stands: xsolana approve --keypair (xsolana keygen makes one).`,
+        `The wallet changed the transaction before signing it${walletChange(mine.message, theirs.message)}, so nothing was sent: only what was prepared and shown here is ever sent. A wallet that adds to what it signs can’t approve this way: use one that signs a transaction as it stands. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
       );
     const slot = mine.signers.indexOf(wallet);
     if (slot < 0) throw new ApproveError(400, 'This transaction was not prepared for that wallet.');

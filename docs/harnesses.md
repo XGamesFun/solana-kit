@@ -31,7 +31,7 @@ its text names no harness. `xsolana connect` knows Claude Code and Codex only. F
 - **Chat apps that add an MCP server by URL** (claude.ai, ChatGPT, Claude Desktop): `js/mcp/http.mjs` is the server
   over Streamable HTTP, one JSON answer a request, no session. It runs the stdio server's handler in remote mode: only
   `REMOTE_TOOLS` (the tools that read nothing but their arguments and the chain), no `file` argument, and instructions
-  that hand the person the spec and the `approve` command instead of `xsolana_save` and `xsolana_publish`. A host
+  that give the spec as a file and the `keygen` and `approve --keypair` commands instead of `xsolana_save` and `xsolana_publish`. A host
   mounts `mcpHttp` (exported as `@xgamesfun/solana/mcp/http`); `xsolana mcp --http` serves it on 127.0.0.1, answering
   only pages on localhost. xgames.fun hosts it at `https://xgames.fun/mcp` (games.fun `creator-studio/app/mcp/route.ts`, its pin moved with each release), which `server.json` names under `remotes`.
 

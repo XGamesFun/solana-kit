@@ -1,6 +1,6 @@
 ---
 name: xsolana-economy
-description: Build a web3, token or NFT economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops, loot boxes and gacha, packs, random NFT and token prizes from a stash of NFTs the project holds, coin flips and prize pools, lotteries and raffles, auctions where the highest bid wins and the outbid get their money back, staking farms with lock tiers and NFT boosts, crafting and merging, seasons and emissions, prediction pools and contests, quests, airdrops and capped rewards, holder-gated drops, and perks or staking for any NFT, whether the project minted it or not. Turns a person's idea into a JSON spec, then checks, simulates and prices it, explains it in plain words, and hands the person the command that puts it live in their own wallet. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
+description: Build a web3, token or NFT economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops, loot boxes and gacha, packs, random NFT and token prizes from a stash of NFTs the project holds, coin flips and prize pools, lotteries and raffles, auctions where the highest bid wins and the outbid get their money back, staking farms with lock tiers and NFT boosts, crafting and merging, seasons and emissions, prediction pools and contests, quests, airdrops and capped rewards, holder-gated drops, and perks or staking for any NFT, whether the project minted it or not. Turns a person's idea into a JSON spec, then checks, simulates and prices it, explains it in plain words, and and puts it live signed by a key file on the person's own machine, once they have read what will be sent and said yes. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
 ---
 
 # Build an economy on loot
@@ -21,11 +21,14 @@ or `npx -y @xgamesfun/solana@0.27.2 tool <name> '<json>'` for any tool (always w
    the risk loot exists to remove. If the idea needs something loot can't do, follow rule 9.
 2. **Going live is signed by a key file on the person's own machine, after their yes; you never ask for, read or
    print a key, and you open no signing page.** `xsolana keygen <file>` makes the project's key file (outside any
-   repository; it prints the address, never the key) and only `xsolana approve <spec> --keypair <file>` uses it: it
-   prints everything it would send and sends nothing until it is run again with the code it printed, which you do
-   only after the person has read that printout and said yes. A key file is the safer way to set up: it signs each
-   transaction exactly as it was prepared and shown (a browser wallet may add to one before signing it), it holds
-   only what the person sends it for this project, and nothing is opened in their browser. The page for a browser
+   repository, unless git ignores it there; it prints the address, never the key). It is read only through the tools:
+   `xsolana approve <spec> --keypair <file>`, which prints everything it would send and sends nothing until it is run
+   again with the code it printed, which you do only after the person has read that printout and said yes; and, for
+   what only the authority signs later, `readKeyFile` in a script (`references/after-launch.md`). A key file is the
+   safer way to set up: it is a new key that has never held anything else, so the wallet that holds what the person
+   owns is never connected or asked to sign; it signs each transaction exactly as it was prepared and shown; and
+   nothing opens in their browser. What it costs: the key is a plain file, so anything on the machine that can read
+   it can sign as the project, and by default what the economy earns lands at its address. The page for a browser
    wallet (`xsolana approve <spec> --browser`) is only for a person who asks for it. The key file is the project's
    owner: whoever can read it controls the project. Never open it, copy it or print it, and never put it in a chat, a
    spec, a repository or a page. Never ask for a seed phrase or the key of a wallet the person already has; if they
@@ -133,20 +136,34 @@ or `npx -y @xgamesfun/solana@0.27.2 tool <name> '<json>'` for any tool (always w
    level would cost. Run it again after every change that touches a route that pays.
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
-   - **The key file**, unless the project has one: `npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/<name>.json`.
-     Give the person the address it prints and what going live costs; they send it that much devnet SOL.
+   - **A new economy gets a key file**, unless the project has one:
+     `npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
+     looking for one.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
      its treasury (what sales leave lands at its address) and its authority (it signs what only the game decides).
-     If the economy takes money in, ask for the public address of a wallet they hold and set
-     `"treasury": "wallet:<address>"` first: it can't be changed through the spec once live.
+     Which key goes live is for good: every later change, and everything only the authority signs, is signed by this
+     file, and these tools can't hand a project to another owner. If they will want to sign in a browser wallet
+     later, go live in one now. If the economy takes money in, ask for the public address of a wallet they hold and
+     set `"treasury": "wallet:<address>"` first: it can't be changed through the spec once live. Tell them to back
+     the file up themselves (a USB stick, a password manager): if it is lost, nobody can change the economy, decide
+     a contest or move what its address holds, and nothing restores it. You never open or copy it.
+   - **Everything the setup takes from the owner must be at the key's address first**: the devnet SOL
+     (`xsolana_cost`), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
+     collection they already have needs the key's address as its update authority. If they would rather not move
+     those, offer the browser wallet.
    - **Show it**: `npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it
-     stops part way, run the command again: it shows what is left, which they have said yes to already, so go on with
-     its code. If it shows a step or a warning they have not seen, ask again.
-   - **A browser wallet instead** (`… approve xsolana.json --browser`, a page on their computer) only when they ask
-     for one. Never open it because it seems easier.
+     stops part way, run it again without `--yes`: it prints what is left and a new code. What is left is part of what
+     they said yes to, so go on with that code; if it shows a step or a warning they have not seen, ask again.
+   - **A change to an economy that is live** is signed by the key that owns it, and by no other: the key file it went
+     live with, or the browser wallet it went live in. Never make a new key for it, and never remove the file's live
+     section because a key was refused: ask the person how it went live.
+   - **A browser wallet** (`… approve xsolana.json --browser`) only when they ask for one, or when a browser wallet
+     owns the project: give them the command to run in their own terminal. It serves a page on their computer and
+     keeps running until the page says it is live. Never run it because it seems easier.
 10. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
     happened. A later change is the same loop: save, publish, and `approve` shows and sends only what changed, signed
     by the same key. What only the authority signs while it runs (open or decide a contest, pay out) is signed where

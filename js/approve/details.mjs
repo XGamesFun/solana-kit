@@ -120,7 +120,7 @@ function readDetails(reads, names) {
   for (const read of reads) {
     if (read?.unreadable) {
       lines.push(
-        `This step could not be read back (${read.unreadable}): check what it pays in your wallet before approving`,
+        `This step could not be read back (${read.unreadable}): nothing here shows what it pays, so don’t say yes to it until it reads back (in a browser wallet, check what the wallet shows)`,
       );
       continue;
     }

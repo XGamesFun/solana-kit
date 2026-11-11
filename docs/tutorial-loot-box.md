@@ -91,7 +91,7 @@ the rent of the collectible they win.
 npx -y @xgamesfun/solana@0.27.2 cost xsolana.json
 ```
 
-Going live takes 3 transactions, one wallet approval and about 0.017 SOL, almost all of it rent for 10 accounts (the
+Going live takes 3 transactions and about 0.017 SOL, almost all of it rent for 10 accounts (the
 project, the collection, the three items, the box, a lookup table and the token accounts).
 
 ## 6. Review it the way a cheater would
@@ -113,11 +113,12 @@ npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana
 ```
 
 `keygen` makes a key file for the project and prints its address, never the key: send that address the devnet SOL
-`cost` named. The key file is the project's owner, so keep it where it is and never paste it anywhere. `approve` then
-lists every transaction with what it pays and trusts and sends nothing until you say yes (in a terminal you type it;
-an agent runs the command again with the code it printed, after you have said yes to the list). Nothing asks for a
-seed phrase or for the key of a wallet you already have. To sign in a browser wallet instead, ask for the page:
-`approve xsolana.json --browser`. `xsolana status xsolana.json` then reads the live economy back.
+`cost` named. The key file is the project's owner, for good: keep it where it is, back it up yourself, and never
+paste it anywhere. `approve` then lists every transaction with what it pays and trusts, ends with a code, and sends
+nothing. Run the same command again with `--yes <code>` to send exactly what was listed (an agent does that only
+after you have read the list and said yes). Nothing asks for a seed phrase or for the key of a wallet you already
+have. To sign in a browser wallet instead, run the page yourself: `approve xsolana.json --browser`.
+`xsolana status xsolana.json` then reads the live economy back.
 
 ## 8. Let players open it
 

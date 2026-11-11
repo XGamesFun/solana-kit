@@ -560,7 +560,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   ]);
   const authority = play.filter(s => s.signer.startsWith('authority'));
   section(
-    `What only the authority signs while it runs (${m.authority === 'owner' ? 'your wallet' : `the key ${m.authority}`})`,
+    `What only the authority signs while it runs (${m.authority === 'owner' ? 'the project’s owner key' : `the key ${m.authority}`})`,
     authority.map(s => `${s.says} (${s.part}, ${s.ix}).`),
   );
   if (authority.length)
@@ -571,7 +571,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   const s = c.setup;
   lines.push('', 'What setting it up costs');
   lines.push(
-    `- About ${num(s.totalSol)} SOL in all, in ${plural(s.transactions, 'transaction')} (${plural(s.approvals, 'wallet approval')}): rent ${num(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${num(s.programFeesSol)} SOL, network fees ${num(s.networkFeesSol)} SOL${
+    `- About ${num(s.totalSol)} SOL in all, in ${plural(s.transactions, 'transaction')}: rent ${num(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${num(s.programFeesSol)} SOL, network fees ${num(s.networkFeesSol)} SOL${
       s.metadataFeesSol ? `, Token Metadata’s fees ${num(s.metadataFeesSol)} SOL (a token’s name on chain)` : ''
     }${
       Object.keys(s.seeds).length
@@ -613,7 +613,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   lines.push(
     '',
-    'Devnet only: nothing here is real money. Nothing is sent before your yes to exactly what going live does, and it is signed on your own machine by the project’s key file: no seed phrase or wallet key is ever asked for.',
+    'Devnet only: nothing here is real money. Going live is signed on your own machine by the project’s key file, which is what “your wallet” means above. The command first prints everything it would send and sends nothing; it sends only when run again with the code it printed, which your agent is told to do only after your yes. No seed phrase or wallet key is ever asked for.',
   );
   return {
     ok: true,

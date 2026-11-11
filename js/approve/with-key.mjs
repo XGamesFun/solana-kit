@@ -2,9 +2,10 @@
 // It is the same approval the page serves (`createApproval`: the same plan, the same reads of the chain, the same
 // check of every signed transaction, the same record in the spec file), driven from the terminal. What the page shows
 // before its Approve button is printed here first, whole: every step with what it pays and trusts, the warnings, the
-// notice and the legal flags. Nothing is signed until the person has said yes to exactly that: on a terminal by typing
-// yes, otherwise by giving back the code the printout ends with (`--yes <code>`), which stands for that printout and
-// no other.
+// notice and the legal flags, and then nothing is sent. It is sent when the command is run again with the code the
+// printout ends with (`--yes <code>`), which stands for that printout and no other: whoever runs it (a person, or an
+// agent after the person's yes) sends exactly what was shown. The command never stops to ask: an agent's terminal
+// would hang on a question, or answer it.
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
@@ -29,6 +30,12 @@ function sol(lamports) {
   return `${n / LAMPORTS}${frac ? `.${frac}` : ''}`;
 }
 
+/** SOL as the tools write it ("5.33360349", 5.3336) in lamports. */
+function solToLamports(text) {
+  const [whole, frac = ''] = String(text).split('.');
+  return BigInt(whole || '0') * LAMPORTS + BigInt(frac.padEnd(9, '0').slice(0, 9) || '0');
+}
+
 const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** The key's own signature put into its slot of a prepared transaction, as a wallet's signTransaction does. */
@@ -42,10 +49,11 @@ function signWire(key, b64) {
 }
 
 /**
- * The code that stands for one printout: the spec, the key, the project, every step still to send and every line the
- * person is to read first. Anything of that changing (an edit to the file, a step landing, the chain saying something
- * new of a token) gives another code, so a yes is never carried over to something that was not shown. The addresses
- * of the accounts the setup makes new are left out: they are new each time, and say nothing a person can check.
+ * The code that stands for one printout: the spec, the key, the project, every step still to send with what it pays
+ * and trusts, and every line the person is to read first. Anything of that changing (an edit to the file, a step
+ * landing, the chain saying something new of a token) gives another code, so a yes is never carried over to something
+ * that was not shown. The addresses of the accounts the setup makes new are left out: they are new each time, and say
+ * nothing a person can check.
  */
 export function approvalCode(state, spec) {
   const { live: _, ...bare } = spec;
@@ -57,7 +65,7 @@ export function approvalCode(state, spec) {
     state.project,
     state.mode,
     bare,
-    state.steps.map(s => [s.id, s.says, s.signer]),
+    state.steps.map(s => [s.id, s.says, s.signer, s.details ?? []]),
     state.warnings,
     state.legal.map(f => f.says),
     state.unwritten,
@@ -127,9 +135,10 @@ export function approvalText(state, { keyFile, balance = null }) {
 
 /**
  * Puts the economy in `file` live with the key in `keyFile`, or goes on with a setup that was cut short, or sends a
- * live economy's change. `yes`: null shows what would be sent and sends nothing (or asks `confirm`, when given: a
- * terminal's "type yes"); a code sends when it is the code of what is shown now, and is refused otherwise; true sends
- * without asking (for a script that has shown it its own way). `out(line)` prints. Returns { ok, sent, done, code }:
+ * live economy's change. `yes`: null shows what would be sent and sends nothing (or asks `confirm`, when a caller
+ * that has the person in front of it gives one; the command line never does); a code sends when it is the code of
+ * what is shown now, and is refused otherwise; true sends without asking (for a script that has shown it its own
+ * way). `out(line)` prints. Returns { ok, sent, done, code }:
  * `ok` false when something was refused or failed, `sent` how many transactions landed, `done` whether the file is
  * recorded as live.
  */
@@ -152,6 +161,11 @@ export async function approveWithKey({
     let state = await session.stateFor(key.address);
     if (state.refused) {
       out(`Nothing can be sent: ${state.refused}`);
+      // (a key that is not the project's: said plainly, so nobody makes a new key or cuts the file to get past it)
+      if (session.spec.live?.project)
+        out(
+          `This key file’s address is ${key.address}. A live project is signed only by the key that owns it; ${state.file} is not to be changed to get past this.`,
+        );
       return { ok: false, sent: 0, done: false, code: null };
     }
     if (!state.remaining) {
@@ -181,6 +195,14 @@ export async function approveWithKey({
     if (balance === 0n) {
       out(
         `Nothing was sent: the key holds no SOL. Send devnet SOL to ${key.address} first (https://faucet.solana.com gives some), then run this again.`,
+      );
+      return { ok: false, sent: 0, done: false, code };
+    }
+    // A new setup the key can't pay for would stop part way: it is not started.
+    const needs = state.mode === 'new' && state.setupSol !== null ? solToLamports(state.setupSol) : null;
+    if (balance !== null && needs !== null && balance < needs) {
+      out(
+        `Nothing was sent: the key holds ${sol(balance)} SOL, less than the about ${state.setupSol} SOL going live takes. Send ${key.address} at least ${sol(needs - balance)} SOL more, then run this again.`,
       );
       return { ok: false, sent: 0, done: false, code };
     }

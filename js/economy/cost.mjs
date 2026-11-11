@@ -505,7 +505,7 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
 export function explainCost(c) {
   const s = c.setup;
   const lines = [
-    `Going live takes ${s.transactions} transaction${s.transactions === 1 ? '' : 's'} (${s.approvals} wallet approval${s.approvals === 1 ? '' : 's'}) and about ${s.totalSol} SOL:`,
+    `Going live takes ${s.transactions} transaction${s.transactions === 1 ? '' : 's'} and about ${s.totalSol} SOL:`,
   ];
   lines.push(
     `  rent ${s.rentSol} SOL for ${s.accounts.length} accounts; program fees ${s.programFeesSol} SOL; network fees ${s.networkFeesSol} SOL${

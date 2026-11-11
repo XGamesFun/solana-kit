@@ -51,8 +51,12 @@ LiteSVM (`js/test/world.mjs` sets up a chain; `npm run fixtures` downloads the p
 
 The JavaScript tools, the MCP server and the plugin never ask for a seed phrase or for the key of a wallet a person
 already has, and never print a key or send one off the machine. Going live is signed on the person's own machine: by
-a key file `xsolana keygen` makes for the project, which only `xsolana approve --keypair` reads and which sends
-nothing before the person's yes to what it prints; or, when they ask for it, in their browser wallet on a page served
-on 127.0.0.1 (`--browser`). A key file is the project's owner: whoever can read it controls the project. It is made
-readable by its user alone, a path inside a git repository is refused, and it is never written over. A tool that asks
+a key file `xsolana keygen` makes for the project; or, when they ask for it, in their browser wallet on a page served
+on 127.0.0.1 (`--browser`). The key file is read only through the tools: `xsolana approve --keypair`, and
+`readKeyFile` in a script for what the authority signs later. `approve --keypair` first prints everything it would
+send and sends nothing; it sends only when run again with the code of that printout. An agent is told to do that only
+after the person's yes: the tool binds what is sent to what was shown, and cannot check who said yes. A key file is
+the project's owner: whoever can read it controls the project. It is made readable by its user alone (on Windows that
+rests on the user folder's own permissions), a path inside a git repository is refused unless git ignores it there,
+and it is never written over. A tool that asks
 for a seed phrase, prints a key or sends one anywhere is a bug: please report it.

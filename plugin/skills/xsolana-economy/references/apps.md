@@ -246,6 +246,6 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   day of their players costs the sponsor (`xsolana_cost`: the player fee, the oracle's fee and rent per step).
 
 - **Never in a page**: a private key, a keyed RPC link, or anything the authority signs (payouts, minting, rewriting
-  a collectible). Those are the owner's or the authority's to sign in their own wallet, or on a server they run.
+  a collectible). Those are signed where the owner's or the authority's key is: a script with the project's key file, the authority's own browser wallet, or a server they run (`after-launch.md`).
 - **Lower level**: `@xgamesfun/solana/client` has one builder per instruction and the account decoders, for what the
   player module doesn't cover.

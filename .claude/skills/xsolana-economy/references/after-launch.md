@@ -75,16 +75,37 @@ is. Unless the spec's `keys.authority` names another address, the authority is t
 key file, that file. Build each step with `@xgamesfun/solana/client` builders (`openContestIx`, `decideIx`,
 `moveTokensIx`).
 
-- **A key file** (the usual case): a short script on the person's own machine, signed by
-  `readKeyFile(file)` from `@xgamesfun/solana/keyfile`. It gives the key's address, `sign(message)` and
-  `signTransaction(wire)`, never the key's bytes, and it refuses a file others can read or one inside a repository.
-  The script says in words what it will do ("Name the Owls the winner: the pot of 0.42 SOL is shared by 7 backers;
-  5% goes to you") and sends only after the person says yes. Never open the key file yourself, and never copy it into
-  the script, a page or a server.
+- **A key file** (the usual case): a short script on the person's own machine, signed by `readKeyFile(file)` from
+  `@xgamesfun/solana/keyfile`. It gives the key's address, `sign(message)` and `signTransaction(wire)`, never the
+  key's bytes, and it refuses a file others can read, or one inside a repository that git does not ignore. Never read
+  the file any other way, and never copy it into the script, a page or a server. The script shows first and sends
+  only when run again after the person's yes:
+
+  ```js
+  import { readKeyFile } from '@xgamesfun/solana/keyfile';
+  import * as loot from '@xgamesfun/solana/client';
+  import { rpcClient } from '@xgamesfun/solana/chain/rpc';
+  import { compileMessage, wireTransaction } from '@xgamesfun/solana/chain/tx';
+
+  const key = await readKeyFile('~/.config/xsolana/<name>.json'); // an address and a way to sign, never the bytes
+  const rpc = rpcClient('https://api.devnet.solana.com');
+  const ix = loot.decideIx({/* the contest and its result: the builder's own arguments */});
+  console.log('Name the Owls the winner: the pot of 0.42 SOL is shared by 7 backers; 5% goes to you.');
+  if (process.argv[2] !== '--yes') process.exit(0); // shows first; run again with --yes after the person's yes
+  const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();
+  const message = compileMessage({ payer: key.address, blockhash, instructions: [ix] });
+  const signature = await rpc.send(await key.signTransaction(wireTransaction(message)));
+  await rpc.confirm(signature, { lastValidBlockHeight });
+  ```
+
+  For a step the player module has (`app.runSchedule`, `app.callOffSale`), `solanaApp({ spec, rpcUrl, wallet: key })`
+  sends it: the key is a wallet to it.
+
 - **A browser wallet**, when the person asks to sign there: a page the owner opens and approves in their own wallet,
   with the wallet's `signTransaction`, served locally or on the same site behind nothing more than that wallet (the
   program checks the signature, so a page holds no secret). It works only when the authority's address is that
-  wallet's: name it as `keys.authority` before going live. Show what each button does in words before the wallet asks.
+  wallet's: name it as `keys.authority` before going live (it can't be changed through the spec after). Show what
+  each button does in words before the wallet asks.
 - Never put an owner's or authority's key in a page or on a server, and never ask the person to export or paste one.
   A server that signs by itself gets an authority key of its own (`keys.authority`), never the owner's.
 
@@ -118,7 +139,8 @@ now })` for the player's own wallet and claims (`app.claimGrant(key, { voucher }
     voucher key, never the owner's. Set the grant's `total` and `perWallet`: they bound what a stolen voucher key can
     pay.
   - Or a **results server** the person runs or names. It checks results signed by the game's host key, which the
-    owner certifies once by signing a text in their wallet; the game server and pages talk to it with
+    owner certifies once by signing a text with the owner's key (in their wallet, when a browser wallet owns the
+    project); the game server and pages talk to it with
     `@xgamesfun/solana/results` (`report`, `giveaways`, `draws`), and winners claim what it vouched for with
     `app.claimWins({ server, token })` (`token`: the player's sign-in with that server, when it asks for one; a drop
     of NFTs from a stash gives one only at a signed-in claim, first come first served). Its voucher key is per
@@ -135,7 +157,7 @@ paid once, and the same voucher sent again later pays what a limit held back. Ch
 clear its history. Closing and recreating a grant starts a new campaign with new records and invalidates old vouchers;
 anyone may then close the old records (`loot.closeShardIx`), their rent to the owner. A grant for more than about
 100,000 wallet-rounds names `wallets` (and `rounds`) so its records are kept in enough lists. A list written in xsolana.json pays each wallet once per grant incarnation: editing it lets newly added wallets
-claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A list leaf names no grant or incarnation, so a grant closed and made again with the same list pays every listed round again: give a re-made grant a fresh list (new rounds); the approval page warns when a change does that. A results server must read the current grant incarnation when accepting
+claim, never a wallet already paid (for repeated payouts, list the wallet again under a new `round`, or use vouchers). A list leaf names no grant or incarnation, so a grant closed and made again with the same list pays every listed round again: give a re-made grant a fresh list (new rounds); `approve` warns when a change does that. A results server must read the current grant incarnation when accepting
 a result and include it in the voucher it signs.
 
 ## Before you act on what the person says happened

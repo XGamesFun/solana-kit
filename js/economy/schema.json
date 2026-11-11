@@ -1824,7 +1824,7 @@
         "signedBy": {
           "enum": ["page", "server"],
           "default": "page",
-          "description": "page: the authority approves each one in its own wallet. server: a server you run holds the authority key (keys.authority is its public address)."
+          "description": "page: the authority signs each one itself (a script with its key file, or its browser wallet). server: a server you run holds the authority key (keys.authority is its public address)."
         },
         "proof": {
           "type": "object",

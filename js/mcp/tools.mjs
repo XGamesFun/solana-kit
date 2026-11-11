@@ -438,7 +438,7 @@ export const tools = [
     name: 'xsolana_cost',
     annotations: READ,
     description:
-      'What going live costs (each account’s rent, the program’s fees, network fees, the seeds, the transactions and wallet approvals it takes) and what each action costs whoever signs it while it runs.',
+      'What going live costs (each account’s rent, the program’s fees, network fees, the seeds, the transactions it takes) and what each action costs whoever signs it while it runs.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -581,7 +581,7 @@ export const tools = [
   {
     name: 'xsolana_publish',
     annotations: { ...READ, readOnlyHint: true },
-    description: `When the person says to put it live: returns what going live does (every step, in order, and its cost) and the commands that do it, pinned to this exact version (give them as they are: \`${approveCommand()}\`). Going live is signed by a key file on the person’s own machine: \`keygen\` makes one for the project (it prints the address, never the key), and \`approve … --keypair <file>\` prints everything that would be sent and sends nothing until it is run again with the code it printed, which you do only after the person has read that printout and said yes. Never ask for, read or print a key, and open no signing page: the browser-wallet page (\`approve … --browser\`) is only for a person who asks for one.`,
+    description: `When the person says to put it live: returns what going live does (every step, in order, and its cost) and the commands that do it (each starts npx -y @xgamesfun/solana@${PACKAGE_VERSION} for this exact version: give them as they are). Going live is signed by a key file on the person’s own machine: \`keygen\` makes one for the project (it prints the address, never the key), and \`approve … --keypair <file>\` prints everything that would be sent and sends nothing until it is run again with the code it printed, which you do only after the person has read that printout and said yes. A live economy is changed only by the key that owns it: never make a new key for one. Never ask for, read or print a key, and open no signing page: the browser-wallet page (\`approve … --browser\`) is for a person who asks for one, or whose browser wallet owns the project, and they run it themselves.`,
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from, file } = await load(input, ctx);
@@ -624,8 +624,10 @@ export const tools = [
           steps: [],
           text: `Not published: ${NOT_PLAIN(target)}, and the approve command carries the file's name as it is. Ask the person to rename it (${RENAME}), then run xsolana_publish again with the new name.${footer}`,
         };
+      const live = Boolean(change.scope.live);
       const keyFile = keyFileFor(economy.name);
-      const keygen = keygenCommand(keyFile);
+      // (a live project is signed only by the key that owns it: no command here makes another)
+      const keygen = live ? null : keygenCommand(keyFile);
       const browserCommand = `${approveCommand(target)} --browser`;
       const command = `${approveCommand(target)} --keypair ${keyFile}`;
       const text = [
@@ -633,26 +635,28 @@ export const tools = [
         `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on devnet:`,
         ...steps.map((s, i) => `${i + 1}. ${s}`),
         '',
-        `${change.scope.live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
-        ...(change.scope.live
+        `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
+        ...(live
           ? [
-              `1. The key that owns the project signs, as when it went live: its key file (${keyFile} is the usual place; give the file’s own path if it is elsewhere), or, for a project that was set up in a browser wallet, that wallet (the --browser command below). It needs about ${c.setup.totalSol} SOL of devnet SOL.`,
+              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere). If there is no such file, a browser wallet owns it: use the --browser command below. Never make a new key for a live project (a new key can change nothing), and never remove the file’s live section because a key was refused. If you can’t tell, ask the person how it went live. The owner’s address needs about ${c.setup.totalSol} SOL of devnet SOL.`,
             ]
           : [
               `1. A key file for this project, unless it has one: ${keygen}`,
-              `   It prints the key’s address, never the key. The person sends that address devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some). The key file is the project’s owner: whoever can read it controls the project. It stays where it is: never in a chat, a spec, a repository or a page, and you never read or print it.`,
+              '   It prints the key’s address, never the key. The key file is the project’s owner: whoever can read it controls the project, and which key goes live is for good (every later change is signed by it; these tools can’t hand a project to another owner). It stays where it is: never in a chat, a spec, a repository or a page, and you never open, read or print it. Tell the person to back the file up themselves: if it is lost, nothing can change the economy or move what its address holds.',
+              `   Everything the setup takes from the owner must be at that address first: the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection they already have needs that address as its update authority). If they would rather not move those, offer the browser wallet.`,
+              '   The steps above call the owner’s address “your wallet”: with a key file, that is the key’s address. Unless the spec names a treasury, what sales leave lands there, and it signs what only the authority signs. If the economy takes money in, ask for the public address of a wallet the person holds and set "treasury": "wallet:<address>" first: it can’t be changed through the spec once live.',
             ]),
         `2. ${command}`,
         '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them: DISCLAIMER.md in the package) and a code. It sends nothing.',
-        '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file; if it stops part way, the same command goes on from where it stopped.',
-        `${change.scope.live ? 'Only for a project a browser wallet owns, or when' : 'Only if'} the person asks to sign in a browser wallet instead: ${browserCommand} serves a page on their own computer where they connect a wallet set to devnet and approve (${plural(p.approvals, 'approval')}). Don’t open it otherwise.`,
+        '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code. Go on with that code; if it shows a step or a warning they have not seen, ask again.',
+        `${live ? 'For a project a browser wallet owns' : 'Only if the person asks to sign in a browser wallet instead'}: give them this to run in their own terminal: ${browserCommand} (it serves a page on their own computer where they connect a wallet set to devnet and approve, ${plural(p.approvals, 'approval')}, and keeps running until the page says it is live). Don’t run or open it otherwise.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
         ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');
       return {
         ok: true,
         command,
-        keygen,
+        ...(keygen ? { keygen } : {}),
         keyFile,
         browserCommand,
         transactions: p.transactions.length,
@@ -893,6 +897,7 @@ export const tools = [
       const text = [
         `loot ${VERSION} on ${CLUSTER}: program ${LOOT_PROGRAM}. Never write another address from memory: take it from this package.`,
         'Package: npm install @xgamesfun/solana (plain ES modules, no Solana SDK needed; works in the browser).',
+        '  What only the project’s owner or authority signs (a contest’s result, a payout, a schedule’s run) is not a page’s: a script on the owner’s machine signs it with the project’s key file, `readKeyFile(file)` from "@xgamesfun/solana/keyfile" (an address and a way to sign, never the key; it is also a `wallet` for solanaApp). The skill’s references/after-launch.md has the script.',
         '  import { solanaApp, walletStandardSigner } from "@xgamesfun/solana/play";',
         '  const app = solanaApp({ spec /* the live xsolana.json */, rpcUrl, wallet: walletStandardSigner(wallet, account) });',
         '  app.shop(), app.buy(key, { listing }), app.boxes(), app.openBox(key, { listing }), app.pay(key) (or app.pay(key, { chosenRecipient })),',

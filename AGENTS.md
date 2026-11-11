@@ -29,11 +29,12 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 
 ## Rules
 
-- **No tool asks for a seed phrase or for the key of a wallet a person already has, none prints a key, and nothing is
-  sent before the owner's yes.** Going live is signed on the owner's own machine by a key file made for the project
+- **No tool asks for a seed phrase or for the key of a wallet a person already has, none prints a key, and what is
+  sent is what was shown.** Going live is signed on the owner's own machine by a key file made for the project
   (`js/approve/keyfile.mjs`: made new by `xsolana keygen`, for its user alone, outside any repository; the code hands
   back its address and a way to sign, never its bytes), with `xsolana approve --keypair`, which prints everything the
-  approval page shows and sends only after a yes to exactly that. The page for a browser wallet (`--browser`) is served
+  approval page shows and sends only when run again with the code of exactly that printout. Every word here tells an
+  agent to do that only after the owner's yes; the code cannot check who said it. The page for a browser wallet (`--browser`) is served
   only when the person asks for it: no tool, text or example opens one by default. A player's step is the player's own
   wallet's. A step after the wallet's prompt (a settle, an ask for a roll, a release) may be sent by a
   throwaway key `js/play` makes for that one job: the wallet's own transaction funds it with what the step pays (its

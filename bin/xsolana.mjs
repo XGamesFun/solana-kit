@@ -99,9 +99,11 @@ function parseArgs(rest) {
 const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
 
   --keypair <keyfile>   a key file on this machine signs (the usual way: no browser, no page). It shows everything that
-                        would be sent and sends nothing until it is told yes. \`xsolana keygen <file>\` makes a key file.
-  --browser             a browser wallet signs, on a page this command serves on this machine. Only when the person
-                        whose economy it is asks for that.`;
+                        would be sent, with a code, and sends nothing; run again with --yes <code>, it sends exactly
+                        that. \`xsolana keygen <file>\` makes a new project's key file; one that is live is signed
+                        only by the key it went live with.
+  --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
+                        when the person whose economy it is asks for that; they run it themselves.`;
 
 /** The port `xsolana approve --browser` listens on: a whole number from 1 to 65535, or undefined for any free one. */
 function portOf(value) {
@@ -172,13 +174,18 @@ async function main(argv) {
           'xsolana keygen <file>: say where the key file goes, outside any repository (for example ~/.config/xsolana/my-game.json).',
         );
       const { makeKeyFile } = await import('../js/approve/keyfile.mjs');
+      const { PACKAGE_VERSION } = await import('../js/mcp/tools.mjs');
       const made = await makeKeyFile(positional[0]);
+      // The file as it was named when that is the home folder's (`~/…` reads the same in any shell), else whole; in
+      // quotes when a shell would split it.
+      const named = positional[0].startsWith('~') ? positional[0] : made.file;
+      const word = /^[\w./~:\\-]+$/.test(named) ? named : `"${named}"`;
       console.log(
         [
-          `A new key is in ${made.file}, readable by you alone. Its address:`,
+          `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
-          'Whatever is set up with it, it owns: anyone who can read that file controls the project. Keep the file where it is, back it up as you would a password, and never paste it into a chat, a spec, a repository or a page.',
-          `It holds nothing yet. Send it devnet SOL (\`xsolana cost\` says what going live takes; https://faucet.solana.com gives some), then: xsolana approve xsolana.json --keypair ${made.file}`,
+          'Whatever is set up with it, it owns, for good: anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
+          `It holds nothing yet. Send it devnet SOL (\`xsolana cost\` says what going live takes; https://faucet.solana.com gives some), then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
         ].join('\n'),
       );
       break;
@@ -193,23 +200,8 @@ async function main(argv) {
         if (flags.has('--port') || flags.has('--no-open'))
           throw new UsageError('--port and --no-open go with --browser.');
         const { approveWithKey } = await import('../js/approve/with-key.mjs');
-        // On a terminal the person is asked there; anywhere else what would be sent is shown with its code.
-        const terminal = process.stdin.isTTY && process.stdout.isTTY;
-        const confirm = async question => {
-          const { createInterface } = await import('node:readline/promises');
-          const lines = createInterface({ input: process.stdin, output: process.stdout });
-          try {
-            return (await lines.question(question)).trim().toLowerCase() === 'yes';
-          } finally {
-            lines.close();
-          }
-        };
-        const r = await approveWithKey({
-          file,
-          keyFile,
-          yes: values.get('--yes') ?? null,
-          confirm: terminal ? confirm : null,
-        });
+        // It shows, and sends only when given the code of what it showed: it never stops to ask.
+        const r = await approveWithKey({ file, keyFile, yes: values.get('--yes') ?? null });
         if (!r.ok) process.exitCode = 1;
         break;
       }
