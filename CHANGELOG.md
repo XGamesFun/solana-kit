@@ -4,6 +4,14 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.7: tickets and the entries they cost, in one approval (loot 0.28.0, unchanged)
+
+The JavaScript alone. `buyTickets(key, count, { listing, make: { recipe, times, listing } })` crafts the recipe first
+in the purchase's own transaction, so a player short of what a ticket costs (an entry a recipe makes) approves once for
+both; if either fails, neither happens. `craft(..., { build: true })` hands back its instructions unsent for that; a
+recipe that rolls is refused there (its roll is settled after its own transaction). Asked for by Bubble Day, whose
+player took the first of two prompts for the whole purchase.
+
 ## 0.28.6: going live on mainnet is said, and typed, as mainnet (loot 0.28.0, unchanged)
 
 The JavaScript alone.

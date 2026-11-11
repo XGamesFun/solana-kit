@@ -2,7 +2,7 @@
   "mcpServers": {
     "xsolana": {
       "command": "npx",
-      "args": ["-y", "--package=@xgamesfun/solana@0.28.6", "xsolana", "mcp"]
+      "args": ["-y", "--package=@xgamesfun/solana@0.28.7", "xsolana", "mcp"]
     }
   }
 }
