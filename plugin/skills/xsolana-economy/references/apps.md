@@ -208,7 +208,8 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   can take the NFT when it is due. The program takes such tokens, so `app.borrow` refuses one unless the player
   accepted it (`{ acceptRisks: true }`). Lend in a plain token (SOL, or a mint with no freeze authority) to avoid it.
 - **An NFT as the price** (a recipe's `trade` line, a box's `rollsOn` with `then`, a lottery's `ticketNft`): say on the
-  page which NFT is spent and where it goes before the player signs; it is spent at once and never refunded.
+  page which NFT is spent and where it goes before the player signs. A recipe's is spent when the craft lands; a
+  lottery's is held until the draw, and handed back if the round is cancelled.
 - **The owner's own wallet on the page**: by default the project's treasury is the owner's wallet. The owner may buy, play
   and unwrap like anyone: a sale whose treasury account was closed opens it again.
 - **A buyer's choice**: a share the box, lottery or payment lets the buyer name (`"chosen"`, a referrer; `"chosen:<item>"`, the
