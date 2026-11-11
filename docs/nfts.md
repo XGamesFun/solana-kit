@@ -51,9 +51,23 @@ rolled where it is. A recipe's roll that can lose the NFT takes only a Core asse
 **Custody follows the NFT's own rules.** Staked, held or auctioned, an NFT moves or locks by its own program (Core,
 Token Metadata, Bubblegum), and its collection's controls (royalty rules, a pNFT's rule set, oracles, permanent
 delegates) still apply to it, whoever controls them. The creator of an NFT with a permanent delegate can pull it back
-out of a hold, a stake, a loan or a listing, and a record it leaves behind can later take the next owner's deposit of
-the same NFT: before a deposit, an app looks for this project's records that name the NFT (a listing at
-`["listing", project, asset]`, holds by the asset's address) and warns when one is left from an earlier owner.
+out of a hold, a stake, a loan or a listing, or burn it there.
+
+**A record whose NFT is gone closes** (loot 0.27). Once the NFT is proven gone from the project, the instruction that
+would have moved it finishes without it and leaves an `NftGone` receipt: a hold closes at any time, sent by anyone
+(`release`); a listing closes for its maker (`close_listing`) and for anyone, who pays nothing (`take_listing`), once
+no rental runs; an order is refunded or settled without it. Nothing moves but the record's rent, which goes where
+that record's close always sent it. Gone is proven, never guessed: the Core asset itself (held by another, or
+burned), the token account that holds a Token Metadata NFT now or its mint holding none, a compressed NFT's record
+proven again. A frozen NFT the project still holds is held, not gone. In js/play: `claims()` lists such a hold or
+loan of the wallet's and `claim` closes it, `unlist` closes the maker's listing, and `closeGone(asset)` closes an
+NFT's holds and listing for anyone.
+
+One thing stays: a record nobody closed can still take its NFT if the NFT comes back into the project's hands under
+another record first (the next owner's deposit). So before a deposit, js/play looks for this project's records that
+name the NFT (a listing at `["listing", project, asset]`, holds by the asset's address) and closes what an earlier
+owner left, in front of the deposit, in the same transaction when it fits. It refuses only what can't be closed yet:
+a listing whose rental still runs.
 
 **Any NFT can be auctioned**, a player's too. The seller is paid only when the lot reaches the winner: while the lot
 can't move (its collection froze it) the winning bid waits in the project's vault, until it can or until the project's
@@ -61,10 +75,11 @@ keys call the sale off, and a lot taken back or burned sends the bid back. So a 
 lost: tell every bidder, before a bid, when the lot is outside the project's collections.
 
 **A loan's NFT that is gone** (taken back or burned by whoever controls its collection while the project held it) can't
-be repaid: the borrower keeps what they borrowed, the lender's release at the due date fails, and the loan's record
-stays open with the borrower's rent in it. A hold can outlive its NFT the same way (a lottery place's NFT, a contest's,
-an outbid NFT bid, a loan's): its receipt says the NFT is held for the player when it is not, and nothing was paid
-against it. The results server and the kit read the NFT's owner and flag such a hold.
+be repaid: the program takes no repayment for it, so the borrower keeps what they borrowed and the lender gets neither
+the NFT nor the money. Anyone then closes the loan's hold for nothing, also before it is due, and its rent goes back to
+the borrower who paid it. A hold a route made of an NFT it owed (a lottery place's NFT, a contest's, an outbid NFT bid)
+closes the same way once its NFT is proven gone. The kit reads the NFT's owner, flags such a hold (`gone`) and closes
+it. Check an NFT's collection before lending against it.
 
 ## Tokens
 

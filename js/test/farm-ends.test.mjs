@@ -311,12 +311,13 @@ test(
 );
 
 test('walk_farm fits its measured count in one transaction, at the dearest kind of farm', { skip }, () => {
-  // The dearest end to walk: a halving rate, and seats so heavy that every number the walk divides is a wide one
-  // (4 × 10^16 base units each at a ×100 tier). Each end walked also frees its weight's share of the carry.
+  // The dearest end to walk: a halving rate as high as a rate goes, and seats so heavy that every number the walk
+  // divides is a wide one (4 × 10^16 base units each at a ×100 tier). Each end walked also frees its weight's share of
+  // the carry.
   const heavy = 40_000_000_000_000_000n;
   const dearest = seed => {
     const w = world({ seed });
-    const rate = { per_day: 1_000_000_000_000_000n, halve_every: 3_600 };
+    const rate = { per_day: 18_000_000_000_000_000_000n, halve_every: 3_600 };
     const address = farmOf(w, farmArgs([{ ...tier(10_000), bps: 1_000_000 }], rate));
     const join = () => {
       const p = w.who();
