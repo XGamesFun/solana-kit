@@ -17,7 +17,9 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { verifySignature } from '../approve/ed25519.mjs';
+import { freshKeypair, verifySignature } from '../approve/ed25519.mjs';
+import { transferLamports } from '../chain/programs.js';
+import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, makeKeyFile, readKeyFile } from '../approve/keyfile.mjs';
 import { approvalCode, approveWithKey, NOTICE } from '../approve/with-key.mjs';
 import { createApproval } from '../approve/server.mjs';
@@ -57,6 +59,21 @@ describe('a key file', () => {
     assert.deepEqual(Object.keys(key).sort(), ['address', 'drop', 'file', 'sign', 'signTransaction']);
     const message = new TextEncoder().encode('a message');
     assert.ok(verifySignature(made.address, message, key.sign(message)), 'it signs as its address');
+    // As a wallet: its own signature in its own slot of a transaction, and no other transaction.
+    const other = freshKeypair().address;
+    const wire = wireTransaction(
+      compileMessage({
+        payer: made.address,
+        blockhash: other,
+        instructions: [transferLamports(made.address, other, 1n)],
+      }),
+    );
+    const signed = readTransaction(await key.signTransaction(wire));
+    assert.ok(verifySignature(made.address, signed.message, signed.signatures[0]));
+    const notMine = wireTransaction(
+      compileMessage({ payer: other, blockhash: other, instructions: [transferLamports(other, made.address, 1n)] }),
+    );
+    await assert.rejects(key.signTransaction(notMine), /is not one .* signs/);
     key.drop();
     assert.throws(() => key.sign(message), /dropped/);
     // (two keys are never the same)

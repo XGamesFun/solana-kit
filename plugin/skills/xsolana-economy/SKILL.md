@@ -10,9 +10,9 @@ writes or deploys a contract: the spec is checked, simulated and priced by the `
 signed by a key file on the owner's own machine, once they have read what will be sent and said yes. It runs on
 **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.27.1 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.27.1 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.27.1 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.27.2 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.27.2 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.27.2 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -133,13 +133,13 @@ or `npx -y @xgamesfun/solana@0.27.1 tool <name> '<json>'` for any tool (always w
    level would cost. Run it again after every change that touches a route that pays.
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
-   - **The key file**, unless the project has one: `npx -y @xgamesfun/solana@0.27.1 keygen ~/.config/xsolana/<name>.json`.
+   - **The key file**, unless the project has one: `npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/<name>.json`.
      Give the person the address it prints and what going live costs; they send it that much devnet SOL.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
      its treasury (what sales leave lands at its address) and its authority (it signs what only the game decides).
      If the economy takes money in, ask for the public address of a wallet they hold and set
      `"treasury": "wallet:<address>"` first: it can't be changed through the spec once live.
-   - **Show it**: `npx -y @xgamesfun/solana@0.27.1 approve xsolana.json --keypair <key file>` prints every step with
+   - **Show it**: `npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it

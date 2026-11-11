@@ -15,7 +15,7 @@ import { decodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
 import { COMPUTE_BUDGET_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { transferLamports } from '../chain/programs.js';
-import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { compileMessage, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import {
   checkSponsored,
@@ -119,7 +119,13 @@ test(
         return fromBase64(body.transaction);
       },
     };
-    const app = solanaApp({ spec: live, rpc, wallet: asWallet(player), now: () => w.chain.now(), sponsor });
+    // (what the player's wallet is handed to sign, as it is handed it)
+    const handed = [];
+    const wallet = {
+      ...asWallet(player),
+      signTransaction: wire => (handed.push(wire), asWallet(player).signTransaction(wire)),
+    };
+    const app = solanaApp({ spec: live, rpc, wallet, now: () => w.chain.now(), sponsor });
 
     // A player with no SOL at all takes the free badge.
     assert.equal(await balance(player.address), 0n);
@@ -136,6 +142,16 @@ test(
     assert.ok(paid >= feeBox + assetRent, 'the sponsor paid the player fee and the badge’s rent');
     assert.ok(paid <= feeBox + assetRent + 100_000n, `and little more than that, its fees: ${paid}`);
     assert.equal(asked.length, 1, 'one transaction, one sponsor signature');
+    // It leads with a compute unit limit and a unit price of 0: a wallet that adds its own priority fee only where
+    // a transaction sets none signs it as it stands, and the sponsor, which pays no price by default, took it.
+    assert.equal(handed.length, 1);
+    const led = readMessage(readTransaction(handed[0]).message);
+    const [limit, price] = led.instructions;
+    assert.equal(led.keys[limit.programIndex], COMPUTE_BUDGET_PROGRAM);
+    assert.equal(limit.data[0], 2, 'its unit limit first');
+    assert.equal(led.keys[price.programIndex], COMPUTE_BUDGET_PROGRAM);
+    assert.deepEqual([...price.data], [3, 0, 0, 0, 0, 0, 0, 0, 0], 'then a unit price of 0');
+    assert.deepEqual(readTransaction(asked[0]).message, readTransaction(handed[0]).message, 'signed as it was handed');
 
     // A second badge's transaction, as the page sends it to the sponsor: kept, never sent.
     let fresh = null;
