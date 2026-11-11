@@ -298,3 +298,166 @@ for (const kind of KINDS)
       assert.equal(w.chain.get(named), null, 'the round closed');
     },
   );
+
+// ---------------------------------------------------------------- a contest's claims
+
+/** The authority opens contest `id` of NFTs that pass `rule`: two sides, entries for 100 seconds, a result within 200. */
+function nftContest(w, id, rule, more = {}) {
+  const now = w.chain.now();
+  w.chain.send(w.authority, [
+    loot.openContestIx({
+      authority: w.authority,
+      project: w.project,
+      projectState: w.projectState(),
+      id,
+      mint: w.mint,
+      args: {
+        sides: 2,
+        closes_at: BigInt(now + 100),
+        result_by: BigInt(now + 200),
+        shares: [],
+        gate: null,
+        nft: rule,
+        ...more,
+      },
+    }),
+  ]);
+}
+
+/** `app` enters contest `id` on `side` with a new NFT of its own; returns the NFT. */
+async function entered(k, app, id, side) {
+  const nft = k.mint(app.wallet);
+  await app.enter(id, side, 0, { nft });
+  k.into(nft);
+  assert.ok(k.holds(nft), 'the contest holds the NFT');
+  return nft;
+}
+
+/** The authority names `side` the winner of contest `id`. */
+const decided = (w, id, side) =>
+  w.chain.send(w.authority, [
+    loot.decideIx({
+      signer: w.authority,
+      project: w.project,
+      contest: w.read('Contest', pda.contest(w.project, id)),
+      side,
+    }),
+  ]);
+
+/** `app` sends every claim it is offered for contest `id` (a compressed NFT moves one a claim); returns the
+ * transactions and the first claim offered. */
+async function claimContest(k, app, id, options) {
+  const from = k.landed.length;
+  let first = null;
+  for (let n = 0; n < 4; n++) {
+    const claim = (await app.claims()).find(c => c.kind === 'contest' && c.id === id);
+    if (!claim) break;
+    first ??= claim;
+    await app.claim(claim, options);
+  }
+  return { first, txs: since(k.landed, from) };
+}
+
+for (const kind of KINDS)
+  test(
+    `a contest called off: an entry's ${kind.name} NFT that is gone can't come back, and its claim closes it on the proof`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-contest-off');
+      const { w } = k;
+      const [p, q] = [w.who(), w.who()].map(a => k.app(a));
+      for (const [id, burned] of [
+        [1, false],
+        [2, true],
+      ]) {
+        nftContest(w, id, k.rule);
+        const [mine, theirs] = [await entered(k, p, id, 0), await entered(k, q, id, 1)];
+        // Nobody names a winner by the time a result is due: the contest is off, and every entry takes its own back.
+        w.chain.warp(w.chain.now() + 201);
+        k.lose(mine, burned);
+        const hold = pda.hold(mine, 0);
+        const { first, txs } = await claimContest(k, p, id);
+        assert.deepEqual([first.gone, first.assets], [true, [mine]]);
+        assert.match(first.says, /contest is off.*no longer holds the NFT you entered.*can’t come back.*sends nothing/);
+        assert.doesNotMatch(first.says, /Your entry back|Your NFT back/);
+        // (A compressed NFT's proof makes the claim a transaction with a lookup table, made first.)
+        if (kind.key !== 'compressed') assert.equal(txs.length, 1);
+        // The contest counts the NFT delivered as a hold for its player; the hold closes on the proof at once.
+        assert.deepEqual(goneIn(txs), [`${hold} ${mine} ${p.wallet}`]);
+        assert.deepEqual(names(txs.at(-1)), ['Held', 'Claimed', 'NftGone']);
+        nothingMoved(txs);
+        assert.equal(w.chain.get(hold), null, 'the hold is closed');
+        assert.equal(w.entries(id)[w.entryOf(id, p.wallet)].amount, 0n, 'the entry is claimed');
+        k.still(mine);
+
+        // The other entry's NFT, still there, goes home as before, and the contest closes.
+        const other = await claimContest(k, q, id);
+        assert.equal(other.first.gone, undefined);
+        assert.match(other.first.says, /Your entry back/);
+        k.into(theirs, q.wallet);
+        assert.equal(k.owner(theirs), q.wallet);
+        assert.equal(w.chain.get(pda.contest(w.project, id)), null, 'the contest closed');
+      }
+    },
+  );
+
+for (const kind of KINDS)
+  test(
+    `a contest won: the winner's own ${kind.name} NFT that is gone, and a loser's, close on the proof; a pick goes to one still there first`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-contest-won');
+      const { w } = k;
+      const [p, q, s] = [w.who(), w.who(), w.who()].map(a => k.app(a));
+      const closedOn = (txs, nft) => {
+        assert.ok(goneIn(txs).includes(`${pda.hold(nft, 0)} ${nft} ${p.wallet}`), `NftGone for ${nft}`);
+        assert.equal(w.chain.get(pda.hold(nft, 0)), null, 'its hold is closed');
+      };
+
+      // The winner's own NFT is taken: their claim closes it and takes the loser's, which is still there.
+      nftContest(w, 1, k.rule);
+      const [mine, theirs] = [await entered(k, p, 1, 0), await entered(k, q, 1, 1)];
+      // The loser's NFT is burned: the winner's claim takes its own back and closes the loser's.
+      nftContest(w, 2, k.rule);
+      const [kept, burned] = [await entered(k, p, 2, 0), await entered(k, q, 2, 1)];
+      // Two losers, and a share of one: the winner's pick goes to the NFT still there, not to the one gone.
+      nftContest(w, 3, k.rule, { cap: 1 });
+      const [own, lost, there] = [await entered(k, p, 3, 0), await entered(k, q, 3, 1), await entered(k, s, 3, 1)];
+      w.chain.warp(w.chain.now() + 150);
+      for (const id of [1, 2, 3]) decided(w, id, 0);
+
+      k.lose(mine);
+      const one = await claimContest(k, p, 1);
+      assert.deepEqual([one.first.gone, one.first.assets], [true, [mine]]);
+      assert.match(one.first.says, /^Your pick of the losers’\. The project no longer holds the NFT you entered/);
+      closedOn(one.txs, mine);
+      nothingMoved(one.txs);
+      k.into(theirs, p.wallet);
+      k.still(mine);
+      assert.equal(k.owner(theirs), p.wallet, 'the loser’s NFT went to the winner');
+      assert.equal(w.chain.get(pda.contest(w.project, 1)), null, 'the contest closed');
+
+      k.lose(burned, true);
+      const two = await claimContest(k, p, 2);
+      assert.deepEqual([two.first.gone, two.first.assets], [true, [burned]]);
+      assert.match(two.first.says, /^Your NFT back\. The project no longer holds the loser’s NFT left.*takes nothing/);
+      closedOn(two.txs, burned);
+      nothingMoved(two.txs);
+      k.into(kept, p.wallet);
+      k.still(burned);
+      assert.equal(k.owner(kept), p.wallet, 'the winner’s own NFT came back');
+      assert.equal(w.chain.get(pda.contest(w.project, 2)), null, 'the contest closed');
+
+      k.lose(lost);
+      const three = await claimContest(k, p, 3);
+      assert.equal(three.first.gone, undefined, 'nothing this claim moves is gone');
+      assert.match(three.first.says, /^Your NFT back, and your pick of the losers’\.$/);
+      assert.deepEqual(goneIn(three.txs), []);
+      k.into(own, p.wallet);
+      k.into(there, p.wallet);
+      assert.deepEqual([k.owner(own), k.owner(there)], [p.wallet, p.wallet], 'the pick took the NFT still there');
+      // The one gone is left: the winner has no pick left, and it is the opener's to close.
+      const entry = w.entries(3)[w.entryOf(3, q.wallet)];
+      assert.deepEqual([entry.nft, entry.amount], [lost, 1n]);
+    },
+  );

@@ -2502,6 +2502,49 @@ export function solanaApp({
     ];
   }
 
+  /** How many of the losers' NFTs left a winner's claim reads to choose its picks among. */
+  const PICKS_READ = 8;
+  /**
+   * The NFTs a claim of entry `i` of a contest of NFTs moves, as `claim` sends it: the entry's own while the contest
+   * holds it, and for a winner the losers' NFTs its share still lets it pick, at most 4 a claim. `take` names the
+   * picks (one asset, or several). With none named, the first of the losers' NFTs left that the project still holds
+   * are picked (the first `PICKS_READ` are read), and one that is gone only when no other is left there: a pick of an
+   * NFT gone takes nothing. Each is { j, nft, gone }: its entry's place in the list, and whether the project no longer
+   * holds it (its collection took it back or burned it).
+   */
+  async function contestNfts(contest, entries, i, take) {
+    const own = entries[i];
+    const won = contest.verdict === 'Won' && Number(contest.winner) === Number(own.side);
+    const out = Number(own.amount) === 1 ? [{ j: i, nft: own.nft }] : [];
+    const share = won && !(own.bits & loot.ENDED) ? loot.shareOf(contest, own) - Number(own.taken) : 0;
+    const left = entries
+      .map((e, j) => ({ j, nft: e.nft, e }))
+      .filter(({ e }) => Number(e.side) !== Number(contest.winner) && Number(e.amount) === 1);
+    const wanted = take ? [take].flat() : [];
+    const among =
+      share <= 0 ? [] : wanted.length ? left.filter(x => wanted.includes(x.nft)) : left.slice(0, PICKS_READ);
+    if (wanted.length && among.length < Math.min(wanted.length, share))
+      throw new Error(`${wanted.join(', ')} is not a loser’s NFT left in this contest for you to pick.`);
+    const heldOf = await heldEach([...out, ...among].map(x => x.nft));
+    const isGone = x => heldOf.get(x.nft)?.held === false;
+    const picks = wanted.length ? among : [...among.filter(x => !isGone(x)), ...among.filter(isGone)];
+    out.push(...picks.slice(0, Math.min(share, 4)));
+    return out.map(x => ({ j: x.j, nft: x.nft, gone: isGone(x) }));
+  }
+  /** What a contest's claim does about its NFTs that are gone, in words, for `claims()`: `own` the wallet's own NFT
+   * when it is gone, `picks` the losers' NFTs gone that its picks land on. */
+  const goneContestSays = (own, picks) =>
+    [
+      own
+        ? `The project no longer holds the NFT you entered (${own}): whoever controls its collection took it back or burned it while the contest held it. It can’t come back to you: claiming closes your entry and sends nothing.`
+        : '',
+      picks.length
+        ? `The project no longer holds ${picks.length === 1 ? 'the loser’s NFT' : 'the losers’ NFTs'} left for you to pick (${picks.join(', ')}): whoever controls its collection took it back or burned it. A pick of it takes nothing: claiming closes it and sends nothing.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
   /**
    * The NFTs the pulls of a wallet's parts of round `r` (`mine`: [{ entry, parts }]) are to hand out: each entry's NFT
    * ticket ('Own'), and each NFT its places are still owed (`Prize`: the lottery's own stash's, as the pulls take them
@@ -4857,8 +4900,8 @@ export function solanaApp({
         const off = loot.contestOff(contest, time);
         if (!(off || contest.verdict === 'Won')) continue;
         const list = await client.account(loot.contestEntries(pubkey, contest));
-        const entry =
-          list?.owner === loot.LOOT_PROGRAM ? loot.decodeEntries(list.data).find(e => e.player === me) : null;
+        const entries = list?.owner === loot.LOOT_PROGRAM ? loot.decodeEntries(list.data) : [];
+        const entry = entries.find(e => e.player === me);
         if (!entry) continue;
         const won = !off && Number(contest.winner) === Number(entry.side);
         const first = won && !(entry.bits & loot.CLAIMED);
@@ -4881,11 +4924,32 @@ export function solanaApp({
               : 'Your share of the pot.';
         // A winner's part of a contest of tokens is what the decision wrote, whoever claims first (`contestWinnings`).
         const winnings = first && !contest.nft ? loot.contestWinnings(contest, entry.amount) : null;
+        // A contest of NFTs: what its claim moves, and which of those the project no longer holds (its collection
+        // took it back or burned it). Such an NFT is not sent anywhere: the claim closes it, and says so here first.
+        const moves = contest.nft ? await contestNfts(contest, entries, entries.indexOf(entry), undefined) : [];
+        const lost = moves.filter(m => m.gone);
+        const mine = lost.find(m => m.nft === entry.nft && entries[m.j] === entry);
+        const there = [
+          moves.some(m => entries[m.j] === entry && !m.gone) ? 'your NFT back' : '',
+          moves.some(m => entries[m.j] !== entry && !m.gone) ? 'your pick of the losers’' : '',
+        ]
+          .filter(Boolean)
+          .join(', and ');
+        const goneSays = [
+          off ? 'The contest is off.' : '',
+          there ? `${there[0].toUpperCase()}${there.slice(1)}.` : '',
+          goneContestSays(
+            mine?.nft,
+            lost.filter(m => m !== mine).map(m => m.nft),
+          ),
+        ]
+          .filter(Boolean)
+          .join(' ');
         out.push({
           kind: 'contest',
           id: contest.id,
           side: entry.side,
-          says,
+          ...(lost.length ? { gone: true, assets: lost.map(m => m.nft), says: goneSays } : { says }),
           ...(winnings ? { potUnits: String(winnings.pot), prizeUnits: String(winnings.prize) } : {}),
         });
       }
@@ -5161,37 +5225,25 @@ export function solanaApp({
         // lets it pick (`take`: one asset, or several; the first left by default), as many as fit.
         const nfts = [];
         const kinds = {};
+        // The NFTs of this claim that are proven gone from the project, each with what shows it and who staked it.
+        // The contest only hands an NFT out and reads nothing, so each is passed as its hold (`["hold", nft, 0]`, made
+        // for this player, who gets it), and that hold closes on the proof right after the claim: nothing is sent.
+        const lost = new Map();
         if (contest.nft) {
           const proofs = {};
-          const kindOf = async (asset, to) => {
-            const { before, hasAuthority: _, ...kind } = await nftOf(asset, me, { to });
-            proofs[asset] = before;
-            kinds[asset] = kind;
-          };
-          if (Number(own.amount) === 1) {
-            nfts.push(i);
-            await kindOf(own.nft, me);
-          }
-          const share = won && !(own.bits & loot.ENDED) ? loot.shareOf(contest, own) - Number(own.taken) : 0;
-          const left = entries
-            .map((e, j) => ({ e, j }))
-            .filter(({ e }) => Number(e.side) !== Number(contest.winner) && Number(e.amount) === 1);
-          const wanted = take ? [take].flat() : [];
-          const picked = (wanted.length ? left.filter(({ e }) => wanted.includes(e.nft)) : left).slice(
-            0,
-            Math.min(share, 4),
-          );
-          if (wanted.length && picked.length < Math.min(wanted.length, share))
-            throw new Error(`${wanted.join(', ')} is not a loser’s NFT left in this contest for you to pick.`);
-          for (const { e, j } of picked) {
+          for (const { j, nft } of await contestNfts(contest, entries, i, take)) {
+            const { before, hasAuthority: _, gone, ...kind } = await leaving(nft, me, { to: me });
+            proofs[nft] = before;
+            kinds[nft] = kind;
+            if (gone) lost.set(nft, { kind, player: me, rentTo: entries[j].player });
             nfts.push(j);
-            await kindOf(e.nft, me);
           }
           // A compressed NFT's proof is long (up to 17 nodes): such a claim moves one NFT, as a v0 transaction with a
           // lookup table (`send`), and the next claim takes the next.
           if (nfts.length > 1 && nfts.some(j => kinds[entries[j].nft]?.compressed)) nfts.splice(1);
           for (const j of nfts) given.before.push(...proofs[entries[j].nft]);
         }
+        const closes = nfts.map(j => entries[j].nft).filter(nft => lost.has(nft));
         const claimed = [
           computeUnitLimit(800_000),
           ...given.before.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM),
@@ -5205,12 +5257,14 @@ export function solanaApp({
             player: me,
             nfts: contest.nft ? nfts : undefined,
             kinds,
+            hold: closes,
             collection: given.collection,
             poolMints: given.poolMints,
             items: given.items,
             nft: given.nft,
             programs,
           }),
+          ...closes.map(nft => closeOwed(nft, lost.get(nft).kind, lost.get(nft), me, g)),
         ];
         // A prize that rolls: asked for in the claim's own transaction and settled by a key after (one prompt).
         return contest.prize?.Roll && !build ? (await sendRolling(claimed)).signature : send(claimed);
