@@ -16,7 +16,7 @@ import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
-import { changedParts } from '../economy/live.mjs';
+import { changedParts, unnamedNote } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { describeReview, review } from '../economy/review.mjs';
@@ -248,9 +248,10 @@ function flagsToTell(economy, now) {
  */
 function liveChange(economy) {
   if (!economy.live?.project || !economy.live?.published) return { scope: {}, notes: '', settings: [] };
-  const { only, fixed, removed, settings } = changedParts(economy);
+  const { only, fixed, removed, settings, unnamed } = changedParts(economy);
   const notes = [
     settings.length ? `\n${settingsNote(settings, economy.live)}` : '',
+    unnamed.length ? `\n${unnamedNote(unnamed)}` : '',
     fixed.length
       ? `\nThese can't change once live, and stay as they were: ${fixed.join(', ')} (a farm, an auction or a pool's token).`
       : '',

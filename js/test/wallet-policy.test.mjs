@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { addressBytes } from '../chain/base58.js';
 import { concat, uintLE } from '../chain/bytes.js';
-import { createFungibleMetadataIx, metadataAddress } from '../chain/metadata.js';
+import { createFungibleMetadataIx, metadataAddress, updateFungibleMetadataIx } from '../chain/metadata.js';
 import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '../chain/programs.js';
 import { compileMessage } from '../chain/tx.js';
 import { TOKEN_PROGRAM } from '../chain/pda.js';
@@ -181,4 +181,23 @@ test('an owner signs the name of a token the setup makes, and no other Token Met
   // and any other instruction of Token Metadata's
   const other = { ...naming, data: Uint8Array.of(43, 0) };
   assert.match(verdict([other], 'owner').findings.join(' '), /unexpected Token Metadata instruction \(43, 0\)/);
+});
+
+test('an owner signs a change to the name record of a token of theirs, never a hand-over of it', () => {
+  const rename = updateFungibleMetadataIx({ mint, authority: me, name: 'Bubble Day', symbol: 'BUBL', uri: '' });
+  const owner = verdict([rename], 'owner');
+  assert.equal(owner.ok, true, owner.findings.join(' '));
+  assert.deepEqual(owner.summary, [`change the name record ${metadataAddress(mint)}`]);
+  assert.match(verdict([rename], 'player').findings.join(' '), /unexpected Token Metadata instruction/);
+  const theirs = updateFungibleMetadataIx({ mint, authority: thief, name: 'Bubble Day', symbol: 'BUBL' });
+  assert.match(verdict([theirs], 'owner').findings.join(' '), /authority that is not this wallet/);
+  // the same change with a new update authority after the name: the record handed to someone else
+  const handOver = {
+    ...rename,
+    data: concat(rename.data.slice(0, -3), Uint8Array.of(1), addressBytes(thief), Uint8Array.of(0, 0)),
+  };
+  assert.match(
+    verdict([handOver], 'owner').findings.join(' '),
+    /Hands a token’s name record to another update authority/,
+  );
 });

@@ -1017,8 +1017,8 @@ export function check(
     // A token the setup makes is named on chain as it is made (its Token Metadata record), and the record takes so
     // many bytes of each, not characters: a longer one would be refused on chain, in the middle of going live. One
     // with no name or ticker at all would be written blank, and show as an unknown token for the record's price. A
-    // token that is live already is not named again: its words here stay labels, as they were.
-    if (source === 'game' && !economy.live?.mints?.[t.key])
+    // token that went live with no record (before setups named tokens) is never written: its words stay labels.
+    if (source === 'game' && (!economy.live?.mints?.[t.key] || (economy.live.named ?? []).includes(t.key)))
       for (const [field, what] of [
         ['name', 'name'],
         ['symbol', 'ticker'],

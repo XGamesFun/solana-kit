@@ -21,7 +21,13 @@ import {
   TOKEN_PROGRAM,
 } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
-import { createFungibleMetadataIx, METADATA_BYTES, METADATA_FEE, METADATA_LIMITS } from '../chain/metadata.js';
+import {
+  createFungibleMetadataIx,
+  METADATA_BYTES,
+  METADATA_FEE,
+  METADATA_LIMITS,
+  updateFungibleMetadataIx,
+} from '../chain/metadata.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import {
   computeUnitLimit,
@@ -738,9 +744,26 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   // show), while the owner is still its mint authority: Token Metadata takes a record from nobody else, so a mint whose
   // minting was handed on or turned off without one can never have one. The owner stays the record's update authority.
   for (const t of m.tokens.values()) {
+    // A token that is live and was named as it was made: a change to its name, ticker or link (`only` names it:
+    // live.mjs changedParts) writes its record again, signed by the owner, the record's update authority.
+    if (t.source === 'game' && live?.mints?.[t.key] && only?.has(`name:${t.key}`))
+      add({
+        id: `name:${t.key}`,
+        part: `name:${t.key}`,
+        says: `Change what the token ${t.symbol} is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'} (its name record, which only your wallet can change)`,
+        build: ctx => [
+          updateFungibleMetadataIx({
+            mint: ctx.mints[t.key],
+            authority: ctx.owner,
+            name: t.name,
+            symbol: t.symbol,
+            uri: t.uri ?? '',
+          }),
+        ],
+      });
     if (t.source !== 'game' || live?.mints?.[t.key] || (t.mint && !t.mint.startsWith('@'))) continue;
     const key = `new:mint/${t.key}`;
-    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, which these tools don’t do yet, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
+    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
     const record = { what: `the name of ${t.symbol} on chain`, bytes: METADATA_BYTES, fee: Number(METADATA_FEE) };
     // The checker refuses a name, ticker or link too long for a record before any plan is made, except on a token
     // that is live already, whose words are only labels. Such a token is made here only when a live economy is

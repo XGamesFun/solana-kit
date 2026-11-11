@@ -122,8 +122,8 @@ Don'ts:
 - **A token the setup makes is named on chain as it goes live**: its `name`, its `symbol` and its `uri` (a link to a
   JSON file the project hosts, `{ "name", "symbol", "image": "https://…" }`), which is what wallets and explorers show.
   Ask for the name, the ticker and a picture before going live: with no `uri` it shows by name and ticker with no
-  picture. Only the owner's wallet can change the three later (Token Metadata's rule, not loot's), and these tools
-  don't change a live token's yet, so get them right first. The record costs about 0.014 SOL (`xsolana_cost` says it:
+  picture. Only the owner's wallet can change the three later (Token Metadata's rule, not loot's): change them in the
+  spec and approve again, and the record is written again for the price of a transaction. The record costs about 0.014 SOL (`xsolana_cost` says it:
   rent, and 0.01 SOL Token Metadata keeps). A token that went live before the tools wrote one has none and
   can't be given one: only a mint's own authority can name it, and its minting was handed on or turned off.
 - **NFTs the project has no authority over** (any collection but its own): they count as they are. Say that

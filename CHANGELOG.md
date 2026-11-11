@@ -4,6 +4,18 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased: a live token's name can be changed (loot 0.26.1, unchanged)
+
+- **A change to a live token's name, ticker or link is written to its record at the next approve** (Token Metadata's
+  UpdateMetadataAccountV2, signed by the owner, the record's update authority; `updateFungibleMetadataIx`). It costs
+  a transaction: no rent, no fee to Token Metadata. This is how a token that went live with no picture gets one. A
+  fixed supply's record changes the same way: turning minting off does not freeze its name.
+- The file records which tokens the setup named as it made them (`live.named`). A token that went live before setups
+  named tokens (0.26.1 and earlier) has no record and can't be given one: a change to its name sends nothing, and
+  `xsolana_publish` and the approval page say so. Approval refuses a file that calls a token named when its mint has
+  no record, or a record that is someone else's to change.
+- The byte limits and the blank-name refusal apply to a named live token too, since its words are written again.
+
 ## 0.26.3: a token made elsewhere is read from the chain, and one place to choose a token (loot 0.26.1, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.26.1's.

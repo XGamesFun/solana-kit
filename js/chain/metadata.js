@@ -72,5 +72,38 @@ export function createFungibleMetadataIx({ mint, authority, payer = authority, n
   };
 }
 
+const UPDATE_V2 = 15;
+/**
+ * Token Metadata's UpdateMetadataAccountV2 for a fungible token's record: a new name, ticker and link ('' for none),
+ * all three written as given. `authority` is the record's update authority (for a token a setup made: the project's
+ * owner) and signs; it stays the update authority, and the record stays changeable. Nothing else of the record or
+ * the mint changes, and it costs only the transaction: the record keeps its size.
+ */
+export function updateFungibleMetadataIx({ mint, authority, name, symbol, uri = '' }) {
+  for (const [field, value] of Object.entries({ name, symbol, uri })) {
+    if (typeof value !== 'string') throw new TypeError(`A token's ${field} is text`);
+    if (utf8(value).length > METADATA_LIMITS[field])
+      throw new RangeError(`A token's ${field} is at most ${METADATA_LIMITS[field]} bytes`);
+  }
+  return {
+    programId: METAPLEX_METADATA_PROGRAM,
+    keys: [meta(metadataAddress(mint), false, true), meta(authority, true, false)],
+    data: concat(
+      Uint8Array.of(UPDATE_V2),
+      Uint8Array.of(1), // new data
+      text(name),
+      text(symbol),
+      text(uri),
+      uintLE(0, 2), // no resale royalty
+      NONE, // no creators
+      NONE, // no collection
+      NONE, // no uses
+      NONE, // the update authority: as it is
+      NONE, // primary sale: as it is
+      NONE, // changeable: as it is
+    ),
+  };
+}
+
 /** The update authority a Token Metadata record names (who can change its name, ticker and link). */
 export const metadataUpdateAuthority = data => (data?.length >= 33 ? encodeBase58(data.subarray(1, 33)) : null);

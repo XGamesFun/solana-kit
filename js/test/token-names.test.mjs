@@ -182,7 +182,7 @@ test('the cost of going live counts the record: its rent, and Token Metadata’s
     s => s.id === 'token:bubl',
   );
   assert.match(step.says, /write its name on chain \(“Bubble”, BUBL, no picture link/);
-  assert.match(step.says, /only your wallet can change it later, which these tools don’t do yet/);
+  assert.match(step.says, /only your wallet can change it later/);
   // the link is said whole: the approval page shows the step's words, and nothing else of this instruction
   const linked = plan(spec({ key: 'bubl', source: 'project', name: 'Bubble', symbol: 'BUBL', uri: LINK }), {
     now: NOW,
@@ -196,7 +196,7 @@ test('explain lists the tokens going live makes, and says when one will show wit
   assert.match(bare, /The tokens going live makes/);
   assert.match(bare, /BUBL \(“Bubble”\): minted by the project as its rules say/);
   assert.match(bare, /its name and ticker and no picture: for one, give it a `uri`/);
-  assert.match(bare, /these tools don’t change a live token’s yet/);
+  assert.match(bare, /change them here and approve again/);
   assert.match(bare, /Token Metadata’s fees 0\.01 SOL/);
   const pictured = words({ key: 'gem', source: 'project', symbol: 'GEM', supply: 500, uri: LINK });
   assert.match(pictured, /GEM: a fixed supply of 500, all of it to your wallet, and no more ever/);

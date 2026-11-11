@@ -5,6 +5,7 @@
 // the tree the file calls made must be on chain and be that project's.
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
+import { metadataAddress, metadataUpdateAuthority } from '../chain/metadata.js';
 import { parseMint } from '../chain/mint.js';
 import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
@@ -84,6 +85,19 @@ export async function checkLive({ live, m, wallet, chain }) {
       throw new LiveMismatch(
         `The mint ${address} the file names for ${t.symbol ?? key} can be frozen by ${mint.freezeAuthority}; the setup makes none that can.`,
       );
+    // A token the file says was named on chain as it was made: a change to its name is sent to its record, signed by
+    // the owner. With no record, or one somebody else can change, that change could never land.
+    if ((made.named ?? []).includes(key)) {
+      const record = await read(metadataAddress(address));
+      if (!record)
+        throw new LiveMismatch(
+          `The file says the setup named the token ${t.symbol ?? key} on chain, and its mint ${address} has no name record.`,
+        );
+      if (metadataUpdateAuthority(record.data) !== owner)
+        throw new LiveMismatch(
+          `The name record of the token ${t.symbol ?? key} (mint ${address}) is ${metadataUpdateAuthority(record.data)}’s to change, not the project’s owner’s (${owner}).`,
+        );
+    }
   }
 
   if (made.collection) {

@@ -22,7 +22,7 @@ import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { LEGAL, legalFlags } from '../economy/legal.mjs';
-import { changedParts, prepare, recordLanded } from '../economy/live.mjs';
+import { changedParts, prepare, recordLanded, unnamedNote } from '../economy/live.mjs';
 import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../economy/model.mjs';
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
@@ -295,6 +295,9 @@ export async function createApproval({
       ? 'What is live has not been read from the chain yet: connect your wallet, and each line is marked against what is on chain.'
       : null;
 
+  // A token that went live with no name record, whose name the spec now changes: nothing is sent for it, and the
+  // page says so.
+  const unnamed = mode === 'change' ? changedParts(spec).unnamed : [];
   // The project's own settings a change names are never published: the page says so.
   const changed = mode === 'change' ? changedParts(spec).settings : [];
   const settings = changed.length
@@ -331,6 +334,7 @@ export async function createApproval({
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
+          unnamed.length ? unnamedNote(unnamed) : null,
           unread(),
           remadeLists(),
           outsideAddresses(
@@ -663,6 +667,10 @@ export async function createApproval({
     const mints = { ...(was.mints ?? {}) };
     for (const id of ids)
       if (id.startsWith('token:') && ctx.mints?.[id.slice(6)]) mints[id.slice(6)] = ctx.mints[id.slice(6)];
+    // A token's own step names it on chain as it makes it (plan.mjs): kept, so a later change to its name is written.
+    const named = [
+      ...new Set([...(was.named ?? []), ...ids.filter(id => id.startsWith('token:')).map(id => id.slice(6))]),
+    ];
     const progress = {
       ...was,
       program: LOOT_PROGRAM,
@@ -671,6 +679,7 @@ export async function createApproval({
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
       ...(made.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
       mints,
+      ...(named.length ? { named } : {}),
       landed: [...new Set([...(was.landed ?? []), ...ids])],
       partial: true,
       ...(only ? { changing: [...only] } : {}),
@@ -697,7 +706,11 @@ export async function createApproval({
         mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
       };
       const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
-      final.live = { ...final.live, transactions: progress.transactions };
+      final.live = {
+        ...final.live,
+        ...(progress.named?.length ? { named: progress.named } : {}),
+        transactions: progress.transactions,
+      };
       spec = final;
       only = changedParts(spec).only;
     }

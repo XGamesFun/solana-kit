@@ -56,6 +56,24 @@ function createdStandard(data) {
     return null;
   }
 }
+/**
+ * The option byte of the new update authority in a Token Metadata UpdateMetadataAccountV2 (0: left as it is), or null
+ * when its data does not read: the tag, an option of the new data (three strings, the royalty, three options this
+ * package always leaves empty), then the authority's option.
+ */
+function renamedAuthority(data) {
+  try {
+    let at = 1;
+    if (data[at++] === 1) {
+      for (let i = 0; i < 3; i++) at += 4 + Number(readUintLE(data, at, 4));
+      at += 2;
+      for (let i = 0; i < 3; i++) if (data[at++] !== 0) return null;
+    }
+    return at < data.length ? data[at] : null;
+  } catch {
+    return null;
+  }
+}
 /** A loot instruction's name, by its tag (1 byte; 8 for the oracle's callbacks). */
 const lootIxName = data => instructionOf(data)?.name ?? null;
 /**
@@ -215,6 +233,16 @@ export function checkTransaction(message, { address, role, game = null, grants =
     if (program === METAPLEX_METADATA_PROGRAM) {
       // The setup names each token it makes (js/chain/metadata.js: CreateV1, with this wallet its mint authority, its
       // payer and the record's update authority). Nothing else of Token Metadata's is the economy's to ask.
+      // …and writes a record again when the owner changes a token's name (UpdateMetadataAccountV2, this wallet the
+      // record's update authority, which it leaves as it is: after the new name, ticker and link, no new authority).
+      if (role === 'owner' && ix.data[0] === 15) {
+        if (acct(1) !== address)
+          findings.push(`Changes a token’s name record with an authority that is not this wallet.`);
+        else if (renamedAuthority(ix.data) !== 0)
+          findings.push(`Hands a token’s name record to another update authority.`);
+        else summary.push(`change the name record ${acct(0)}`);
+        continue;
+      }
       if (role !== 'owner' || ix.data[0] !== 42 || ix.data[1] !== 0)
         findings.push(`An unexpected Token Metadata instruction (${ix.data[0]}, ${ix.data[1]}).`);
       else if (acct(3) !== address || acct(4) !== address || acct(5) !== address)

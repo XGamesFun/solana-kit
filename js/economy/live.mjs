@@ -104,6 +104,8 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
     treasury: ctx.treasury,
     authority: ctx.authority,
     ...(Object.keys(mints).length ? { mints } : {}),
+    // (the tokens named on chain as they were made, kept by whoever records a landing: approve/server.mjs)
+    ...(economy.live?.named?.length ? { named: economy.live.named } : {}),
     at,
     published,
     transactions: [...(economy.live?.transactions ?? []), ...signatures.map(signature => ({ signature }))].slice(-60),
@@ -133,10 +135,11 @@ const FIXED = new Set(['farm', 'pool', 'auction']);
  */
 export function changedParts(economy) {
   const published = economy.live?.published;
-  if (!published) return { only: null, fixed: [], removed: [], settings: [] };
+  if (!published) return { only: null, fixed: [], removed: [], settings: [], unnamed: [] };
   const only = new Set();
   const fixed = [];
   const removed = [];
+  const unnamed = [];
   // A grant's `trust` is the spec's own note about its server, never sent on chain: changing it publishes nothing.
   const strip = ({ id, index, shopBox, seller, trust, ...rest }) => JSON.stringify(rest);
   for (const [list, kind] of Object.entries(PART_LISTS)) {
@@ -155,8 +158,19 @@ export function changedParts(economy) {
     }
     for (const key of before.keys()) removed.push(`${kind}:${key}`);
   }
-  for (const t of economy.tokens ?? [])
-    if (!(published.tokens ?? []).some(x => x.key === t.key)) only.add(`token:${t.key}`);
+  // A token is made once. One the setup named on chain as it made it (`live.named`: its Token Metadata record, the
+  // owner its update authority) has its record written again when its name, ticker or link changes; one that went
+  // live before setups named tokens has no record, and can never be given one (`unnamed`).
+  const named = new Set(economy.live.named ?? []);
+  const called = t => JSON.stringify([t.name ?? null, t.symbol ?? null, t.uri ?? null]);
+  for (const t of economy.tokens ?? []) {
+    const was = (published.tokens ?? []).find(x => x.key === t.key);
+    if (!was) only.add(`token:${t.key}`);
+    else if (['project', 'game'].includes(t.source) && economy.live.mints?.[t.key] && called(was) !== called(t)) {
+      if (named.has(t.key)) only.add(`name:${t.key}`);
+      else unnamed.push(t.key);
+    }
+  }
   // The first compressed prize opens the project's tree.
   if (!economy.live.tree && compressedTree(model(economy))) only.add('tree');
   // A traits root set again replaces the last.
@@ -168,5 +182,9 @@ export function changedParts(economy) {
   if ((published.treasury ?? null) !== (economy.treasury ?? null)) settings.push('its treasury');
   if (JSON.stringify(published.collections ?? []) !== JSON.stringify(economy.collections ?? []))
     settings.push('the collections it takes');
-  return { only, fixed, removed, settings };
+  return { only, fixed, removed, settings, unnamed };
 }
+
+/** In words: these tokens' names changed in the spec, and they have no record on chain to change. */
+export const unnamedNote = unnamed =>
+  `The spec changes what ${unnamed.join(', ')} ${unnamed.length === 1 ? 'is' : 'are'} called, but ${unnamed.length === 1 ? 'that token' : 'those tokens'} went live before setups named tokens on chain: ${unnamed.length === 1 ? 'it has' : 'they have'} no name record, and none can be made now (only a mint’s own authority makes one, and its minting was handed on or turned off). Wallets keep showing ${unnamed.length === 1 ? 'it' : 'them'} as before.`;

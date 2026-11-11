@@ -212,7 +212,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       .filter(t => t.source === 'game' && !economy.live?.mints?.[t.key])
       .map(
         t =>
-          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later, and these tools don’t change a live token’s yet: get them right first.`,
+          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later: change them here and approve again.`,
       ),
   );
 
