@@ -9,7 +9,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as loot from '../client/index.js';
-import { KINDS, logged, names, receiptsOf } from './gone-kinds.mjs';
+import { coreOwner } from './gone-chain.mjs';
+import { appOf, KINDS, logged, names, receiptsOf } from './gone-kinds.mjs';
+import { collectible } from './world.mjs';
 
 const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';
@@ -459,5 +461,328 @@ for (const kind of KINDS)
       // The one gone is left: the winner has no pick left, and it is the opener's to close.
       const entry = w.entries(3)[w.entryOf(3, q.wallet)];
       assert.deepEqual([entry.nft, entry.amount], [lost, 1n]);
+    },
+  );
+
+// ---------------------------------------------------------------- an auction's end
+
+/** `seller` puts their NFT `lot` up as auction `id` for ten minutes: bids in the project's coin, or (`nftBids`: a
+ * rule) in NFTs. */
+function sale(k, seller, id, lot, nftBids = null) {
+  const { w } = k;
+  const now = w.chain.now();
+  k.send(seller, lot, piece =>
+    loot.openAuctionIx({
+      seller,
+      project: w.project,
+      id,
+      mint: w.mint,
+      ...piece,
+      args: {
+        lot: { Asset: [lot] },
+        reserve: 1n,
+        min_raise_bps: 0,
+        starts_at: BigInt(now),
+        ends_at: BigInt(now + 600),
+        extend: 0,
+        shares: [],
+        gate: null,
+        nft_bids: nftBids,
+      },
+    }),
+  );
+  k.into(lot);
+  return pda.auction(w.project, seller, id);
+}
+
+for (const kind of KINDS)
+  test(
+    `an auction whose ${kind.name} lot is gone: with no bid it closes and nothing goes home; sold, anyone's end calls it off and the bid goes back`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-lot');
+      const { w } = k;
+      const seller = w.who();
+      const auctions = [1, 2, 3, 4].map(id => ({ key: `a${id}`, name: `Lot ${id}`, id, seller }));
+      const [sellers, bidder, stranger] = [seller, w.player, w.who()].map(a => k.app(a, { auctions }));
+      const lots = auctions.map(() => k.mint(seller));
+      const at = auctions.map((a, i) => sale(k, seller, a.id, lots[i]));
+      for (const key of ['a3', 'a4']) await bidder.bid(key, '0.0005');
+      const paid = w.balance(w.player);
+      w.chain.warp(w.chain.now() + 601);
+      assert.match((await sellers.claims()).find(c => c.key === 'a1').says, /ended with no bid: take your lot back/);
+
+      for (const [i, burned] of [false, true, false, true].entries()) k.lose(lots[i], burned);
+      // The seller and the winner are told before anything is signed.
+      const mine = (await sellers.claims()).filter(c => c.kind === 'auction');
+      for (const c of mine) assert.equal(c.gone, true, c.key);
+      assert.match(mine[0].says, /no longer holds its lot.*no bid.*nothing comes back.*closes the auction/);
+      assert.match(mine[2].says, /no longer holds its lot.*called off.*bid goes back.*paid nothing/);
+      const won = (await bidder.claims()).filter(c => c.kind === 'auction');
+      assert.deepEqual(
+        won.map(c => [c.key, c.gone]),
+        [
+          ['a3', true],
+          ['a4', true],
+        ],
+      );
+      assert.match(won[0].says, /no longer holds its lot.*called off.*your bid comes back/);
+      for (const c of [...mine, ...won]) assert.doesNotMatch(c.says, /take your lot back|take it\.$|is paid to you/);
+
+      // No bid: anyone ends it. The auction closes, its rent to its seller, and no lot goes home.
+      for (const i of [0, 1]) {
+        const [rent, before] = [w.chain.get(at[i]).lamports, w.chain.get(seller).lamports];
+        const ended = await stranger.endAuction(auctions[i].key);
+        assert.equal(ended.gone, true);
+        assert.match(ended.says, /no longer holds the lot.*Nothing went home/);
+        const tx = logged(k.landed, ended.signature);
+        assert.deepEqual(
+          receiptsOf(tx, 'AuctionEnded').map(e => [e.winner, e.asset]),
+          [[null, NOBODY]],
+        );
+        nothingMoved(tx, ['Held']);
+        assert.equal(w.chain.get(at[i]), null, 'the auction closed');
+        assert.equal(w.chain.get(seller).lamports, before + rent, 'its rent to its seller');
+        k.still(lots[i]);
+      }
+      // Sold: anyone's end calls the sale off on the evidence. The bid goes back whole, and no lot goes home.
+      for (const i of [2, 3]) {
+        const ended = await stranger.endAuction(auctions[i].key);
+        assert.deepEqual([ended.calledOff, ended.gone], [true, true]);
+        assert.match(ended.says, /no longer holds the lot.*bid went back/);
+        const [off] = receiptsOf(logged(k.landed, ended.signature), 'SaleCalledOff');
+        assert.deepEqual(
+          [off.bidder, off.back, off.home, off.gone, off.by],
+          [w.player, 500n, false, true, stranger.wallet],
+        );
+        nothingMoved(logged(k.landed, ended.signature), ['Held', 'AuctionEnded']);
+        assert.equal(w.chain.get(at[i]), null, 'the auction closed');
+        k.still(lots[i]);
+      }
+      assert.equal(w.balance(w.player), paid + 1_000n, 'both bids came back');
+      assert.ok(!(await sellers.claims()).some(c => c.kind === 'auction'));
+    },
+  );
+
+// A bid of NFTs is never a compressed NFT (the program refuses one), so these run for the two kinds a bid can be.
+for (const kind of KINDS.filter(k => k.key !== 'compressed'))
+  test(
+    `an auction's winning bid of ${kind.name} NFTs, one of them gone: a player's lot is called off, the project's lot and a lot sent first are paid without it`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-bid');
+      const { w } = k;
+      const seller = w.who();
+      w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+      w.upsert({ Item: { id: 2, args: { ...collectible('Potion'), kind: 'Normal' } } });
+      const auctions = [
+        { key: 'players', name: 'A player’s lot', id: 1, seller },
+        { key: 'projects', name: 'The project’s lot', id: 2, seller: w.authority },
+        { key: 'first', name: 'A lot sent first', id: 3, seller },
+      ];
+      const [sellers, bidder, stranger] = [seller, w.who(), w.who()].map(a => k.app(a, { auctions }));
+      const now = w.chain.now();
+      const args = lot => ({
+        lot,
+        reserve: 1n,
+        min_raise_bps: 0,
+        starts_at: BigInt(now),
+        ends_at: BigInt(now + 600),
+        extend: 0,
+        shares: [],
+        gate: null,
+        nft_bids: k.rule,
+      });
+      const open = (who, id, lot) =>
+        w.chain.send(who, [
+          loot.openAuctionIx({
+            seller: who,
+            project: w.project,
+            collection: w.collection,
+            id,
+            mint: w.mint,
+            args: args(lot),
+          }),
+        ]);
+      const lots = { players: w.make(1, seller), first: w.make(1, seller) };
+      open(seller, 1, { Asset: [lots.players] });
+      open(w.authority, 2, { Item: [2] });
+      open(seller, 3, { Asset: [lots.first] });
+      const bids = {};
+      for (const { key } of auctions) {
+        bids[key] = [k.mint(bidder.wallet), k.mint(bidder.wallet)];
+        await bidder.bid(key, null, { nfts: bids[key] });
+      }
+      w.chain.warp(now + 601);
+      const at = id => pda.auction(w.project, id === 2 ? w.authority : seller, id);
+
+      // A player's lot: the two sides move together or not at all, so anyone's end calls the sale off.
+      {
+        const [lost, kept] = bids.players;
+        k.lose(lost);
+        const told = (await bidder.claims()).find(c => c.key === 'players');
+        assert.deepEqual([told.gone, told.assets], [true, [lost]]);
+        assert.match(told.says, /no longer holds an NFT of your bid.*called off.*lot goes home to its seller/);
+        assert.match((await sellers.claims()).find(c => c.key === 'players').says, /lot goes home to you/);
+        const ended = await stranger.endAuction('players');
+        assert.deepEqual([ended.calledOff, ended.gone], [true, true]);
+        assert.match(ended.says, /no longer holds an NFT of the winning bid.*lot went home.*rest of the bid went back/);
+        const tx = logged(k.landed, ended.signature);
+        const [off] = receiptsOf(tx, 'SaleCalledOff');
+        assert.deepEqual([off.back, off.home, off.gone, off.by], [1n, true, true, stranger.wallet]);
+        nothingMoved(tx, ['Held', 'AuctionEnded']);
+        assert.deepEqual([k.owner(kept), coreOwner(w, lots.players)], [bidder.wallet, seller]);
+        k.still(lost);
+        assert.equal(w.chain.get(at(1)), null, 'the auction closed');
+      }
+
+      // The project's own lot: the end passes the NFT that is gone over, and pays the rest.
+      {
+        const [lost, kept] = bids.projects;
+        k.lose(lost, true);
+        const told = (await bidder.claims()).find(c => c.key === 'projects');
+        assert.deepEqual([told.gone, told.assets], [true, [lost]]);
+        assert.match(
+          told.says,
+          /no longer holds an NFT of your bid.*gives the lot to you.*nothing is paid for the one gone/,
+        );
+        const ended = await stranger.endAuction('projects');
+        assert.deepEqual([ended.winner, ended.calledOff, ended.gone], [bidder.wallet, undefined, true]);
+        assert.match(ended.says, /Nothing was paid for it: the lot went to its winner/);
+        const tx = logged(k.landed, ended.signature);
+        assert.equal(receiptsOf(tx, 'AuctionEnded')[0].winner, bidder.wallet);
+        nothingMoved(tx, ['Held', 'SaleCalledOff']);
+        assert.equal(k.owner(kept), w.treasury, 'the NFT still there went to the treasury');
+        k.still(lost);
+        assert.equal(w.chain.get(at(2)), null, 'the auction closed');
+      }
+
+      // A lot sent first: the winner has it, and an NFT of the bid goes before the second end pays the seller.
+      {
+        const [lost, kept] = bids.first;
+        w.chain.send(w.cranker, [
+          loot.endAuctionIx({
+            signer: w.cranker,
+            project: w.project,
+            projectState: w.projectState(),
+            id: 3,
+            auction: w.read('Auction', at(3)),
+            collection: w.collection,
+            ending: 'LotFirst',
+          }),
+        ]);
+        assert.equal(coreOwner(w, lots.first), bidder.wallet, 'the lot went first');
+        k.lose(lost);
+        const told = (await sellers.claims()).find(c => c.key === 'first');
+        assert.deepEqual([told.gone, told.assets], [true, [lost]]);
+        assert.match(told.says, /winner of .* has the lot.*pays you the rest of the bid, and nothing for the one gone/);
+        const ended = await stranger.endAuction('first');
+        assert.equal(ended.gone, true);
+        assert.match(ended.says, /Nothing was paid for it: the rest of the bid was paid to the seller/);
+        const tx = logged(k.landed, ended.paid);
+        nothingMoved(tx, ['Held', 'SaleCalledOff']);
+        assert.equal(k.owner(kept), seller, 'the NFT still there was paid to the seller');
+        k.still(lost);
+        assert.equal(w.chain.get(at(3)), null, 'the auction closed');
+      }
+    },
+  );
+
+for (const kind of KINDS.filter(k => k.key !== 'compressed'))
+  test(
+    `a high bid of ${kind.name} NFTs, one of them gone, is still topped: the one gone is made a hold that closes on the proof`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-topped');
+      const { w } = k;
+      const seller = w.who();
+      w.upsert({ Item: { id: 1, args: collectible('Painting') } });
+      const lot = w.make(1, seller);
+      const auctions = [{ key: 'lot', name: 'Lot', id: 1, seller }];
+      const now = w.chain.now();
+      w.chain.send(seller, [
+        loot.openAuctionIx({
+          seller,
+          project: w.project,
+          collection: w.collection,
+          id: 1,
+          mint: w.mint,
+          args: {
+            lot: { Asset: [lot] },
+            reserve: 1n,
+            min_raise_bps: 0,
+            starts_at: BigInt(now),
+            ends_at: BigInt(now + 600),
+            extend: 0,
+            shares: [],
+            gate: null,
+            nft_bids: k.rule,
+          },
+        }),
+      ]);
+      const [first, second] = [w.who(), w.who()].map(a => k.app(a, { auctions }));
+      const [lost, kept] = [k.mint(first.wallet), k.mint(first.wallet)];
+      await first.bid('lot', null, { nfts: [lost, kept] });
+      k.lose(lost);
+
+      const mine = [k.mint(second.wallet), k.mint(second.wallet), k.mint(second.wallet)];
+      second.calls.prompts = 0;
+      const tx = logged(k.landed, await second.bid('lot', null, { nfts: mine }));
+      // (Five Token Metadata NFTs' accounts need a lookup table, made first: more prompts.)
+      if (kind.key === 'core') assert.equal(second.calls.prompts, 1);
+      assert.equal(w.read('Auction', pda.auction(w.project, seller, 1)).high_bidder, second.wallet, 'the bid landed');
+      assert.deepEqual(goneIn(tx), [`${pda.hold(lost, 0)} ${lost} ${second.wallet}`]);
+      nothingMoved(tx);
+      assert.equal(w.chain.get(pda.hold(lost, 0)), null, 'the hold is closed');
+      assert.equal(k.owner(kept), first.wallet, 'the NFT still there went back to its bidder');
+      k.still(lost);
+    },
+  );
+
+for (const kind of KINDS)
+  test(
+    `a ${kind.name} lot made a hold at its auction's end and gone before its release: the release closes the hold on the proof`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-held-lot');
+      const { w } = k;
+      const seller = w.who();
+      const lot = k.mint(seller);
+      const auctions = [{ key: 'lot', name: 'Lot', id: 1, seller }];
+      const at = sale(k, seller, 1, lot);
+      w.chain.warp(w.chain.now() + 601);
+      const hold = pda.hold(lot, 0);
+      // The lot can't move when the end is tried (its dry run fails, as a frozen NFT's does), so the end makes it a
+      // hold for its seller. Its controller takes it as soon as that lands, before the release.
+      let [tries, taken] = [0, false];
+      const rpc = {
+        ...k.rpc,
+        async simulate(...args) {
+          if (tries++ === 0) throw Object.assign(new Error('The NFT is frozen.'), { logs: [] });
+          return k.rpc.simulate(...args);
+        },
+        async send(wire) {
+          const signature = await k.rpc.send(wire);
+          if (!taken && w.chain.get(hold)) {
+            taken = true;
+            k.lose(lot);
+          }
+          return signature;
+        },
+      };
+      const ended = await appOf(w, w.who(), { rpc, spec: { auctions } }).endAuction('lot');
+      assert.equal(taken, true, 'the end made the hold');
+      assert.equal(w.chain.get(at), null, 'the auction closed');
+      assert.equal(ended.releases.length, 1);
+      const [release] = ended.releases;
+      assert.deepEqual([release.asset, release.gone], [lot, true]);
+      const tx = logged(k.landed, release.closed);
+      assert.deepEqual(
+        receiptsOf(tx, 'NftGone').map(g => [g.record, g.asset]),
+        [[hold, lot]],
+      );
+      nothingMoved(tx);
+      assert.equal(w.chain.get(hold), null, 'the hold is closed');
+      k.still(lot);
     },
   );

@@ -421,10 +421,10 @@ export function solanaApp({
    * way. Whoever controls a collection the project does not can take an NFT out of the project's hands or burn it. A
    * Core asset shows it by itself (`kind`: its collection now); a Token Metadata NFT by the token account that holds it
    * now, or its mint once burned (`kind.tokenMetadata.evidence`); a compressed NFT by its record, proven again as its
-   * leaf is now (`before`, by `signer`). `holder`: as `heldNow` takes it.
+   * leaf is now (`before`, by `signer`). `holder`: as `heldNow` takes it. `now`: what `heldNow` read of it already.
    */
-  async function goneProof(asset, signer = wallet.address, { holder = null } = {}) {
-    const now = await heldNow(asset, { holder });
+  async function goneProof(asset, signer = wallet.address, { holder = null, now = null } = {}) {
+    now ??= await heldNow(asset, { holder });
     if (now.held !== false) return null;
     if (now.das) {
       const proof = await client.call('getAssetProof', { id: asset });
@@ -439,9 +439,10 @@ export function solanaApp({
   /**
    * An NFT a record of the project's is to send on (`nftOf`, to `to`), or, when it is proven gone from the project
    * (`goneProof`), what shows that, with `gone` true: the instruction then finishes without it and nothing is sent.
+   * `now`: what `heldNow` read of it already.
    */
-  async function leaving(asset, signer = wallet.address, { to, payer = signer } = {}) {
-    const proof = await goneProof(asset, signer);
+  async function leaving(asset, signer = wallet.address, { to, payer = signer, now = null } = {}) {
+    const proof = await goneProof(asset, signer, { now });
     if (!proof) return { ...(await nftOf(asset, signer, { to, payer })), gone: false };
     // A Core asset shows it by itself, with the accounts it always took.
     if (!proof.kind.tokenMetadata && !proof.kind.compressed) return { ...(await nftOf(asset, signer)), gone: true };
@@ -1975,16 +1976,18 @@ export function solanaApp({
     const lotNow = lot ? await heldNow(lot) : { held: null };
     const bidNow = [];
     if (sold && auction.nft_bids) for (const nft of auction.held) bidNow.push(await heldNow(nft));
-    const gone = lotNow.held === false || bidNow.some(n => n.held === false);
+    const lostBids = sold && auction.nft_bids ? auction.held.filter((_, i) => bidNow[i].held === false) : [];
+    const gone = lotNow.held === false || lostBids.length > 0;
     const ending = sold && lot && (callOff || gone) ? 'CallOff' : 'Deliver';
     const home = !sold || ending === 'CallOff';
     // The lot to its winner, or home to its seller; a bid's NFTs to whoever owned the lot, or back to their bidder.
+    // One that is gone is not sent: its accounts only show the end that the project no longer holds it.
     const before = [];
-    const lotKind = lot ? await kindFor(lot, home ? auction.seller : auction.high_bidder, lotNow.evidence, before) : {};
+    const lotKind = lot ? await kindFor(lot, home ? auction.seller : auction.high_bidder, lotNow, before) : {};
     const bidTo = ending === 'CallOff' ? auction.high_bidder : owner;
     const held = [];
     if (sold && auction.nft_bids)
-      for (const [i, nft] of auction.held.entries()) held.push(await kindFor(nft, bidTo, bidNow[i].evidence, before));
+      for (const [i, nft] of auction.held.entries()) held.push(await kindFor(nft, bidTo, bidNow[i], before));
     if (sold && !home) holders ??= await holdersOf(auction.shares);
     const end = (ending, hold = false) =>
       loot.endAuctionIx({ ...base, auction, item, ...lotKind, held, holders, ending, hold });
@@ -1999,6 +2002,24 @@ export function solanaApp({
       ...(made ? { asset: made } : {}),
     };
     if (ending === 'CallOff') Object.assign(result, { calledOff: true, gone });
+    // What the end did about an NFT that is gone, in words: nothing here says it moved.
+    if (gone) {
+      const which =
+        lotNow.held === false
+          ? `the lot (${lot})`
+          : `${lostBids.length === 1 ? 'an NFT' : 'NFTs'} of the winning bid (${lostBids.join(', ')})`;
+      const did = !sold
+        ? 'Nothing went home: the auction is closed, and its rent went back to its seller.'
+        : ending === 'Deliver'
+          ? 'Nothing was paid for it: the lot went to its winner, and the rest of the bid was paid.'
+          : lotNow.held === false
+            ? `The sale was called off: ${auction.nft_bids ? 'the NFTs of the winning bid the project still held' : 'the winning bid'} went back to its bidder, and nothing went home to the seller.`
+            : 'The sale was called off: the lot went home to its seller, and the rest of the bid went back to its bidder.';
+      Object.assign(result, {
+        gone: true,
+        says: `The project no longer holds ${which}: whoever controls its collection took it back or burned it while the auction held it. ${did}`,
+      });
+    }
 
     // An end that may make holds: a lot going home, a bid's NFTs going back or to the treasury for the project's lot.
     const outs = [
@@ -2066,15 +2087,15 @@ export function solanaApp({
     return holding();
   }
 
-  /** An NFT's kind on an auction's end, going to `to`: what `nftOf` reads, its proof put in `before`; `evidence` for a Token
-   * Metadata NFT that left the project (the account that holds it now, or its mint). */
-  async function kindFor(asset, to, evidence, before) {
-    const { before: proof, hasAuthority: _, ...kind } = await nftOf(asset, wallet.address, { to });
+  /** An NFT's kind on an auction's end, going to `to`: what `nftOf` reads, its proof put in `before`. `now`: what
+   * `heldNow` read of it; one that is gone carries what shows it instead (a Token Metadata NFT's account that holds it
+   * now, or its mint; a compressed NFT's leaf as it is now), and is sent nowhere. */
+  async function kindFor(asset, to, now, before) {
+    const { before: proof, hasAuthority: _h, gone: _g, ...kind } = await leaving(asset, wallet.address, { to, now });
     before.push(...proof);
     return {
       ...kind,
       collection: kind.compressed || kind.tokenMetadata ? undefined : ((await collectionOf(asset)) ?? MPL_CORE),
-      ...(evidence && kind.tokenMetadata ? { evidence } : {}),
     };
   }
 
@@ -2123,16 +2144,30 @@ export function solanaApp({
     if (opens.length) await send([...new Map(opens.map(x => [x.keys[1].pubkey, x])).values()]);
     const before = [];
     const held = [];
-    if (auction.nft_bids) for (const nft of auction.held) held.push(await kindFor(nft, auction.seller, null, before));
+    // An NFT of the bid that is gone (its collection took it back or burned it) is not paid: its accounts show the
+    // end that the project no longer holds it, and the end passes it over.
+    const lost = [];
+    if (auction.nft_bids)
+      for (const nft of auction.held) {
+        const now = await heldNow(nft);
+        if (now.held === false) lost.push(nft);
+        held.push(await kindFor(nft, auction.seller, now, before));
+      }
     const end = (hold = false) => loot.endAuctionIx({ ...base, auction, held, holders, hold });
     const steps = ix => [
       computeUnitLimit(1_000_000),
       ...before.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM),
       ix,
     ];
+    const passed = lost.length
+      ? {
+          gone: true,
+          says: `The project no longer holds ${lost.length === 1 ? 'an NFT' : 'NFTs'} of the winning bid (${lost.join(', ')}): whoever controls its collection took it back or burned it while the auction held it. Nothing was paid for it: the rest of the bid was paid to the seller.`,
+        }
+      : {};
     if (sendPlan({ payer: wallet.address, instructions: steps(end()), alone: isProveLeaf }))
       try {
-        return { paid: await send(steps(end())) };
+        return { paid: await send(steps(end())), ...passed };
       } catch (e) {
         // The lot is the winner's already: what is owed waits until the account it goes into can take it.
         return {
@@ -2140,9 +2175,9 @@ export function solanaApp({
           says: `The lot is the winner’s; the money waits (${e.message}): end the auction again to pay it.`,
         };
       }
-    const outs = auction.held.map(x => [x, auction.seller]);
-    const { signature, releases } = await heldThenReleased(at, steps(end(true)), outs);
-    return { paid: signature, releases };
+    const outs = auction.held.filter(x => !lost.includes(x)).map(x => [x, auction.seller]);
+    const { signature, releases } = await heldThenReleased(at, steps(end(outs.map(([x]) => x))), outs);
+    return { paid: signature, releases, ...passed };
   }
 
   /**
@@ -2158,9 +2193,12 @@ export function solanaApp({
     const signature = await send([...instructions, fund]);
     const releases = [];
     for (const [asset, to] of outs) {
+      // Taken back or burned since the end made it a hold: its release closes the hold on that proof, and sends nothing.
+      let lost = false;
       const release = async signer => {
         const hold = await read('Hold', loot.pda.hold(asset, 0));
-        const { before: proof, hasAuthority: _h, ...kind } = await nftOf(asset, signer, { to });
+        const { before: proof, hasAuthority: _h, gone, ...kind } = await leaving(asset, signer, { to });
+        lost = gone;
         return [
           ...proof,
           loot.releaseIx({
@@ -2177,7 +2215,8 @@ export function solanaApp({
       const steps = await release(key.address);
       const byKey = (await dryRun(key.address, steps)).ok ? await sendAs(key, steps).catch(() => null) : null;
       // One that still can't move (frozen for now) stays a hold: claims() lists it for whoever it is owed to.
-      releases.push(byKey ?? (await send(await release(wallet.address)).catch(e => ({ asset, waits: e.message }))));
+      const sent = byKey ?? (await send(await release(wallet.address)).catch(e => ({ asset, waits: e.message })));
+      releases.push(lost && typeof sent === 'string' ? { asset, gone: true, closed: sent } : sent);
     }
     await emptyKey(key);
     return { signature, releases };
@@ -2190,6 +2229,35 @@ export function solanaApp({
   const GONE_LISTING =
     'The project no longer holds this NFT: whoever controls its collection took it back or burned it while it was listed. There is nothing to buy or rent. The listing can be closed for nothing, by its maker (unlist) or by anyone (closeGone), once no rental runs: its rent goes back to its maker.';
 
+  /**
+   * What ending an auction does when its lot or an NFT of its winning bid is gone, in words, for `claims()`: `x` the
+   * auction, `me` the wallet told (its seller, or its high bidder), `lot` the lot when it is gone, `bids` the NFTs of
+   * the winning bid that are gone.
+   */
+  function goneSaleSays(name, x, me, lot, bids) {
+    const [sold, owed] = [BigInt(x.high) > 0n, BigInt(x.proceeds_owed) > 0n];
+    const mine = sold && x.high_bidder === me;
+    const why = 'whoever controls its collection took it back or burned it while the auction held it';
+    const lostBids = `${bids.length === 1 ? 'an NFT' : 'NFTs'} of ${mine ? 'your' : 'the winning'} bid (${bids.join(', ')})`;
+    if (lot && !sold)
+      return `The project no longer holds its lot (${lot}): ${why}. “${name}” ended with no bid, and nothing comes back to you: ending it closes the auction, and its rent comes back to you.`;
+    if (lot) {
+      const back = x.nft_bids
+        ? `the NFTs of ${mine ? 'your' : 'the winning'} bid that the project still holds go back to ${mine ? 'you' : 'their bidder'}`
+        : mine
+          ? 'your bid comes back to you'
+          : 'the winning bid goes back to its bidder';
+      return `The project no longer holds its lot (${lot}): ${why}. The sale of “${name}” is called off by its end, which anyone may send: ${back}, and ${mine ? 'the lot is not yours' : 'you are paid nothing'}.${bids.length ? ` It no longer holds ${lostBids} either: nothing comes back for it.` : ''}`;
+    }
+    const first = `The project no longer holds ${lostBids}: ${why}.`;
+    // A player's lot that has not moved: the two sides move together or not at all, so the sale is called off.
+    if (x.lot.Asset && !owed)
+      return `${first} The sale of “${name}” is called off by its end, which anyone may send: the lot goes home to ${mine ? 'its seller' : 'you'}, and the rest of the bid back to ${mine ? 'you' : 'its bidder'}. Nothing comes back for the one gone.`;
+    // The lot went first, or it is the project's own: the end passes that NFT over and pays the rest.
+    return owed
+      ? `${first} The winner of “${name}” has the lot: ending it again pays you the rest of the bid, and nothing for the one gone.`
+      : `${first} Ending “${name}” gives the lot to ${mine ? 'you' : 'its winner'} and pays the rest of the bid: nothing is paid for the one gone.`;
+  }
   /** What claiming does about the NFTs of a round's parts that are gone, in words, for `claims()`: `tickets` the NFTs
    * that paid for the wallet's tickets, `prizes` the NFTs its places won; `back` when its tickets go back to their
    * buyers (a round called off, a lottery that returns its tickets). */
@@ -4183,9 +4251,17 @@ export function solanaApp({
         };
         const bid = [];
         for (const asset of bundle) bid.push(await kindOf(asset));
-        // The bid it tops goes back to its bidder: into a fresh account of theirs when their own can't take it.
+        // The bid it tops goes back to its bidder: into a fresh account of theirs when their own can't take it. An
+        // NFT of it that is gone (its collection took it back or burned it) can't go back: the auction only hands it
+        // out, so it is made a hold for its bidder, and that hold closes on the proof right after the bid.
         const held = [];
-        for (const asset of auction.held) held.push(await kindOf(asset, auction.high_bidder));
+        const lost = new Map();
+        for (const asset of auction.held) {
+          const { before: proof, gone, ...kind } = await leaving(asset, wallet.address, { to: auction.high_bidder });
+          before.push(...proof);
+          held.push({ asset, ...kind });
+          if (gone) lost.set(asset, kind);
+        }
         const ix = loot.bidIx({
           bidder: wallet.address,
           project,
@@ -4195,13 +4271,19 @@ export function solanaApp({
           listProof,
           nfts: bid,
           held,
+          hold: [...lost.keys()],
           programs,
         });
+        const g = await projectNow();
+        const closes = [...lost].map(([asset, { hasAuthority: _, ...kind }]) =>
+          closeOwed(asset, kind, { player: auction.high_bidder, rentTo: auction.high_bidder }, wallet.address, g),
+        );
         return send(
           await closesFirst(clears, [
             computeUnitLimit(800_000),
             ...before.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM),
             ix,
+            ...closes,
           ]),
         );
       }
@@ -4999,32 +5081,47 @@ export function solanaApp({
       }
       const auctions = spec.auctions ?? [];
       const found = await client.accounts(auctions.map(a => auctionAt(a)));
-      auctions.forEach((a, i) => {
+      for (const [i, a] of auctions.entries()) {
         const x = found[i] && loot.decode('Auction', found[i].data);
-        if (!x || time < loot.auctionEnds(x)) return;
-        // The lot went first (an end too wide for one transaction, or a seller's account that couldn't take the money
-        // then): only the money is left to pay.
-        if (BigInt(x.proceeds_owed) > 0n) {
-          if (x.seller === me)
-            out.push({
-              kind: 'auction',
-              key: a.key,
-              says: `The winner of “${a.name}” has the lot, and the winning bid is still to be paid to you: end it again, and it is paid (once your account can take it).`,
-            });
-          return;
-        }
-        if (x.high_bidder === me) out.push({ kind: 'auction', key: a.key, says: `You won “${a.name}”: take it.` });
-        // The seller's own auction, over: ending it pays them (or brings an unsold lot home).
-        else if (x.seller === me)
+        if (!x || time < loot.auctionEnds(x)) continue;
+        const [sold, owed] = [BigInt(x.high) > 0n, BigInt(x.proceeds_owed) > 0n];
+        if (!(x.seller === me || (sold && !owed && x.high_bidder === me))) continue;
+        // Its lot, or an NFT of the winning bid, that the project no longer holds (its collection took it back or
+        // burned it): the end does not send it anywhere, and this says what the end does instead.
+        const lot = owed ? null : (x.lot.Asset?.[0] ?? null);
+        const bids = sold && x.nft_bids ? x.held : [];
+        const heldOf = lot || bids.length ? await heldEach([...(lot ? [lot] : []), ...bids]) : new Map();
+        const lostBids = bids.filter(nft => heldOf.get(nft)?.held === false);
+        if ((lot && heldOf.get(lot)?.held === false) || lostBids.length) {
+          const lotGone = lot && heldOf.get(lot)?.held === false;
           out.push({
             kind: 'auction',
             key: a.key,
-            says:
-              BigInt(x.high) > 0n
-                ? `Your auction “${a.name}” is over: end it, and the winning bid is paid to you.`
-                : `Your auction “${a.name}” ended with no bid: take your lot back.`,
+            gone: true,
+            assets: [...(lotGone ? [lot] : []), ...lostBids],
+            says: goneSaleSays(a.name, x, me, lotGone ? lot : null, lostBids),
           });
-      });
+          continue;
+        }
+        // The lot went first (an end too wide for one transaction, or a seller's account that couldn't take the money
+        // then): only the money is left to pay.
+        if (owed)
+          out.push({
+            kind: 'auction',
+            key: a.key,
+            says: `The winner of “${a.name}” has the lot, and the winning bid is still to be paid to you: end it again, and it is paid (once your account can take it).`,
+          });
+        else if (x.high_bidder === me) out.push({ kind: 'auction', key: a.key, says: `You won “${a.name}”: take it.` });
+        // The seller's own auction, over: ending it pays them (or brings an unsold lot home).
+        else
+          out.push({
+            kind: 'auction',
+            key: a.key,
+            says: sold
+              ? `Your auction “${a.name}” is over: end it, and the winning bid is paid to you.`
+              : `Your auction “${a.name}” ended with no bid: take your lot back.`,
+          });
+      }
       for (const l of spec.lotteries ?? []) {
         // A lottery the page names but nobody has written yet (a raffle still to open) has nothing to finish.
         if (!(await client.account(loot.pda.lottery(project, l.id)))) continue;
