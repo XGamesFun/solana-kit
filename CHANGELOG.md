@@ -4,7 +4,7 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## 0.27.0: a record whose NFT is gone closes, and a deposit clears what an earlier owner left (loot 0.27.0; devnet runs 0.26.1 until it is deployed)
+## 0.27.0: a record whose NFT is gone closes, and a deposit clears what an earlier owner left (loot 0.27.0, on devnet since 2026-11-11, slot 521,001,695)
 
 The program, 0.27.0: two changes. No stored record changed shape and no instruction's arguments or accounts changed:
 every account made under 0.26 reads as before, and a 0.26 client's instructions land. The IDL gains one receipt,
