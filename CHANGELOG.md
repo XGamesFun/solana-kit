@@ -80,8 +80,11 @@ the rest did not, and the setup stopped there.
   answer never came back, the client's own second try was refused as already processed, the approval took that for
   "never taken" and forgot the transaction, and the next run made its steps again. A setup's seeds could be paid in
   twice, and a step that makes an account could never finish ("already in use"). Now `rpc.send` answers such a
-  refusal with the transaction's own signature, and the approval asks the chain about a transaction before it forgets
-  it: only one the chain has not seen and the node refused for another reason is dropped.
+  refusal with the transaction's own signature (read from the node's own word for it, never from a program's log),
+  and the approval asks the chain about a transaction before it forgets it. It is forgotten only when it can never
+  land: the chain says it failed, or a node answered the send with a refusal and no earlier try of that send went
+  unanswered (`RpcError.maybeTaken`). Anything else is kept and looked up before anything is sent again, which can
+  mean a wait of a minute or two before a setup goes on.
 - **A sponsored step leads with a unit limit and a unit price of 0** (`js/play`): the player's wallet signs it before
   the sponsor does, with no signature on it yet, so such a wallet added its price and the sponsor's server, which pays
   none by default, refused it; the step then went as the player's own, with a second prompt. A step keeps the kind
