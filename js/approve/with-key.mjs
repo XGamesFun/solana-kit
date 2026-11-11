@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { readKeyFile } from './keyfile.mjs';
-import { createApproval, devnetChain } from './server.mjs';
+import { clusterChain, createApproval } from './server.mjs';
 
 /** The notice the page has its owner tick before Approve (js/approve/page.html, "Read this first"), word for word. */
 export const NOTICE = [
@@ -156,7 +156,7 @@ export async function approveWithKey({
   keyFile,
   yes = null,
   confirm = null,
-  chain = devnetChain(),
+  chain = clusterChain(),
   out = line => console.log(line),
   now,
   keyReader = readKeyFile,

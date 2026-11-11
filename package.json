@@ -102,6 +102,7 @@
   ],
   "scripts": {
     "test": "node --test \"js/test/**/*.test.mjs\"",
+    "test:mainnet": "node scripts/test-mainnet.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "types": "tsc -p tsconfig.types.json",

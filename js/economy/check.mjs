@@ -8,7 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { MAX_POTS } from '../client/accounts.js';
-import { vault } from '../client/pda.js';
+import { cluster, CLUSTERS, networkOf, useCluster, vault } from '../client/pda.js';
 import { ASSUMED_TRIES, boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
@@ -693,10 +693,7 @@ export function dateWords(seconds) {
  * (`ASSUMED_TRIES`).
  * Returns { ok, refusals: [{ code, where, message, fix }], warnings: [{ code, where, message, fix? }] }.
  */
-export function check(
-  economy,
-  { network = 'devnet', now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {},
-) {
+export function check(economy, { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {}) {
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
@@ -717,13 +714,27 @@ export function check(
       `The economy names ${STAND_IN_OWNER}, the address the setup plan stands in for your wallet before one connects. Nobody holds its key: whatever is sent there is lost.`,
       'Name a real wallet there.',
     );
-  if (network !== 'devnet' || (economy?.network && economy.network !== 'devnet'))
+  // The economy's cluster: the network it names, devnet when it names none. This process works on one cluster, and
+  // the first economy it checks names it when nothing did before.
+  const named = networkOf(economy);
+  if (!Object.hasOwn(CLUSTERS, named))
     refuse(
       'E-NETWORK',
       'economy.network',
-      `The economy names the network “${economy?.network ?? network}”. loot runs on devnet only: mainnet waits for an audit.`,
-      'Set the network to "devnet".',
+      `The economy names the network “${named}”. loot runs on ${Object.keys(CLUSTERS).join(' and on ')}.`,
+      'Set the network to "devnet", or to "mainnet".',
     );
+  else
+    try {
+      useCluster(named);
+    } catch {
+      refuse(
+        'E-NETWORK',
+        'economy.network',
+        `The economy is on ${named}, and this process works on ${cluster()}: one process works on one cluster.`,
+        `Run it where the cluster is ${named}: the xsolana command takes the cluster from the file, and a server or a script is started with XSOLANA_CLUSTER=${named}.`,
+      );
+    }
   const oldVersion = economy?.version === 1;
   if (oldVersion)
     refuse(

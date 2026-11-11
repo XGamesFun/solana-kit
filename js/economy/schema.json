@@ -12,8 +12,8 @@
       "description": "The spec format: 2 is loot 0.7 and later."
     },
     "network": {
-      "const": "devnet",
-      "description": "Devnet only until the program is audited."
+      "enum": ["devnet", "mainnet"],
+      "description": "The cluster the economy is on: devnet when it names none. loot has an address of its own on each."
     },
     "name": {
       "type": "string",

@@ -4,6 +4,37 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased: a cluster for each process (loot 0.28.0, unchanged)
+
+loot has an address of its own on each cluster. Devnet's is `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, where it
+runs today; mainnet's build of the program is `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, where nothing is deployed
+yet. A voucher and a verdict are signed over the program's address, so one signed for devnet never counts on mainnet.
+This is the client's side of it. Nothing changes for an economy on devnet, and this is not released until the program
+is on mainnet.
+
+- **One process works on one cluster** (`js/client/cluster.js`). It is devnet unless the process names mainnet: the
+  environment variable `XSOLANA_CLUSTER`, or `useCluster('mainnet')` before anything is derived. Every address
+  derived, every instruction built and everything signed follows it: `LOOT_PROGRAM` is the cluster's program, and a
+  second cluster is refused once the first is settled, so addresses of two clusters never mix.
+- **An economy names its cluster**: `"network": "devnet"` or `"mainnet"`, devnet when it names none. The `xsolana`
+  command and `solanaApp` take the cluster from the economy they are given; a server or a script is started for one.
+  An economy of another cluster than the process's is refused (`E-NETWORK`), and so is a `live` section that names
+  another cluster's program.
+- **The RPC must be on that cluster**: a URL that names another is refused, and so is a chain whose first block is
+  another's (`rightCluster`, `checkCluster`). Devnet keeps its public RPC as the default; mainnet has none, since its
+  public RPC does not serve what loot reads, so one is always named (`XSOLANA_RPC_URL`, or `rpcUrl`). A wallet is
+  asked to sign for `solana:devnet` or `solana:mainnet` accordingly.
+- **Fixed: receipts were read by the IDL's address.** `decodeEvents` counted only the log lines of the address in the
+  IDL, which is devnet's, so on another address it read no receipt at all. It takes the program's address now.
+- **Tests on both addresses.** `npm test` runs the suite on devnet's address and `npm run test:mainnet` on mainnet's,
+  against the program's own build for it (`XSOLANA_PROGRAM_DIR` names a checkout of the program that built
+  `target/mainnet/loot.so`: that build is pinned nowhere until it is deployed). `js/test/cluster.test.mjs` holds the
+  program's own vectors for both addresses: a voucher, the verdicts, their signatures, a grant's addresses and the
+  identities the oracle knows the program by.
+- **Not yet**: a fee that lands on mainnet (the tools send almost none), the oracle's fee there, the results server's
+  address for mainnet, the MCP server for an economy of the cluster it was not started on, and every sentence in the
+  tools, the skill and the docs that says devnet only.
+
 ## 0.28.1: a wallet that adds its own checks can approve on the page (loot 0.28.0, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.28.0's.

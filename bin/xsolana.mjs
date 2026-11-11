@@ -141,6 +141,29 @@ async function main(argv) {
 
   const fileInput = () => (positional[0] ? { file: positional[0] } : {});
 
+  /**
+   * Names the cluster this command works on from the economy it is given (a file, or a spec passed whole): its
+   * "network", devnet when it names none. A file that is missing or not JSON, and a network loot does not know, are
+   * left to the tool, which says so in its own words.
+   */
+  async function clusterOf({ file = 'xsolana.json', spec = null } = {}) {
+    const { CLUSTERS, networkOf, useCluster } = await import('../js/client/cluster.js');
+    let network;
+    try {
+      network = networkOf(spec ?? JSON.parse(await readFile(file, 'utf8')));
+    } catch {
+      return;
+    }
+    if (!Object.hasOwn(CLUSTERS, network)) return;
+    try {
+      useCluster(network);
+    } catch {
+      throw new UsageError(
+        `${spec ? 'The economy' : file} is on ${network}, and XSOLANA_CLUSTER says ${process.env.XSOLANA_CLUSTER}: unset it, or change the economy’s "network".`,
+      );
+    }
+  }
+
   switch (command) {
     case 'mcp': {
       if (flags.has('--http')) {
@@ -166,6 +189,7 @@ async function main(argv) {
     case 'review':
     case 'publish':
     case 'status':
+      await clusterOf(fileInput());
       await tool(`xsolana_${command}`, fileInput());
       break;
     case 'token':
@@ -200,6 +224,7 @@ async function main(argv) {
     }
     case 'approve': {
       const file = positional[0] ?? 'xsolana.json';
+      await clusterOf({ file });
       const keyFile = values.get('--keypair');
       const page = flags.has('--browser');
       if (keyFile !== undefined && page)
@@ -252,6 +277,7 @@ async function main(argv) {
           { cause: e },
         );
       }
+      if (input && typeof input === 'object' && (input.file !== undefined || input.spec)) await clusterOf(input);
       await tool(positional[0], input);
       break;
     }

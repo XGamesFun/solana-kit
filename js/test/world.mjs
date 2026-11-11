@@ -24,9 +24,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export const program = process.env.XSOLANA_PROGRAM_DIR ? path.resolve(process.env.XSOLANA_PROGRAM_DIR) : null;
 /** The pinned programs, accounts and runtime the tests load. */
 export const fixtures = path.join(root, 'js/test/fixtures');
-/** The loot program the tests run: a local build when XSOLANA_PROGRAM_DIR names a checkout, else the pinned devnet build. */
-const localBuild = process.env.XSOLANA_PROGRAM_DIR ? path.join(program, 'target/deploy/loot.so') : null;
-const lootProgram = () => (localBuild ? readFileSync(localBuild) : pinned('loot.so'));
+/**
+ * The loot program the tests run, built for the address of the cluster this process works on (XSOLANA_CLUSTER): a
+ * local build when XSOLANA_PROGRAM_DIR names a checkout (`target/deploy/loot.so` is devnet's, `target/mainnet/loot.so`
+ * mainnet's), else the pinned devnet build. Mainnet's build is pinned nowhere until it is deployed, so its tests need
+ * the checkout.
+ */
+const onMainnet = loot.cluster() === 'mainnet';
+const localBuild = process.env.XSOLANA_PROGRAM_DIR
+  ? path.join(program, onMainnet ? 'target/mainnet/loot.so' : 'target/deploy/loot.so')
+  : null;
+const lootProgram = () => {
+  if (localBuild) return readFileSync(localBuild);
+  if (onMainnet)
+    throw new Error(
+      'XSOLANA_CLUSTER=mainnet: loot is not deployed on mainnet, so no build of it is pinned. Set XSOLANA_PROGRAM_DIR to a checkout of the program that built target/mainnet/loot.so.',
+    );
+  return pinned('loot.so');
+};
 const FETCH = 'run `npm run fixtures`';
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const BPF_LOADER_2 = 'BPFLoader2111111111111111111111111111111111';

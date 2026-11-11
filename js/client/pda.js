@@ -3,9 +3,20 @@
 import { addressBytes } from '../chain/base58.js';
 import { intLE, utf8, uintLE } from '../chain/bytes.js';
 import { associatedTokenAddress, findProgramAddress, MPL_CORE_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
-import IDL from './idl/loot.js';
+import { lootProgram } from './cluster.js';
 
-export const LOOT_PROGRAM = IDL.address;
+// loot's program on this process's cluster (`cluster.js`): devnet unless the process names mainnet.
+export {
+  checkOnCluster,
+  CLUSTERS,
+  cluster,
+  clusterRpcUrl,
+  LOOT_PROGRAM,
+  lootProgram,
+  networkOf,
+  useCluster,
+  walletChain,
+} from './cluster.js';
 /** MagicBlock's VRF program and its default queue, the only queue the program accepts. */
 export const VRF_PROGRAM = 'Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz';
 export const VRF_QUEUE = 'Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh';
@@ -25,7 +36,7 @@ const u64 = n => uintLE(n, 8);
 const i64 = n => intLE(n, 8);
 
 /** The PDA of these seeds under the loot program, with its bump. */
-export const lootAddress = (seeds, program = LOOT_PROGRAM) => findProgramAddress(seeds, program);
+export const lootAddress = (seeds, program = lootProgram()) => findProgramAddress(seeds, program);
 const at = (...seeds) => lootAddress(seeds)[0];
 
 export const pda = {
@@ -104,9 +115,9 @@ export const pda = {
   /** The program's identity, which signs its requests to the oracle. */
   identity: () => at(seed('identity')),
   /** The identity the oracle signs callbacks with: the VRF program's PDA for this program. */
-  oracleIdentity: () => findProgramAddress([seed('identity'), key(LOOT_PROGRAM)], VRF_PROGRAM)[0],
+  oracleIdentity: () => findProgramAddress([seed('identity'), key(lootProgram())], VRF_PROGRAM)[0],
   /** The program's ProgramData account (its upgrade authority signs `init_platform`). */
-  programData: () => findProgramAddress([key(LOOT_PROGRAM)], BPF_LOADER_UPGRADEABLE)[0],
+  programData: () => findProgramAddress([key(lootProgram())], BPF_LOADER_UPGRADEABLE)[0],
 };
 
 /** `owner`'s associated token account of `mint` (owner may be a PDA: a project's vault, a pool is not one). */

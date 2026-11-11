@@ -11,6 +11,7 @@ import { createFungibleMetadataIx } from '../chain/metadata.js';
 import { tokenEntry } from '../chain/mint.js';
 import { createAccountIx, initializeMint2Ix, setAuthorityIx } from '../chain/token.js';
 import { mintState, powersOf } from '../chain/token2022.js';
+import { cluster as lootCluster } from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import { runTool } from '../mcp/server.mjs';
@@ -154,7 +155,9 @@ test('xsolana_token reads a mint into its ready tokens entry, which the checker 
   });
   assert.match(
     plain.text,
-    /^The token at \w+ on devnet: a classic SPL token, 6 decimals, 0 in existence, and nobody can mint more\. It calls itself “Tile”, ticker “TILE” \(its own record’s words/,
+    new RegExp(
+      `^The token at \\w+ on ${lootCluster()}: a classic SPL token, 6 decimals, 0 in existence, and nobody can mint more\\. It calls itself “Tile”, ticker “TILE” \\(its own record’s words`,
+    ),
   );
   assert.match(plain.text, /no key that can freeze it/);
   // the entry goes into a spec as it is: no refusal, and no warning that the mint could not be read
@@ -192,10 +195,15 @@ test('xsolana_token reads a mint into its ready tokens entry, which the checker 
   // what is not a mint, in words
   const wallet = await runTool('xsolana_token', { mint: w.creator }, ctx);
   assert.equal(wallet.ok, false);
-  assert.match(wallet.text, /is not a token mint on devnet/);
+  assert.match(wallet.text, new RegExp(`is not a token mint on ${lootCluster()}`));
   const nothing = await runTool('xsolana_token', { mint: newAddress(w.random) }, ctx);
   assert.equal(nothing.ok, false);
-  assert.match(nothing.text, /nothing at .* A coin launched on mainnet is not on devnet/);
+  assert.match(
+    nothing.text,
+    lootCluster() === 'devnet'
+      ? /nothing at .* A coin launched on mainnet is not on devnet/
+      : /nothing at .* on mainnet\. A coin made on devnet is not on mainnet/,
+  );
   const wrong = await runTool('xsolana_token', { mint: 'not an address' }, ctx);
   assert.equal(wrong.ok, false);
   assert.match(wrong.text, /is not a Solana address/);
@@ -351,7 +359,7 @@ test(
     assert.equal(r.token.name, '🫧'.repeat(16), '32 UTF-16 units, no half character');
     assert.equal(r.token.key, 'okitsmi');
     const head = r.text.split('\n\n')[0];
-    assert.match(head, /^The token at \w+ on devnet: a Token-2022 token/);
+    assert.match(head, new RegExp(`^The token at \\w+ on ${lootCluster()}: a Token-2022 token`));
     assert.match(
       head,
       /It calls itself “\S+”, ticker “OK Its mi” \(its own record’s words: a label anyone can write, not a fact\)\.$/,

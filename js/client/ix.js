@@ -68,6 +68,7 @@ import {
   BUBBLEGUM_PROGRAM,
   COMPRESSION_PROGRAM,
   LOOT_PROGRAM,
+  lootProgram,
   MPL_CORE_PROGRAM,
   NOOP_PROGRAM,
   pda,
@@ -204,7 +205,7 @@ export function lootIx(
       if (a.pda && !a.pda.program) {
         const seeds = a.pda.seeds.map(s => seedBytes(s, known, args, def));
         if (seeds.every(Boolean)) {
-          known[a.name] = findProgramAddress(seeds, LOOT_PROGRAM)[0];
+          known[a.name] = findProgramAddress(seeds, lootProgram())[0];
           progress = true;
         }
       }
@@ -221,7 +222,7 @@ export function lootIx(
     const isWritable = (a.writable === true || writable.includes(a.name)) && !readonly.includes(a.name);
     return meta(key, a.signer === true || signer.includes(a.name), isWritable);
   });
-  return { programId: LOOT_PROGRAM, keys: [...keys, ...remaining], data: encodeInstruction(IDL, name, args) };
+  return { programId: lootProgram(), keys: [...keys, ...remaining], data: encodeInstruction(IDL, name, args) };
 }
 
 // ---------------------------------------------------------------- the accounts after an instruction's own

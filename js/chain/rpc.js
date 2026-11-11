@@ -47,23 +47,39 @@ export const GENESIS = Object.freeze({
   testnet: '4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY',
 });
 
-const DEVNET_ONLY =
-  'loot runs on devnet only: mainnet waits for an audit. Unset XSOLANA_RPC_URL, or point it at a devnet RPC.';
+const ON_DEVNET =
+  'This works on devnet (an economy that names no network is on devnet). Unset XSOLANA_RPC_URL, or point it at a devnet RPC.';
+const ON_MAINNET = 'This works on mainnet. Point XSOLANA_RPC_URL at a mainnet RPC.';
 
-/** Refuses an RPC URL that names mainnet. Returns the URL. */
-export function notMainnet(url) {
-  if (/mainnet/i.test(String(url))) throw new RpcError(`${url} is a mainnet RPC. ${DEVNET_ONLY}`);
+/**
+ * Refuses an RPC URL that names another cluster than the one the caller works on (`devnet` or `mainnet`). Returns the
+ * URL. A URL names nothing for certain: `checkCluster` reads the chain itself.
+ */
+export function rightCluster(url, cluster = 'devnet') {
+  const text = String(url);
+  if (cluster === 'mainnet') {
+    if (/devnet|testnet/i.test(text)) throw new RpcError(`${url} is not a mainnet RPC. ${ON_MAINNET}`);
+  } else if (/mainnet/i.test(text)) throw new RpcError(`${url} is a mainnet RPC. ${ON_DEVNET}`);
   return url;
 }
 
+/** Refuses an RPC URL that names mainnet. Returns the URL. */
+export const notMainnet = url => rightCluster(url, 'devnet');
+
 /**
- * Refuses a chain that is mainnet or testnet, by its genesis block, whatever its URL says (a local validator is
- * let through). `rpc` has `call`. Returns the genesis hash.
+ * Refuses a chain that is not the cluster the caller works on, by its genesis block, whatever its URL says. On
+ * devnet, mainnet and testnet are refused and a local validator is let through; on mainnet, only mainnet itself
+ * passes. `rpc` has `call`. Returns the genesis hash.
  */
-export async function checkCluster(rpc) {
+export async function checkCluster(rpc, cluster = 'devnet') {
   const genesis = await rpc.call('getGenesisHash');
-  if (genesis === GENESIS.mainnet) throw new RpcError(`${rpc.url ?? 'This RPC'} is on mainnet. ${DEVNET_ONLY}`);
-  if (genesis === GENESIS.testnet) throw new RpcError(`${rpc.url ?? 'This RPC'} is on testnet. ${DEVNET_ONLY}`);
+  const here = rpc.url ?? 'This RPC';
+  if (cluster === 'mainnet') {
+    if (genesis !== GENESIS.mainnet) throw new RpcError(`${here} is not on mainnet. ${ON_MAINNET}`);
+    return genesis;
+  }
+  if (genesis === GENESIS.mainnet) throw new RpcError(`${here} is on mainnet. ${ON_DEVNET}`);
+  if (genesis === GENESIS.testnet) throw new RpcError(`${here} is on testnet. ${ON_DEVNET}`);
   return genesis;
 }
 const decodeAccount = raw =>

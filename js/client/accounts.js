@@ -855,14 +855,14 @@ export function receipts(tx, err) {
       throw new Error(
         "loot.receipts(logs, err) needs the transaction's meta.err (null when it succeeded): a failed transaction keeps its logs",
       );
-    return err === null ? decodeEvents(IDL, tx) : [];
+    return err === null ? decodeEvents(IDL, tx, LOOT_PROGRAM) : [];
   }
   const meta = tx?.meta;
   if (!meta || meta.err === undefined)
     throw new Error(
       'loot.receipts(tx) needs the transaction getTransaction returns, with its meta.err and meta.logMessages',
     );
-  return meta.err === null ? decodeEvents(IDL, meta.logMessages ?? []) : [];
+  return meta.err === null ? decodeEvents(IDL, meta.logMessages ?? [], LOOT_PROGRAM) : [];
 }
 
 /** The program's errors by code: { code: { name, msg } }. */

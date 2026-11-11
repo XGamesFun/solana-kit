@@ -40,7 +40,7 @@ import {
   withComputeBudget,
   withSolWrap,
 } from '../chain/programs.js';
-import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { rightCluster, rpcClient } from '../chain/rpc.js';
 import { extension, mayStartFrozen, mintPowers, resolveTransfers } from '../chain/token2022.js';
 import {
   compileFitting,
@@ -84,7 +84,6 @@ const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...LOTTERY_STEPS]);
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
-const CHAIN = 'solana:devnet';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const MPL_CORE = loot.MPL_CORE_PROGRAM;
 const NOBODY = '11111111111111111111111111111111';
@@ -101,7 +100,7 @@ const SIGNATURE_FEE = 5_000n;
  * `solana:signMessage`, also `signMessage(bytes)`: the app's settle keys are made from one signature of it a session,
  * so a page that closes can make them again (`recover`).
  */
-export function walletStandardSigner(wallet, account, chain = CHAIN) {
+export function walletStandardSigner(wallet, account, chain = loot.walletChain()) {
   const feature = wallet.features?.['solana:signTransaction'];
   if (!feature) throw new Error(`${wallet.name} cannot sign transactions.`);
   const messages = wallet.features?.['solana:signMessage'];
@@ -165,18 +164,18 @@ const show = (u, decimals) => {
 };
 
 /**
- * `client`, kept to devnet: a URL that names mainnet is refused at once, and before its first request goes out the
- * chain's genesis block is checked, once (`checkCluster`), so an RPC whose URL hides mainnet or testnet is refused
+ * `client`, kept to this page's cluster: a URL that names another is refused at once, and before its first request goes
+ * out the chain's genesis block is checked, once (`checkCluster`), so an RPC whose URL hides another cluster is refused
  * whatever it says. Every RPC reached over http(s) is checked: the app's own client, and one given whose `url` is
  * http(s). A client with no such URL (a local chain of the caller's own, like the tests' LiteSVM) is used as it is.
  */
-function devnetOnly(client) {
-  if (typeof client.url === 'string') notMainnet(client.url);
+function onCluster(client) {
+  if (typeof client.url === 'string') rightCluster(client.url, loot.cluster());
   if (!/^(https?|wss?):/i.test(String(client.url ?? ''))) return client;
   let checked = null;
   // A check that could not be made (the network did not answer) is made again on the next request.
   const ready = () =>
-    (checked ??= checkCluster(client).catch(e => {
+    (checked ??= loot.checkOnCluster(client).catch(e => {
       checked = null;
       throw e;
     }));
@@ -203,7 +202,7 @@ function devnetOnly(client) {
  */
 export function solanaApp({
   spec,
-  rpcUrl = 'https://api.devnet.solana.com',
+  rpcUrl = null,
   rpc = null,
   wallet,
   programs = {},
@@ -217,7 +216,13 @@ export function solanaApp({
     throw new Error(
       'The rpc given has no call(method, params): a custom rpc needs it (the devnet check, the slot and compressed NFTs are read through it), as well as accounts, account, latestBlockhash, send, confirm and programAccounts.',
     );
-  const client = devnetOnly(rpc ?? rpcClient(notMainnet(rpcUrl)));
+  // The economy's file names its cluster (devnet when it names none), and this page works on it and no other.
+  loot.useCluster(loot.networkOf(spec));
+  if (live.program && live.program !== loot.LOOT_PROGRAM)
+    throw new Error(
+      `This economy went live on the program ${live.program}, which is not loot’s on ${loot.cluster()} (${loot.LOOT_PROGRAM}): its "network" and its "live" section name two clusters.`,
+    );
+  const client = onCluster(rpc ?? rpcClient(loot.clusterRpcUrl(rpcUrl)));
   const project = live.project;
   /** The settle keys, each named by its job's account (`keys.js`): made again after a reload (`recover`). */
   const keys = wallet?.address ? keyring({ wallet, project, store: keyStore }) : null;

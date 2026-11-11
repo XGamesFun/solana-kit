@@ -215,21 +215,31 @@ test('solanaApp checks the genesis block of an http RPC once, before its first r
       return [];
     },
   });
-  await assert.rejects(solanaApp({ spec, rpc: rpcOn(GENESIS.mainnet), wallet: { address: B } }).shop(), /mainnet/);
-  assert.deepEqual(asked, ['getGenesisHash'], 'nothing else is asked of a mainnet RPC');
+  // This process's cluster and the other one: an RPC on the other, or on testnet, is refused by its first block.
+  const here = loot.cluster();
+  const other = here === 'devnet' ? 'mainnet' : 'devnet';
+  const notHere =
+    here === 'devnet' ? /is on mainnet\. This works on devnet/ : /is not on mainnet\. This works on mainnet/;
+  await assert.rejects(solanaApp({ spec, rpc: rpcOn(GENESIS[other]), wallet: { address: B } }).shop(), notHere);
+  assert.deepEqual(asked, ['getGenesisHash'], 'nothing else is asked of an RPC on another cluster');
   asked.length = 0;
-  await assert.rejects(solanaApp({ spec, rpc: rpcOn(GENESIS.testnet), wallet: { address: B } }).shop(), /testnet/);
+  await assert.rejects(
+    solanaApp({ spec, rpc: rpcOn(GENESIS.testnet), wallet: { address: B } }).shop(),
+    here === 'devnet' ? /is on testnet/ : notHere,
+  );
   asked.length = 0;
-  const app = solanaApp({ spec, rpc: rpcOn(GENESIS.devnet), wallet: { address: B } });
+  const app = solanaApp({ spec, rpc: rpcOn(GENESIS[here]), wallet: { address: B } });
   await app.shop().catch(() => {});
   await app.shop().catch(() => {});
   assert.equal(asked.filter(m => m === 'getGenesisHash').length, 1);
   assert.ok(asked.length > 1);
-  // A URL that says mainnet is refused at once, given as a URL or on an rpc object.
-  assert.throws(() => solanaApp({ spec, rpcUrl: 'https://api.mainnet-beta.solana.com' }), /mainnet/);
+  // A URL that names the other cluster is refused at once, given as a URL or on an rpc object.
+  const otherUrl = here === 'devnet' ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com';
+  const named = here === 'devnet' ? /is a mainnet RPC/ : /is not a mainnet RPC/;
+  assert.throws(() => solanaApp({ spec, rpcUrl: otherUrl }), named);
   assert.throws(
-    () => solanaApp({ spec, rpc: { ...rpcOn(GENESIS.devnet), url: 'https://mainnet.example.invalid' } }),
-    /mainnet/,
+    () => solanaApp({ spec, rpc: { ...rpcOn(GENESIS[here]), url: `https://${other}.example.invalid` } }),
+    named,
   );
   // The old live shape (`live.game`) is not read.
   assert.throws(() => solanaApp({ spec: { version: 2, live: { game: A } }, rpc: {} }), /not live/);

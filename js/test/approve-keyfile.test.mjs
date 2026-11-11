@@ -17,6 +17,7 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import * as loot from '../client/index.js';
 import { freshKeypair, verifySignature } from '../approve/ed25519.mjs';
 import { toBase64 } from '../chain/bytes.js';
 import { transferLamports } from '../chain/programs.js';
@@ -311,7 +312,7 @@ describe('xsolana approve --keypair', () => {
       assert.equal(sending.join('; '), state.steps.map(s => s.says).join('; '));
       assert.equal(sending.length, state.remaining);
       assert.equal(live.sent, state.remaining);
-      assert.match(live.text, /Live on devnet: \d+ transactions landed/);
+      assert.match(live.text, new RegExp(`Live on ${loot.cluster()}: \\d+ transactions landed`));
       const file2 = saved();
       assert.ok(file2.live?.project && !file2.live.partial, 'live, and not partial');
       assert.equal(w.read('Project', file2.live.project).owner, address, 'the key is the project’s owner');
@@ -322,7 +323,7 @@ describe('xsolana approve --keypair', () => {
       assert.equal(again.ok, true);
       assert.equal(again.done, true);
       assert.equal(again.sent, 0);
-      assert.match(again.text, /Nothing to send: “.*” is live on devnet/);
+      assert.match(again.text, new RegExp(`Nothing to send: “.*” is live on ${loot.cluster()}`));
       assert.equal(sends(), live.sent);
     },
   );

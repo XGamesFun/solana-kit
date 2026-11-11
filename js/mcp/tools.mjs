@@ -9,11 +9,11 @@ import path from 'node:path';
 import { addressBytes } from '../chain/base58.js';
 import { metadataAddress } from '../chain/metadata.js';
 import { parseMint, tokenEntry } from '../chain/mint.js';
-import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
-import { LOOT_PROGRAM, pda } from '../client/pda.js';
+import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, LOOT_PROGRAM, lootProgram, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
@@ -73,17 +73,26 @@ export function keyFileFor(name) {
 }
 /** The command that makes a project's key file (it prints the key's address, never the key). */
 export const keygenCommand = keyFile => `npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ${keyFile}`;
-export const CLUSTER = 'devnet';
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
-/** What every answer carries, so an agent never has to remember the program's address. */
+/** The RPC a tool reads through: the test's own when it gives one, else this process's cluster's (XSOLANA_RPC_URL, or devnet's public RPC). */
+const chainOf = ctx =>
+  ctx?.rpc ? ctx.rpc(process.env.XSOLANA_RPC_URL || CLUSTERS[cluster()].rpc) : rpcClient(clusterRpcUrl());
+/**
+ * What every answer carries, so an agent never has to remember the program's address. The program and the cluster are
+ * read when asked for: this process's cluster (`client/cluster.js`).
+ */
 export const PROGRAM_INFO = Object.freeze({
-  program: LOOT_PROGRAM,
-  cluster: CLUSTER,
+  get program() {
+    return lootProgram();
+  },
+  get cluster() {
+    return cluster();
+  },
   version: VERSION,
   idl: '@xgamesfun/solana/idl.json',
   package: `@xgamesfun/solana@${PACKAGE_VERSION}`,
 });
-const footer = `\n\nloot ${VERSION} · program ${LOOT_PROGRAM} · ${CLUSTER}`;
+const footer = () => `\n\nloot ${VERSION} · program ${lootProgram()} · ${cluster()}`;
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const nowOf = ctx => ctx?.now ?? Math.floor(Date.now() / 1000);
 const cwdOf = ctx => ctx?.cwd ?? process.cwd();
@@ -298,7 +307,7 @@ export const tools = [
     },
     async handler({ part } = NO_OPTIONS) {
       return {
-        text: guideText(part) + footer,
+        text: guideText(part) + footer(),
         parts: catalog(part),
         ...(part ? {} : { cannot: CANNOT }),
         ...PROGRAM_INFO,
@@ -327,7 +336,7 @@ export const tools = [
           name: ex.name,
           spec: ex.spec,
           checks: verdict.ok ? 'clean' : verdict.refusals.map(r => r.code),
-          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${footer}`,
+          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${footer()}`,
         };
       }
       if (!query) {
@@ -345,7 +354,7 @@ export const tools = [
               `${all.length} worked examples (xsolana_examples {"name": "<name>"} gives the whole spec):`,
               ...all.map(e => `- ${e.name}: ${e.title}. ${e.prompt ?? ''} [${e.parts.join(', ')}]`),
               `\nAnd ${ideas().length} rated economies: pass a query to search them.`,
-            ].join('\n') + footer,
+            ].join('\n') + footer(),
         };
       }
       const r = search(query, { limit, fit });
@@ -370,7 +379,7 @@ export const tools = [
       ]
         .filter(Boolean)
         .join('\n');
-      return { examples: r.examples, ideas: r.ideas, hows: r.hows, limits: r.limits, text: text + footer };
+      return { examples: r.examples, ideas: r.ideas, hows: r.hows, limits: r.limits, text: text + footer() };
     },
   },
   {
@@ -391,7 +400,7 @@ export const tools = [
         from,
         refusals: verdict.refusals,
         warnings: verdict.warnings,
-        text: `${head}${tail}${footer}`,
+        text: `${head}${tail}${footer()}`,
       };
     },
   },
@@ -430,7 +439,7 @@ export const tools = [
         from,
         summary,
         ...(input.json ? { simulation: sim } : {}),
-        text: explain(sim, economy) + footer,
+        text: explain(sim, economy) + footer(),
       };
     },
   },
@@ -458,7 +467,7 @@ export const tools = [
         setup: c.setup,
         actions: c.actions,
         fees: c.fees,
-        text: head + explainCost(c) + names + footer,
+        text: head + explainCost(c) + names + footer(),
       };
     },
   },
@@ -471,7 +480,7 @@ export const tools = [
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
       const r = explainEconomy(economy, { now: nowOf(ctx) });
-      return { ...r, from, text: r.text + footer };
+      return { ...r, from, text: r.text + footer() };
     },
   },
   {
@@ -494,7 +503,7 @@ export const tools = [
         routes: r.routes,
         findings: r.findings,
         tradeoffs: r.tradeoffs,
-        text: `${describeReview(r, economy.name)}${tail}${footer}`,
+        text: `${describeReview(r, economy.name)}${tail}${footer()}`,
       };
     },
   },
@@ -574,7 +583,7 @@ export const tools = [
         ok: true,
         file: rel,
         warnings: verdict.warnings,
-        text: `Saved ${rel} (${plural(verdict.warnings.length, 'warning')}).${dropped}${spec.live ? ' It is live: xsolana_publish publishes only what changed.' : ' Next: xsolana_publish when the person says to put it live.'}${footer}`,
+        text: `Saved ${rel} (${plural(verdict.warnings.length, 'warning')}).${dropped}${spec.live ? ' It is live: xsolana_publish publishes only what changed.' : ' Next: xsolana_publish when the person says to put it live.'}${footer()}`,
       };
     },
   },
@@ -592,7 +601,7 @@ export const tools = [
           transactions: 0,
           approvals: 0,
           steps: [],
-          text: `${from} is live, and its parts are as they are on chain. ${settingsNote(change.settings, economy.live)}${footer}`,
+          text: `${from} is live, and its parts are as they are on chain. ${settingsNote(change.settings, economy.live)}${footer()}`,
         };
       if (change.scope.live && !change.changes)
         return {
@@ -600,7 +609,7 @@ export const tools = [
           transactions: 0,
           approvals: 0,
           steps: [],
-          text: `${from} is live, and nothing in it has changed since it went live: there is nothing to publish.${change.notes}${footer}`,
+          text: `${from} is live, and nothing in it has changed since it went live: there is nothing to publish.${change.notes}${footer()}`,
         };
       const p = plan(economy, { now: nowOf(ctx), ...change.scope });
       if (!p.ok) return refused(p, from);
@@ -622,7 +631,7 @@ export const tools = [
           transactions: 0,
           approvals: 0,
           steps: [],
-          text: `Not published: ${NOT_PLAIN(target)}, and the approve command carries the file's name as it is. Ask the person to rename it (${RENAME}), then run xsolana_publish again with the new name.${footer}`,
+          text: `Not published: ${NOT_PLAIN(target)}, and the approve command carries the file's name as it is. Ask the person to rename it (${RENAME}), then run xsolana_publish again with the new name.${footer()}`,
         };
       const live = Boolean(change.scope.live);
       const keyFile = keyFileFor(economy.name);
@@ -663,7 +672,7 @@ export const tools = [
         approvals: p.approvals,
         setupSol: c.setup.totalSol,
         steps,
-        text: text + footer,
+        text: text + footer(),
       };
     },
   },
@@ -678,12 +687,12 @@ export const tools = [
       if (!economy.live?.project)
         return {
           ok: false,
-          text: `${from} is not live yet (no "live" section). xsolana_publish says how to put it live.${footer}`,
+          text: `${from} is not live yet (no "live" section). xsolana_publish says how to put it live.${footer()}`,
         };
       const m = model(economy);
-      // Devnet only: a mainnet URL is refused, and so is a chain whose first block is mainnet's or testnet's.
-      const rpc = (ctx?.rpc ?? rpcClient)(notMainnet(process.env.XSOLANA_RPC_URL || DEVNET_RPC));
-      if (!ctx?.rpc) await checkCluster(rpc);
+      // This process's cluster only: a URL that names another is refused, and so is a chain whose first block is another's.
+      const rpc = chainOf(ctx);
+      if (!ctx?.rpc) await checkOnCluster(rpc);
       const project = economy.live.project;
       const wanted = [
         ['project', project],
@@ -734,7 +743,7 @@ export const tools = [
       });
       const missing = rows.filter(r => !r.found);
       const text = [
-        `${economy.name ?? 'The economy'} on ${CLUSTER}: project ${project}.`,
+        `${economy.name ?? 'The economy'} on ${cluster()}: project ${project}.`,
         ...rows.map(
           r =>
             `- ${r.part}: ${r.found ? `found${r.amount !== undefined ? `, holds ${r.amount} base units` : ''}${r.nfts !== undefined ? `, holds ${r.nfts} NFT${r.nfts === 1 ? '' : 's'} to give away` : ''}${r.sol !== undefined ? `, holds ${r.sol} SOL for claims` : ''}` : 'missing'} (${r.address})`,
@@ -745,7 +754,7 @@ export const tools = [
       ]
         .filter(Boolean)
         .join('\n');
-      return { ok: true, rows, text: text + footer };
+      return { ok: true, rows, text: text + footer() };
     },
   },
   {
@@ -778,12 +787,12 @@ export const tools = [
       } catch {
         return {
           ok: false,
-          text: `${JSON.stringify(mint)} is not a Solana address. Give the token’s mint address.${footer}`,
+          text: `${JSON.stringify(mint)} is not a Solana address. Give the token’s mint address.${footer()}`,
         };
       }
-      // Devnet only: a mainnet URL is refused, and so is a chain whose first block is mainnet's or testnet's.
-      const rpc = (ctx?.rpc ?? rpcClient)(notMainnet(process.env.XSOLANA_RPC_URL || DEVNET_RPC));
-      if (!ctx?.rpc) await checkCluster(rpc);
+      // This process's cluster only: a URL that names another is refused, and so is a chain whose first block is another's.
+      const rpc = chainOf(ctx);
+      if (!ctx?.rpc) await checkOnCluster(rpc);
       let project = null;
       if (input.project !== undefined) {
         project = String(input.project).trim();
@@ -792,7 +801,7 @@ export const tools = [
         } catch {
           return {
             ok: false,
-            text: `${JSON.stringify(project)} is not a Solana address. Give the project’s address, or leave it out.${footer}`,
+            text: `${JSON.stringify(project)} is not a Solana address. Give the project’s address, or leave it out.${footer()}`,
           };
         }
       }
@@ -815,15 +824,17 @@ export const tools = [
           ok: false,
           text: `${
             account
-              ? `${mint} is not a token mint on ${CLUSTER} (a token account or a wallet is not the mint: an explorer’s token page names it)`
-              : `There is nothing at ${mint} on ${CLUSTER}. A coin launched on mainnet is not on ${CLUSTER}, where loot runs for now`
-          }.${footer}`,
+              ? `${mint} is not a token mint on ${cluster()} (a token account or a wallet is not the mint: an explorer’s token page names it)`
+              : cluster() === 'devnet'
+                ? `There is nothing at ${mint} on devnet. A coin launched on mainnet is not on devnet, where loot runs for now`
+                : `There is nothing at ${mint} on ${cluster()}. A coin made on devnet is not on ${cluster()}`
+          }.${footer()}`,
         };
       if (token.source === 'sol')
         return {
           ok: true,
           token,
-          text: `${mint} is wrapped SOL: in a spec that is SOL itself.\n\nIn the spec’s "tokens":\n${JSON.stringify(token)}${footer}`,
+          text: `${mint} is wrapped SOL: in a spec that is SOL itself.\n\nIn the spec’s "tokens":\n${JSON.stringify(token)}${footer()}`,
         };
       const read = parseMint(mint, account.owner, account.data, record?.data ?? null);
       const supply = Number(BigInt(read.supply)) / 10 ** read.decimals;
@@ -863,7 +874,7 @@ export const tools = [
           `Its mint authority is not the project given (${project}): until it is handed over, nothing the economy mints in it lands.`,
       ].filter(Boolean);
       const text = [
-        `The token at ${mint} on ${CLUSTER}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}. It ${called}.`,
+        `The token at ${mint} on ${cluster()}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}. It ${called}.`,
         can.length
           ? `Whoever controls its mint can:\n${can.map(c => `- ${c}`).join('\n')}\nAn economy in it is only as safe as the token: say so where players pay, stake or are paid.`
           : `Its mint has no key that can freeze it, take it, charge on it or stop a transfer${p.mintAuthority === 'project' ? ' (the project mints it)' : ''}.`,
@@ -883,7 +894,7 @@ export const tools = [
           mintAuthority: read.mintAuthority,
           freezeAuthority: read.freezeAuthority,
         },
-        text: text + footer,
+        text: text + footer(),
       };
     },
   },
@@ -895,7 +906,7 @@ export const tools = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     async handler() {
       const text = [
-        `loot ${VERSION} on ${CLUSTER}: program ${LOOT_PROGRAM}. Never write another address from memory: take it from this package.`,
+        `loot ${VERSION} on ${cluster()}: program ${LOOT_PROGRAM}. Never write another address from memory: take it from this package.`,
         'Package: npm install @xgamesfun/solana (plain ES modules, no Solana SDK needed; works in the browser).',
         '  What only the project’s owner or authority signs (a contest’s result, a payout, a schedule’s run) is not a page’s: a script on the owner’s machine signs it with the project’s key file, `readKeyFile(file)` from "@xgamesfun/solana/keyfile" (an address and a way to sign, never the key; it is also a `wallet` for solanaApp). The skill’s references/after-launch.md has the script.',
         '  import { solanaApp, walletStandardSigner } from "@xgamesfun/solana/play";',
@@ -941,7 +952,7 @@ export const tools = [
         'A page builds the instruction, puts it in a transaction, and asks the player’s wallet (Wallet Standard: Phantom, Solflare, Backpack) to sign and send it. The app never holds a key.',
         'Reads: the project’s records are plain accounts (loot.decode); every move leaves a receipt in the transaction’s logs (loot.receipts(tx)). A backend delivers only from a finalized transaction whose meta.err is null, once per order or reference, and only for a receipt whose data.project is its own (loot.receipts reads every project’s, and anyone can make a project): a failed transaction keeps its logs, and they can read as all-success.',
       ].join('\n');
-      return { text: text + footer, ...PROGRAM_INFO };
+      return { text: text + footer(), ...PROGRAM_INFO };
     },
   },
 ];
