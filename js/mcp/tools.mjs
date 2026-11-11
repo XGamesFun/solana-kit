@@ -881,6 +881,7 @@ export const tools = [
         '  app.listForSale(asset, { price }), app.listForRent(asset, { price, lasts, maxPeriods }), app.listing(asset), app.listings(),',
         '  app.buyListing(asset, { listing }), app.rentListing(asset, { periods, listing }) (`listing`: what listing() or listings()',
         '  showed the player), app.unlist(asset), app.rentedTo(asset) (one account read)   listings, sale and rent',
+        '  app.closeGone(asset)   anyone closes the holds and the listing of an NFT the project no longer holds (its collection took it back or burned it): nothing is sent or paid; claims() lists such a hold or loan flagged `gone`, and listing() flags such a listing',
         '  app.raffle(id, nft, { price, drawsAt, minSold }), app.unraffle(id, nft)   a raffle from the lottery’s own stash',
         '  app.compound(key), app.runSchedule(key)   compound, send a schedule that is due (a run missed is missed: only a sealed fixed amount pays every run due)',
         '  app.farmWalk(key), app.walkFarm(key)   a farm idle past many end times: how many it must walk, and walking them in parts (anyone, free; moves ask for the compute to walk a few themselves)',

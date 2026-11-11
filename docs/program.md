@@ -1262,7 +1262,9 @@ of ends passes a seat's end and takes its weight out, once. Only the drop of the
 a top-up, a refresh that changes nothing, a tier move or a booster put on frees nothing, and a seat that weighs as
 much or more loses none of its rounding. The share is the carry's whole tokens times the weight leaving over the total
 before it, rounded down, worked out with both weights cut by one shift to their top 40 bits (the total rounded up): it
-fits 128 bits for any farm, is never more than the exact share, and no way out of a farm fails on it. What rounding
+fits 128 bits for any farm, is never more than the exact share, and no way out of a farm fails on it. It runs at every
+end a walk passes, so it is kept cheap: a carry under a token works nothing out, and one under 2^24 whole tokens is
+worked out in 64 bits, the same number. What rounding
 leaves stays in the carry, with the seats that stay. Before, the seats that stayed were credited all of it, the
 leaver's part too: at most the leaving weight times 10⁻¹² tokens, all of it to a wallet of 1 unit when it was the only
 one left. Free again means what it means for anything a seat gives back: with a rate paid from the vault, free in the
