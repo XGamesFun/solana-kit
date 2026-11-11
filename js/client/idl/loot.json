@@ -1,8 +1,8 @@
 {
-  "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
+  "address": "xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet",
   "metadata": {
     "name": "loot",
-    "version": "0.27.0",
+    "version": "0.28.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"

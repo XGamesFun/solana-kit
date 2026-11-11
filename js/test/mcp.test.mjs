@@ -57,13 +57,13 @@ describe('the xsolana MCP server', () => {
   test('guide, examples, check, simulate, explain, cost and publish answer on an example', async () => {
     const guide = await client.callTool({ name: 'xsolana_guide', arguments: {} });
     assert.match(text(guide), /What no part of loot does/);
-    assert.equal(guide.structuredContent.program, '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ');
+    assert.equal(guide.structuredContent.program, 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet');
     const ex = await client.callTool({ name: 'xsolana_examples', arguments: { query: 'coin flip with staking' } });
     assert.ok(ex.structuredContent.examples.some(e => e.name === 'coin-flip-arena'));
     for (const name of ['xsolana_check', 'xsolana_simulate', 'xsolana_explain', 'xsolana_cost', 'xsolana_publish']) {
       const r = await client.callTool({ name, arguments: { example: 'coin-flip-arena' } });
       assert.ok(!r.isError, `${name}: ${text(r)}`);
-      assert.match(text(r), /program 9cwqM1TX/);
+      assert.match(text(r), /program xgamesVs/);
     }
     const pub = await client.callTool({ name: 'xsolana_publish', arguments: { example: 'coin-flip-arena' } });
     // Pinned to this package's exact version (an unpinned npx runs whatever the name holds when it runs).

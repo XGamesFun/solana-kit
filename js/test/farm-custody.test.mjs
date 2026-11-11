@@ -52,7 +52,7 @@ test('a rule names an item of the game or another collection, never both', () =>
       },
       { now },
     );
-  const club = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+  const club = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
   assert.ok(
     gated({ collection: club }).ok,
     gated({ collection: club })

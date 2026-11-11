@@ -26,7 +26,7 @@ import { cannotRun, world } from './world.mjs';
 
 const NOW = 1_790_000_000;
 const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-const OTHER = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+const OTHER = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
 const skip = cannotRun() ?? false;
 
 /** A small economy in a token the project makes, with `more` merged in. */

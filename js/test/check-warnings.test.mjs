@@ -480,7 +480,7 @@ test('a box whose open’s order would pass 10,240 bytes is refused (BadEntries)
 
 test('a compressed prize of a collection without Bubblegum’s plugin mints nothing: the next one’s Sheet takes its place', () => {
   const [plain, plugged] = [pda.platform(), pda.identity()];
-  const tree = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+  const tree = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
   const order = {
     project: WALLET,
     player: WALLET,

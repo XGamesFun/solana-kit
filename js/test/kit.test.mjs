@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { collectFeesIx, fromKitInstruction, KIT_ACCOUNT_ROLE, toKitInstruction } from '../client/index.js';
 
-const admin = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+const admin = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
 const to = '11111111111111111111111111111111';
 
 test('a builder’s instruction in @solana/kit’s shape, and back unchanged', () => {

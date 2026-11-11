@@ -94,7 +94,7 @@ test('the simulation and the explainer say a minting rate mints only while the m
 test('stashIx refuses taking an NFT out to an account of the program it names', () => {
   const project = pda.project('5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T');
   const signer = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-  const asset = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+  const asset = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
   const collection = 'Stake11111111111111111111111111111111111111';
   const own = pda.lottery(project, 3);
   for (const [out, args] of [
