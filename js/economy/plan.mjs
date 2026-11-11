@@ -965,27 +965,39 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   // the first of its addresses, then extended a group a step.
   if (fresh) {
     const named = standingAddresses(m);
-    groupsOf(named, TABLE_GROUP).forEach((group, i) =>
-      add({
-        id: i ? `table:${i}` : 'table',
-        part: 'project',
-        says: i
-          ? `Add ${group.length} more addresses to the project’s lookup table`
-          : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
-        creates: i
-          ? [{ what: `room for ${group.length} addresses in the lookup table`, bytes: 32 * group.length, grows: true }]
-          : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
-        build: ctx => {
-          const addresses = group.map(at => at(ctx)).filter(Boolean);
-          // A table made already (its first step landed in an earlier batch, or before the setup was cut short) is the
-          // one the rest is added to: its address is of the slot it was made at, never of this batch's.
-          if (i && ctx.tables?.[0]) return [extendTableIx({ table: ctx.tables[0], authority: ctx.owner, addresses })];
-          // With no recent slot known (a plan built offline), there is no table to make.
-          if (ctx.slot == null) return [];
-          const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
-          return [...(i ? [] : [instruction]), extendTableIx({ table, authority: ctx.owner, addresses })];
-        },
-      }),
+    // A table whose making landed with no address kept (a file an earlier release left, which recorded a transaction
+    // found landed without what it made) can't be added to: its address is of a slot nobody recorded. It stays as it
+    // is, and nothing more is planned for it.
+    const lost = landed.has('table') && !given?.tables?.[0];
+    groupsOf(named, TABLE_GROUP).forEach(
+      (group, i) =>
+        (i && lost) ||
+        add({
+          id: i ? `table:${i}` : 'table',
+          part: 'project',
+          says: i
+            ? `Add ${group.length} more addresses to the project’s lookup table`
+            : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
+          creates: i
+            ? [
+                {
+                  what: `room for ${group.length} addresses in the lookup table`,
+                  bytes: 32 * group.length,
+                  grows: true,
+                },
+              ]
+            : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
+          build: ctx => {
+            const addresses = group.map(at => at(ctx)).filter(Boolean);
+            // A table made already (its first step landed in an earlier batch, or before the setup was cut short) is the
+            // one the rest is added to: its address is of the slot it was made at, never of this batch's.
+            if (i && ctx.tables?.[0]) return [extendTableIx({ table: ctx.tables[0], authority: ctx.owner, addresses })];
+            // With no recent slot known (a plan built offline), there is no table to make.
+            if (ctx.slot == null) return [];
+            const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
+            return [...(i ? [] : [instruction]), extendTableIx({ table, authority: ctx.owner, addresses })];
+          },
+        }),
     );
   }
 

@@ -11,6 +11,7 @@ import { freshKeypair } from '../approve/ed25519.mjs';
 import { request } from 'node:http';
 import { approve, createApproval, ownRequest } from '../approve/server.mjs';
 import * as loot from '../client/index.js';
+import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { approvalChain, cannotRun, cannotRunCompressed, world } from './world.mjs';
 
 const NOW = 1_790_000_000;
@@ -378,6 +379,80 @@ describe('xsolana approve', () => {
       assert.equal(second.id, first.id);
       assert.deepEqual(second.transactions, first.transactions);
       await session.complete(owner.address, first.id, signAll(owner, first.transactions));
+    },
+  );
+});
+
+describe('xsolana approve: a lookup table that can’t be made or added to', () => {
+  const COINS = {
+    version: 2,
+    network: 'devnet',
+    name: 'Tabled',
+    currency: 'sol',
+    tokens: [
+      { key: 'sol', source: 'sol' },
+      { key: 'bubl', source: 'project', name: 'Bubble', symbol: 'BUBL' },
+      { key: 'gem', source: 'project', name: 'Gem', symbol: 'GEM', decimals: 6, supply: 1000 },
+    ],
+    collection: false,
+  };
+  // The chain's slot hashes do not read, at every ask: no table can be made. Nothing needs one here, so the setup
+  // is recorded as live without it; before, the page said a step was left and every Approve was refused.
+  test(
+    'with no recent slot to make it at, the setup goes live without its table',
+    { skip: skip ?? false },
+    async () => {
+      const { w, owner, file, chain: base } = setup(COINS);
+      const chain = {
+        ...base,
+        account: async address => (address === SYSVAR_SLOT_HASHES ? null : w.chain.rpc.account(address)),
+      };
+      const session = await createApproval({ file, chain, now: () => NOW });
+      for (let i = 0; i < 6; i++) {
+        const state = await session.stateFor(owner.address);
+        if (state.done) break;
+        const batch = await session.prepare(owner.address);
+        await session.complete(owner.address, batch.id, signAll(owner, batch.transactions));
+      }
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(saved.live.project && saved.live.published && !saved.live.partial, JSON.stringify(saved.live));
+      assert.equal(saved.live.tables, undefined);
+      const again = await createApproval({ file, chain, now: () => NOW });
+      assert.deepEqual([(await again.stateFor(owner.address)).done, again.state().steps.length], [true, 0]);
+    },
+  );
+
+  // A file 0.26.3 left: the table's own transaction was found landed with no address kept, and the setup was cut
+  // again before the table's second step. Its address is of a slot nobody recorded, so nothing more is planned for it
+  // and the setup finishes; before, every approve failed on a table that was never made.
+  test(
+    'a table made with no address kept is not added to, and the setup finishes',
+    { skip: skip ?? false },
+    async () => {
+      const { w, owner, file, chain } = setup(COINS);
+      const first = await createApproval({ file, chain, now: () => NOW });
+      const ids = first.state().steps.map(s => s.id);
+      assert.ok(ids.includes('table') && ids.includes('table:1'), ids.join(' '));
+      await runAll(first, owner);
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      const { published: _p, tables: _t, at: _a, ...made } = saved.live;
+      const { live: _l, ...bare } = saved;
+      const left = { ...bare, live: { ...made, partial: true, landed: ids.filter(id => id !== 'table:1') } };
+      writeFileSync(file, JSON.stringify(left, null, 2));
+      const session = await createApproval({ file, chain, now: () => NOW });
+      assert.ok(!session.state().steps.some(s => s.id.startsWith('table')));
+      const state = await session.stateFor(owner.address);
+      assert.deepEqual([state.steps.length, state.done], [0, true]);
+      const after = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(after.live.published && !after.live.partial && after.live.project === saved.live.project);
+      assert.ok(w.chain.get(after.live.mints.bubl));
+      // with its address kept, the rest of the table is still planned
+      writeFileSync(file, JSON.stringify({ ...left, live: { ...left.live, tables: saved.live.tables } }, null, 2));
+      const kept = await createApproval({ file, chain, now: () => NOW });
+      assert.deepEqual(
+        kept.state().steps.map(s => s.id),
+        ['table:1'],
+      );
     },
   );
 });

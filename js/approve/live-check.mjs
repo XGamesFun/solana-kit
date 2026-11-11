@@ -142,8 +142,14 @@ const clip = text => [...String(text).replace(HIDES, '')].slice(0, 40).join('');
  * spec gives the old name back. Nothing here trusts the file for what is on chain. `owner`: the project's owner.
  */
 export async function readRenames({ live, m, chain, owner, published = null }) {
-  const out = { renames: [], notes: [], held: [] };
+  const out = { renames: [], notes: [], held: [], settled: [] };
   const made = madeSoFar(live) ?? {};
+  // A name this setup or change wrote already, or sent and has not seen land (the file is still `partial`): the
+  // record no longer says what was published, so the published spec is no measure of it and the chain is read.
+  const step = key => `name:${key}`;
+  const written = key =>
+    Boolean(live?.partial) &&
+    ((live.landed ?? []).includes(step(key)) || (live.pending ?? []).some(p => (p.steps ?? []).includes(step(key))));
   if (typeof chain.account !== 'function') return out;
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const hold = (key, note) => {
@@ -157,14 +163,15 @@ export async function readRenames({ live, m, chain, owner, published = null }) {
     const was = published ? (published.tokens ?? []).find(x => x.key === key) : null;
     const said = was ? tokenLabels(was) : null;
     // as it was published: nothing asked for, and a record its owner changed elsewhere is left as it is
-    if (said && same(said, want)) continue;
+    const asPublished = Boolean(said) && same(said, want);
+    if (asPublished && !written(key)) continue;
     // (the token as the person knows it: by the ticker it was published with)
     const what = `the token ${said?.[1] ?? t.symbol ?? key}`;
     const again = 'This is said at each approve until the spec gives the old name, ticker and link back.';
     const account = await chain.account(metadataAddress(address));
     const record = account?.owner === METAPLEX_METADATA_PROGRAM ? parseRecord(account.data) : null;
     if (!record || record.mint !== address) {
-      if (said)
+      if (said && !asPublished)
         hold(
           key,
           account?.owner === METAPLEX_METADATA_PROGRAM
@@ -173,7 +180,12 @@ export async function readRenames({ live, m, chain, owner, published = null }) {
         );
       continue;
     }
-    if (same([record.name, record.symbol, record.uri], want)) continue;
+    if (same([record.name, record.symbol, record.uri], want)) {
+      // the chain says the spec's name already (written by another tool, or by a session whose file was lost): it is
+      // the published one from here on
+      if (said && !asPublished) out.settled.push(key);
+      continue;
+    }
     const called = `“${clip(record.name)}” (“${clip(record.symbol)}”)`;
     const kept = `nothing is sent for it, and wallets keep showing ${called}. ${said ? again : ''}`.trim();
     if (record.updateAuthority !== owner)

@@ -493,13 +493,14 @@ test('which names are written is read from the chain alone', { skip }, async () 
       published: economy.live.published,
       ...extra,
     });
-  assert.deepEqual(await ask(saved), { renames: [], notes: [], held: [] });
-  assert.deepEqual(await ask(next), { renames: ['bubl'], notes: [], held: [] });
+  assert.deepEqual(await ask(saved), { renames: [], notes: [], held: [], settled: [] });
+  assert.deepEqual(await ask(next), { renames: ['bubl'], notes: [], held: [], settled: [] });
   // a file that claims anything about names is not believed: there is nothing in it to believe
   assert.deepEqual(await ask({ ...next, live: { ...next.live, named: [] } }), {
     renames: ['bubl'],
     notes: [],
     held: [],
+    settled: [],
   });
   // another project's owner asking: the record is not theirs to change
   const other = await ask(next, { owner: freshKeypair().address });
@@ -523,12 +524,13 @@ test('which names are written is read from the chain alone', { skip }, async () 
   const long = await ask(edit(saved, 'bubl', { name: '🫧'.repeat(11) }), { published: null });
   assert.deepEqual(long.renames, []);
   assert.match(long.notes[0], /words a name record can’t take/);
-  assert.deepEqual(await ask(saved, { published: null }), { renames: [], notes: [], held: [] });
+  assert.deepEqual(await ask(saved, { published: null }), { renames: [], notes: [], held: [], settled: [] });
   // a connection that can't read accounts renames nothing
   assert.deepEqual(await readRenames({ live: next.live, m: model(next), chain: {}, owner: owner.address }), {
     renames: [],
     notes: [],
     held: [],
+    settled: [],
   });
 });
 
@@ -718,5 +720,71 @@ test(
     assert.equal(session.state().done, false);
     assert.equal((await session.stateFor(owner.address)).done, true);
     assert.equal(JSON.parse(readFileSync(file, 'utf8')).live.partial, undefined);
+  },
+);
+
+test(
+  'a name put back while its change was cut short is written back; one the chain already carries becomes the published one',
+  { skip },
+  async () => {
+    const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+    const { saved } = await approveAll(file, chain, owner);
+    const mint = saved.live.mints.bubl;
+    // a change: the new name, and enough beside it that it takes more than one transaction; cut after the first
+    const more = ['ash', 'soot', 'coal'].map(key => ({ key, source: 'project', name: key, symbol: key.toUpperCase() }));
+    const renamed = edit(saved, 'bubl', { name: 'Bubbles' });
+    writeFileSync(file, JSON.stringify({ ...renamed, tokens: [...renamed.tokens, ...more] }, null, 2));
+    let sends = 0;
+    const cut = { on: true };
+    const flaky = {
+      ...chain,
+      send: async wire => {
+        if (cut.on && ++sends === 2) throw Object.assign(new Error('RPC: blockhash not found'), { code: -32002 });
+        return w.chain.sendWire(wire);
+      },
+    };
+    const first = await createApproval({ file, chain: flaky, now: () => NOW });
+    const batch = await first.prepare(owner.address);
+    await assert.rejects(first.complete(owner.address, batch.id, signAll(owner, batch.transactions)), /blockhash/);
+    const half = JSON.parse(readFileSync(file, 'utf8'));
+    assert.ok(half.live.partial && half.live.landed.includes('name:bubl'));
+    assert.equal(named(w, mint).name, 'Bubbles');
+    // the old name is put back before going on: the spec says what was published, and the chain no longer does
+    cut.on = false;
+    writeFileSync(file, JSON.stringify(edit(half, 'bubl', { name: 'Bubble' }), null, 2));
+    const again = await createApproval({ file, chain: flaky, now: () => NOW });
+    const state = await again.stateFor(owner.address);
+    assert.ok(
+      state.steps.some(x => x.id === 'name:bubl'),
+      state.steps.map(x => x.id).join(' '),
+    );
+    const { saved: done } = await approveAll(file, flaky, owner);
+    assert.ok(!done.live.partial);
+    assert.deepEqual(
+      [named(w, mint).name, done.live.published.tokens.find(t => t.key === 'bubl').name],
+      ['Bubble', 'Bubble'],
+      'the chain and the file agree',
+    );
+    assert.deepEqual(changedParts(done).renames, []);
+
+    // the spec takes a new name the record already has (written elsewhere): nothing is sent, and the file's published
+    // spec takes it, so no tool keeps announcing the change
+    alterRecord(w, mint, data => {
+      data.fill(0, 69, 69 + 32);
+      data.set(new TextEncoder().encode('Bubble Day'), 69);
+    });
+    const next = edit(done, 'bubl', { name: 'Bubble Day', symbol: 'BUBL' });
+    writeFileSync(file, JSON.stringify(next, null, 2));
+    assert.deepEqual(changedParts(next).renames, ['bubl']);
+    const settled = await createApproval({ file, chain: flaky, now: () => NOW });
+    const read = await settled.stateFor(owner.address);
+    assert.deepEqual([read.steps.length, read.done], [0, true]);
+    const after = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(after.live.published.tokens.find(t => t.key === 'bubl').name, 'Bubble Day');
+    assert.deepEqual(changedParts(after).renames, []);
+    assert.match(
+      (await runTool('xsolana_publish', { spec: after }, { now: NOW })).text,
+      /nothing in it has changed since it went live/,
+    );
   },
 );
