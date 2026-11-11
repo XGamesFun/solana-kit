@@ -61,7 +61,17 @@ that record's close always sent it. Gone is proven, never guessed: the Core asse
 burned), the token account that holds a Token Metadata NFT now or its mint holding none, a compressed NFT's record
 proven again. A frozen NFT the project still holds is held, not gone. In js/play: `claims()` lists such a hold or
 loan of the wallet's and `claim` closes it, `unlist` closes the maker's listing, and `closeGone(asset)` closes an
-NFT's holds and listing for anyone.
+NFT's holds and listing for anyone, and takes its row off each of the project's stashes that lists it (so no roll
+draws it, and a prize that names it is passed over in place of failing on an NFT that can't move). A lottery's own
+stash is left to the project's keys: `unraffle` takes the row out.
+
+**What a record owes and can't send closes too**, for a Core, a Token Metadata and a compressed NFT alike. A lottery
+ticket paid with an NFT that is gone settles with nothing moved. A ticket going back to its buyer, a place's NFT, a
+contest's NFT (the entry's own, or a loser's a winner picks) and an NFT of a topped bid are only handed out by the
+program, so js/play has it make a hold of that NFT and closes the hold on the proof in the same transaction: the
+round, the contest or the auction goes on, and nothing is sent. An auction whose lot or winning NFT is gone is called
+off, or ended without it. `claims()` flags each such claim `gone`, with `says`, what claiming does in words: show it
+before the player signs.
 
 One thing stays: a record nobody closed can still take its NFT if the NFT comes back into the project's hands under
 another record first (the next owner's deposit). So before a deposit, js/play looks for this project's records that
@@ -78,8 +88,9 @@ lost: tell every bidder, before a bid, when the lot is outside the project's col
 be repaid: the program takes no repayment for it, so the borrower keeps what they borrowed and the lender gets neither
 the NFT nor the money. Anyone then closes the loan's hold for nothing, also before it is due, and its rent goes back to
 the borrower who paid it. A hold a route made of an NFT it owed (a lottery place's NFT, a contest's, an outbid NFT bid)
-closes the same way once its NFT is proven gone. The kit reads the NFT's owner, flags such a hold (`gone`) and closes
-it. Check an NFT's collection before lending against it.
+closes the same way once its NFT is proven gone. The kit reads the NFT's owner, makes such a hold only to close it in
+the same transaction, and flags one left open (`gone`) so its claim closes it. Check an NFT's collection before
+lending against it.
 
 ## Tokens
 

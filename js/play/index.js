@@ -2725,6 +2725,11 @@ export function solanaApp({
    * The pulls of `parts` of entry `i` of a round (`partsOwed`; `i` null for parts owed in common, `commonOwed`), signed by
    * `signer`, and the rolls they make ([{ order, box }], `loot.pullRolls`). With `closes`, the last pull carries the
    * round's close (when the parts it pays are the last owed).
+   * An NFT of a part that is proven gone from the project is not sent anywhere. A ticket whose price sends it on
+   * passes what proves it gone, and its part settles (`NftGone`, the round its record). A ticket going back to its
+   * buyer and a place's NFT are only handed out by the program: the pull passes each as its hold, and a release on
+   * the proof follows it here, which closes the hold (`NftGone`, the hold its record). A pull makes holds of all its
+   * prize NFTs or of none, so with one of them gone the others are made holds too and released on to their winner.
    */
   async function pulls(key, r, i, parts, signer, { closes = false, lotteryClosed = false } = {}) {
     const e = i == null ? null : r.entries[i];
@@ -4257,7 +4262,9 @@ export function solanaApp({
      * Bids `amount` (whole units) on an auction. The bid it tops goes back to its bidder in the same transaction
      * (the program opens their account again if they closed it, paid by this bidder). In SOL, only what the player's
      * wrapped-SOL account does not hold already is wrapped, and the account stays open: if this bid is topped, it comes
-     * back there.
+     * back there. In an auction of NFT bids, an NFT of the topped bid that the project no longer holds (its collection
+     * took it back or burned it) can't go back: the bid makes it a hold for its bidder and closes that hold on the
+     * proof in the same transaction, so a high bid with an NFT gone can still be topped.
      */
     async bid(auctionKey, amount, { shown, listProof, nfts, acceptLeftover, ...others } = NO_OPTIONS) {
       only(others, ['shown', 'listProof', 'nfts', 'acceptLeftover'], 'bid');
@@ -4363,6 +4370,12 @@ export function solanaApp({
      * the sale is called off on that evidence, which anyone may: the bid goes back to its bidder (`{ calledOff: true }`).
      * With no bid, the lot goes home to its seller. An end too big for one transaction otherwise makes each NFT that may
      * be a hold one, and sends each on with a release after it (`releases`).
+     * An NFT that is gone is never sent, whatever its kind, and the result says so (`gone: true`, and `says`, what the
+     * end did in words): a lot gone with no bid stays where it is and the auction closes, its rent to its seller; a
+     * sale with the lot or an NFT of the bid gone is called off, and what the project still holds goes back; for the
+     * project's own lot, or a lot that went first, the end passes the bid's NFT that is gone over and pays the rest.
+     * A hold made at the end whose NFT goes before its release is closed on the proof: its entry in `releases` is
+     * then `{ asset, gone: true, closed }`, `closed` the signature.
      */
     async endAuction(auctionKey, { holders, ...others } = NO_OPTIONS) {
       only(others, ['holders'], 'endAuction');
@@ -4619,7 +4632,7 @@ export function solanaApp({
      * debt ends unpaid. The sender pays the transaction's fee only; each record's rent goes to whoever that record
      * names (a hold's payer, a listing's maker), never to the sender, and a stash keeps the rent its row no longer
      * needs (it goes to the sender only when that is one of the project's keys). With its row off a stash, no roll
-     * draws the NFT and no prize names one that is not there to give.
+     * draws the NFT, and a prize that names it is passed over in place of failing on an NFT that can't move.
      * What is left is in `waits`: a listing whose rental still runs (the program keeps a running rental, and the
      * listing closes once it has run), and a lottery's own stash that lists the NFT (`kind` 'lottery-stash', with its
      * `lottery`, the lottery's id): only the project's keys take a row out of that one (`unraffle`), gone or not.
@@ -5010,6 +5023,10 @@ export function solanaApp({
      * SOL), and a drawn lottery's unpaid places, which anyone may pay so the next round can open. [{ kind, says, … }];
      * a winner's first claim of a contest of tokens carries `potUnits` and `prizeUnits`, its part as the decision wrote
      * it (base units, as text). Pass one to `claim`.
+     * A `pull`, a `contest` or an `auction` whose claim would hand out an NFT the project no longer holds is flagged
+     * `gone` too, with `assets` (those NFTs) and `says`, what the claim does about each in words: a ticket's NFT, a
+     * place's NFT, a contest's entry or a loser's NFT picked is not sent anywhere and its part closes; an auction with
+     * its lot or an NFT of its winning bid gone is called off, or ended without it. Show `says` before the player signs.
      */
     async claims() {
       const me = wallet.address;
@@ -5353,8 +5370,15 @@ export function solanaApp({
      * Finishes one of `claims()`, signed by this player. Returns the signature. A `release` flagged `gone` closes its
      * hold on the proof that the project no longer holds the NFT: nothing is sent, the hold's rent goes back to whoever
      * paid it, and a loan's debt ends unpaid. A winner of a contest of NFTs picks
-     * which loser's NFT they take (`{ take: asset }`, the NFT of a losing entry that still holds one; the first found by default):
-     * only the winner can, while any are left.
+     * which loser's NFT they take (`{ take: asset }`, the NFT of a losing entry that still holds one; by default the
+     * first found that the project still holds): only the winner can, while any are left.
+     * An NFT a lottery's round or a contest owes that the project no longer holds (its collection took it back or
+     * burned it) is not sent anywhere, and the claim still finishes. A ticket whose price sends it on (burned, given,
+     * stashed) settles on the proof with nothing moved. A ticket going back to its buyer, a place's NFT and a
+     * contest's NFT are only handed out by the program, which reads nothing first: the claim has it make a hold of
+     * that NFT (`["hold", nft, 0]`) and closes that hold on the proof right after, in the same transaction when it
+     * fits. The signer pays that hold's rent and gets it back at once. The program's receipts for it are those of a
+     * hold made (`Held`, and `PrizeGiven` for a place's prize) and then `NftGone`: no `Released`.
      */
     async claim(c, { take, build = false, ...others } = NO_OPTIONS) {
       only(others, ['take', 'build'], 'claim');

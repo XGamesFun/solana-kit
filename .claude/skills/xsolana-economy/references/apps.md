@@ -182,8 +182,12 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   hold, a loan or a listing, or burn it there. `claims()` then lists that hold or loan, for its player and for its
   lender, as a `release` flagged `gone`: show `c.says` (closing it sends nothing, and a loan ends unpaid) and let
   `app.claim(c)` close it. `app.listing(asset)` and `app.listings()` flag such a listing `gone`: show it as not for
-  sale. Its maker's `app.unlist` closes it, and `app.closeGone(asset)` lets anyone close it. Before a deposit, the
-  play module closes what an earlier owner left of the NFT, in the same prompt.
+  sale. Its maker's `app.unlist` closes it, and `app.closeGone(asset)` lets anyone close it, and takes the NFT's row
+  off each of the project's stashes (`unstashed`). Before a deposit, the play module closes what an earlier owner left
+  of the NFT, in the same prompt. A lottery's part, a contest's claim and an auction whose NFT is gone are flagged
+  `gone` in `claims()` too (a ticket's NFT, a place's prize, an entry's or a loser's NFT, a lot or an NFT of the
+  winning bid): show `c.says` and let `app.claim(c)` finish it. Nothing is sent for that NFT, and the round, the
+  contest or the auction closes as it would have. `app.endAuction` says what it did (`gone`, `says`).
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

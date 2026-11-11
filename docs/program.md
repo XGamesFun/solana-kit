@@ -1470,12 +1470,32 @@ it: `settle` (the player, the key they named, the project's keys) and `close_lis
   controller can take it again.
 - A taken Token Metadata NFT leaves the project's token account empty, with its rent.
 - A route that turns an NFT it owes into a hold (an auction's bid, a contest's NFT, a lottery's place or ticket) reads
-  nothing first, so it can make a hold of an NFT gone. That hold then closes on the proof: two transactions.
+  nothing first, so it can make a hold of an NFT gone. That hold then closes on the proof, by a `release` after the
+  instruction that made it: two instructions, which js/play sends in one transaction when they fit.
 - A stash's NFT its winner gives back in a settle goes back on the list, gone or not. Anyone then takes the row off.
 
 **In js/play:** `claims()` lists a hold of the wallet's, and a loan it made or took, whose NFT is gone (`gone`), and
-`claim` closes it; `unlist` closes the maker's listing; `closeGone(asset)` closes an NFT's holds and listing for
-anyone; `collect` says which NFTs a settle passed over (`gone`), and a prize among them is not in `assets`.
+`claim` closes it; `unlist` closes the maker's listing; `closeGone(asset)` closes an NFT's holds and listing and takes
+its row off each of the project's stashes, for anyone (`unstashed`; a lottery's own stash that lists it is left, and
+named in `waits`); `unraffle` takes its row out of a lottery's own stash for the project's keys; `collect` says which
+NFTs a settle passed over (`gone`), and a prize among them is not in `assets`.
+
+The routes that hand out an NFT a record owes finish without one that is gone, for every kind of NFT, and `claims()`
+flags each such claim `gone` with what it does in words (`says`, and `assets`, the NFTs):
+
+- **A lottery's part** (`pull`, `payout`, and the pull a cancelling draw carries): a ticket whose price sends it on
+  settles on the proof. A ticket going back to its buyer and a place's NFT are passed as their hold, and a `release` on
+  the proof follows the pull. A pull makes holds of all its prize NFTs or of none, so with one of them gone the others
+  are made holds too and released on to their winner in the same transaction.
+- **A contest's claim**: the entry's own NFT, or a loser's NFT the winner picks, is passed as its hold and closed the
+  same way. A winner's picks go first to the losers' NFTs the project still holds.
+- **An auction** (`endAuction`, and the end `claim` sends): with no bid, a lot gone stays where it is and the auction
+  closes; a sale with its lot or an NFT of its winning bid gone is called off on the evidence; the project's own lot,
+  and a lot that went first, are ended with that NFT passed over. The result says which (`gone`, `says`). A bid over a
+  high bid with an NFT gone makes that NFT a hold for its bidder and closes it in the bid's own transaction.
+
+Where the program makes a hold it writes that hold's receipts (`Held`, and `PrizeGiven` for a place's prize) before
+the release's `NftGone`. Read `NftGone` for that hold as the NFT not given: no `Released` follows it.
 
 ## Sheets and off-chain traits
 
