@@ -1476,8 +1476,8 @@ export function check(
       warn(
         'W-OUTSIDE-NFT',
         `${where}.collection`,
-        `${what} takes NFTs of ${r.collection}, a collection the project does not control. The creator of an NFT with a permanent delegate can pull it back out of a hold, a stake, a loan or a listing, and a record it leaves behind can later take the next owner’s deposit of the same NFT. This holds for every rule on such a collection in the spec.`,
-        'Before a player deposits one, the app looks for this project’s records that name the NFT (a listing, a hold) and warns when one is left from an earlier owner; prefer collections without a permanent delegate.',
+        `${what} takes NFTs of ${r.collection}, a collection the project does not control. The creator of an NFT with a permanent delegate can pull it back out of a hold, a stake, a loan or a listing, or burn it there: the record then closes without it (anyone may close it, and nothing is paid: a lender is out the loan). A record nobody closed can still take the next owner’s deposit of the same NFT. This holds for every rule on such a collection in the spec.`,
+        'Before a player deposits one, the app closes this project’s records an earlier owner left of the NFT (a listing, a hold), in the same transaction; prefer collections without a permanent delegate.',
       );
     }
     // A gate may list wallets instead (rules.rs Gate::Wallets): a duel's two players, a tournament's entrants.

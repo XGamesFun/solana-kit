@@ -119,9 +119,10 @@ Run `xsolana_review` and go through what it reports; these are the points behind
     enter: keep contests for results the server decides, or that anyone can check outside the game. A prize to each
     winning entry with no stake and no gate pays one person with many wallets once a wallet.
 15. **NFTs the project doesn't control.** The creator of an NFT with a permanent delegate can pull it back out of a
-    hold, a stake, a loan or a listing, and a collection the project is only an update delegate of lets its owner and
-    every other delegate mint NFTs that read as the project's own items. Name only collections whose every writer the
-    project trusts.
+    hold, a stake, a loan or a listing, or burn it there. Its record then closes without it (anyone may, and nothing
+    is paid: a lender is out what they lent), and `js/play` closes what an earlier owner left before the next owner's
+    deposit. A collection the project is only an update delegate of lets its owner and every other delegate mint NFTs
+    that read as the project's own items. Name only collections whose every writer the project trusts.
 
 ## Telling the person
 

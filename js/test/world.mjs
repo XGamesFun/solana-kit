@@ -197,7 +197,10 @@ export function world({ seed = 'world', platform = true, project = true, compres
   const { LiteSVM, FeatureSet, Rent } = loadLiteSVM();
   const random = seeded(seed);
   const admin = newAddress(random);
+  // Who is told of each transaction that lands (`w.watch`): nobody until a test asks.
+  let landed = () => {};
   const chain = simChain({
+    onSent: record => landed(record),
     LiteSVM,
     FeatureSet,
     Rent,
@@ -231,6 +234,13 @@ export function world({ seed = 'world', platform = true, project = true, compres
     return a;
   };
   const w = { chain, random, admin, who, creator: who(), authority: who(), player: who(), cranker: who() };
+  /** Every transaction that lands from now on, as the chain recorded it ({ id: its signature, logs, receipts, … }),
+   * also one a wallet or the play module sent as a wire: the list returned fills as they land. */
+  w.watch = () => {
+    const list = [];
+    landed = record => list.push(record);
+    return list;
+  };
 
   /** A new classic mint with `authority` as its mint authority (6 decimals). */
   w.newMint = (authority = w.creator) => {

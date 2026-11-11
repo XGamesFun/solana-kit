@@ -1504,6 +1504,10 @@ export const SETTLE_LAST = 4_294_967_295;
  * them (one its collection won't let move). `giveUp`: the places in `won` of tokens or collectibles the player,
  * signing, gives up because they can't receive them (an account its issuer froze, a collection that refuses the mint),
  * so the rest of the order is not held up: tokens given up stay in the project's vault (`PrizeForgone` says which).
+ * An NFT proven gone from the project is passed over the same way, with no choice of the player's (`piece`: the Core
+ * asset itself, `tokenMetadata.evidence` in its kind, a compressed NFT's record proven again): the NFT the order rolled
+ * on is not sent back, burned, given or stashed (`NftGone`), and a stash's NFT it won is not given (`PrizeForgone`
+ * for it beside `NftGone`: read it as not given); everything else settles as rolled.
  * `handBack`: the wallet the box's fate gives the NFT rolled on to
  * (`receiverOf`) is an account of the loot program (`handsBack` of it as read), so the program gives it back to the
  * player, and a Token Metadata NFT's `token` is the player's. `extra`: a hook's or a memo's accounts.
@@ -1650,6 +1654,8 @@ export const INCINERATOR = '1nc1nerator11111111111111111111111111111111';
  * (`orderRefundable`). A purchase counted against a box's limit for each
  * wallet is given back. A purchase that counts its draws in its box's `in_flight` (`order.reserved`, a box that stops
  * selling when an entry runs out) names the box, whose count it leaves. `extra`: a hook's or a memo's accounts.
+ * An NFT the order holds that is proven gone from the project (`subject`, as `piece` takes it) is not looked for: the
+ * whole payment goes back all the same (`NftGone` beside `OrderRefunded`).
  */
 export function refundIx({ signer, orderAddress, order, subject, programs, extra = [] }) {
   const project = order.project;
@@ -1952,6 +1958,10 @@ export const madeAssets = (project, item, itemState, count = 1) =>
  * NFT is any kind
  * (`piece`): `asset` and `collection` for a Core asset, with `tokenMetadata` for a Token Metadata NFT, or `compressed`
  * (after a `proveLeafIx`).
+ * A hold whose NFT is proven gone from the project (`piece`: the Core asset itself, `tokenMetadata.evidence`, a
+ * compressed NFT's record proven again) closes instead: anyone sends it, at any time, also while the hold runs and for
+ * a loan before it is due, for no project fee. Nothing moves and `to` is not read; the hold's rent goes to whoever paid
+ * it, and a loan's debt ends unpaid. Its receipt is `NftGone`, with no `Released`.
  */
 export function releaseIx({
   signer,
@@ -2480,6 +2490,8 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  * close, and the next carries on. Every pull of one entry's places names the same `nonce`: a place's roll is made at
  * `prizeRollNonce(nonce + place)`, so a later pull with another nonce can land on an order an earlier pull made and fail
  * ("already in use"). js/play names `prizeNonce(round, entry)` for every pull of an entry, whoever sends it.
+ * An NFT ticket proven gone from the project (`ticket`, as `piece` takes it) goes nowhere: its part settles and
+ * nothing moves (`LotteryPulled` with amount 0 beside `NftGone`).
  */
 export function pullIx({
   payer,
@@ -2739,14 +2751,17 @@ export function endsToWalk(farm, ends, now) {
   return ends.filter(e => e.at > clock && e.at <= stop).length;
 }
 
-/** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes at most some 2,300 units, with a
- * halving rate (`js/test/farm-ends.test.mjs` measures it). */
-export const WALK_PER_TX = 500;
+/** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes up to some 3,150 units at
+ * the dearest farm, a halving rate and seats of 4 × 10^16 base units at a ×100 tier (`js/test/farm-ends.test.mjs`
+ * measures it: 400 ends take 1,260,730 units, 2,270 an end with light seats). Since loot 0.27 each end walked also
+ * frees the leaving weight's share of the carry, some 300 units more at that farm; it was 500 until then, measured
+ * with light seats only. */
+export const WALK_PER_TX = 400;
 /** The compute units a transaction that walks ends asks for: `walk_farm`, or a move with ends to walk first. */
 export const WALK_COMPUTE_UNITS = 1_400_000;
-/** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work: past this, the farm is walked
- * first (`farmNeedsWalk`). */
-export const MOVE_WALK_ROOM = 400;
+/** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work (some 400,000 units are left
+ * for it at the dearest farm): past this, the farm is walked first (`farmNeedsWalk`). 400 until loot 0.27. */
+export const MOVE_WALK_ROOM = 300;
 
 /**
  * Whether a farm has passed more ends than a move can walk in its own transaction (`endsToWalk`, `MOVE_WALK_ROOM`): such
@@ -2919,6 +2934,11 @@ const NO_PIECE = {
  *     token account of `wallet` (its holder, or whoever the project sends it to) and the project's own;
  *   a compressed NFT (`compressed`, from `compressedFromDas`), proven by a `proveLeafIx` earlier in the transaction.
  * A Token Metadata or compressed NFT passes its Sheet: the project writes nothing on it.
+ * An NFT proven gone from the project (whoever controls its collection took it out of the project's hands or burned
+ * it) is let go by the record that holds it, on these same accounts (loot 0.27, receipt `NftGone`): a Core asset shows
+ * it by itself; a compressed NFT by its record, proven again as the leaf is now; a Token Metadata NFT by
+ * `tokenMetadata.evidence`, the token account that holds it now, or its mint when it was burned, which goes in the
+ * place of `wallet`'s token account. Anything else shows nothing, and the route goes its usual way.
  * What the route does with it, so only the accounts it takes are passed (each true when left out):
  *   `moves`: hands it to the project or sends it on; `locks`: locks or unlocks it in its wallet; `writes`: writes on it;
  *   `burns`: burns a Core asset (false when left out); `reads`: reads its Sheet; `held`: reads it in the project's token
@@ -2963,7 +2983,8 @@ export function piece({
   }
   if (tm) {
     // `tm.into`: the token account of `wallet`'s the NFT goes into when it is not their associated one (`freshNftAccount`).
-    const token = tm.into ?? ata(wallet, asset, TOKEN_PROGRAM);
+    // `tm.evidence`: what shows the NFT gone from the project (the account that holds it now, or its mint), in its place.
+    const token = tm.evidence ?? tm.into ?? ata(wallet, asset, TOKEN_PROGRAM);
     const projectToken = ata(project, asset, TOKEN_PROGRAM);
     const pnft = Boolean(tm.programmable);
     // Token Metadata is called to lock it or move it; a move also takes the project's token account (and record) and the
@@ -4000,6 +4021,10 @@ export function holdIx({
  * by, and gets back the rent it no longer needs. `drop`: the NFT leaves the stash and stays where it is, owed to the
  * treasury in its hold (`["hold", nft, 0]`, the signer paying its rent until anyone `release`s it to the treasury, one
  * NFT a call). `out` is never the project's own address nor another account of the program (`ToTheProject`).
+ * Taking out of a project's stash an NFT proven gone from the project (`piece`: the Core asset itself,
+ * `tokenMetadata.evidence`, a compressed NFT's record proven again) only takes its row off the list: anyone may send
+ * it (`signer`), for no fee, nothing moves and no hold is made (`NftGone`, no `Stashed`); the rent the stash no longer
+ * needs goes to the signer only when it is one of the project's keys. A lottery's own stash stays the project's keys'.
  */
 export function stashIx({
   signer,
@@ -4922,6 +4947,10 @@ export function openListingIx({
  * takes none of the NFT's accounts but its address. `holders`, `programs`, `treasury` as for any split. After the
  * take's own accounts come a sale's compressed NFT's proof, then the shares' accounts, then (in `extra`) Core's
  * transfer adapters and any transfer hook's accounts, which the program finds by address after the shares'.
+ * A listing whose NFT is proven gone from the project (`piece`: the Core asset itself, `tokenMetadata.evidence`, a
+ * compressed NFT's record proven again) closes instead, whoever sends this: the taker pays nothing and no fee, the
+ * listing's rent goes to its maker, and the receipt is `NftGone`. It is refused while a rental runs (`Rented`), and
+ * closes once the rental has run.
  */
 export function takeListingIx({
   taker,
@@ -4958,7 +4987,10 @@ export function takeListingIx({
           ...piece({ project, asset: listing.asset, wallet: taker, compressed, ...ONLY_MOVES, moves: false }),
           proof: [],
         }
-      : standIn(listing.asset);
+      : tm?.evidence
+        ? // A rented Token Metadata NFT shown gone: the project's token account of it, and the one that holds it now.
+          heldPiece({ project, asset: listing.asset, tokenMetadata: tm, evidence: tm.evidence })
+        : standIn(listing.asset);
   return lootIx(
     'take_listing',
     { terms: listingTerms(listing), periods },
@@ -4989,7 +5021,10 @@ export function takeListingIx({
 
 /**
  * Its maker closes a listing (`listing` the decoded Listing): the NFT goes home. While a rental runs it only stops (no
- * renter takes it again), and the same call once the rental is over takes it home. Free.
+ * renter takes it again), and the same call once the rental is over takes it home. Free. A listing whose NFT is proven
+ * gone from the project (`piece`: the Core asset itself, `tokenMetadata.evidence`, a compressed NFT's record proven
+ * again) closes without it once no rental runs, its rent to its maker (`NftGone`, no `Unlisted`); anyone else closes
+ * such a listing with `takeListingIx`.
  */
 export function closeListingIx({
   maker,

@@ -10,7 +10,7 @@
 //
 //   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
 //
-// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm, weighted, exchanges.
+// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm, weighted, exchanges, gone.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -30,6 +30,7 @@ import { checkCluster, notMainnet, rpcClient } from '../js/chain/rpc.js';
 import { compileMessage, readTransaction, wireTransaction } from '../js/chain/tx.js';
 import * as loot from '../js/client/index.js';
 import { solanaApp } from '../js/play/index.js';
+import { seizingAssetIx, seizingCollectionIx, takeBackIx } from '../js/test/gone-chain.mjs';
 
 const arg = n => process.argv[process.argv.indexOf(`--${n}`) + 1];
 const url = process.env.XSOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -61,18 +62,25 @@ async function send(signers, instructions) {
 // swept later.
 const fresh = [];
 mkdirSync(path.join(dir, 'keys'), { recursive: true });
-function freshKeypair() {
+/** A new key's 64-byte secret (its seed, then its public key). */
+function newSecret() {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const jwk = privateKey.export({ format: 'jwk' });
-  const secret = new Uint8Array([
+  return new Uint8Array([
     ...Buffer.from(jwk.d, 'base64url'),
     ...Buffer.from(publicKey.export({ format: 'jwk' }).x, 'base64url'),
   ]);
+}
+function freshKeypair() {
+  const secret = newSecret();
   const k = keypairFromSecret(secret);
   writeFileSync(path.join(dir, 'keys', `${k.address}.json`), JSON.stringify([...secret]), { mode: 0o600 });
   fresh.push(k);
   return k;
 }
+/** A key that only signs the making of the account at its own address (a collection's, an asset's): never funded, so
+ * it has nothing to send back and is not kept. */
+const addressKey = () => keypairFromSecret(newSecret());
 async function sweepBack() {
   let back = 0n;
   for (const k of fresh) {
@@ -946,6 +954,102 @@ if (want('exchanges')) {
   if (await rpc.account(loot.pda.hold(pledged, loan.due))) throw new Error('The loan’s hold is still open.');
   console.log(
     `exchanges: repaid ${repaid.signature}: the lender has 2,200,000 lamports and the relic is home, in one transaction`,
+  );
+}
+// 12. A record whose NFT is gone closes (loot 0.27). A throwaway key makes a Core collection it controls, with a
+// permanent transfer delegate of its own, and an NFT of it for a player, who puts it on a hold of an hour. The
+// controller takes the NFT back out of the project's hands. A third wallet then sends the hold's release: on the proof
+// that the NFT is gone the hold closes at once, nothing moves, the log has NftGone and no Released, and every lamport
+// of the hold's rent goes to the player who paid it. The third wallet pays its network fee only.
+if (want('gone')) {
+  await send([funder], [transferLamports(funder.address, owner.address, 100_000_000n)]);
+  const live = await goLive('taken-back', {
+    version: 2,
+    network: 'devnet',
+    name: 'Taken back',
+    prompt: 'A project that holds an NFT of a collection it does not control.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    collection: { name: 'Taken back' },
+    items: [{ key: 'relic', name: 'Relic' }],
+  });
+  const { project } = live.live;
+  const [controller, player, stranger] = [freshKeypair(), freshKeypair(), freshKeypair()];
+  for (const k of [controller, player, stranger])
+    await send([funder], [transferLamports(funder.address, k.address, 40_000_000n)]);
+  const ownerOf = async asset => parseCoreAsset((await rpc.account(asset)).data).owner;
+  const lamportsOf = async address => BigInt(await rpc.balance(address));
+
+  // The controller's collection, which the project does not name, and one NFT of it for the player.
+  const [collection, nft] = [addressKey(), addressKey()];
+  const made = await send(
+    [controller, collection],
+    [seizingCollectionIx({ collection: collection.address, controller: controller.address })],
+  );
+  await send(
+    [controller, nft],
+    [
+      seizingAssetIx({
+        asset: nft.address,
+        collection: collection.address,
+        controller: controller.address,
+        owner: player.address,
+      }),
+    ],
+  );
+  console.log(
+    `gone: ${controller.address} made the collection ${collection.address} it can take NFTs back out of (${made}), and the NFT ${nft.address} for ${player.address}`,
+  );
+
+  // The player puts it on a hold of an hour, through js/play.
+  const app = solanaApp({ spec: live, rpc, wallet: asWallet(player) });
+  const held = await app.hold(nft.address, 3600);
+  const holdAddress = loot.pda.hold(nft.address, held.freeAt);
+  if ((await ownerOf(nft.address)) !== project) throw new Error('The project does not hold the NFT after the hold.');
+  if ((await app.claims()).some(c => c.asset === nft.address))
+    throw new Error('A hold that runs, its NFT held, was listed as something to finish.');
+  console.log(`gone: ${player.address} put it on a hold until ${held.freeAt}: ${held.signature}`);
+
+  // Its controller takes it back: the hold names an NFT the project no longer holds.
+  const taken = await send(
+    [controller],
+    [takeBackIx({ asset: nft.address, collection: collection.address, controller: controller.address })],
+  );
+  if ((await ownerOf(nft.address)) !== controller.address) throw new Error('The controller did not get the NFT.');
+  const claim = (await app.claims()).find(c => c.asset === nft.address);
+  if (!claim?.gone) throw new Error('claims() did not list the hold as one whose NFT is gone.');
+  console.log(`gone: the controller took it back (${taken}); the player’s claims say: ${claim.says}`);
+
+  // A third wallet closes the hold, while it still runs.
+  const rent = BigInt((await rpc.account(holdAddress)).lamports);
+  const before = [await lamportsOf(player.address), await lamportsOf(stranger.address)];
+  const closed = await solanaApp({ spec: live, rpc, wallet: asWallet(stranger) }).closeGone(nft.address);
+  if (closed.closed.length !== 1 || closed.closed[0].address !== holdAddress || closed.waits.length)
+    throw new Error(`closeGone closed ${JSON.stringify(closed.closed)}, not the hold ${holdAddress} alone.`);
+  if (await rpc.account(holdAddress)) throw new Error('The hold is still open after its release.');
+  let tx = null;
+  for (let i = 0; i < 20 && !tx; i++) {
+    tx = await rpc.call('getTransaction', [
+      closed.signature,
+      { commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
+    ]);
+    if (!tx) await sleep(1500);
+  }
+  if (!tx) throw new Error(`The release ${closed.signature} can't be read back.`);
+  const receipts = loot.receipts(tx);
+  const names = receipts.map(r => r.name);
+  const gone = receipts.find(r => r.name === 'NftGone')?.data;
+  if (!gone || names.includes('Released')) throw new Error(`The release logged ${names.join(', ') || 'nothing'}.`);
+  if (gone.record !== holdAddress || gone.asset !== nft.address || gone.by !== stranger.address)
+    throw new Error(`NftGone names ${gone.record}, ${gone.asset}, ${gone.by}.`);
+  const after = [await lamportsOf(player.address), await lamportsOf(stranger.address)];
+  if (after[0] - before[0] !== rent)
+    throw new Error(`The hold's rent was ${rent} lamports, and its payer has ${after[0] - before[0]} more.`);
+  if (before[1] - after[1] !== 5_000n)
+    throw new Error(`The sender paid ${before[1] - after[1]} lamports, not the network fee alone.`);
+  if ((await ownerOf(nft.address)) !== controller.address) throw new Error('The NFT moved.');
+  console.log(
+    `gone: ${stranger.address} closed the hold while it ran (${closed.signature}): NftGone, no Released, all ${rent} lamports of its rent to the player who paid it, and 5,000 lamports of fee from the sender`,
   );
 }
 await sweepBack();

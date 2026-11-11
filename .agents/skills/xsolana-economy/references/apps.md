@@ -178,6 +178,12 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   of its `mint`), then `app.repay(asset, due, { repay })` pays exactly that, in the payer's one prompt (a loan whose
   debt changed since is refused); a throwaway key that transaction funds sends the NFT home to its borrower, a pNFT's
   or a compressed NFT's too (one prompt). A lender sees an overdue unpaid loan in `claims()` (`release`, to them).
+- **An NFT its collection took back.** Whoever controls a collection the project does not can take an NFT out of a
+  hold, a loan or a listing, or burn it there. `claims()` then lists that hold or loan, for its player and for its
+  lender, as a `release` flagged `gone`: show `c.says` (closing it sends nothing, and a loan ends unpaid) and let
+  `app.claim(c)` close it. `app.listing(asset)` and `app.listings()` flag such a listing `gone`: show it as not for
+  sale. Its maker's `app.unlist` closes it, and `app.closeGone(asset)` lets anyone close it. Before a deposit, the
+  play module closes what an earlier owner left of the NFT, in the same prompt.
 - **A grant that pays by rank**: a voucher with an `amount` (base units of the grant's token) pays that much, up to
   the grant's; `app.claimGrant(key, { voucher })` passes it, and `{ proof, round, personHash, amount }` for a list.
 - **The price the player saw is the most they pay**: `app.buy` and `app.openBox` need the listing `shop()` or

@@ -619,7 +619,7 @@ test(
 );
 
 test(
-  'the player module repays: home in one prompt; the money alone when the NFT can’t move now; refused before signing when it is gone',
+  'the player module repays: home in one prompt; the money alone when the NFT can’t move now; refused before signing when it is gone, and that loan is closed for nothing',
   { skip },
   async () => {
     const { w, maker, club } = tmSetup('ex-play-repay');
@@ -673,20 +673,27 @@ test(
     // Taken back while held: refused in words, nothing signed.
     takeCore(w, lost, w.who());
     prompts = 0;
-    await assert.rejects(app.repay(lost, loans[1].due, { repay: 1_100n }), /no longer holds.*NotTheNft/);
+    await assert.rejects(
+      app.repay(lost, loans[1].due, { repay: 1_100n }),
+      /no longer holds.*NotTheNft.*closed for nothing: claims\(\) lists it/,
+    );
     assert.equal(prompts, 0);
     assert.equal(w.balance(lender), 10_000n - 6_000n + 2n * 1_100n, 'two offers of three loans each, two repaid');
-    // Once it is due, the lender's claims flag that loan's hold: its NFT is gone, and its release can't be sent.
-    w.chain.warp(Number(loans[1].due) + 1);
+    // The lender's claims list that loan's hold at once, before it is due, flagged gone: its claim closes the hold.
     const lenders = solanaApp({
       spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } },
       rpc: w.chain.rpc,
       wallet: asWallet(lender),
       now: () => w.chain.now(),
     });
+    assert.ok(w.chain.now() < Number(loans[1].due), 'the loan still runs');
     const flagged = (await lenders.claims()).find(c => c.asset === lost);
     assert.deepEqual([flagged.kind, flagged.gone], ['release', true]);
-    await assert.rejects(lenders.claim(flagged), /no longer holds this NFT/);
+    assert.match(flagged.says, /closing it sends nothing.*nothing is repaid, the borrower keeps what they borrowed/);
+    const paid = [w.balance(lender), w.balance(w.player)];
+    await lenders.claim(flagged);
+    assert.equal(w.chain.get(loans[1].hold), null, 'the hold is closed');
+    assert.deepEqual([w.balance(lender), w.balance(w.player)], paid, 'nothing was repaid');
   },
 );
 
@@ -884,7 +891,7 @@ function outsideAsset(w, maker, owner) {
 }
 
 test(
-  'a deposit of an NFT whose earlier owner left a listing or a hold in the project is refused in words, and goes ahead with acceptLeftover',
+  'a deposit of an NFT whose earlier owner left a listing or a hold in the project closes them first, with no option',
   { skip },
   async () => {
     const w = world({ seed: 'ex-leftover' });
@@ -905,50 +912,37 @@ test(
         hasAuthority: false,
       }),
     ]);
-    const freeAt = BigInt(w.chain.now() + 60);
+    const freeAt = BigInt(w.chain.now() + 3600);
     w.chain.send(earlier, [
       loot.holdIx({ player: earlier, project: w.project, asset: held.asset, collection: held.collection, freeAt }),
     ]);
     takeCore(w, listed.asset, next);
     takeCore(w, held.asset, next);
-    w.chain.warp(w.chain.now() + 61);
 
     let prompts = 0;
     const app = solanaApp({
-      spec: { version: 2, tokens: [], live: { project: w.project, collection: w.collection } },
+      spec: {
+        version: 2,
+        currency: 'coin',
+        tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
+        live: { project: w.project, collection: w.collection },
+      },
       rpc: w.chain.rpc,
       wallet: { address: next, signTransaction: async x => (prompts++, x) },
       now: () => w.chain.now(),
     });
-    await assert.rejects(
-      app.hold(listed.asset, 3600),
-      new RegExp(
-        `listing of this NFT .* left by an earlier owner, ${earlier}.*would be lost to you.*acceptLeftover: true`,
-      ),
-    );
-    await assert.rejects(
-      app.hold(held.asset, 3600),
-      /a hold that is over: anyone can send the NFT to .*acceptLeftover/,
-    );
-    // A listing: the program refuses a second one while the first is open, so no option sends it.
-    await assert.rejects(
-      app.listForSale(listed.asset, { price: 1, acceptLeftover: true }),
-      /refuses another listing of this NFT/,
-    );
-    assert.equal(prompts, 0, 'nothing signed');
-
-    // Given the option, the deposit goes: and the earlier owner's listing takes it, as the warning said.
-    const { freeAt: until } = await app.hold(listed.asset, 3600, { acceptLeftover: true });
+    // The earlier owner's listing is closed in front of the new owner's hold, in one transaction: its rent to its maker.
+    const rent = BigInt(w.chain.get(pda.listing(w.project, listed.asset)).lamports);
+    const before = BigInt(w.chain.get(earlier).lamports);
+    const { freeAt: until } = await app.hold(listed.asset, 3600);
+    assert.equal(prompts, 1, 'one prompt for both');
+    assert.equal(w.chain.get(pda.listing(w.project, listed.asset)), null, 'the earlier listing is closed');
+    assert.equal(BigInt(w.chain.get(earlier).lamports), before + rent, 'its rent went to its maker');
     assert.equal(coreOwner(w, listed.asset), w.project);
-    assert.ok(w.chain.get(pda.hold(listed.asset, until)));
-    w.chain.send(earlier, [
-      loot.closeListingIx({
-        maker: earlier,
-        project: w.project,
-        listing: w.read('Listing', pda.listing(w.project, listed.asset)),
-        collection: listed.collection,
-      }),
-    ]);
-    assert.equal(coreOwner(w, listed.asset), earlier, 'the earlier owner took the deposit');
+    assert.equal(w.read('Hold', pda.hold(listed.asset, until)).player, next);
+    // The earlier owner's hold, still running, is closed in front of the new owner's listing.
+    await app.listForSale(held.asset, { price: 1 });
+    assert.equal(w.chain.get(pda.hold(held.asset, freeAt)), null, 'the earlier hold is closed');
+    assert.equal(w.read('Listing', pda.listing(w.project, held.asset)).maker, next);
   },
 );

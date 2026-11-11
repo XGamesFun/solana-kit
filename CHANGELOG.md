@@ -4,6 +4,86 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.27.0: a record whose NFT is gone closes, and a deposit clears what an earlier owner left (loot 0.27.0, on devnet since 2026-11-11, slot 521,001,695)
+
+The program, 0.27.0: two changes. No stored record changed shape and no instruction's arguments or accounts changed:
+every account made under 0.26 reads as before, and a 0.26 client's instructions land. The IDL gains one receipt,
+`NftGone { project, record, asset, by }`.
+
+- **A record whose NFT is proven gone closes.** Whoever controls a collection the project does not can take an NFT
+  out of the project's hands, or burn it, while a hold, a loan, a listing or an order has it. That record then stayed
+  open for good, with its rent, and an order's payment with it. Now the instruction that would have moved the NFT,
+  sent with the same accounts, finishes without it and writes `NftGone`:
+  - `release`: the hold closes, sent by anyone at any time, also while it runs and for a loan before it is due, for no
+    fee. Its rent goes to whoever paid it. A loan's debt ends unpaid: the borrower keeps what they borrowed.
+  - `refund` and `settle` of an order whose box holds the NFT it rolls on: the payment goes back, or is split as
+    rolled, and the NFT is not moved. A stash's NFT the roll won that is gone is not given: `PrizeForgone` beside
+    `NftGone`.
+  - `close_listing` by its maker and `take_listing` by anyone (nothing paid, no fee): the listing closes, its rent to
+    its maker. While a rental runs it is kept: a stranger's take is refused, the maker's close only stops the listing,
+    and it closes once the rental has run.
+  - `stash` out: the row of a gone NFT comes off, for anyone on a project's stash; a lottery's own stash stays the
+    project's keys'. A lottery `pull` of an NFT ticket that is gone settles its part and moves nothing.
+  - Gone is proven, never guessed: a Core asset itself (held by another, or burned); the token account that holds a
+    Token Metadata NFT now, or its mint with none left; a compressed NFT's record, proven again. A frozen NFT the
+    project still holds is held, not gone, and goes the way it always went.
+  - What stays: a record nobody closed can still take its NFT if the NFT comes back into the project's hands under
+    another record first. That is why a deposit now closes them first (below).
+- **The weight that leaves a farm gives its share of the rounding back** to the project (`Farm::free_share`). Before,
+  the seats that stayed were credited all of the farm's carry, the leaver's part too. A player's numbers do not change
+  in any way a client shows; what a farm holds free can be a few whole reward units higher after a large seat leaves.
+  Walking an end costs a little more compute for it: up to some 3,150 units an end at the dearest farm (a halving rate
+  and seats of 4 × 10^16 base units at a ×100 tier), 2,270 with light seats.
+
+What `js/play` now does:
+
+- **`claims()`** lists a hold of the wallet's, and a loan it made or took, whose NFT the project no longer holds: at
+  any time, also while the hold runs, as a `release` flagged `gone`, with `says`, what closing it does in words (the
+  hold closes, its rent goes back to whoever paid it, nothing is sent, and for a loan nothing is repaid). Before, only
+  a hold that was over was flagged, and nothing could be done with it.
+- **`claim(c)`** of such a claim sends the `release` on the proof and returns its signature: the hold closes. Before,
+  it threw.
+- **`repay`** of a loan whose NFT is gone still takes no payment and signs nothing; its refusal now says the loan
+  can be closed for nothing, and how (`claims()` lists it for both sides, `claim` closes it).
+- **`unlist(asset)`** of a listing whose NFT is gone closes it on the proof (the maker's `close_listing`): its rent
+  comes back and nothing is sent. Before, it failed.
+- **`closeGone(asset)`**, new: anyone closes an NFT's holds and its listing once the project no longer holds it.
+  Nothing is sent or paid; the sender pays the transaction's fee, and each record's rent goes to whoever that record
+  names. A listing whose rental still runs is left and named in `waits`.
+- **`buyListing` and `rentListing`** refuse a listing whose NFT is gone, in words, before anything is signed. Sent
+  all the same, the take would now only close the listing.
+- **`listing(asset)`** flags such a listing `gone` (one more read). **`listings()`** flags it from one read of all the
+  listed NFTs: a Core asset held by another or burned, a Token Metadata NFT whose token left the project's account.
+  A compressed NFT is not read there (an indexer's answer for each): `listing(asset)` says it for one.
+- **The deposit guard clears what an earlier owner left, then deposits.** `hold`, `stakeNft` in escrow, `borrow`,
+  `enter` with an NFT, `bid` with NFTs, `listForSale`, `listForRent`, a ticket paid with an NFT, a box or a mission
+  that rolls on one: each used to refuse while an earlier owner's hold or listing of the NFT was open, unless told
+  `acceptLeftover: true`. Now each leftover hold is closed by `release` and a leftover listing by `take_listing`, on
+  the proof that the player holds the NFT, in front of the deposit: in the same transaction when both fit one, in a
+  transaction of their own before it when they do not, after a dry run. The closes cost the player their transaction
+  fee only; each record's rent goes to whoever that record names, never to the player. Only what can't be closed
+  still refuses, with the same words: a listing whose rental still runs (the program keeps it until the rental has
+  run). `acceptLeftover: true` still goes ahead. NFTs of the project's own collections are not read, as before.
+- **`collect`** of an order one of whose NFTs is gone settles without it and says so: `gone` lists those NFTs, and a
+  stash's NFT won that was not given is null in `assets` (read `PrizeForgone` as not given). **`refund`** of an order
+  whose NFT is gone pays back all the same.
+- **A farm's walk** carries 400 ends a transaction (`WALK_PER_TX`, 500 before, which was measured with light seats
+  only) and a move walks up to 300 first (`MOVE_WALK_ROOM`, 400 before): what fits 1,400,000 compute units at the
+  dearest farm, with 100,000 and 400,000 units to spare. `walkFarm` and `claims()` count their transactions by it.
+
+The client and the rest:
+
+- `piece` takes `tokenMetadata.evidence` (the token account that holds a Token Metadata NFT now, or its mint once
+  burned), which goes in the receiver's token account's place on every builder that moves an NFT out of the project;
+  a Core asset and a compressed NFT need nothing new (the same accounts, a compressed one proven again).
+  `takeListingIx` passes it for a rental too. `compressedFromDas` reads a burned NFT (`burnt`) as its empty leaf, so
+  `proveLeafIx` proves it burned.
+- `loot.receipts` decodes `NftGone` like any receipt. `docs/program.md` has the new section, "An NFT gone from the
+  project", a line under each instruction it touches and the receipt; `docs/nfts.md`, the checker's warning of a
+  collection the project does not control, the guide and the skill say the new rule.
+- `scripts/devnet-e2e.mjs` has a scenario `gone`: a collection whose controller takes an NFT back out of a hold, and a
+  third wallet's close of that hold.
+
 ## 0.26.4: a live token's name, ticker or link can be changed (loot 0.26.1, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.26.1's.
