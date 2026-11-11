@@ -1892,8 +1892,8 @@ export const SETUP_UNIT_PRICE = 1n;
 /**
  * A setup transaction's instructions as the owner's wallet is handed them: led by a compute unit limit and a compute
  * unit price, each once. A wallet that adds its own priority fee (Phantom does) adds it only to a transaction that
- * sets neither, and the approval page sends a transaction only as it prepared it, so every setup transaction sets both
- * itself. The limit is all a transaction can have (1,400,000 units): nothing here measures what a step takes, a box's
+ * sets neither, and the approval page takes no price a wallet puts on a transaction that has one, so every setup
+ * transaction sets both itself: its fee is the plan's own, whatever the wallet. The limit is all a transaction can have (1,400,000 units): nothing here measures what a step takes, a box's
  * write needs it, and no step may fail for want of compute. A limit or a price the instructions already carry is
  * kept.
  */

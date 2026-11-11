@@ -76,7 +76,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.0 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.1 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -87,26 +87,26 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.28.0 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.28.1 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.28.0 token <its mint address>
+npx -y @xgamesfun/solana@0.28.1 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.28.0 check xsolana.json
-npx -y @xgamesfun/solana@0.28.0 simulate xsolana.json
-npx -y @xgamesfun/solana@0.28.0 cost xsolana.json
+npx -y @xgamesfun/solana@0.28.1 check xsolana.json
+npx -y @xgamesfun/solana@0.28.1 simulate xsolana.json
+npx -y @xgamesfun/solana@0.28.1 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.28.0 explain xsolana.json
-npx -y @xgamesfun/solana@0.28.0 review xsolana.json
+npx -y @xgamesfun/solana@0.28.1 explain xsolana.json
+npx -y @xgamesfun/solana@0.28.1 review xsolana.json
 
 # go live: a key file for the project (it prints the address to send devnet SOL to, never the key)…
-npx -y @xgamesfun/solana@0.28.0 keygen ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.28.1 keygen ~/.config/xsolana/my-game.json
 # …then everything going live would send, and a code; nothing is sent
-npx -y @xgamesfun/solana@0.28.0 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.28.1 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # …and with that code, exactly what it listed is sent
-npx -y @xgamesfun/solana@0.28.0 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.28.1 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.

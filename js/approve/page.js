@@ -241,7 +241,11 @@ export function approvalPage(token) {
       const outputs = await sign.signTransaction(...inputs);
       const signed = outputs.map(o => toBase64(o.signedTransaction));
       $('status').textContent = 'Sending and confirming…';
+      const before = last?.walletAdded?.length ?? 0;
       const state = await api('/api/complete', { wallet: signer.address, id: batch.id, transactions: signed });
+      // What the wallet added to what it signed (its own checks, a compute budget): sent as it signed them.
+      for (const line of (state.walletAdded ?? []).slice(before))
+        log(`${line} It was sent as your wallet signed it: everything listed above is in it, untouched.`);
       log(`Landed: ${state.signatures.slice(-batch.transactions.length).join(', ')}`, 'ok');
       busy = false;
       render(state);

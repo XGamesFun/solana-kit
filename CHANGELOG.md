@@ -4,6 +4,41 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.1: a wallet that adds its own checks can approve on the page (loot 0.28.0, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.28.0's.
+
+`xsolana approve --browser` sent a transaction only as it had prepared it, byte for byte. Phantom adds to what it is
+asked to sign: its own checks, instructions of the Lighthouse program that read accounts and fail the transaction when
+something is not as the wallet expected. It documents no way to turn them off, so with the exact rule Phantom could
+not approve wherever it adds them.
+
+- **The page now takes what the wallet signed when the wallet only added its own** (`js/approve/wallet-adds.mjs`).
+  The wallet's message is sent, with the wallet's signature, when all of this holds, and refused otherwise, with
+  nothing sent:
+  - the wallet is the transaction's one signer and its fee payer (a transaction a new account's own key signed as it
+    was prepared can't be changed), and the blockhash is the same;
+  - every prepared instruction is in it, in the prepared order, with the same program, accounts and data;
+  - every account a prepared instruction names is a signer, or writable, exactly as it was (an added instruction that
+    asks to write one of them is refused: whether an account can be written is the whole transaction's word);
+  - every other instruction is the Lighthouse program's (`L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95`, the same on
+    mainnet and devnet), or a Compute Budget instruction of a kind the transaction does not set itself. A second unit
+    limit or price is refused: a setup's transactions set their own, so their fee stays the plan's;
+  - both messages are legacy ones, every account in the message itself.
+- **The page says what was added**: "Transaction 2 of this batch: your wallet added 1 check of its own (the Lighthouse
+  program's). It was sent as your wallet signed it: everything listed above is in it, untouched."
+- **A refusal says what the wallet did**: "it added an instruction of the program …", "it changed, dropped or moved
+  one of the prepared instructions", "it changed what the account … is in the transaction (it could only be read, and
+  can now be written)", "it added a second compute unit price …".
+- What a wallet's own check does is the Lighthouse program's to say: its assertions read accounts; its memory
+  instructions make and close an account of its own, paid for by the wallet that signs. This package holds none of
+  that against the wallet, and takes no instruction of any other program.
+- `LIGHTHOUSE_PROGRAM` is exported from `@xgamesfun/solana/chain/pda`.
+- Going live with a key file (`approve --keypair`) is as it was: the key signs each transaction as it stands.
+
+Not tried with a real Phantom: the tests add a check the way Phantom is documented to, with a stand-in program at the
+Lighthouse address.
+
 ## 0.28.0: loot at its official address (loot 0.28.0, on devnet since 2026-11-11, slot 521,074,836)
 
 The program now runs at the address it keeps, `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`. loot 0.28.0 is 0.27.0
