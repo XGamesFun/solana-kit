@@ -4,6 +4,18 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.6: going live on mainnet is said, and typed, as mainnet (loot 0.28.0, unchanged)
+
+The JavaScript alone.
+
+- **`xsolana approve --keypair` on mainnet**: the printout's first line says that everything below moves real SOL and
+  real tokens and cannot be undone, and that loot is not independently audited; the code it gives starts with
+  `mainnet-` (`--yes mainnet-1a2b3c4d`), so sending takes typing "mainnet", a step beyond the file's own
+  `"network": "mainnet"`; asked on a terminal, the question says MAINNET first. Devnet's printout and code are as
+  before.
+- The last two sentences that said devnet only (the explainer's summary, `xsolana_guide`'s description) say which
+  cluster the economy is on.
+
 ## 0.28.5: `walletAdded` is exported (loot 0.28.0, unchanged)
 
 The JavaScript alone. `@xgamesfun/solana/wallet-adds` exports `walletAdded(ours, theirs, wallet)`, the rule the approval
