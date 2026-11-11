@@ -393,6 +393,16 @@ export const spendOf = (then, m) => {
 };
 
 /** What a token is on chain: its mint (or "@mint:<key>" until it exists), program, decimals, and who can mint it. */
+/**
+ * What a token the setup makes is called on chain, from its entry in a spec as written: [name, ticker, link], with
+ * the names it gets when the spec gives none (`tokenOf`: its key in capitals for a ticker, its ticker or key for a
+ * name). Two entries with the same labels write the same record, however they are spelled.
+ */
+export function tokenLabels(t) {
+  const symbol = t.symbol ?? String(t.key).toUpperCase().slice(0, 10);
+  return [t.name ?? t.symbol ?? t.key, symbol, t.uri ?? ''];
+}
+
 function tokenOf(given) {
   // "project" is the spec's word for a token the project mints; "game" is the older spelling of it.
   const t = given.source === 'project' ? { ...given, source: 'game' } : given;
@@ -408,10 +418,11 @@ function tokenOf(given) {
       gameMints: false,
     };
   const decimals = t.decimals ?? (t.source === 'game' ? 0 : undefined);
+  const [name, symbol] = tokenLabels(t);
   return {
     ...t,
-    symbol: t.symbol ?? t.key.toUpperCase().slice(0, 10),
-    name: t.name ?? t.symbol ?? t.key,
+    symbol,
+    name,
     decimals,
     program: t.program ?? 'spl-token',
     mint: t.mint ?? `@mint:${t.key}`,

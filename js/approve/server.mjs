@@ -22,12 +22,12 @@ import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { LEGAL, legalFlags } from '../economy/legal.mjs';
-import { changedParts, prepare, recordLanded, unnamedNote } from '../economy/live.mjs';
+import { changedParts, prepare, recordLanded } from '../economy/live.mjs';
 import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../economy/model.mjs';
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
-import { checkLive, checkMints, LiveMismatch, MintMismatch } from './live-check.mjs';
+import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames } from './live-check.mjs';
 
 const PREPARE_TTL_MS = 90_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -152,6 +152,17 @@ export async function createApproval({
   const mode = !spec.live ? 'new' : spec.live.partial ? 'resume' : 'change';
   /** The parts this session publishes: all of them for a new economy, what changed for a live one. */
   let only = mode === 'change' ? changedParts(spec).only : spec.live?.changing ? new Set(spec.live.changing) : null;
+  /**
+   * The live tokens whose name record this session writes again (plan.mjs `renames`), and in words the names the spec
+   * changes that can't be written. Until a wallet connects: what the file itself says changed since it was published.
+   * Once one has: what the chain says (`readRenames`), which is all that is ever sent.
+   */
+  let renames = new Set(mode === 'change' ? changedParts(spec).renames : []);
+  let renameNotes = [];
+  /** The names this session has written already: never offered again, even to a connection that reads a slot behind. */
+  const renamed = new Set();
+  /** What a plan of this session is scoped by. */
+  const scope = () => ({ only, renames });
 
   /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   const live = () => spec.live ?? null;
@@ -192,9 +203,19 @@ export async function createApproval({
       );
     }
     try {
-      // the tokens this session renames: each one's record must be the owner's to change
-      const renaming = new Set([...(only ?? [])].filter(part => part.startsWith('name:')).map(part => part.slice(5)));
-      return await checkLive({ live: live(), m: model(spec, { now: at }), wallet, chain, renaming });
+      const m = model(spec, { now: at });
+      const trusted = await checkLive({ live: live(), m, wallet, chain });
+      // which names are written again is the chain's to say, read for the project's owner
+      const read = await readRenames({
+        live: live(),
+        m,
+        chain,
+        owner: trusted.owner,
+        published: spec.live?.published ?? null,
+      });
+      renames = new Set(read.renames.filter(key => !renamed.has(key)));
+      renameNotes = read.notes;
+      return trusted;
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
       throw new ApproveError(
@@ -205,7 +226,7 @@ export async function createApproval({
   }
 
   async function build(owner) {
-    const p0 = plan(spec, { now: at, live: live(), only });
+    const p0 = plan(spec, { now: at, live: live(), ...scope() });
     if (!p0.ok) throw new ApproveError(400, describe({ refusals: p0.refusals, warnings: [] }));
     for (const name of p0.freshKeys) if (!keys.has(name)) keys.set(name, freshKeypair());
     // The accounts the owner makes outside loot: a mint, and the project's tree of compressed NFTs.
@@ -231,7 +252,7 @@ export async function createApproval({
       live: live() ?? {},
       now: at,
       rent,
-      only,
+      ...scope(),
       slot: hashes[0] ?? null,
     });
     if (!p.ok) throw new ApproveError(400, describe({ refusals: p.refusals, warnings: [] }));
@@ -297,9 +318,6 @@ export async function createApproval({
       ? 'What is live has not been read from the chain yet: connect your wallet, and each line is marked against what is on chain.'
       : null;
 
-  // A token that went live with no name record, whose name the spec now changes: nothing is sent for it, and the
-  // page says so.
-  const unnamed = mode === 'change' ? changedParts(spec).unnamed : [];
   // The project's own settings a change names are never published: the page says so.
   const changed = mode === 'change' ? changedParts(spec).settings : [];
   const settings = changed.length
@@ -330,13 +348,13 @@ export async function createApproval({
       mode,
       program: LOOT_PROGRAM,
       cluster: 'devnet',
-      setupSol: cost(spec, { now: at, live: live(), only }).setup?.totalSol ?? null,
+      setupSol: cost(spec, { now: at, live: live(), ...scope() }).setup?.totalSol ?? null,
       warnings: [
         ...(extra.refused ? [extra.refused] : []),
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
-          unnamed.length ? unnamedNote(unnamed) : null,
+          ...renameNotes,
           unread(),
           remadeLists(),
           outsideAddresses(
@@ -378,7 +396,7 @@ export async function createApproval({
     },
     /** The steps still to go and what is done, built on stand-in addresses until a wallet connects. */
     state() {
-      const p = plan(spec, { now: at, live: live(), only });
+      const p = plan(spec, { now: at, live: live(), ...scope() });
       const v = view(p);
       return { ...v, remaining: p.ok ? p.transactions.length : 0, done: p.ok && p.transactions.length === 0 };
     },
@@ -407,11 +425,11 @@ export async function createApproval({
 
   async function stateFor(wallet) {
     let trusted;
-    let p0 = plan(spec, { now: at, live: live(), only });
+    let p0 = plan(spec, { now: at, live: live(), ...scope() });
     try {
       await settlePending();
-      p0 = plan(spec, { now: at, live: live(), only });
       trusted = await trust(wallet);
+      p0 = plan(spec, { now: at, live: live(), ...scope() });
     } catch (e) {
       if (!(e instanceof ApproveError)) throw e;
       const v = view(p0, namesOf(model(spec, { now: at }), { now: at, owner: wallet }), { refused: e.message });
@@ -669,10 +687,12 @@ export async function createApproval({
     const mints = { ...(was.mints ?? {}) };
     for (const id of ids)
       if (id.startsWith('token:') && ctx.mints?.[id.slice(6)]) mints[id.slice(6)] = ctx.mints[id.slice(6)];
-    // A token's own step names it on chain as it makes it (plan.mjs): kept, so a later change to its name is written.
-    const named = [
-      ...new Set([...(was.named ?? []), ...ids.filter(id => id.startsWith('token:')).map(id => id.slice(6))]),
-    ];
+    // a name written again is done
+    for (const id of ids)
+      if (id.startsWith('name:')) {
+        renames.delete(id.slice(5));
+        renamed.add(id.slice(5));
+      }
     const progress = {
       ...was,
       program: LOOT_PROGRAM,
@@ -681,7 +701,6 @@ export async function createApproval({
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
       ...(made.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
       mints,
-      ...(named.length ? { named } : {}),
       landed: [...new Set([...(was.landed ?? []), ...ids])],
       partial: true,
       ...(only ? { changing: [...only] } : {}),
@@ -696,7 +715,7 @@ export async function createApproval({
     if (!progress.collection) delete progress.collection;
     spec = { ...spec, live: progress };
     generation++;
-    const rest = plan(spec, { now: at, live: spec.live, only });
+    const rest = plan(spec, { now: at, live: spec.live, ...scope() });
     if (rest.ok && rest.transactions.length === 0) {
       const { live: _, ...bare } = spec;
       // Everything the setup made, whichever session or transaction made it.
@@ -708,11 +727,7 @@ export async function createApproval({
         mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
       };
       const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
-      final.live = {
-        ...final.live,
-        ...(progress.named?.length ? { named: progress.named } : {}),
-        transactions: progress.transactions,
-      };
+      final.live = { ...final.live, transactions: progress.transactions };
       spec = final;
       only = changedParts(spec).only;
     }

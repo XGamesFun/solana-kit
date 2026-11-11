@@ -57,21 +57,22 @@ function createdStandard(data) {
   }
 }
 /**
- * The option byte of the new update authority in a Token Metadata UpdateMetadataAccountV2 (0: left as it is), or null
- * when its data does not read: the tag, an option of the new data (three strings, the royalty, three options this
- * package always leaves empty), then the authority's option.
+ * Whether a Token Metadata UpdateMetadataAccountV2 is a rename and nothing more: new data (three strings, no royalty,
+ * no creators, collection or uses), and then the update authority, the primary sale and whether it can be changed
+ * each left as they are (their options empty), with nothing after. Anything else (the record handed on, frozen for
+ * good, a royalty set) is not this package's rename.
  */
-function renamedAuthority(data) {
+function onlyRenames(data) {
   try {
     let at = 1;
-    if (data[at++] === 1) {
-      for (let i = 0; i < 3; i++) at += 4 + Number(readUintLE(data, at, 4));
-      at += 2;
-      for (let i = 0; i < 3; i++) if (data[at++] !== 0) return null;
-    }
-    return at < data.length ? data[at] : null;
+    if (data[at++] !== 1) return false;
+    for (let i = 0; i < 3; i++) at += 4 + Number(readUintLE(data, at, 4));
+    if (Number(readUintLE(data, at, 2)) !== 0) return false;
+    at += 2;
+    for (let i = 0; i < 6; i++) if (data[at++] !== 0) return false;
+    return at === data.length;
   } catch {
-    return null;
+    return false;
   }
 }
 /** A loot instruction's name, by its tag (1 byte; 8 for the oracle's callbacks). */
@@ -234,12 +235,14 @@ export function checkTransaction(message, { address, role, game = null, grants =
       // The setup names each token it makes (js/chain/metadata.js: CreateV1, with this wallet its mint authority, its
       // payer and the record's update authority). Nothing else of Token Metadata's is the economy's to ask.
       // …and writes a record again when the owner changes a token's name (UpdateMetadataAccountV2, this wallet the
-      // record's update authority, which it leaves as it is: after the new name, ticker and link, no new authority).
+      // record's update authority): the new name, ticker and link and nothing else of the record (`onlyRenames`).
       if (role === 'owner' && ix.data[0] === 15) {
         if (acct(1) !== address)
           findings.push(`Changes a token’s name record with an authority that is not this wallet.`);
-        else if (renamedAuthority(ix.data) !== 0)
-          findings.push(`Hands a token’s name record to another update authority.`);
+        else if (!onlyRenames(ix.data))
+          findings.push(
+            `Changes more of a token’s name record than its name, ticker and link (its authority, whether it can be changed, a royalty).`,
+          );
         else summary.push(`change the name record ${acct(0)}`);
         continue;
       }

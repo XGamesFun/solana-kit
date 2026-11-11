@@ -205,7 +205,8 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   if (economy.prompt) lines.push(`Asked for: “${economy.prompt}”`);
 
   // A token the setup makes is named on chain as it is made (plan.mjs): what wallets will show, and that a picture
-  // needs its link before going live. One that is live already keeps what it has.
+  // needs its link before going live. One that is live already keeps what it has until the spec changes its name,
+  // which is written at the next approve (live.mjs changedParts, approve/live-check.mjs readRenames).
   section(
     'The tokens going live makes',
     [...m.tokens.values()]

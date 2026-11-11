@@ -183,7 +183,7 @@ test('an owner signs the name of a token the setup makes, and no other Token Met
   assert.match(verdict([other], 'owner').findings.join(' '), /unexpected Token Metadata instruction \(43, 0\)/);
 });
 
-test('an owner signs a change to the name record of a token of theirs, never a hand-over of it', () => {
+test('an owner signs a change to the name record of a token of theirs, and nothing else of the record', () => {
   const rename = updateFungibleMetadataIx({ mint, authority: me, name: 'Bubble Day', symbol: 'BUBL', uri: '' });
   const owner = verdict([rename], 'owner');
   assert.equal(owner.ok, true, owner.findings.join(' '));
@@ -191,13 +191,18 @@ test('an owner signs a change to the name record of a token of theirs, never a h
   assert.match(verdict([rename], 'player').findings.join(' '), /unexpected Token Metadata instruction/);
   const theirs = updateFungibleMetadataIx({ mint, authority: thief, name: 'Bubble Day', symbol: 'BUBL' });
   assert.match(verdict([theirs], 'owner').findings.join(' '), /authority that is not this wallet/);
-  // the same change with a new update authority after the name: the record handed to someone else
-  const handOver = {
-    ...rename,
-    data: concat(rename.data.slice(0, -3), Uint8Array.of(1), addressBytes(thief), Uint8Array.of(0, 0)),
-  };
-  assert.match(
-    verdict([handOver], 'owner').findings.join(' '),
-    /Hands a token’s name record to another update authority/,
-  );
+  const more = /Changes more of a token’s name record than its name, ticker and link/;
+  const tail = (...bytes) => ({ ...rename, data: concat(rename.data.slice(0, -3), Uint8Array.from(bytes.flat())) });
+  // a new update authority after the name: the record handed to someone else
+  assert.match(verdict([tail([1], [...addressBytes(thief)], [0, 0])], 'owner').findings.join(' '), more);
+  // the record made unchangeable for good, or marked as sold
+  assert.match(verdict([tail([0, 0, 1, 0])], 'owner').findings.join(' '), more);
+  assert.match(verdict([tail([0, 1, 1, 0])], 'owner').findings.join(' '), more);
+  // a royalty, or bytes after the end
+  const royalty = Uint8Array.from(rename.data);
+  royalty[royalty.length - 8] = 5;
+  assert.match(verdict([{ ...rename, data: royalty }], 'owner').findings.join(' '), more);
+  assert.match(verdict([{ ...rename, data: concat(rename.data, Uint8Array.of(0)) }], 'owner').findings.join(' '), more);
+  // no new data at all
+  assert.match(verdict([{ ...rename, data: Uint8Array.of(15, 0, 0, 0, 0) }], 'owner').findings.join(' '), more);
 });

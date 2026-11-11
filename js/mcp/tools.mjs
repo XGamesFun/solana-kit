@@ -16,7 +16,7 @@ import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
-import { changedParts, unnamedNote } from '../economy/live.mjs';
+import { changedParts, renamesNote } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { describeReview, review } from '../economy/review.mjs';
@@ -247,11 +247,11 @@ function flagsToTell(economy, now) {
  * what can't change or was taken out.
  */
 function liveChange(economy) {
-  if (!economy.live?.project || !economy.live?.published) return { scope: {}, notes: '', settings: [] };
-  const { only, fixed, removed, settings, unnamed } = changedParts(economy);
+  if (!economy.live?.project || !economy.live?.published) return { scope: {}, notes: '', settings: [], changes: 0 };
+  const { only, fixed, removed, settings, renames } = changedParts(economy);
   const notes = [
     settings.length ? `\n${settingsNote(settings, economy.live)}` : '',
-    unnamed.length ? `\n${unnamedNote(unnamed)}` : '',
+    renames.length ? `\n${renamesNote(renames)}` : '',
     fixed.length
       ? `\nThese can't change once live, and stay as they were: ${fixed.join(', ')} (a farm, an auction or a pool's token).`
       : '',
@@ -259,7 +259,8 @@ function liveChange(economy) {
       ? `\nTaken out of the spec but still on chain: ${removed.join(', ')}. To stop one, keep it and set "active": false.`
       : '',
   ].join('');
-  return { scope: { only, live: economy.live }, notes, settings };
+  // (`changes`: whether anything is to be published at all: a part, or a token's name)
+  return { scope: { only, live: economy.live, renames }, notes, settings, changes: only.size + renames.length };
 }
 
 /** In words: the spec changes the project's own settings, which publishing never writes. */
@@ -429,8 +430,8 @@ export const tools = [
       const c = cost(economy, { now: nowOf(ctx), ...change.scope });
       if (!c.ok) return refused(c, from);
       const head = change.scope.live
-        ? change.scope.only.size
-          ? `This economy is live: this prices only the change (${[...change.scope.only].join(', ')}).\n`
+        ? change.changes
+          ? `This economy is live: this prices only the change (${[...change.scope.only, ...change.scope.renames.map(key => `the name of ${key}`)].join(', ')}).\n`
           : 'This economy is live and nothing has changed since it went live: publishing costs nothing.\n'
         : '';
       return { ok: true, from, setup: c.setup, actions: c.actions, fees: c.fees, text: head + explainCost(c) + footer };
@@ -560,7 +561,7 @@ export const tools = [
     async handler(input, ctx) {
       const { economy, from, file } = await load(input, ctx);
       const change = liveChange(economy);
-      if (change.scope.live && !change.scope.only.size && change.settings.length)
+      if (change.scope.live && !change.changes && change.settings.length)
         return {
           ok: false,
           transactions: 0,
@@ -568,7 +569,7 @@ export const tools = [
           steps: [],
           text: `${from} is live, and its parts are as they are on chain. ${settingsNote(change.settings, economy.live)}${footer}`,
         };
-      if (change.scope.live && !change.scope.only.size)
+      if (change.scope.live && !change.changes)
         return {
           ok: true,
           transactions: 0,

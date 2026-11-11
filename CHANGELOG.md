@@ -10,11 +10,20 @@ tools see them.
   UpdateMetadataAccountV2, signed by the owner, the record's update authority; `updateFungibleMetadataIx`). It costs
   a transaction: no rent, no fee to Token Metadata. This is how a token that went live with no picture gets one. A
   fixed supply's record changes the same way: turning minting off does not freeze its name.
-- The file records which tokens the setup named as it made them (`live.named`). A token that went live before setups
-  named tokens (0.26.1 and earlier) has no record and can't be given one: a change to its name sends nothing, and
-  `xsolana_publish` and the approval page say so. Approval refuses a file that calls a token named when its mint has
-  no record, or a record that is someone else's to change.
-- The byte limits and the blank-name refusal apply to a named live token too, since its words are written again.
+- **Which tokens have a record to write is read from the chain as the change is approved** (`readRenames`), never
+  taken from the file: a file from any earlier release works as it is. A record is written again only when the spec
+  gives a name, ticker or link otherwise than it was published with, the record says something else, and it is still
+  the project owner's to change. The same names spelled out (a ticker the spec used to leave to its key) send nothing.
+- A token that went live before setups named tokens (0.26.1 and earlier) has no record and can't be given one, and a
+  record its owner handed to another wallet or made unchangeable outside these tools can't be written: nothing is
+  sent for such a token, the approval page says why, and the rest of the change goes through. `xsolana_publish` and
+  `xsolana_cost`, which do not read the chain, list the change and say that approving reads the record first.
+- A name edited while a setup or a change was cut short is written when it is gone on with, and one that landed
+  already is not sent twice.
+- The byte limits and the blank-name refusal apply to a live token whose name, ticker or link is changed, since the
+  new words are written to a record; what it went live with stays a label, held to nothing.
+- `parseRecord` (`chain/metadata.js`) reads a Token Metadata record: its update authority, mint, name, ticker, link
+  and whether it can still be changed.
 
 ## 0.26.3: a token made elsewhere is read from the chain, and one place to choose a token (loot 0.26.1, unchanged)
 

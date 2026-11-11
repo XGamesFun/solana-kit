@@ -729,7 +729,7 @@ const placeholderKey = name => encodeBase58(sha256(utf8(`loot-plan:${name}`)));
  * seats there as it is released, its clock stopped while nobody is in. A seed that lands
  * before the first stake or after it is released the same way from that stake on, so seeding first would change nothing.
  */
-export function setupSteps(economy, { now = 0, only = null, live: given = null } = {}) {
+export function setupSteps(economy, { now = 0, only = null, live: given = null, renames = null } = {}) {
   const m = model(economy, { now });
   const live = madeSoFar(given);
   const steps = [];
@@ -744,13 +744,23 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   // show), while the owner is still its mint authority: Token Metadata takes a record from nobody else, so a mint whose
   // minting was handed on or turned off without one can never have one. The owner stays the record's update authority.
   for (const t of m.tokens.values()) {
-    // A token that is live and was named as it was made: a change to its name, ticker or link (`only` names it:
-    // live.mjs changedParts) writes its record again, signed by the owner, the record's update authority.
-    if (t.source === 'game' && live?.mints?.[t.key] && only?.has(`name:${t.key}`))
-      add({
+    // A live token whose name record is to be written again (`renames`: its key; the approval reads the chain for
+    // which, live-check.mjs readRenames): the new name, ticker and link, signed by the owner, the record's update
+    // authority. Not a part a change scopes (`only`), and never held back as landed: the chain says when it is done.
+    const labels = [t.name, t.symbol, t.uri ?? ''];
+    const writable =
+      labels.every(
+        (v, i) => utf8(String(v)).length <= [METADATA_LIMITS.name, METADATA_LIMITS.symbol, METADATA_LIMITS.uri][i],
+      ) &&
+      String(t.name).trim() !== '' &&
+      String(t.symbol).trim() !== '';
+    if (t.source === 'game' && live?.mints?.[t.key] && renames && new Set(renames).has(t.key) && writable)
+      steps.push({
+        creates: [],
+        signers: [owner],
         id: `name:${t.key}`,
         part: `name:${t.key}`,
-        says: `Change what the token ${t.symbol} is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'} (its name record, which only your wallet can change)`,
+        says: `Change what the token ${t.symbol} (mint ${live.mints[t.key]}) is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: its name record is written again, and stays only your wallet’s to change`,
         build: ctx => [
           updateFungibleMetadataIx({
             mint: ctx.mints[t.key],
@@ -766,7 +776,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
     const record = { what: `the name of ${t.symbol} on chain`, bytes: METADATA_BYTES, fee: Number(METADATA_FEE) };
     // The checker refuses a name, ticker or link too long for a record before any plan is made, except on a token
-    // that is live already, whose words are only labels. Such a token is made here only when a live economy is
+    // that is live already and whose words were not changed. Such a token is made here only when a live economy is
     // planned as if it were new (explain's cost of the whole setup, which is never sent): its record is left out.
     const fits = ['name', 'symbol', 'uri'].every(f => utf8(String(t[f] ?? '')).length <= METADATA_LIMITS[f]);
     const name = ctx =>
@@ -1899,11 +1909,14 @@ export function pack(steps, ctx) {
  * The plan for a spec: refusals, or every step packed into transactions. With `ctx` the transactions carry the
  * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing).
  */
-export function plan(economy, { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null } = {}) {
+export function plan(
+  economy,
+  { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null, renames = null } = {},
+) {
   // With a real context the project is known: a box's write is checked with its own address searches counted.
   const checked = check(economy, { now, ...(ctx?.project ? { project: ctx.project } : {}) });
   if (!checked.ok) return { ok: false, refusals: checked.refusals, warnings: checked.warnings };
-  const { steps, model: m } = setupSteps(economy, { now, only, live });
+  const { steps, model: m } = setupSteps(economy, { now, only, live, renames });
   if (ctx)
     ctx.tokenPrograms ??= Object.fromEntries(
       [...m.tokens.values()]

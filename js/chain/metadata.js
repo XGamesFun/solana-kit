@@ -105,5 +105,38 @@ export function updateFungibleMetadataIx({ mint, authority, name, symbol, uri = 
   };
 }
 
+/**
+ * A Token Metadata record as the chain holds it: { updateAuthority, mint, name, symbol, uri, mutable }, or null when
+ * the data is not one (its first byte says a metadata record; the strings are padded with NULs to their full length).
+ * `mutable`: its update authority can still change it.
+ */
+export function parseRecord(data) {
+  try {
+    if (!data || data.length < 1 + 32 + 32 + 12 || data[0] !== 4) return null;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    let at = 65;
+    const words = [];
+    for (let i = 0; i < 3; i++) {
+      const length = view.getUint32(at, true);
+      if (at + 4 + length > data.length) return null;
+      words.push(new TextDecoder().decode(data.subarray(at + 4, at + 4 + length)).replaceAll('\0', ''));
+      at += 4 + length;
+    }
+    at += 2; // the royalty
+    if (data[at++] === 1) at += 4 + 34 * view.getUint32(at, true); // creators
+    if (at + 2 > data.length) return null;
+    return {
+      updateAuthority: encodeBase58(data.subarray(1, 33)),
+      mint: encodeBase58(data.subarray(33, 65)),
+      name: words[0],
+      symbol: words[1],
+      uri: words[2],
+      mutable: data[at + 1] === 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** The update authority a Token Metadata record names (who can change its name, ticker and link). */
 export const metadataUpdateAuthority = data => (data?.length >= 33 ? encodeBase58(data.subarray(1, 33)) : null);
