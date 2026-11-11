@@ -90,7 +90,7 @@ const NOBODY = '11111111111111111111111111111111';
 /** A table made this many slots ago whose transaction never landed was never sent: its blockhashes ran out long since. */
 const TABLE_UNSENT_SLOTS = 300n;
 /** A compressed NFT's `prove_leaf`: its record stays good while the leaf is unchanged, so it may go in a transaction of its own first. */
-const isProveLeaf = ix => ix.programId === loot.LOOT_PROGRAM && loot.instructionOf(ix.data)?.name === 'prove_leaf';
+const isProveLeaf = ix => ix.programId === loot.lootProgram() && loot.instructionOf(ix.data)?.name === 'prove_leaf';
 /** A system account must keep this much (rent for 0 bytes) or be emptied. */
 const RENT_EMPTY = 890_880n;
 const SIGNATURE_FEE = 5_000n;
@@ -218,9 +218,9 @@ export function solanaApp({
     );
   // The economy's file names its cluster (devnet when it names none), and this page works on it and no other.
   loot.useCluster(loot.networkOf(spec));
-  if (live.program && live.program !== loot.LOOT_PROGRAM)
+  if (live.program && live.program !== loot.lootProgram())
     throw new Error(
-      `This economy went live on the program ${live.program}, which is not loot’s on ${loot.cluster()} (${loot.LOOT_PROGRAM}): its "network" and its "live" section name two clusters.`,
+      `This economy went live on the program ${live.program}, which is not loot’s on ${loot.cluster()} (${loot.lootProgram()}): its "network" and its "live" section name two clusters.`,
     );
   const client = onCluster(rpc ?? rpcClient(loot.clusterRpcUrl(rpcUrl)));
   const project = live.project;
@@ -257,13 +257,13 @@ export function solanaApp({
   const read = async (name, address) => {
     const a = await client.account(address);
     if (!a) throw new Error(`Nothing at ${address}: is the economy live on this cluster?`);
-    if (a.owner !== loot.LOOT_PROGRAM) throw new Error(`${address} is not a loot account.`);
+    if (a.owner !== loot.lootProgram()) throw new Error(`${address} is not a loot account.`);
     return loot.decode(name, a.data);
   };
   /** A loot account, or null when there is none yet. */
   const readMaybe = async (name, address) => {
     const a = await client.account(address);
-    return a?.owner === loot.LOOT_PROGRAM ? loot.decode(name, a.data) : null;
+    return a?.owner === loot.lootProgram() ? loot.decode(name, a.data) : null;
   };
   /** The key of the token a lottery's tickets are paid in: the spec's `ticketCurrency`, or the token of its mint. */
   const ticketCurrencyOf = (l, lottery) =>
@@ -535,7 +535,7 @@ export function solanaApp({
   const sheetOf = async nft => {
     const found = await client.account(loot.pda.sheet(project, nft));
     return Object.fromEntries(
-      (loot.decodeSheet(found?.owner === loot.LOOT_PROGRAM ? found.data : null)?.attributes ?? []).map(a => [
+      (loot.decodeSheet(found?.owner === loot.lootProgram() ? found.data : null)?.attributes ?? []).map(a => [
         a.key,
         a.value,
       ]),
@@ -658,7 +658,7 @@ export function solanaApp({
     if (loot.readsProfile(rule)) {
       const found = await client.account(loot.pda.profile(project, wallet.address));
       const attributes = Object.fromEntries(
-        (loot.decodeProfile(found?.owner === loot.LOOT_PROGRAM ? found.data : null)?.attributes ?? []).map(a => [
+        (loot.decodeProfile(found?.owner === loot.lootProgram() ? found.data : null)?.attributes ?? []).map(a => [
           a.key,
           a.value,
         ]),
@@ -930,7 +930,7 @@ export function solanaApp({
     const said = String(e?.message ?? '');
     const m = /custom program error: 0x([0-9a-f]+)/i.exec(said);
     const failed = e?.logs?.find(line => / failed: custom program error: 0x/i.test(line));
-    const known = m && (!failed || failed.includes(loot.LOOT_PROGRAM)) ? loot.ERRORS[parseInt(m[1], 16)] : null;
+    const known = m && (!failed || failed.includes(loot.lootProgram())) ? loot.ERRORS[parseInt(m[1], 16)] : null;
     if (!known) throw e;
     throw Object.assign(new Error(`${known.msg} (${known.name}).`, { cause: e }), {
       code: parseInt(m[1], 16),
@@ -1085,14 +1085,14 @@ export function solanaApp({
     const watch = [
       ...new Set(
         instructions
-          .filter(ix => ix.programId === loot.LOOT_PROGRAM)
+          .filter(ix => ix.programId === loot.lootProgram())
           .flatMap(ix => ix.keys.filter(k => k.isWritable && !k.isSigner).map(k => k.pubkey)),
       ),
     ];
     const after = (await dryRun(wallet.address, instructions, watch)).accounts;
     const waiting = watch.flatMap((address, i) => {
       const a = after[i];
-      if (a?.owner !== loot.LOOT_PROGRAM || loot.accountKind(a.data) !== 'Order') return [];
+      if (a?.owner !== loot.lootProgram() || loot.accountKind(a.data) !== 'Order') return [];
       const order = loot.decode('Order', a.data);
       return order.status === 'Waiting' && order.player === wallet.address ? [[address, order]] : [];
     });
@@ -1196,7 +1196,7 @@ export function solanaApp({
     // `landed`: the slot one's own open landed in; the order is read from a node that has seen it.
     const current = async () => {
       const account = await client.account(orderAddress, 'confirmed', landed != null ? { minContextSlot: landed } : {});
-      return account?.owner === loot.LOOT_PROGRAM ? loot.decode('Order', account.data) : null;
+      return account?.owner === loot.lootProgram() ? loot.decode('Order', account.data) : null;
     };
     let order = await current();
     // Right after one's own confirmed open, no order is "not seen yet", never "settled already": a node of the RPC may
@@ -2303,7 +2303,7 @@ export function solanaApp({
     const listing = await readMaybe('Listing', listingAt);
     if (listing) out.push({ kind: 'listing', address: listingAt, record: listing });
     const tag = { memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.Hold)) } };
-    const holds = await client.programAccounts(loot.LOOT_PROGRAM, [
+    const holds = await client.programAccounts(loot.lootProgram(), [
       tag,
       { memcmp: { offset: 1, bytes: project } },
       { memcmp: { offset: 33, bytes: asset } },
@@ -2322,7 +2322,7 @@ export function solanaApp({
    */
   async function stashesOf(asset) {
     const at = (offset, bytes) => ({ memcmp: { offset, bytes } });
-    const found = await client.programAccounts(loot.LOOT_PROGRAM, [
+    const found = await client.programAccounts(loot.lootProgram(), [
       at(0, encodeBase58(Uint8Array.of(loot.TAGS.Table))),
       at(1, project),
       at(37, encodeBase58(Uint8Array.of(loot.PAYLOAD.Nft))),
@@ -2537,7 +2537,7 @@ export function solanaApp({
     const found = await client.accounts(keys);
     const rounds = keys.map((key, i) => ({
       address: key,
-      round: found[i]?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found[i].data) : null,
+      round: found[i]?.owner === loot.lootProgram() ? loot.decodeRound(found[i].data) : null,
     }));
     return { address, lottery, current: rounds[0].round, rounds: rounds.filter(r => r.round) };
   }
@@ -2592,7 +2592,7 @@ export function solanaApp({
       first && lottery?.owing && lottery.owing !== NOBODY && loot.potIdOf(terms) != null
         ? await client.account(lottery.owing)
         : null;
-    const owing = owingAt?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(owingAt.data) : null;
+    const owing = owingAt?.owner === loot.lootProgram() ? loot.decodeRound(owingAt.data) : null;
     // That round's answer says what it left the pot: until it lands (or the round is cancelled), this draw waits.
     if (owing?.status === 'Drawing')
       throw new Error(
@@ -3005,13 +3005,13 @@ export function solanaApp({
       const tag = t => ({ memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS[t])) } });
       const at = (offset, bytes) => ({ memcmp: { offset, bytes } });
       const orders = new Map();
-      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [
+      for (const { pubkey, account } of await client.programAccounts(loot.lootProgram(), [
         tag('Order'),
         at(1, project),
         at(33, me),
       ]))
         orders.set(pubkey, loot.decode('Order', account.data));
-      const holds = (await client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project), at(65, me)])).map(
+      const holds = (await client.programAccounts(loot.lootProgram(), [tag('Hold'), at(1, project), at(65, me)])).map(
         h => h.pubkey,
       );
       // Keys are named by an order of the wallet's, a hold (a loan's release), or an auction (the releases after its end).
@@ -3145,7 +3145,7 @@ export function solanaApp({
     async payNft(asset, { to = null, reference, ...others } = NO_OPTIONS) {
       only(others, ['to', 'reference'], 'payNft');
       // An NFT paid goes to a wallet: never the project's address or an account of the program (ToTheProject).
-      if (to && (to === project || (await client.account(to))?.owner === loot.LOOT_PROGRAM))
+      if (to && (to === project || (await client.account(to))?.owner === loot.lootProgram()))
         throw new Error('An NFT paid can’t go to the project or an account of the program: name a wallet, or burn it.');
       const { before, ...nft } = await nftOf(asset);
       return send([...before, loot.payNftIx({ player: wallet.address, project, asset, to, ...nft, reference })]);
@@ -3163,7 +3163,7 @@ export function solanaApp({
         const there = await client.account(loot.pda.lottery(project, l.id));
         // The terms on sale are the round's own copy once someone bought into it, the lottery's before.
         const { lottery, current } =
-          there?.owner === loot.LOOT_PROGRAM ? await roundOf(l) : { lottery: null, current: null };
+          there?.owner === loot.lootProgram() ? await roundOf(l) : { lottery: null, current: null };
         const copy = current ?? lottery;
         const terms = copy?.terms;
         const currency = lottery ? ticketCurrencyOf(l, lottery) : (l.ticketCurrency ?? currencyKey);
@@ -3723,7 +3723,7 @@ export function solanaApp({
       const nfts = f.stakes === 'collectibles';
       // A seat names its player (offset 1), not its farm: a seat of this farm is the one at its own address here.
       const found = (
-        await client.programAccounts(loot.LOOT_PROGRAM, [
+        await client.programAccounts(loot.lootProgram(), [
           { memcmp: { offset: 0, bytes: encodeBase58(Uint8Array.of(loot.TAGS.Seat)) } },
           { memcmp: { offset: 1, bytes: player } },
         ])
@@ -4550,7 +4550,7 @@ export function solanaApp({
         ...(maker ? [{ memcmp: { offset: 33, bytes: maker } }] : []),
       ];
       const time = await chainNow();
-      const found = (await client.programAccounts(loot.LOOT_PROGRAM, filters)).map(({ pubkey, account }) => {
+      const found = (await client.programAccounts(loot.lootProgram(), filters)).map(({ pubkey, account }) => {
         const listing = loot.decode('Listing', account.data);
         return { listing: pubkey, ...listing, renter: loot.renterOf(listing, time) };
       });
@@ -5055,7 +5055,7 @@ export function solanaApp({
       const slot = await slotNow();
       const time = BigInt(now());
       const chainTime = await chainNow();
-      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [
+      for (const { pubkey, account } of await client.programAccounts(loot.lootProgram(), [
         tag('Order'),
         at(1, project),
         at(33, me),
@@ -5073,7 +5073,7 @@ export function solanaApp({
             says: 'A roll you won (a mission’s, a recipe’s, a prize’s): ask for it and see what it gives (one whose box has nothing left to give waits until it has).',
           });
       }
-      for (const { pubkey, account } of await client.programAccounts(loot.LOOT_PROGRAM, [
+      for (const { pubkey, account } of await client.programAccounts(loot.lootProgram(), [
         tag('Contest'),
         at(1, project),
       ])) {
@@ -5081,7 +5081,7 @@ export function solanaApp({
         const off = loot.contestOff(contest, time);
         if (!(off || contest.verdict === 'Won')) continue;
         const list = await client.account(loot.contestEntries(pubkey, contest));
-        const entries = list?.owner === loot.LOOT_PROGRAM ? loot.decodeEntries(list.data) : [];
+        const entries = list?.owner === loot.lootProgram() ? loot.decodeEntries(list.data) : [];
         const entry = entries.find(e => e.player === me);
         if (!entry) continue;
         const won = !off && Number(contest.winner) === Number(entry.side);
@@ -5139,7 +5139,7 @@ export function solanaApp({
       // wallet made: one search of the project's holds finds them all.
       const g = await projectNow();
       const holdsOf = [me, ...(g.treasury === me ? [project] : [])];
-      const holds = (await client.programAccounts(loot.LOOT_PROGRAM, [tag('Hold'), at(1, project)]))
+      const holds = (await client.programAccounts(loot.lootProgram(), [tag('Hold'), at(1, project)]))
         .map(({ pubkey, account }) => ({ pubkey, hold: loot.decode('Hold', account.data) }))
         .filter(({ hold }) => holdsOf.includes(hold.player) || hold.debt?.lender === me);
       // Whether the project still holds each one's NFT: whoever controls its collection can take it back or burn it.
@@ -5162,7 +5162,7 @@ export function solanaApp({
           out.push({ ...claim, says: 'A loan you made is overdue and unpaid: take its NFT.' });
       }
       // A compressed NFT's proof record this wallet paid for and left open: closing it brings its rent back.
-      for (const { account } of await client.programAccounts(loot.LOOT_PROGRAM, [tag('Proven')])) {
+      for (const { account } of await client.programAccounts(loot.lootProgram(), [tag('Proven')])) {
         const leaf = (() => {
           try {
             return loot.decodeProven(account.data);
@@ -5340,7 +5340,7 @@ export function solanaApp({
           out.push({ kind: 'vest', key: sc.key, says: `What has vested of “${sc.name ?? sc.key}”: claim it.` });
       }
       // The player's listings whose rental is over: their NFT can go home (or wait for the next renter).
-      const mineListed = await client.programAccounts(loot.LOOT_PROGRAM, [tag('Listing'), at(1, project), at(33, me)]);
+      const mineListed = await client.programAccounts(loot.lootProgram(), [tag('Listing'), at(1, project), at(33, me)]);
       for (const { account } of mineListed) {
         const listing = loot.decode('Listing', account.data);
         if (listing.deal.Rent && listing.user !== NOBODY && !loot.renterOf(listing, chainTime))
@@ -5540,7 +5540,7 @@ export function solanaApp({
         : await read('Lottery', loot.pda.lottery(project, l.id));
       const key = c.round ?? loot.currentRound(loot.pda.lottery(project, l.id), lottery);
       const found = await client.account(key);
-      const r = found?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(found.data) : null;
+      const r = found?.owner === loot.lootProgram() ? loot.decodeRound(found.data) : null;
       // The ask: the current round's once due, or an older round's again (after the timeout, it cancels the round).
       if (c.kind === 'reveal' || c.kind === 'cancel-draw') {
         const steps = await drawStep(l, lottery, c.round ?? null, r, me);
@@ -5622,7 +5622,7 @@ export function solanaApp({
       const carryOn = async signature => {
         if (build || !partial) return signature;
         const after = await client.account(key);
-        const r2 = after?.owner === loot.LOOT_PROGRAM ? loot.decodeRound(after.data) : null;
+        const r2 = after?.owner === loot.lootProgram() ? loot.decodeRound(after.data) : null;
         const moved = r2 && (Number(r2.assigned) > Number(r.assigned) || Number(r2.owed) < Number(r.owed));
         if (!moved) return signature;
         const left =

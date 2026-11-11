@@ -13,7 +13,7 @@ import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
-import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, LOOT_PROGRAM, lootProgram, pda } from '../client/pda.js';
+import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
@@ -729,7 +729,7 @@ export const tools = [
           a.data?.length >= 72 && (part.startsWith('pool:') || part.includes(' (pot '))
             ? Number(new DataView(a.data.buffer, a.data.byteOffset).getBigUint64(64, true))
             : undefined;
-        const decoded = a.owner === LOOT_PROGRAM ? decodeAny(a.data) : null;
+        const decoded = a.owner === lootProgram() ? decodeAny(a.data) : null;
         // A stash: how many NFTs it still holds to give away.
         const nfts = decoded?.kind === 'Stash' ? decoded.value.nfts.length : undefined;
         return {
@@ -906,7 +906,7 @@ export const tools = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     async handler() {
       const text = [
-        `loot ${VERSION} on ${cluster()}: program ${LOOT_PROGRAM}. Never write another address from memory: take it from this package.`,
+        `loot ${VERSION} on ${cluster()}: program ${lootProgram()}. Never write another address from memory: take it from this package.`,
         'Package: npm install @xgamesfun/solana (plain ES modules, no Solana SDK needed; works in the browser).',
         '  What only the project’s owner or authority signs (a contest’s result, a payout, a schedule’s run) is not a page’s: a script on the owner’s machine signs it with the project’s key file, `readKeyFile(file)` from "@xgamesfun/solana/keyfile" (an address and a way to sign, never the key; it is also a `wallet` for solanaApp). The skill’s references/after-launch.md has the script.',
         '  import { solanaApp, walletStandardSigner } from "@xgamesfun/solana/play";',

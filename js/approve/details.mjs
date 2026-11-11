@@ -5,7 +5,7 @@
 import { decodeBorsh } from '../chain/borsh.js';
 import { equalBytes, toHex } from '../chain/bytes.js';
 import { accountKind, decode, IDL, instructionOf, keyLeaf, merkleRoot } from '../client/index.js';
-import { LOOT_PROGRAM, pda } from '../client/pda.js';
+import { lootProgram, pda } from '../client/pda.js';
 import { dateWords, FAR_SECONDS } from '../economy/check.mjs';
 import { fromUnits } from '../economy/model.mjs';
 import { grantArgs } from '../economy/plan.mjs';
@@ -38,7 +38,7 @@ const leafNames = list => list.flatMap(a => (a.accounts ? leafNames(a.accounts) 
 
 /** A loot instruction read back: { name, args, accounts: { name: address } }, or null for another program's. */
 function readLootInstruction(ix) {
-  if (ix.programId !== LOOT_PROGRAM) return null;
+  if (ix.programId !== lootProgram()) return null;
   const def = instructionOf(ix.data);
   if (!def) return null;
   const args = {};
@@ -104,7 +104,7 @@ export async function liveStepDetails(instructions, names, chain) {
       reads.push(null);
       continue;
     }
-    if (account.owner !== LOOT_PROGRAM || accountKind(account.data) !== RECORD_ACCOUNT[kind])
+    if (account.owner !== lootProgram() || accountKind(account.data) !== RECORD_ACCOUNT[kind])
       throw new Error(`${read.accounts.target} is not the ${kind.toLowerCase()} it should be.`);
     reads.push({
       ...read,

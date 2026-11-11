@@ -10,7 +10,7 @@ import { METADATA_LIMITS, metadataAddress, parseRecord } from '../chain/metadata
 import { parseMint } from '../chain/mint.js';
 import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
-import { BUBBLEGUM_PROGRAM, LOOT_PROGRAM, pda } from '../client/pda.js';
+import { BUBBLEGUM_PROGRAM, lootProgram, pda } from '../client/pda.js';
 import { METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
 import { tokenLabels } from '../economy/model.mjs';
 import { madeSoFar } from '../economy/plan.mjs';
@@ -43,7 +43,7 @@ export async function checkLive({ live, m, wallet, chain }) {
   let project = own;
   if (made.project) {
     const account = await read(made.project);
-    if (!account || account.owner !== LOOT_PROGRAM || accountKind(account.data) !== 'Project')
+    if (!account || account.owner !== lootProgram() || accountKind(account.data) !== 'Project')
       throw new LiveMismatch(
         `The file names the project ${made.project}, and there is no loot project at that address.`,
       );

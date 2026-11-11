@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createPrivateKey, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,8 @@ import { decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { utf8, uintLE } from '../chain/bytes.js';
 import { findProgramAddress } from '../chain/pda.js';
 import * as loot from '../client/index.js';
+import { runTool } from '../mcp/server.mjs';
+import { withCluster } from '../mcp/with-cluster.mjs';
 
 const hex = bytes => Buffer.from(bytes).toString('hex');
 const filled = (byte, length = 32) => new Uint8Array(length).fill(byte);
@@ -202,4 +205,75 @@ test('a cluster loot does not know is refused, from the environment too', () => 
     run('console.log(loot.cluster())', { XSOLANA_CLUSTER: 'mainnet-beta' }),
     /"mainnet-beta" is not a cluster loot knows/,
   );
+});
+
+// A server that answers for both clusters: each piece of work has its own (js/mcp/with-cluster.mjs).
+const voucherNow = () =>
+  hex(
+    loot.voucherBytes({
+      grant: filled(0x22),
+      incarnation: 7n,
+      wallet: filled(0x33),
+      personHash: filled(0x44),
+      expires: EXPIRES,
+      rounds: [{ id: filled(0x55, 16), amount: 0n }],
+    }),
+  );
+
+test('a server gives each piece of work its own cluster, and two at once never mix', async () => {
+  const own = loot.cluster();
+  const work = async () => {
+    const seen = [];
+    for (let i = 0; i < 4; i++) {
+      seen.push({
+        cluster: loot.cluster(),
+        program: loot.lootProgram(),
+        identity: loot.pda.identity(),
+        built: loot.collectFeesIx({ admin: address(0x11), to: address(0x12), projects: [] }).programId,
+        voucher: voucherNow(),
+      });
+      // Let the other piece of work run in between.
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+    return seen;
+  };
+  const [onDevnet, onMainnet] = await Promise.all([withCluster('devnet', work), withCluster('mainnet', work)]);
+  for (const [name, seen] of [
+    ['devnet', onDevnet],
+    ['mainnet', onMainnet],
+  ])
+    for (const at of seen)
+      assert.deepEqual(at, {
+        cluster: name,
+        program: VECTORS[name].program,
+        identity: VECTORS[name].identity,
+        built: VECTORS[name].program,
+        voucher: VECTORS[name].voucher,
+      });
+  // Outside any, the client is on the process's own cluster, as before.
+  assert.equal(loot.cluster(), own);
+  assert.equal(loot.lootProgram(), VECTORS[own].program);
+  // Inside one, its cluster can be named again and no other can.
+  const other = own === 'devnet' ? 'mainnet' : 'devnet';
+  withCluster(other, () => {
+    assert.equal(loot.useCluster(other), other);
+    assert.throws(() => loot.useCluster(own), /being done on .*; it can't also be done on/);
+    assert.equal(loot.lootProgram(), VECTORS[other].program);
+  });
+  assert.throws(() => withCluster('testnet', () => {}), /"testnet" is not a cluster loot knows/);
+});
+
+test('the MCP server answers for an economy of either cluster, each on its own program', async () => {
+  const example = JSON.parse(readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url), 'utf8'));
+  const says = async network => {
+    const r = await runTool('xsolana_check', { spec: { ...example, network } }, { now: 1_790_000_000 });
+    assert.ok(!r.isError, r.text);
+    return r.text;
+  };
+  assert.match(await says('mainnet'), new RegExp(`program ${VECTORS.mainnet.program} · mainnet$`));
+  // On a run of the whole suite on mainnet's address every economy is read as mainnet's (on-mainnet.mjs).
+  if (process.env.XSOLANA_CLUSTER) return;
+  assert.match(await says('devnet'), new RegExp(`program ${VECTORS.devnet.program} · devnet$`));
+  const unknown = await runTool('xsolana_check', { spec: { ...example, network: 'testnet' } }, { now: 1_790_000_000 });
+  assert.match(unknown.text, /E-NETWORK/);
 });

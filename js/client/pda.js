@@ -14,6 +14,7 @@ export {
   LOOT_PROGRAM,
   lootProgram,
   networkOf,
+  scopeClusters,
   useCluster,
   walletChain,
 } from './cluster.js';

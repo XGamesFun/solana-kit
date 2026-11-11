@@ -1,11 +1,14 @@
-// The cluster this process works on, and loot's address there. loot has an address of its own on each cluster, so
-// what is signed for one (a voucher, a verdict) never counts on the other, and every address this client derives,
-// every instruction it builds and everything it signs follows the cluster's address.
+// The cluster the client works on, and loot's address there. loot has an address of its own on each cluster, so what
+// is signed for one (a voucher, a verdict) never counts on the other, and every address this client derives, every
+// instruction it builds and everything it signs follows the cluster's address.
 //
-// One process works on one cluster. It is devnet unless the process names another: the environment variable
+// A process works on one cluster. It is devnet unless the process names another: the environment variable
 // XSOLANA_CLUSTER, or `useCluster` before anything is derived or built. Once an address has been derived the
-// cluster is settled, and naming another is refused: addresses of two clusters never mix in one process.
-// Browser-safe.
+// cluster is settled, and naming another is refused: addresses of two clusters never mix by accident.
+//
+// A server that answers for both clusters gives each piece of work its own: `withCluster` (js/mcp/with-cluster.mjs, Node)
+// runs a function, and everything it awaits, on the cluster named; inside it the client is on that cluster whatever
+// the process's own is. Browser-safe.
 import { checkCluster, rightCluster } from '../chain/rpc.js';
 import IDL from './idl/loot.js';
 
@@ -33,22 +36,43 @@ const fromEnv = globalThis.process?.env?.XSOLANA_CLUSTER?.trim() || null;
 let name = known(fromEnv ?? 'devnet');
 // Settled: named by the environment or by `useCluster`, or already used to derive an address.
 let settled = Boolean(fromEnv);
+// The cluster of the work being done now, when a server gives each piece of work its own (`scopeClusters`).
+let scoped = null;
+const within = () => {
+  const cluster = scoped?.();
+  return cluster ? known(cluster) : null;
+};
 
 /**
- * loot's program on this process's cluster. A live binding: it follows `useCluster`. Reading it settles nothing, so
- * take it when it is used, never into a value kept from before the cluster was named.
+ * loot's program on this process's own cluster. A live binding: it follows `useCluster`. It knows nothing of
+ * `withCluster`: code that may run for either cluster asks `lootProgram()`, as the client itself does.
  * @type {string}
  */
 export let LOOT_PROGRAM = CLUSTERS[name].program;
 
 /**
+ * For a server's own set-up (js/mcp/with-cluster.mjs does it): `current()` answers the cluster of the work being done now,
+ * or nothing outside any. While it answers one, the client is on that cluster.
+ * @param {(() => string | undefined | null) | null} current
+ */
+export function scopeClusters(current) {
+  scoped = current;
+}
+
+/**
  * Names the cluster this process works on (`devnet` or `mainnet`) and returns it. Call it first, before any address
- * is derived: it throws when the process already works on another cluster.
+ * is derived: it throws when the process already works on another cluster. Inside `withCluster` it names nothing: it
+ * throws unless the cluster named is the one that work is on.
  * @param {'devnet' | 'mainnet'} cluster
  * @returns {'devnet' | 'mainnet'}
  */
 export function useCluster(cluster) {
   known(cluster);
+  const here = within();
+  if (here) {
+    if (cluster !== here) throw new Error(`This is being done on ${here}; it can't also be done on ${cluster}.`);
+    return here;
+  }
   if (cluster !== name) {
     if (settled)
       throw new Error(
@@ -62,18 +86,23 @@ export function useCluster(cluster) {
 }
 
 /**
- * The cluster this process works on. Asking settles it.
+ * The cluster the client works on now: inside `withCluster` that work's, else the process's own (asking settles it).
  * @returns {'devnet' | 'mainnet'}
  */
 export function cluster() {
+  const here = within();
+  if (here) return here;
   settled = true;
   return name;
 }
 
-/** loot's program on this process's cluster, settling the cluster: what derives an address or builds an instruction calls this. */
+/**
+ * loot's program on the cluster the client works on now (`cluster()`): what derives an address, builds an
+ * instruction or reads who owns an account calls this.
+ * @returns {string}
+ */
 export function lootProgram() {
-  settled = true;
-  return LOOT_PROGRAM;
+  return CLUSTERS[cluster()].program;
 }
 
 // The tests' own switch, set by js/test/on-mainnet.mjs before a run of the whole suite on mainnet's address and by

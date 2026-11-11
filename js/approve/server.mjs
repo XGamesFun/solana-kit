@@ -21,7 +21,7 @@ import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
-import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, LOOT_PROGRAM, pda } from '../client/pda.js';
+import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { LEGAL, legalFlags } from '../economy/legal.mjs';
@@ -394,7 +394,7 @@ export async function createApproval({
       name: spec.name ?? path.basename(file),
       file: path.basename(file),
       mode,
-      program: LOOT_PROGRAM,
+      program: lootProgram(),
       cluster: cluster(),
       setupSol: cost(spec, { now: at, live: live(), ...scope() }).setup?.totalSol ?? null,
       warnings: [
@@ -743,7 +743,7 @@ export async function createApproval({
   async function projectOwner(project) {
     if (!project || !chain.account) return null;
     const account = await chain.account(project).catch(() => null);
-    return account && account.owner === LOOT_PROGRAM && accountKind(account.data) === 'Project'
+    return account && account.owner === lootProgram() && accountKind(account.data) === 'Project'
       ? decode('Project', account.data).owner
       : null;
   }
@@ -816,7 +816,7 @@ export async function createApproval({
       }
     const progress = {
       ...was,
-      program: LOOT_PROGRAM,
+      program: lootProgram(),
       ...(made.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
       ...(made.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
