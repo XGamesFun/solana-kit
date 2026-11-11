@@ -11,6 +11,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLUSTERS } from '../js/client/cluster.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,6 +36,11 @@ const idl = JSON.parse(idlBytes);
 const sbfFile = process.env.XSOLANA_PROGRAM_DIR
   ? path.resolve(process.env.XSOLANA_PROGRAM_DIR, 'target/deploy/loot.so')
   : path.join(root, 'js/test/fixtures/loot.so');
+// Mainnet's build of the same source, at its own address (js/client/cluster.js): the manifest's `mainnet`.
+const mainnetFile = process.env.XSOLANA_PROGRAM_DIR
+  ? path.resolve(process.env.XSOLANA_PROGRAM_DIR, 'target/mainnet/loot.so')
+  : path.join(root, 'js/test/fixtures/loot_mainnet.so');
+const mainnetProgram = CLUSTERS.mainnet.program;
 const checking = process.argv.includes('--check');
 const target = path.join(root, 'release.json');
 // The package's major.minor is the program's (the IDL's); its patch may be higher: a release of the JavaScript alone
@@ -72,12 +78,26 @@ if (checking) {
       `Verified loot ${held.version} release: version, IDL and client. The program build was not checked: there is none at ${sbfFile}.`,
     );
   }
+  if (release.mainnet?.programId !== mainnetProgram)
+    throw new Error(`release.json does not name mainnet's program (${mainnetProgram}). Regenerate release.json.`);
+  if (existsSync(mainnetFile)) {
+    const sbf = await readFile(mainnetFile);
+    if (release.mainnet.sbfBytes !== sbf.length || release.mainnet.sbfSha256 !== sha(sbf))
+      throw new Error(
+        `release.json does not match mainnet's program build at ${mainnetFile}. Rebuild, test, then regenerate release.json.`,
+      );
+  }
 } else {
   if (!existsSync(sbfFile))
     throw new Error(
       `No program build at ${sbfFile}: release.json binds one. Run npm run fixtures, or set XSOLANA_PROGRAM_DIR to a program build, then run this again.`,
     );
+  if (!existsSync(mainnetFile))
+    throw new Error(
+      `No mainnet build at ${mainnetFile}: release.json binds one. Run npm run fixtures, or set XSOLANA_PROGRAM_DIR to a program build with target/mainnet/loot.so, then run this again.`,
+    );
   const sbf = await readFile(sbfFile);
+  const onMainnet = await readFile(mainnetFile);
   const manifest = {
     version: held.version,
     programId: held.programId,
@@ -85,6 +105,7 @@ if (checking) {
     sbfSha256: sha(sbf),
     idlSha256: held.idlSha256,
     clientSha256: held.clientSha256,
+    mainnet: { programId: mainnetProgram, sbfBytes: onMainnet.length, sbfSha256: sha(onMainnet) },
   };
   await writeFile(target, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Wrote loot ${manifest.version} release manifest (${manifest.sbfBytes} program bytes).`);

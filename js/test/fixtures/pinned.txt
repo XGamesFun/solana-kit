@@ -7,9 +7,10 @@
 # the network. Programs read from a cluster are not committed (upstream binaries, and loot.so is the program's own
 # build): .gitignore keeps them out. The accounts (mainnet/queue.json) and test_hook.so are committed.
 #
-# Mainnet is where loot will deploy, so the outside programs are mainnet's builds. loot.so is the build release.json
+# The outside programs are mainnet's builds, where loot runs for real money. loot.so is the build release.json
 # pins (its sha256 and bytes are release.json's sbfSha256 and sbfBytes, and `--check` says so when they part): devnet's,
-# the only cluster it runs on (0.28.0 since slot 521,074,836, at its official address). test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
+# at its address there (0.28.0 since slot 521,074,836). loot_mainnet.so is the same source built for mainnet's address
+# (release.json's `mainnet`), as mainnet runs it since slot 468,156,581: the tests on mainnet's address run it. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
 # loot program's source, committed here as a binary. Token-2022 calls it on every transfer of a mint that names it; it
 # counts transfers in an account it owns, refuses a transfer of 13, and marks the count if any account arrives signed.
 #
@@ -29,5 +30,6 @@ mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  ma
 mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
 vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
 loot.so                          xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet  devnet  upgradeable ac8b09ed2c3a3f7daa2dfab55d2f6dea19fa43e4c98b44a82da2a68a7bc8ebbe 1794616 521074836 -
+loot_mainnet.so                  xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy  mainnet upgradeable f78e4f0ef38b5f1673936044263293e91172b4bac92c741cc7bb9567617bbdf6 1794616 468156581 -
 mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
 test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -

@@ -27,21 +27,13 @@ export const fixtures = path.join(root, 'js/test/fixtures');
 /**
  * The loot program the tests run, built for the address of the cluster this process works on (XSOLANA_CLUSTER): a
  * local build when XSOLANA_PROGRAM_DIR names a checkout (`target/deploy/loot.so` is devnet's, `target/mainnet/loot.so`
- * mainnet's), else the pinned devnet build. Mainnet's build is pinned nowhere until it is deployed, so its tests need
- * the checkout.
+ * mainnet's), else the pinned build of that cluster, as it runs there (`loot.so`, `loot_mainnet.so`).
  */
 const onMainnet = loot.cluster() === 'mainnet';
 const localBuild = process.env.XSOLANA_PROGRAM_DIR
   ? path.join(program, onMainnet ? 'target/mainnet/loot.so' : 'target/deploy/loot.so')
   : null;
-const lootProgram = () => {
-  if (localBuild) return readFileSync(localBuild);
-  if (onMainnet)
-    throw new Error(
-      'XSOLANA_CLUSTER=mainnet: loot is not deployed on mainnet, so no build of it is pinned. Set XSOLANA_PROGRAM_DIR to a checkout of the program that built target/mainnet/loot.so.',
-    );
-  return pinned('loot.so');
-};
+const lootProgram = () => (localBuild ? readFileSync(localBuild) : pinned(onMainnet ? 'loot_mainnet.so' : 'loot.so'));
 const FETCH = 'run `npm run fixtures`';
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const BPF_LOADER_2 = 'BPFLoader2111111111111111111111111111111111';

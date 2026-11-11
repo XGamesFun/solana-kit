@@ -111,13 +111,24 @@ async function download({ address, cluster, loader, bytes }) {
   throw new Error(`${address} has loader ${loader}: it is not read from a cluster`);
 }
 
-/** Problems with the loot.so row against release.json, which pins the build this client is for. */
+/**
+ * Problems with the loot rows against release.json, which pins the builds this client is for: loot.so is devnet's
+ * (the manifest's own fields), loot_mainnet.so mainnet's (its `mainnet`).
+ */
 function releaseMismatch(all) {
-  const row = all.find(r => r.file === 'loot.so');
-  const release = JSON.parse(readFileSync(path.join(root, 'release.json'), 'utf8'));
-  if (!row) return 'pinned.txt has no loot.so row';
+  const manifest = JSON.parse(readFileSync(path.join(root, 'release.json'), 'utf8'));
+  return (
+    rowMismatch(all, 'loot.so', manifest) ??
+    (manifest.mainnet
+      ? rowMismatch(all, 'loot_mainnet.so', manifest.mainnet)
+      : 'release.json has no mainnet build: run npm run release:manifest')
+  );
+}
+function rowMismatch(all, file, release) {
+  const row = all.find(r => r.file === file);
+  if (!row) return `pinned.txt has no ${file} row`;
   if (row.address !== release.programId || row.sha256 !== release.sbfSha256 || row.bytes !== release.sbfBytes) {
-    return `pinned.txt's loot.so row (${row.address}, sha256 ${row.sha256}, ${row.bytes} bytes) is not release.json's build (${release.programId}, sha256 ${release.sbfSha256}, ${release.sbfBytes} bytes): update the row`;
+    return `pinned.txt's ${file} row (${row.address}, sha256 ${row.sha256}, ${row.bytes} bytes) is not release.json's build (${release.programId}, sha256 ${release.sbfSha256}, ${release.sbfBytes} bytes): update the row`;
   }
   return null;
 }

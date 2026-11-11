@@ -4,13 +4,12 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased: a cluster for each process (loot 0.28.0, unchanged)
+## Unreleased: a cluster for each process, and loot on mainnet (loot 0.28.0, unchanged)
 
-loot has an address of its own on each cluster. Devnet's is `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, where it
-runs today; mainnet's build of the program is `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, where nothing is deployed
-yet. A voucher and a verdict are signed over the program's address, so one signed for devnet never counts on mainnet.
-This is the client's side of it. Nothing changes for an economy on devnet, and this is not released until the program
-is on mainnet.
+loot has an address of its own on each cluster. Devnet's is `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`; mainnet's
+is `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, where the same source runs since 2026-11-11 (slot 468,156,581). It
+has not been independently audited. A voucher and a verdict are signed over the program's address, so one signed for devnet never counts on mainnet.
+This is the client's side of it. Nothing changes for an economy on devnet.
 
 - **One process works on one cluster** (`js/client/cluster.js`). It is devnet unless the process names mainnet: the
   environment variable `XSOLANA_CLUSTER`, or `useCluster('mainnet')` before anything is derived. Every address
@@ -27,10 +26,10 @@ is on mainnet.
 - **Fixed: receipts were read by the IDL's address.** `decodeEvents` counted only the log lines of the address in the
   IDL, which is devnet's, so on another address it read no receipt at all. It takes the program's address now.
 - **Tests on both addresses.** `npm test` runs the suite on devnet's address and `npm run test:mainnet` on mainnet's,
-  against the program's own build for it (`XSOLANA_PROGRAM_DIR` names a checkout of the program that built
-  `target/mainnet/loot.so`: that build is pinned nowhere until it is deployed). `js/test/cluster.test.mjs` holds the
-  program's own vectors for both addresses: a voucher, the verdicts, their signatures, a grant's addresses and the
-  identities the oracle knows the program by.
+  each against the build that cluster runs: `release.json` now pins mainnet's build too (its `mainnet`), and
+  `npm run fixtures` reads it from mainnet and checks its hash. `js/test/cluster.test.mjs` holds the program's own
+  vectors for both addresses: a voucher, the verdicts, their signatures, a grant's addresses and the identities the
+  oracle knows the program by.
 - **Not yet**: a fee that lands on mainnet (the tools send almost none), the oracle's fee there, the results server's
   address for mainnet, the MCP server for an economy of the cluster it was not started on, and every sentence in the
   tools, the skill and the docs that says devnet only.
