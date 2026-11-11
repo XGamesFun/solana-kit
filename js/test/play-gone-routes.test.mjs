@@ -102,9 +102,11 @@ for (const kind of KINDS)
         assert.match(offered.says, /no longer holds.*took it back or burned it.*sends nothing/);
         assert.doesNotMatch(offered.says, /burned, given|was sent|went to/);
 
-        // One claim settles all three: the two gone go nowhere, the third where its price sends it.
+        // One claim settles all three: the two gone go nowhere, the third where its price sends it. claimAll sends
+        // the same step.
         buyer.calls.prompts = 0;
-        const tx = logged(k.landed, await buyer.claim(offered));
+        const signature = key === 'gives' ? (await buyer.claimAll([offered]))[0].signature : await buyer.claim(offered);
+        const tx = logged(k.landed, signature);
         // (Three compressed tickets' proofs go in a transaction with a lookup table, made first: more prompts.)
         if (kind.key !== 'compressed') assert.equal(buyer.calls.prompts, 1);
         assert.deepEqual(
