@@ -608,7 +608,7 @@ describe('auctions in a spec', () => {
         withAuction({
           lot: {
             asset: '6U3XnmrzuZ5sDujScii8SmzwtRZ4skfKcH2TLiz1rmES',
-            collection: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ',
+            collection: 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet',
           },
         }),
       ).includes('E-AUCTION'),
@@ -935,4 +935,4 @@ describe('stashes and prizes in a spec', () => {
     assert.ok(again.steps[0].creates[0].grows);
   });
 });
-const NOBODY_PROJECT = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+const NOBODY_PROJECT = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';

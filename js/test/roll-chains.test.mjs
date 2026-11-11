@@ -261,7 +261,7 @@ test('W-LIVE-ROLLS names a box whose outcome won the rolls that now roll on it a
   const changed = {
     ...structuredClone(s),
     live: {
-      program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ',
+      program: 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet',
       project: 'So11111111111111111111111111111111111111112',
       published,
     },

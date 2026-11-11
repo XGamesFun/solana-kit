@@ -11,7 +11,7 @@ const NOW = 1_790_000_000;
 const example = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
 const WALLETS = [
   '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T',
-  '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ',
+  'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet',
   'So11111111111111111111111111111111111111112',
 ];
 const codes = spec => {

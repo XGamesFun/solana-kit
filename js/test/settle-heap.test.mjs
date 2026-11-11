@@ -22,7 +22,7 @@ import { cannotRun, collectible, world } from './world.mjs';
 
 const NOW = 1_790_000_000;
 const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
-const NFT = '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ';
+const NFT = 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet';
 const warned = spec => check(spec, { now: NOW }).warnings.map(w => `${w.code} ${w.where}`);
 const refused = spec => check(spec, { now: NOW }).refusals.map(r => `${r.code} ${r.where}`);
 

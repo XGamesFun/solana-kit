@@ -14,7 +14,7 @@ const live = spec => {
   return {
     ...spec,
     live: {
-      program: '9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ',
+      program: 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet',
       project: 'So11111111111111111111111111111111111111112',
       published,
     },

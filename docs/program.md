@@ -1,6 +1,6 @@
 # The loot program: how it behaves
 
-**Version 0.27.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 521,001,695
+**Version 0.27.0**, program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, **on devnet** since slot 521,001,695
 (2026-11-11); 0.26.1 ran there before it, from slot 520,911,720. No stored record changed shape and no instruction's
 arguments or accounts changed between them, so every account made under 0.26 reads as before. Nothing runs on mainnet. **Not
 independently audited** (`SECURITY.md`). No accounts carry over from versions before 0.26: make fresh economies.

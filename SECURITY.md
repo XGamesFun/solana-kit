@@ -4,7 +4,7 @@
 
 | Piece                             | Version                                                          | Where                                            | Review                                               |
 | --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
-| The loot program                  | 0.24.0, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ` | devnet only, since slot 519,723,738 (2026-11-07) | Internal reviews only. **Not independently audited** |
+| The loot program                  | 0.24.0, program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet` | devnet only, since slot 519,723,738 (2026-11-07) | Internal reviews only. **Not independently audited** |
 | These tools (`@xgamesfun/solana`) | 0.24.0                                                           | npm                                              | Internal reviews only                                |
 
 `release.json` pins the exact program binary, IDL and client this package is built for. Nothing runs on mainnet.
