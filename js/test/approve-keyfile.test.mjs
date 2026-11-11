@@ -23,7 +23,7 @@ import { toBase64 } from '../chain/bytes.js';
 import { transferLamports } from '../chain/programs.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, makeKeyFile, readKeyFile } from '../approve/keyfile.mjs';
-import { approvalCode, approveWithKey, NOTICE } from '../approve/with-key.mjs';
+import { approvalCode, approvalText, approveWithKey, NOTICE } from '../approve/with-key.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { approvalChain, cannotRun, world } from './world.mjs';
 
@@ -269,7 +269,7 @@ describe('xsolana approve --keypair', () => {
       assert.equal(shown.sent, 0);
       assert.equal(sends(), 0, 'nothing was sent');
       assert.equal(saved().live, undefined, 'the file is as it was');
-      assert.match(shown.code, /^[0-9a-f]{8}$/);
+      assert.match(shown.code, loot.cluster() === 'mainnet' ? /^mainnet-[0-9a-f]{8}$/ : /^[0-9a-f]{8}$/);
       assert.match(shown.text, new RegExp(`Nothing was sent\\..*--yes ${shown.code}$`, 's'));
       // The key, the project it makes, the notice, the legal flags and every step with its details.
       assert.ok(shown.text.includes(address) && shown.text.includes(keyFile));
@@ -589,7 +589,11 @@ describe('xsolana approve --keypair', () => {
     };
     const { run, saved } = await setup(spec);
     const shown = await run();
-    assert.match(shown.code ?? '', /^[0-9a-f]{8}$/, shown.text);
+    assert.match(
+      shown.code ?? '',
+      loot.cluster() === 'mainnet' ? /^mainnet-[0-9a-f]{8}$/ : /^[0-9a-f]{8}$/,
+      shown.text,
+    );
     // Ninety seconds on, the lines that count from now say other times, and the code is the same: it sends.
     const later = await run({ now: () => NOW + 90 });
     assert.notEqual(
@@ -612,7 +616,11 @@ describe('xsolana approve --keypair', () => {
       const changed = { ...live, pools: [...live.pools, { key: 'bonus', currency: 'arena' }] };
       writeFileSync(file, JSON.stringify(changed, null, 2));
       const shown = await run();
-      assert.match(shown.code ?? '', /^[0-9a-f]{8}$/, shown.text);
+      assert.match(
+        shown.code ?? '',
+        loot.cluster() === 'mainnet' ? /^mainnet-[0-9a-f]{8}$/ : /^[0-9a-f]{8}$/,
+        shown.text,
+      );
       const before = sends();
       // Only the live section's mint is edited: no line of the printout names it.
       const other = (await makeKeyFile(path.join(folder(), 'other.json'))).address;
@@ -968,4 +976,28 @@ describe('the command line', () => {
     assert.equal(r.status, 1);
     assert.match(r.stderr, /^xsolana: .*none\.json does not exist\./);
   });
+});
+
+test('on mainnet the code says mainnet and the printout says real money first: typing the code back is a step beyond the file', () => {
+  const state = {
+    cluster: 'mainnet',
+    program: 'P',
+    wallet: 'W',
+    project: 'J',
+    mode: 'new',
+    steps: [],
+    warnings: [],
+    legal: [],
+    unwritten: [],
+  };
+  const spec = { name: 'x', network: 'mainnet' };
+  assert.match(approvalCode(state, spec), /^mainnet-[0-9a-f]{8}$/);
+  assert.match(approvalCode({ ...state, cluster: 'devnet' }, { name: 'x' }), /^[0-9a-f]{8}$/);
+  // (every list the printout reads is empty here, every other field as given)
+  const shown = new Proxy(
+    { ...state, name: 'x', file: 'xsolana.json', setupSol: null },
+    { get: (t, k) => (k in t ? t[k] : []) },
+  );
+  const lines = approvalText(shown, { keyFile: 'k.json' });
+  assert.match(lines[0], /^MAINNET: everything below moves real SOL and real tokens/);
 });

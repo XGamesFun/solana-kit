@@ -83,7 +83,9 @@ export function approvalCode(state, spec) {
   for (const f of state.fresh ?? []) shown = shown.replaceAll(f.address, `<new ${f.name}>`);
   shown = shown.replace(WRITTEN_TIME, '<a time>');
   // The file as it is, live section and all: what the steps are built from, whether or not a line names it.
-  return createHash('sha256').update(JSON.stringify(spec)).update('\n').update(shown).digest('hex').slice(0, 8);
+  const hex = createHash('sha256').update(JSON.stringify(spec)).update('\n').update(shown).digest('hex').slice(0, 8);
+  // (on mainnet the code says so: whoever types it back types "mainnet", a step beyond the file's own word)
+  return state.cluster === 'mainnet' ? `mainnet-${hex}` : hex;
 }
 
 /** A new account of the setup in words: "mint/gold" is the mint of the token “gold”. */
@@ -99,6 +101,11 @@ const freshName = name =>
 /** What the page shows before Approve, as lines of text. `balance`: the key's lamports, or null when not read. */
 export function approvalText(state, { keyFile, balance = null }) {
   const lines = [];
+  // (on mainnet, the first thing said: what is sent is real money)
+  if (state.cluster === 'mainnet')
+    lines.push(
+      'MAINNET: everything below moves real SOL and real tokens, and cannot be undone. loot is not independently audited.',
+    );
   const kind =
     state.mode === 'change'
       ? 'a change to a live economy'
@@ -221,7 +228,7 @@ export async function approveWithKey({
     }
     if (yes === null && confirm) {
       const said = await confirm(
-        `Send ${count(state.remaining, 'transaction')} from ${key.address}? Type yes to send: `,
+        `${state.cluster === 'mainnet' ? 'This is MAINNET: real SOL and real tokens. ' : ''}Send ${count(state.remaining, 'transaction')} from ${key.address}? Type yes to send: `,
       );
       if (!said) {
         out('Nothing was sent.');

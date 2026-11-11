@@ -201,7 +201,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     .filter(k => economy[k]?.length)
     .map(k => plural(economy[k].length, ONE[k], k));
   lines.push(
-    `${economy.name ?? 'This economy'}: ${counted.join(', ') || 'nothing yet'}. The project’s currency is ${m.currency?.symbol ?? '(none)'}${m.currency ? ` (${m.currency.source === 'sol' ? 'SOL' : m.currency.source === 'game' ? 'a token the project mints' : `an existing ${m.currency.program === 'token-2022' ? 'Token-2022 ' : ''}mint`})` : ''}. It runs on the shared loot program, devnet only: no contract of its own.`,
+    `${economy.name ?? 'This economy'}: ${counted.join(', ') || 'nothing yet'}. The project’s currency is ${m.currency?.symbol ?? '(none)'}${m.currency ? ` (${m.currency.source === 'sol' ? 'SOL' : m.currency.source === 'game' ? 'a token the project mints' : `an existing ${m.currency.program === 'token-2022' ? 'Token-2022 ' : ''}mint`})` : ''}. It runs on the shared loot program, on ${realMoney() ? 'mainnet (real money)' : 'devnet'}: no contract of its own.`,
   );
   if (economy.prompt) lines.push(`Asked for: “${economy.prompt}”`);
 
