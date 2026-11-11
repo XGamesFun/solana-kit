@@ -10,9 +10,9 @@ writes or deploys a contract: the spec is checked, simulated and priced by the `
 signed by a key file on the owner's own machine, once they have read what will be sent and said yes. It runs on
 **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.0 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.28.0 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.28.0 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.1 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.28.1 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.28.1 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -137,7 +137,7 @@ or `npx -y @xgamesfun/solana@0.28.0 tool <name> '<json>'` for any tool (always w
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
    - **A new economy gets a key file**, unless the project has one:
-     `npx -y @xgamesfun/solana@0.28.0 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     `npx -y @xgamesfun/solana@0.28.1 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
      Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
      looking for one.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
@@ -152,7 +152,7 @@ or `npx -y @xgamesfun/solana@0.28.0 tool <name> '<json>'` for any tool (always w
      (`xsolana_cost`), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
      collection they already have needs the key's address as its update authority. If they would rather not move
      those, offer the browser wallet.
-   - **Show it**: `npx -y @xgamesfun/solana@0.28.0 approve xsolana.json --keypair <key file>` prints every step with
+   - **Show it**: `npx -y @xgamesfun/solana@0.28.1 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it

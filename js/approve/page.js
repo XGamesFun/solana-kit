@@ -62,8 +62,16 @@ export function approvalPage(token) {
   let last = null;
   // The legal lines the box was last shown with.
   let legalShown = new Set();
+  // How many of the lines about what the wallet added have been said on this page.
+  let addedSaid = 0;
   function render(state) {
     last = state;
+    // What the wallet added to transactions that landed (its own checks): they were sent as it signed them. Said
+    // whenever a state arrives, so one that landed in a batch that then stopped is said too.
+    const addedLines = state.walletAdded ?? [];
+    for (const line of addedLines.slice(addedSaid))
+      log(`${line} It was sent as your wallet signed it: everything listed here is in it, untouched.`);
+    addedSaid = Math.max(addedSaid, addedLines.length);
     // A token's name the spec changes and the chain can't take (`unwritten`): said whether or not anything else was
     // sent. With nothing else to send, the page never calls that a landing.
     const unwritten = state.unwritten ?? [];

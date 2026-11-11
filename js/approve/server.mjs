@@ -2,8 +2,9 @@
 // wallet, served only when asked for (`xsolana approve --keypair`, js/approve/with-key.mjs, drives this same approval
 // with a key file and no page). The
 // server builds each transaction (js/economy/plan.mjs), has the fresh keys a setup makes sign their part, and sends
-// only what it prepared: a wallet's answer must carry the exact message prepared for it and that wallet's valid
-// signature. Each prepared batch answers once and expires after 90 seconds. What lands is written back into the spec
+// only what it prepared and showed: a wallet's answer must carry that wallet's valid signature of the exact message
+// prepared for it, or of that message with nothing but a wallet's own additions (js/approve/wallet-adds.mjs: its
+// Lighthouse checks, a compute budget). Each prepared batch answers once and expires after 90 seconds. What lands is written back into the spec
 // file as it lands, so a setup cut short goes on from where it stopped. The server never sees the owner's key.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmod, mkdtemp, open as openFile, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -16,9 +17,9 @@ import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
 import { alreadyProcessed, checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
-import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
+import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
-import { compileMessage, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
@@ -30,6 +31,7 @@ import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
 import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames } from './live-check.mjs';
+import { walletAdded } from './wallet-adds.mjs';
 
 const PREPARE_TTL_MS = 90_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -150,6 +152,8 @@ export async function createApproval({
   // Goes up each time the live section changes: a batch prepared before a change is never sent.
   let generation = 0;
   const signatures = [];
+  // What a wallet added to transactions this session sent (its own checks, a compute budget): said on the page.
+  const walletAdds = [];
   const at = now();
   const mode = !spec.live ? 'new' : spec.live.partial ? 'resume' : 'change';
   /**
@@ -413,6 +417,8 @@ export async function createApproval({
       steps,
       landed: [...done].map(id => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),
       signatures: [...signatures],
+      // (what a wallet added to transactions it signed, in words: they were sent as it signed them)
+      walletAdded: [...walletAdds],
       // The project the setup sends to, once a wallet is connected: always that wallet's own (or the one it is the
       // authority of).
       project: extra.project ?? null,
@@ -597,7 +603,7 @@ export async function createApproval({
     prepared = null;
     if (batch.generation !== generation)
       throw new ApproveError(409, 'Something landed after that batch was built: ask for the next one.');
-    const wires = checkSigned(batch.wires, signed, wallet);
+    const { wires, added } = checkSigned(batch.wires, signed, wallet);
     busy = true;
     try {
       for (const [i, wire] of wires.entries()) {
@@ -654,6 +660,8 @@ export async function createApproval({
           }
         }
         signatures.push(signature);
+        // (what the wallet added to it is said once it has landed, never of one that did not)
+        if (added[i]) walletAdds.push(added[i]);
         await landed(sent, batch.ctx, signature, { more: i < wires.length - 1 });
       }
     } finally {
@@ -928,53 +936,18 @@ const sameText = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-/** What a Compute Budget instruction asks for, by its first byte. */
-const BUDGET_ASKS = {
-  1: 'a heap size',
-  2: 'a compute unit limit',
-  3: 'a compute unit price (a priority fee of its own)',
-  4: 'a limit on the account data loaded',
-};
-
 /**
- * What a wallet did to a message it was to sign as it stood, in words for the refusal: " (it added …)" when the
- * message it signed is the prepared one with instructions added (a wallet that adds its own priority fee, or checks
- * of its own), " (it put another blockhash on it)", or '' when the change is anything else or can't be read.
+ * The wallet's signed copies, as they are sent: { wires, added }. Each is the exact prepared message with the wallet's
+ * valid signature, or, from a wallet that adds to what it signs, the wallet's own message with its signature, taken
+ * only when everything prepared is in it untouched and what it added is a wallet's own (`walletAdded`,
+ * js/approve/wallet-adds.mjs: instructions of the Lighthouse program, a heap size). `added`: for each transaction, what
+ * was added to it in words, or null. Anything else is refused, and nothing is sent.
  */
-export function walletChange(ours, theirs) {
-  try {
-    const [a, b] = [readMessage(ours), readMessage(theirs)];
-    const told = m =>
-      m.instructions.map(ix => ({
-        program: m.keys[ix.programIndex],
-        kind: ix.data[0],
-        text: `${m.keys[ix.programIndex]} ${ix.accountIndexes.map(i => m.keys[i] ?? `#${i}`).join(',')} ${toBase64(ix.data)}`,
-      }));
-    const mine = told(a);
-    const added = [];
-    let at = 0;
-    for (const ix of told(b)) {
-      if (at < mine.length && ix.text === mine[at].text) at++;
-      else added.push(ix);
-    }
-    if (at !== mine.length || !added.length)
-      return a.blockhash !== b.blockhash ? ' (it put another blockhash on it)' : '';
-    const what = added.map(ix =>
-      ix.program === COMPUTE_BUDGET_PROGRAM
-        ? (BUDGET_ASKS[ix.kind] ?? 'a compute budget instruction')
-        : `an instruction of the program ${ix.program}`,
-    );
-    return ` (it added ${[...new Set(what)].join(', ')})`;
-  } catch {
-    return '';
-  }
-}
-
-/** The wallet's signed copies: each the exact prepared message, each with the wallet's valid signature. */
 function checkSigned(prepared, signed, wallet) {
   if (!Array.isArray(signed) || signed.length !== prepared.length)
     throw new ApproveError(400, 'The wallet’s answer does not match the request.');
-  return prepared.map((wire, i) => {
+  const added = prepared.map(() => null);
+  const wires = prepared.map((wire, i) => {
     let mine;
     let theirs;
     try {
@@ -983,11 +956,20 @@ function checkSigned(prepared, signed, wallet) {
     } catch {
       throw new ApproveError(400, 'The wallet returned something that is not a transaction.');
     }
-    if (!equalBytes(mine.message, theirs.message))
-      throw new ApproveError(
-        400,
-        `The wallet changed the transaction before signing it${walletChange(mine.message, theirs.message)}, so nothing was sent: only what was prepared and shown here is ever sent. A wallet that adds to what it signs can’t approve this way: use one that signs a transaction as it stands. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
-      );
+    if (!equalBytes(mine.message, theirs.message)) {
+      const taken = walletAdded(mine.message, theirs.message, wallet);
+      if (!taken.ok)
+        throw new ApproveError(
+          400,
+          `The wallet changed the transaction before signing it (it ${taken.why}), so nothing was sent. A wallet may add its own checks (instructions of the Lighthouse program) to a transaction it alone signs; everything that was prepared and shown here must be in it untouched, and nothing else may be. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
+        );
+      // The wallet's own message, with the wallet's own signature: it is the transaction's one signer.
+      const signature = theirs.signatures[0];
+      if (theirs.signers[0] !== wallet || !verifySignature(wallet, theirs.message, signature))
+        throw new ApproveError(400, 'The wallet’s signature is missing or does not match your wallet.');
+      added[i] = `Transaction ${i + 1} of its batch: your wallet added ${taken.added.join(', ')}.`;
+      return wireTransaction(theirs.message, [signature]);
+    }
     const slot = mine.signers.indexOf(wallet);
     if (slot < 0) throw new ApproveError(400, 'This transaction was not prepared for that wallet.');
     const signature = theirs.signatures[slot];
@@ -997,6 +979,7 @@ function checkSigned(prepared, signed, wallet) {
     signatures[slot] = signature;
     return wireTransaction(mine.message, signatures);
   });
+  return { wires, added };
 }
 
 // ---------------------------------------------------------------- the page

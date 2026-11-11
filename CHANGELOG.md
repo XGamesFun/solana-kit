@@ -4,6 +4,50 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.1: a wallet that adds its own checks can approve on the page (loot 0.28.0, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.28.0's.
+
+`xsolana approve --browser` sent a transaction only as it had prepared it, byte for byte. Phantom adds to what it is
+asked to sign: its own checks, instructions of the Lighthouse program that read accounts and fail the transaction when
+something is not as the wallet expected. It documents no way to turn them off, so with the exact rule Phantom could
+not approve wherever it adds them.
+
+- **The page now takes what the wallet signed when the wallet only added its own** (`js/approve/wallet-adds.mjs`).
+  The wallet's message is sent, with the wallet's signature of it, when all of this holds, and refused otherwise, with
+  nothing sent:
+  - the wallet is the transaction's one signer and its fee payer (a transaction a new account's own key signed as it
+    was prepared can't be changed), and the blockhash is the same;
+  - every prepared instruction is in it, in the prepared order, with the same program, accounts and data;
+  - every account a prepared instruction names is a signer, or writable, exactly as it was (an added instruction that
+    asks to write one of them is refused: whether an account can be written is the whole transaction's word), and
+    nothing added names the loader of upgradeable programs, which would let a program's own account be written;
+  - every other instruction is the Lighthouse program's (`L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95`, the same on
+    mainnet and devnet), or a Compute Budget instruction that asks for a heap size or a limit on loaded data. Never a
+    unit limit or a unit price: the fee of a prepared transaction is the one it was shown with;
+  - both messages are legacy ones, every account in the message itself.
+- **The page says what was added**, once the transaction has landed: "Transaction 2 of its batch: your wallet added 1
+  instruction of the Lighthouse program (a wallet's own checks). It was sent as your wallet signed it: everything
+  listed here is in it, untouched."
+- **A refusal says what the wallet did**: "it added an instruction of the program …", "it changed, dropped or moved
+  one of the prepared instructions", "it changed what the account … is in the transaction (it could only be read, and
+  can now be written)", "it added a compute unit price …".
+- `LIGHTHOUSE_PROGRAM` is exported from `@xgamesfun/solana/chain/pda`.
+- Going live with a key file (`approve --keypair`) is as it was: the key signs each transaction as it stands.
+
+What this trusts, and what was not tried:
+
+- An instruction of the Lighthouse program is taken as the wallet's own, whatever it is: its assertions read accounts;
+  its memory instructions make and close an account of that program's, paid for by the wallet that signs. Naming the
+  wallet in one hands that program the wallet's signature, the trust a Phantom user already extends. This package
+  holds none of it against the wallet, and takes no instruction of any other program.
+- A program that reads the transaction's own list of instructions sees the added ones too. loot does not read it;
+  Token Metadata is handed it when a setup stashes or auctions one of its NFTs. Nothing was found there that an added
+  instruction changes, and it was not run against the real programs.
+- Not tried with a real Phantom, or with the real Lighthouse program: the tests add an instruction the way Phantom is
+  documented to, with a stand-in program at the Lighthouse address. An independent reading tried to get the rule to
+  take a message it should refuse (300,000 variants against a second implementation of the rule) and found none.
+
 ## 0.28.0: loot at its official address (loot 0.28.0, on devnet since 2026-11-11, slot 521,074,836)
 
 The program now runs at the address it keeps, `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`. loot 0.28.0 is 0.27.0
