@@ -21,8 +21,10 @@ export class LiveMismatch extends Error {}
  * `m` is the spec's model. Returns { owner, project }: the project's owner the setup is built for (the wallet, or the
  * project's owner when the wallet is its authority), and the project's address. Throws LiveMismatch when the file
  * names a project that is not this wallet's, or an account the chain does not have as the file says.
+ * `renaming`: the keys of the tokens whose name record this session writes again (their `name:` steps): each one's
+ * record must be the owner's to change.
  */
-export async function checkLive({ live, m, wallet, chain }) {
+export async function checkLive({ live, m, wallet, chain, renaming = new Set() }) {
   const made = madeSoFar(live) ?? {};
   const own = pda.project(wallet, m.projectNumber);
   const setupMints = Object.entries(made.mints ?? {}).filter(([key]) => {
@@ -85,17 +87,19 @@ export async function checkLive({ live, m, wallet, chain }) {
       throw new LiveMismatch(
         `The mint ${address} the file names for ${t.symbol ?? key} can be frozen by ${mint.freezeAuthority}; the setup makes none that can.`,
       );
-    // A token the file says was named on chain as it was made: a change to its name is sent to its record, signed by
-    // the owner. With no record, or one somebody else can change, that change could never land.
+    // A token the file says was named on chain as it was made has a record there. A change to its name is sent to
+    // that record, signed by the owner: with a record somebody else can change (the owner handed it on, outside these
+    // tools) the change could never land, so it is refused before anything is built. A record handed on stops nothing
+    // else.
     if ((made.named ?? []).includes(key)) {
       const record = await read(metadataAddress(address));
       if (!record)
         throw new LiveMismatch(
           `The file says the setup named the token ${t.symbol ?? key} on chain, and its mint ${address} has no name record.`,
         );
-      if (metadataUpdateAuthority(record.data) !== owner)
+      if (renaming.has(key) && metadataUpdateAuthority(record.data) !== owner)
         throw new LiveMismatch(
-          `The name record of the token ${t.symbol ?? key} (mint ${address}) is ${metadataUpdateAuthority(record.data)}’s to change, not the project’s owner’s (${owner}).`,
+          `The name record of the token ${t.symbol ?? key} (mint ${address}) is ${metadataUpdateAuthority(record.data)}’s to change, not the project’s owner’s (${owner}): its name can’t be changed from here.`,
         );
     }
   }

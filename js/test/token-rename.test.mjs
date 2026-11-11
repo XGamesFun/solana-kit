@@ -8,15 +8,19 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
+import { checkLive, LiveMismatch } from '../approve/live-check.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { addressBytes } from '../chain/base58.js';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { metadataAddress, metadataUpdateAuthority } from '../chain/metadata.js';
 import { parseMint } from '../chain/mint.js';
+import { TOKEN_PROGRAM } from '../chain/pda.js';
+import { createAccountIx, initializeMint2Ix, MINT_BYTES, setAuthorityIx } from '../chain/token.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { check } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { changedParts, unnamedNote } from '../economy/live.mjs';
+import { model } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { approvalChain, cannotRun, world } from './world.mjs';
@@ -169,5 +173,35 @@ test(
     writeFileSync(file, JSON.stringify(edit(saved, 'bubl', { name: 'Bubble Day' }), null, 2));
     const refused = await createApproval({ file, chain, now: () => NOW });
     await assert.rejects(refused.prepare(owner.address), /name record of the token BUBL .* not the project’s owner’s/);
+    // a record handed on stops only its own rename: another change to the economy still goes through
+    writeFileSync(file, JSON.stringify({ ...saved, pools: [{ key: 'pot', currency: 'sol' }] }, null, 2));
+    const { before, saved: after } = await approveAll(file, chain, owner);
+    assert.deepEqual(
+      before.steps.map(s => s.id),
+      ['pool:pot'],
+    );
+    assert.ok(after.pools[0].index !== undefined, 'the pool landed');
+    // and a file that calls a token named whose mint has no record at all is not believed
+    const bare = freshKeypair().address;
+    w.chain.send(owner.address, [
+      createAccountIx({
+        from: owner.address,
+        address: bare,
+        lamports: w.chain.rent(MINT_BYTES),
+        space: MINT_BYTES,
+        owner: TOKEN_PROGRAM,
+      }),
+      initializeMint2Ix({ mint: bare, decimals: 0, authority: owner.address }),
+      setAuthorityIx({ account: bare, current: owner.address, newAuthority: after.live.project }),
+    ]);
+    await assert.rejects(
+      checkLive({
+        live: { ...after.live, mints: { bubl: bare } },
+        m: model(after),
+        wallet: owner.address,
+        chain: { account: async a => w.chain.get(a) ?? null },
+      }),
+      e => e instanceof LiveMismatch && /has no name record/.test(e.message),
+    );
   },
 );

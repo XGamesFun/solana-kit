@@ -192,7 +192,9 @@ export async function createApproval({
       );
     }
     try {
-      return await checkLive({ live: live(), m: model(spec, { now: at }), wallet, chain });
+      // the tokens this session renames: each one's record must be the owner's to change
+      const renaming = new Set([...(only ?? [])].filter(part => part.startsWith('name:')).map(part => part.slice(5)));
+      return await checkLive({ live: live(), m: model(spec, { now: at }), wallet, chain, renaming });
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
       throw new ApproveError(
