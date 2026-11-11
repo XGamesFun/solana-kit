@@ -5802,7 +5802,7 @@ export function check(
       refuse(
         'E-TX-SIZE',
         paths[kind] ? `economy.${paths[kind]}${part ? `.${key}` : ''}` : 'economy',
-        `${named} takes ${bytes} bytes to set up in one transaction, more than the ${BUDGET} a setup transaction may hold (${MAX_TRANSACTION_BYTES}, less ${WALLET_ROOM} kept for what the owner’s wallet adds), so it could never go live.`,
+        `${named} takes ${bytes} bytes to set up in one transaction, more than the ${BUDGET} a setup transaction may hold (${MAX_TRANSACTION_BYTES}, less ${WALLET_ROOM} kept for the compute unit limit and price it leads with), so it could never go live.`,
         fix,
       );
     }
