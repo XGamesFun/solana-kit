@@ -3,7 +3,8 @@
 What to know before you build on loot, and before you ask players to trust what you built. The README has the short
 version; this is the whole of it.
 
-- **Devnet only, and not independently audited.** Nothing here is for real money yet.
+- **Not independently audited, and mainnet is real money.** An economy is on devnet, where nothing has value, unless
+  its file says `"network": "mainnet"`. Try it on devnet first.
 - **A key file on your computer owns the project, for good.** `xsolana keygen` makes it and `xsolana approve
 --keypair` signs going live with it, after showing everything it sends. Whoever can read that file controls the
   project, and every later change is signed by it: these tools can't hand a project to another owner. Keep it where

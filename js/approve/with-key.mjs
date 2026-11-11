@@ -12,6 +12,7 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { readKeyFile } from './keyfile.mjs';
 import { clusterChain, createApproval } from './server.mjs';
+import { realMoney } from '../client/cluster.js';
 
 /** The notice the page has its owner tick before Approve (js/approve/page.html, "Read this first"), word for word. */
 export const NOTICE = [
@@ -122,7 +123,7 @@ export function approvalText(state, { keyFile, balance = null }) {
   lines.push('', 'Read this first');
   for (const line of [...NOTICE, ...state.legal.map(f => f.says)]) lines.push(`- ${line}`);
   lines.push(
-    'The full text is in DISCLAIMER.md, in the package. Devnet is not real money; real money needs every point above answered first.',
+    `The full text is in DISCLAIMER.md, in the package. ${realMoney() ? 'This is mainnet: everything sent here is real money, and every point above is yours to have answered first.' : 'Devnet is not real money; real money needs every point above answered first.'}`,
   );
 
   if (state.warnings.length) {
@@ -204,7 +205,9 @@ export async function approveWithKey({
     out('');
     if (balance === 0n) {
       out(
-        `Nothing was sent: the key holds no SOL. Send devnet SOL to ${key.address} first (https://faucet.solana.com gives some), then run this again.`,
+        realMoney()
+          ? `Nothing was sent: the key holds no SOL. This economy is on mainnet: send SOL to ${key.address} first, then run this again.`
+          : `Nothing was sent: the key holds no SOL. Send devnet SOL to ${key.address} first (https://faucet.solana.com gives some), then run this again.`,
       );
       return { ok: false, sent: 0, done: false, code };
     }

@@ -54,7 +54,7 @@ test('a result’s bytes: the domain, the cluster, the game, the round, when it 
   assert.equal(bytes.length, RESULT_DOMAIN.length + 1 + 32 + 16 + 8 + 1 + 2 * 35);
   let at = RESULT_DOMAIN.length;
   assert.deepEqual([...bytes.subarray(0, at)], [...utf8(RESULT_DOMAIN)]);
-  assert.equal(bytes[at], 0, 'devnet');
+  assert.equal(bytes[at], loot.cluster() === 'mainnet' ? 1 : 0, 'the cluster: 0 devnet, 1 mainnet');
   assert.deepEqual([...bytes.subarray(at + 1, at + 33)], [...addressBytes(game.address)]);
   assert.deepEqual([...bytes.subarray(at + 33, at + 49)], [...fromHex(round)]);
   assert.equal(readUintLE(bytes, at + 49, 8), 1_800_000_000n);
@@ -78,11 +78,11 @@ test('the texts an owner signs read as they are checked, line by line; a host ke
   const [game, host] = [await newKey(), await newKey()];
   assert.equal(
     hostCertText({ game: game.address, host: host.address, until: 42 }),
-    `loot host key\ncluster: devnet\ngame: ${game.address}\nhost: ${host.address}\nuntil: 42`,
+    `loot host key\ncluster: ${loot.cluster()}\ngame: ${game.address}\nhost: ${host.address}\nuntil: 42`,
   );
   assert.equal(
     giveawayHostText({ game: game.address, who: 'x:123', slug: 'rattlepost', grant: 5, until: 42 }),
-    `loot giveaway host\ncluster: devnet\ngame: ${game.address}\nwho: x:123\nslug: rattlepost\ngrant: 5\nuntil: 42`,
+    `loot giveaway host\ncluster: ${loot.cluster()}\ngame: ${game.address}\nwho: x:123\nslug: rattlepost\ngrant: 5\nuntil: 42`,
   );
   const kept = await keyFromSecret(host.secret);
   assert.equal(kept.address, host.address);

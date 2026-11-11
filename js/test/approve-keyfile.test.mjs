@@ -423,7 +423,13 @@ describe('xsolana approve --keypair', () => {
     const shown = await run({ yes: true });
     assert.equal(shown.ok, false);
     assert.equal(sends(), 0);
-    assert.ok(shown.text.includes(`the key holds no SOL. Send devnet SOL to ${address} first`));
+    assert.ok(
+      shown.text.includes(
+        loot.cluster() === 'mainnet'
+          ? `the key holds no SOL. This economy is on mainnet: send SOL to ${address} first`
+          : `the key holds no SOL. Send devnet SOL to ${address} first`,
+      ),
+    );
   });
 
   test('a key that holds less than a new setup takes starts nothing', { skip: skip ?? false }, async () => {

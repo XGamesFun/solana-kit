@@ -31,7 +31,7 @@ test('a wallet proof: the server asks, the wallet signs the text, the server che
   assert.match(ask.nonce, /^[0-9a-f]{32}$/);
   assert.equal(ask.expires, NOW + 300);
   assert.deepEqual(readProof(ask.text), {
-    cluster: 'devnet',
+    cluster: loot.cluster(),
     game: GAME,
     wallet: wallet.address,
     purpose: 'link to player 42',

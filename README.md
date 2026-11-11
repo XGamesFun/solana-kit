@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@xgamesfun/solana?color=b9f26c&label=npm)](https://www.npmjs.com/package/@xgamesfun/solana)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![network](https://img.shields.io/badge/network-devnet-orange)](#good-to-know)
+[![network](https://img.shields.io/badge/network-devnet%20%7C%20mainnet-orange)](#good-to-know)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.XGamesFun%2Fsolana--kit-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.XGamesFun/solana-kit)
 
 You describe your game's or community's economy in a small JSON file: what players buy, open, stake, win or craft.
@@ -15,8 +15,9 @@ write, deploy or audit yourself.
 Most people never touch the JSON: they ask an AI agent (Claude Code, Codex, Cursor, ChatGPT or Claude) for _"a fishing
 game where each cast costs 0.02 SOL, with a rare golden fish and a monthly draw"_ and the agent does the rest.
 
-> **Devnet only for now.** The program is not yet independently audited, so nothing here is for real money. The
-> tools are provided as is: read [DISCLAIMER.md](DISCLAIMER.md) before you use them.
+> **On devnet and on mainnet.** An economy runs on devnet, where nothing is real money, unless its file says
+> `"network": "mainnet"`, where everything is. The program is not independently audited and the tools are provided as
+> is: read [DISCLAIMER.md](DISCLAIMER.md) before you use them, and before real money above all.
 
 ## What you can build
 
@@ -76,7 +77,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.1 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.2 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -87,26 +88,26 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.28.1 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.28.2 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.28.1 token <its mint address>
+npx -y @xgamesfun/solana@0.28.2 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.28.1 check xsolana.json
-npx -y @xgamesfun/solana@0.28.1 simulate xsolana.json
-npx -y @xgamesfun/solana@0.28.1 cost xsolana.json
+npx -y @xgamesfun/solana@0.28.2 check xsolana.json
+npx -y @xgamesfun/solana@0.28.2 simulate xsolana.json
+npx -y @xgamesfun/solana@0.28.2 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.28.1 explain xsolana.json
-npx -y @xgamesfun/solana@0.28.1 review xsolana.json
+npx -y @xgamesfun/solana@0.28.2 explain xsolana.json
+npx -y @xgamesfun/solana@0.28.2 review xsolana.json
 
-# go live: a key file for the project (it prints the address to send devnet SOL to, never the key)…
-npx -y @xgamesfun/solana@0.28.1 keygen ~/.config/xsolana/my-game.json
+# go live: a key file for the project (it prints the address to send SOL to, never the key)…
+npx -y @xgamesfun/solana@0.28.2 keygen ~/.config/xsolana/my-game.json
 # …then everything going live would send, and a code; nothing is sent
-npx -y @xgamesfun/solana@0.28.1 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.28.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # …and with that code, exactly what it listed is sent
-npx -y @xgamesfun/solana@0.28.1 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.28.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -149,7 +150,8 @@ Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction
 
 ## Good to know
 
-- **Devnet only, not yet audited.** Mainnet waits for an independent audit.
+- **Devnet and mainnet, not independently audited.** An economy is on devnet unless its file says
+  `"network": "mainnet"`. Mainnet is real money: try everything on devnet first.
 - **Upgrades can mean setting up again.** No program version so far has carried accounts over. Pin the package version.
 - **Players trust the project.** Your keys can mint and move your project's pools. The program protects players from
   each other and from mistakes, not from the project they chose.

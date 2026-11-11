@@ -19,7 +19,9 @@ Read this before you use this package, its tools or the loot program. Using them
   wallets, token and NFT programs, npm and any results server. Any of them can fail, change or stop.
 - The public results server (`https://play.xgames.fun/xsolana`) is offered as is, may change or stop at any time, and
   carries no promise of uptime or of what it vouches for.
-- **Devnet only.** Nothing here is meant for real money until the program has been independently audited.
+- **Mainnet is real money, and the program has not been independently audited.** loot runs on devnet, where nothing
+  has value, and on mainnet, where everything does. An economy is on devnet unless its file says
+  `"network": "mainnet"`. What is sent to the program on mainnet can be lost, and you use it there at your own risk.
 
 ## Use it legally
 

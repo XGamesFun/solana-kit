@@ -8,7 +8,7 @@ import IDL from '../client/idl/loot.js';
 import { gateList } from '../client/grant.js';
 import { MAX_BID_NFTS, MAX_SHARES } from '../client/ix.js';
 import { MAX_POTS } from '../client/accounts.js';
-import { cluster, CLUSTERS, networkOf, useCluster, vault } from '../client/pda.js';
+import { cluster, CLUSTERS, networkOf, realMoney, useCluster, vault } from '../client/pda.js';
 import { ASSUMED_TRIES, boxBytes, buyFits, drawsFit, MAX_ORDER_BYTES, tableBudget } from '../client/sizes.js';
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
@@ -4936,7 +4936,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         'W-REVENUE-SHARE',
         where,
         `${label(f)} pays stakers a share of what players spend (${revenue.map(x => x.by).join(', ')}). Paying holders out of a project’s revenue is what regulators look at when they decide whether a token is a security.`,
-        'Fine on devnet. Before mainnet, ask counsel, or reward stakers from emissions (a schedule that mints a game token) rather than from sales.',
+        realMoney()
+          ? 'This economy is on mainnet, where that is real money: ask counsel first, or reward stakers from emissions (a schedule that mints a game token) rather than from sales.'
+          : 'Fine on devnet. Before mainnet, ask counsel, or reward stakers from emissions (a schedule that mints a game token) rather than from sales.',
       );
   }
 
@@ -5041,7 +5043,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         'W-TOKEN-SALE',
         `${where}.prize`,
         `${label(c)} sells ${sold.symbol ?? sold.key} for ${tok.symbol ?? tok.key}: each backer pays in and takes a share of the tokens by what they put in. Selling a token to raise money is what securities law looks at first, and many places limit who may buy.`,
-        'Fine on devnet. Before mainnet, ask counsel.',
+        realMoney()
+          ? 'This economy is on mainnet, where that is real money: ask counsel first.'
+          : 'Fine on devnet. Before mainnet, ask counsel.',
       );
     // One NFT, the last units of an item, a pool's prize: the winning entries share it in the order they are claimed.
     const scarce =
@@ -5130,7 +5134,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       warn(
         'W-CHANCE-PRIZE',
         where,
-        `${label(c)} lets players put money on an outcome: that is betting, which is regulated in most places once it is real money (state rules on prediction markets are in flux). loot runs on devnet only.`,
+        `${label(c)} lets players put money on an outcome: that is betting, which is regulated in most places once it is real money (state rules on prediction markets are in flux). ${realMoney() ? 'This economy is on mainnet: it is real money.' : 'This economy is on devnet, which is not real money.'}`,
         'Before mainnet: counsel, an age and region gate, and a name that does not call it an investment.',
       );
   }
@@ -5699,14 +5703,14 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     warn(
       'W-CHANCE-ITEMS',
       'economy',
-      'Players pay for a random collectible they can resell (a loot box or gacha). Some places treat paid loot boxes of tradeable items as gambling, and many require the odds to be shown. loot runs on devnet only; before mainnet, counsel and an age and region gate.',
+      `Players pay for a random collectible they can resell (a loot box or gacha). Some places treat paid loot boxes of tradeable items as gambling, and many require the odds to be shown. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
       'Tell the person in plain words: paid random items that can be resold may count as gambling in some places; show the odds on the page, and get a lawyer before real money.',
     );
   if (chance)
     warn(
       'W-CHANCE-PRIZE',
       'economy',
-      'Players pay for a chance at money (a box that pays a prize, a lottery). That is gambling in many places once it is real money, and paid packs with a cash buyback are drawing lawsuits. loot runs on devnet only; before mainnet, counsel and an age and region gate.',
+      `Players pay for a chance at money (a box that pays a prize, a lottery). That is gambling in many places once it is real money, and paid packs with a cash buyback are drawing lawsuits. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
       'Tell the person this in plain words before they go live: paying for a chance at money is gambling in many places, so before real money they need a lawyer and an age and region gate.',
     );
 

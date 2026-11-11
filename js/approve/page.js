@@ -5,7 +5,8 @@
 // session's token from its <meta name="xsolana-token"> (the page allows no inline script).
 import { fromBase64, toBase64 } from '/js/chain/bytes.js';
 
-const CHAIN = 'solana:devnet';
+// The cluster of this approval (the economy's own), as the server says it: devnet until the first answer.
+let onCluster = 'devnet';
 const $ = id => document.getElementById(id);
 
 function walletRegistry() {
@@ -65,6 +66,13 @@ export function approvalPage(token) {
   // How many of the lines about what the wallet added have been said on this page.
   let addedSaid = 0;
   function render(state) {
+    onCluster = state.cluster ?? 'devnet';
+    $('cluster').textContent = onCluster;
+    $('walletcluster').textContent = onCluster;
+    $('money').textContent =
+      onCluster === 'mainnet'
+        ? 'This is mainnet: everything sent here is real money, and every point above is yours to have answered first.'
+        : 'Devnet is not real money; real money needs every point above answered first.';
     last = state;
     // What the wallet added to transactions that landed (its own checks): they were sent as it signed them. Said
     // whenever a state arrives, so one that landed in a batch that then stopped is said too.
@@ -84,7 +92,7 @@ export function approvalPage(token) {
     $('sub').textContent = state.done
       ? nothingSent
         ? `The only change in ${state.file} is a token’s name, and it can’t be written on chain: nothing was sent, and the file is as it was. See below.`
-        : `Every step landed on devnet. ${state.file} now holds the project’s addresses: you can close this page.`
+        : `Every step landed on ${state.cluster}. ${state.file} now holds the project’s addresses: you can close this page.`
       : `${state.mode === 'change' ? 'A change to a live economy' : state.mode === 'resume' ? 'A setup that was cut short goes on' : 'A new economy'} from ${state.file}, on the shared loot program ${state.program.slice(0, 6)}…${state.project ? `, in the project ${state.project}${state.wallet ? `, made from your wallet ${state.wallet}` : ''}` : ''}`;
     $('cost').textContent = state.setupSol !== null && state.mode === 'new' ? `about ${state.setupSol} SOL` : '';
     const steps = $('steps');
@@ -205,7 +213,7 @@ export function approvalPage(token) {
     const found = list();
     if (!found.length) {
       log(
-        'No Solana wallet in this browser. Install one (Phantom, Solflare, Backpack), set it to devnet, then reload.',
+        `No Solana wallet in this browser. Install one (Phantom, Solflare, Backpack), set it to ${onCluster}, then reload.`,
         'bad',
       );
       return;
@@ -245,7 +253,11 @@ export function approvalPage(token) {
         `Asking your wallet to approve ${batch.transactions.length} transaction${batch.transactions.length === 1 ? '' : 's'} in the project ${batch.project}: ${batch.says.join(' | ')}${details.length ? `. ${details.join('. ')}` : ''}`,
       );
       const sign = signingWallet.features['solana:signTransaction'];
-      const inputs = batch.transactions.map(t => ({ account: signer, transaction: fromBase64(t), chain: CHAIN }));
+      const inputs = batch.transactions.map(t => ({
+        account: signer,
+        transaction: fromBase64(t),
+        chain: `solana:${onCluster}`,
+      }));
       const outputs = await sign.signTransaction(...inputs);
       const signed = outputs.map(o => toBase64(o.signedTransaction));
       $('status').textContent = 'Sending and confirming…';

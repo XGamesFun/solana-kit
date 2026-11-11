@@ -29,7 +29,7 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    a score): "Checking that a player really did it is up to you, on your own server: a game runs in the player's
    browser, and the program trusts the authority's signature."
 6. **Flags for the law, once.** `W-CHANCE-PRIZE`: "Players pay for a chance at money. That is gambling in many places once
-   it is real money; this runs on devnet only." `W-CHANCE-ITEMS`: "Players pay for random items they can resell: some
+   it is real money; this one is on devnet, which is not." (On mainnet: "this one is on mainnet, so it is.") `W-CHANCE-ITEMS`: "Players pay for random items they can resell: some
    places treat that as gambling, and many require the odds to be shown." `W-REVENUE-SHARE`: "Stakers are paid from
    what players spend; regulators look at that when they decide whether a token is a security." `W-TOKEN-SALE`:
    "People pay for a share of a new token; selling a token to raise money is what securities law looks at first."

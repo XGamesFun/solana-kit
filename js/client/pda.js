@@ -14,6 +14,7 @@ export {
   LOOT_PROGRAM,
   lootProgram,
   networkOf,
+  realMoney,
   scopeClusters,
   useCluster,
   walletChain,

@@ -13,7 +13,7 @@ import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
-import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda } from '../client/pda.js';
+import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
@@ -641,7 +641,7 @@ export const tools = [
       const command = `${approveCommand(target)} --keypair ${keyFile}`;
       const text = [
         ...flagsToTell(economy, nowOf(ctx)),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on devnet:`,
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}:`,
         ...steps.map((s, i) => `${i + 1}. ${s}`),
         '',
         `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
@@ -652,13 +652,13 @@ export const tools = [
           : [
               `1. A key file for this project, unless it has one: ${keygen}`,
               '   It prints the key’s address, never the key. The key file is the project’s owner: whoever can read it controls the project, and which key goes live is for good (every later change is signed by it; these tools can’t hand a project to another owner). It stays where it is: never in a chat, a spec, a repository or a page, and you never open, read or print it. Tell the person to back the file up themselves: if it is lost, nothing can change the economy or move what its address holds.',
-              `   Everything the setup takes from the owner must be at that address first: the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection they already have needs that address as its update authority). If they would rather not move those, offer the browser wallet.`,
+              `   Everything the setup takes from the owner must be at that address first: ${realMoney() ? `the SOL (about ${c.setup.totalSol} SOL here: this economy is on mainnet, so it is real SOL)` : `the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some)`}, any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection they already have needs that address as its update authority). If they would rather not move those, offer the browser wallet.`,
               '   The steps above call the owner’s address “your wallet”: with a key file, that is the key’s address. Unless the spec names a treasury, what sales leave lands there, and it signs what only the authority signs. If the economy takes money in, ask for the public address of a wallet the person holds and set "treasury": "wallet:<address>" first: it can’t be changed through the spec once live.',
             ]),
         `2. ${command}`,
         '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them: DISCLAIMER.md in the package) and a code. It sends nothing.',
         '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code. Go on with that code; if it shows a step or a warning they have not seen, ask again.',
-        `${live ? 'For a project a browser wallet owns' : 'Only if the person asks to sign in a browser wallet instead'}: give them this to run in their own terminal: ${browserCommand} (it serves a page on their own computer where they connect a wallet set to devnet and approve, ${plural(p.approvals, 'approval')}, and keeps running until the page says it is live). Don’t run or open it otherwise.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
+        `${live ? 'For a project a browser wallet owns' : 'Only if the person asks to sign in a browser wallet instead'}: give them this to run in their own terminal: ${browserCommand} (it serves a page on their own computer where they connect a wallet set to ${cluster()} and approve, ${plural(p.approvals, 'approval')}, and keeps running until the page says it is live). Don’t run or open it otherwise.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
         ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');
@@ -680,7 +680,7 @@ export const tools = [
     name: 'xsolana_status',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     description:
-      'A live economy as it is on chain: the project, every pool’s balance, every record the spec names (found or missing). Reads devnet (or XSOLANA_RPC_URL).',
+      'A live economy as it is on chain: the project, every pool’s balance, every record the spec names (found or missing). Reads the economy’s own cluster: devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL, which must then name a mainnet RPC.',
     inputSchema: { type: 'object', properties: { spec: SOURCE.spec, file: SOURCE.file }, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -826,7 +826,7 @@ export const tools = [
             account
               ? `${mint} is not a token mint on ${cluster()} (a token account or a wallet is not the mint: an explorer’s token page names it)`
               : cluster() === 'devnet'
-                ? `There is nothing at ${mint} on devnet. A coin launched on mainnet is not on devnet, where loot runs for now`
+                ? `There is nothing at ${mint} on devnet. A coin launched on mainnet is not on devnet: this reads the cluster of the economy in this folder, devnet unless its file says "network": "mainnet"`
                 : `There is nothing at ${mint} on ${cluster()}. A coin made on devnet is not on ${cluster()}`
           }.${footer()}`,
         };

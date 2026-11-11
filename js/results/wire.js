@@ -2,6 +2,7 @@
 // with whoever signs them: a host server, a player's game page, an owner's wallet. Browser-safe: no Node imports.
 import { addressBytes } from '../chain/base58.js';
 import { concat, fromHex, uintLE, utf8 } from '../chain/bytes.js';
+import { cluster as onCluster } from '../client/cluster.js';
 
 export const RESULT_DOMAIN = 'loot-result-v1';
 export const NO_GRANT = 0xffff;
@@ -31,10 +32,10 @@ const write = (kind, values) =>
   [CERT_KINDS[kind].title, ...CERT_KINDS[kind].fields.map(f => `${f}: ${field(f, values[f])}`)].join('\n');
 
 /** The text the owner signs to let `host` report `game`'s results until `until` (unix seconds). */
-export const hostCertText = ({ cluster = 'devnet', game, host, until }) =>
+export const hostCertText = ({ cluster = onCluster(), game, host, until }) =>
   write('host', { cluster, game, host, until });
 /** The text the owner signs to take `host` back. */
-export const revokeText = ({ cluster = 'devnet', game, host }) => write('revoke', { cluster, game, host });
+export const revokeText = ({ cluster = onCluster(), game, host }) => write('revoke', { cluster, game, host });
 
 /**
  * The text the organizer (the game's owner or authority, or a host key they certified) signs to open a draw: a round
@@ -45,7 +46,7 @@ export const revokeText = ({ cluster = 'devnet', game, host }) => write('revoke'
  * JSON), or 'default'.
  */
 export const drawText = ({
-  cluster = 'devnet',
+  cluster = onCluster(),
   game,
   draw,
   engine,
@@ -69,19 +70,19 @@ export const drawText = ({
     rates,
   });
 /** The text the organizer signs to lock a draw's players (`roster`: rosterHash) to a beacon round still to come. */
-export const lockText = ({ cluster = 'devnet', game, draw, roster, players, beacon, net = 'quicknet' }) =>
+export const lockText = ({ cluster = onCluster(), game, draw, roster, players, beacon, net = 'quicknet' }) =>
   write('lock', { cluster, game, draw, roster, players, beacon: `${net} ${beacon}` });
 /** The text a player's wallet signs to enter a draw (identity 'wallet'). */
-export const entryText = ({ cluster = 'devnet', game, draw }) => write('entry', { cluster, game, draw });
+export const entryText = ({ cluster = onCluster(), game, draw }) => write('entry', { cluster, game, draw });
 
 /**
  * The text the owner (or authority) signs to appoint a giveaway host: `who` is "x:<X account id>" (the host signs in
  * with that X account through the play host) or a wallet address; their giveaways pay from grant `grant` alone.
  */
-export const giveawayHostText = ({ cluster = 'devnet', game, who, slug, grant, until }) =>
+export const giveawayHostText = ({ cluster = onCluster(), game, who, slug, grant, until }) =>
   write('giveaway', { cluster, game, who, slug, grant, until });
 /** The text the owner (or authority) signs to take a giveaway host back. */
-export const revokeGiveawayText = ({ cluster = 'devnet', game, who }) =>
+export const revokeGiveawayText = ({ cluster = onCluster(), game, who }) =>
   write('revokeGiveaway', { cluster, game, who });
 
 /** A draw's players, as one hash: each `id<TAB>wallet`, sorted by id, one a line; sha256, hex. */
@@ -113,7 +114,7 @@ export function canonicalJson(value) {
  * Every field has one length, so one set of bytes means one result: an unknown cluster, a round that is not 16 bytes, a
  * place past 255 and more than 255 winners are refused, never written as something else.
  */
-export function resultBytes({ cluster = 'devnet', game, round, endedAt, winners }) {
+export function resultBytes({ cluster = onCluster(), game, round, endedAt, winners }) {
   if (!Object.hasOwn(CLUSTERS, cluster))
     throw new RangeError(
       `Unknown cluster ${JSON.stringify(cluster)}: a result names ${Object.keys(CLUSTERS).join(' or ')}.`,
