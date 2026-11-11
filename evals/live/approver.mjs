@@ -1,5 +1,7 @@
-// The person approving: runs the approval command the agent gave them, in the project folder, and approves on the
-// page with the test wallet as the owner, batch by batch, as a person clicking would. Reports what the page said.
+// The person approving in a browser wallet, which this harness's person asks for: runs the approval command the
+// agent gave them (`approve … --browser`), in the project folder, and approves on the page with the test wallet as
+// the owner, batch by batch, as a person clicking would. Reports what the page said. (Going live with a key file,
+// the tools' usual way, is not driven here: js/test/approve-keyfile.test.mjs covers it against the real program.)
 import { spawnGroup, stopGroup } from './procs.mjs';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -7,7 +9,7 @@ import { attachWallet, launchBrowser } from './wallet.mjs';
 
 /** Is this a command a person would run to approve? Only xsolana's own approve. */
 export const isApproveCommand = command =>
-  /^(npx\s+(-y\s+)?(--yes\s+)?@xgamesfun\/solana(@[\w.-]+)?\s+approve|xsolana\s+approve|node\s+\S*bin\/xsolana\.mjs\s+approve)(\s+[\w./-]+)?\s*$/.test(
+  /^(npx\s+(-y\s+)?(--yes\s+)?@xgamesfun\/solana(@[\w.-]+)?\s+approve|xsolana\s+approve|node\s+\S*bin\/xsolana\.mjs\s+approve)(\s+[\w./-]+)?\s+--browser(\s+[\w./-]+)?\s*$/.test(
     command.trim(),
   );
 

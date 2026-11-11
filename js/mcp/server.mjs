@@ -10,18 +10,18 @@ import { PACKAGE_VERSION, PROGRAM_INFO, REMOTE_TOOLS, tools, VERSION } from './t
 
 export const INSTRUCTIONS = [
   'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
-  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live (they approve in their own wallet: you never sign or ask for a key).',
+  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live. Going live is signed by a key file on their own machine (xsolana keygen makes one; never ask for, read or print a key) with xsolana approve --keypair, which sends nothing until they have read what it prints and said yes. Open a browser wallet’s signing page (approve --browser) only if they ask for one.',
   `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
 ].join(' ');
 
 /**
  * What a hosted server (js/mcp/http.mjs) tells the agent: the same work, with the spec passed whole in every call,
- * and going live on the person's own computer, since a hosted server can neither write their files nor open a page there.
+ * and going live on the person's own computer, since a hosted server can neither write their files nor sign there.
  */
 export const REMOTE_INSTRUCTIONS = [
   INSTRUCTIONS.split(' Start with')[0],
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec and pass it whole as "spec" to every tool (this hosted server reads no files); xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets).',
-  `To go live, give the person the spec as a file named xsolana.json and this command, run in its folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json. It opens a page on their own computer where they approve each transaction in their own wallet. Nobody else signs, and never ask for a key. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
+  `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address devnet SOL), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. A browser wallet’s signing page (the same approve command with --browser in place of --keypair) only if the person asks for one. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
   `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
 ].join(' ');
 

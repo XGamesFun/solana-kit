@@ -72,6 +72,10 @@ export function programError(err, logs) {
   return last ?? (typeof err === 'string' ? err : JSON.stringify(err));
 }
 
+/** Whether a send's refusal is the dry run not knowing the transaction's blockhash. */
+const blockhashNotFound = error =>
+  error?.data?.err === 'BlockhashNotFound' || /blockhash not found/i.test(String(error?.message ?? ''));
+
 /** A client for one RPC URL. `fetchImpl` and `sleepImpl` are for tests. */
 export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
   let id = 0;
@@ -112,6 +116,13 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
         // A node of a load-balanced RPC a moment behind: "No confirmed state available yet" (-32005), "Minimum context
         // slot has not been reached" (-32016). Asked again, another (or the same, caught up) answers.
         if (BEHIND.includes(body?.error?.code) && attempt < RETRIES) {
+          await sleepImpl(500 * 2 ** attempt);
+          continue;
+        }
+        // A send refused in its dry run for a blockhash this node has not seen yet ("Blockhash not found"): the node
+        // that gave the blockhash was a moment ahead of this one. Asked again, it (or another) knows it. A blockhash
+        // that is truly gone is refused the same way each time, and the last refusal is the answer.
+        if (method === 'sendTransaction' && blockhashNotFound(body?.error) && attempt < RETRIES) {
           await sleepImpl(500 * 2 ** attempt);
           continue;
         }

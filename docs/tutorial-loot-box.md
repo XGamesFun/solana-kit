@@ -102,17 +102,22 @@ npx -y @xgamesfun/solana@0.27.1 review xsolana.json
 
 For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the
 chain and the most one cheater gets. Here the only route is the box, and its roll comes from MagicBlock's VRF:
-“nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's wallet controls the
-project, so keep it in a hardware wallet or a multisig.
+“nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's key controls the
+project, so keep it safe: the key file readable by you alone on devnet, a hardware wallet or a multisig with real money.
 
-## 7. Go live, in your own wallet
+## 7. Go live, signed on your own computer
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 approve xsolana.json
+npx -y @xgamesfun/solana@0.27.1 keygen ~/.config/xsolana/loot-box.json
+npx -y @xgamesfun/solana@0.27.1 approve xsolana.json --keypair ~/.config/xsolana/loot-box.json
 ```
 
-This opens a page on your own computer. Connect a devnet wallet and approve the transactions it lists. Neither the
-tools nor the agent ever signs or asks for a key. `xsolana status xsolana.json` then reads the live economy back.
+`keygen` makes a key file for the project and prints its address, never the key: send that address the devnet SOL
+`cost` named. The key file is the project's owner, so keep it where it is and never paste it anywhere. `approve` then
+lists every transaction with what it pays and trusts and sends nothing until you say yes (in a terminal you type it;
+an agent runs the command again with the code it printed, after you have said yes to the list). Nothing asks for a
+seed phrase or for the key of a wallet you already have. To sign in a browser wallet instead, ask for the page:
+`approve xsolana.json --browser`. `xsolana status xsolana.json` then reads the live economy back.
 
 ## 8. Let players open it
 

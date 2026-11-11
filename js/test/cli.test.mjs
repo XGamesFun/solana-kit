@@ -41,9 +41,9 @@ describe('xsolana (the command line)', () => {
   test('a failure is one line on stderr and exit 1, never a stack', async () => {
     const cases = [
       [['tool', 'xsolana_check', 'notjson'], /not JSON/],
-      [['approve', 'missing.json', '--no-open'], /missing\.json does not exist/],
-      [['approve', 'xsolana.json', '--port', 'abc'], /--port must be a whole number/],
-      [['approve', 'xsolana.json', '--port=99999'], /--port must be a whole number/],
+      [['approve', 'missing.json', '--browser', '--no-open'], /missing\.json does not exist/],
+      [['approve', 'xsolana.json', '--browser', '--port', 'abc'], /--port must be a whole number/],
+      [['approve', 'xsolana.json', '--browser', '--port=99999'], /--port must be a whole number/],
       [['connect', '--agent'], /--agent needs a value/],
     ];
     for (const [args, said] of cases) {

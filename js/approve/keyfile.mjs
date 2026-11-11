@@ -10,6 +10,7 @@ import { chmod, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { encodeBase58 } from '../chain/base58.js';
+import { readTransaction, wireTransaction } from '../chain/tx.js';
 
 const PKCS8_ED25519 = Buffer.from('302e020100300506032b657004220420', 'hex');
 /** The most a key file holds: 64 numbers of up to three digits, with room for however it was spaced. */
@@ -180,8 +181,9 @@ export async function makeKeyFile(file, { run } = {}) {
 }
 
 /**
- * Reads the key in `file` to sign with: { file, address, sign(message), drop() }. Refused: a file other users of the
- * machine can read, one inside a git repository, and anything that is not a whole key. No refusal quotes the file.
+ * Reads the key in `file` to sign with: { file, address, sign(message), signTransaction(wire), drop() }, which is
+ * also what `@xgamesfun/solana/play` takes as a wallet. Refused: a file other users of the machine can read, one
+ * inside a git repository, and anything that is not a whole key. No refusal quotes the file.
  */
 export async function readKeyFile(file, { run, platform = process.platform } = {}) {
   const target = keyFilePath(file);
@@ -202,5 +204,19 @@ export async function readKeyFile(file, { run, platform = process.platform } = {
   const real = await realpath(target);
   await outsideRepositories(target, path.dirname(real), real, { run });
   const key = parseKey(target, await readFile(target, 'utf8'));
-  return { file: target, address: key.address, sign: key.sign, drop: key.drop };
+  return {
+    file: target,
+    address: key.address,
+    sign: key.sign,
+    /** A wire transaction with this key's signature in its own slot, as a wallet's signTransaction gives it back. */
+    async signTransaction(wire) {
+      const t = readTransaction(wire);
+      const slot = t.signers.indexOf(key.address);
+      if (slot < 0) throw new KeyFileError(`This transaction is not one ${key.address} signs.`);
+      const signatures = [...t.signatures];
+      signatures[slot] = key.sign(t.message);
+      return wireTransaction(t.message, signatures);
+    },
+    drop: key.drop,
+  };
 }

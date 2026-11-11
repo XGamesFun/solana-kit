@@ -16,7 +16,7 @@ ${(card.beats ?? []).length ? `THINGS YOU MUST SAY, each once, at the moment giv
 
 HOW THE SESSION GOES
 1. You describe what you want and answer the assistant's questions briefly, like a real person (one to four sentences, no lists unless you pasted something). Don't design the economy for them; react to what they propose. Agree when it sounds right, ask a short question when it doesn't.
-2. When the assistant gives you a command to put it live (approve it in your wallet), you run it: action "run_command" with that exact command. Only ever run a command the assistant gave you. You will be told what happened.
+2. You put it live yourself, in your browser wallet: that is the only key you have, and you can't send SOL to another address from here. If the assistant offers to sign with a key file on this computer, say you want to approve in your own browser wallet instead. When the assistant gives you the command for that (it serves a page for your wallet), you run it: action "run_command" with that exact command. Only ever run a command the assistant gave you. You will be told what happened.
 3. Once it is live, ask for a simple web page your players can use for it, if the assistant hasn't made one.
 4. When the assistant tells you how to open the page (a file to open, or a command that starts it), try it: action "open_app" with the command or the file. A tester will use the page and you'll get their report. If something didn't work, tell the assistant plainly what the tester said and ask them to fix it (at most twice).
 5. When the page works (or after two fixes, or if what you want can't be built and the assistant offered something you accept or refuse), end with action "done".

@@ -230,7 +230,7 @@ export const CANNOT = [
     why: 'loot isn’t a multisig, but any wallet can receive and any key can be the spending key',
     nearest: [
       'payments and sales go to a multisig vault: `"treasury": "wallet:<vault>"` or a `wallet:<vault>` share; spending from it needs the vault’s approvals in the multisig’s own app',
-      'the multisig vault as `keys.authority`, so moving the game’s pools needs its approvals (sent from the multisig’s own app, not the approve page)',
+      'the multisig vault as `keys.authority`, so moving the game’s pools needs its approvals (sent from the multisig’s own app, not by `xsolana approve`)',
     ],
   },
   {
@@ -431,7 +431,7 @@ export function guideText(only) {
   return [
     only
       ? `The part “${only}” of a loot economy (* = required):`
-      : `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, devnet only. Nobody writes a contract: the spec is checked, simulated, and put live by the owner approving in their own wallet. Its parts (* = required field):`,
+      : `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, devnet only. Nobody writes a contract: the spec is checked, simulated, and put live on the owner’s own machine, signed by the project’s key file once they have said yes. Its parts (* = required field):`,
     ...parts.flatMap(p => [
       `\n${p.part} (${p.type}): ${p.says}${p.atPlayTime ? `\n  At play time: ${p.atPlayTime}.` : ''}`,
       ...p.fields.map(fieldLine),

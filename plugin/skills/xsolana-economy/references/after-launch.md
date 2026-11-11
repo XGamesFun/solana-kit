@@ -68,16 +68,25 @@ suspends it, and the pieces stay locked in their farm meanwhile.
 Leaving a farm needs only the player's wallet, never a server's signature; what can still keep an NFT from coming
 back is the NFT issuer's own controls (`telling-the-person.md`, NFT custody).
 
-## The owner's own steps: an owner page
+## The authority's own steps
 
-What only the authority can sign (open or decide a contest, pay out, move a pool) needs a page the owner opens and
-approves in **their own wallet**, like the approve page. Build it with `@xgamesfun/solana/client` builders
-(`openContestIx`, `decideIx`, `moveTokensIx`) and the wallet's `signTransaction`, served locally or on the same site
-behind nothing more than the owner's wallet: the program checks the signature, so a page holds no secret.
+What only the authority can sign (open or decide a contest, pay out, move a pool) is signed where the authority's key
+is. Unless the spec's `keys.authority` names another address, the authority is the owner: for a project set up with a
+key file, that file. Build each step with `@xgamesfun/solana/client` builders (`openContestIx`, `decideIx`,
+`moveTokensIx`).
 
-- Show what each button does in words before the wallet asks ("Name the Owls the winner: the pot of 0.42 SOL is
-  shared by 7 backers; 5% goes to you").
-- Never put an owner's or authority's key in a page, a file or a server, and never ask the person to export one.
+- **A key file** (the usual case): a short script on the person's own machine, signed by
+  `readKeyFile(file)` from `@xgamesfun/solana/keyfile`. It gives the key's address, `sign(message)` and
+  `signTransaction(wire)`, never the key's bytes, and it refuses a file others can read or one inside a repository.
+  The script says in words what it will do ("Name the Owls the winner: the pot of 0.42 SOL is shared by 7 backers;
+  5% goes to you") and sends only after the person says yes. Never open the key file yourself, and never copy it into
+  the script, a page or a server.
+- **A browser wallet**, when the person asks to sign there: a page the owner opens and approves in their own wallet,
+  with the wallet's `signTransaction`, served locally or on the same site behind nothing more than that wallet (the
+  program checks the signature, so a page holds no secret). It works only when the authority's address is that
+  wallet's: name it as `keys.authority` before going live. Show what each button does in words before the wallet asks.
+- Never put an owner's or authority's key in a page or on a server, and never ask the person to export or paste one.
+  A server that signs by itself gets an authority key of its own (`keys.authority`), never the owner's.
 
 ## Results from a game: who won, and paying them
 

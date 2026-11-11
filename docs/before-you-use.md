@@ -3,7 +3,12 @@
 What to know before you build on loot, and before you ask players to trust what you built. The README has the short
 version; this is the whole of it.
 
-- **Devnet only, and not independently audited.** Nothing here is for real money yet. Use a devnet wallet.
+- **Devnet only, and not independently audited.** Nothing here is for real money yet.
+- **A key file on your computer owns the project.** `xsolana keygen` makes it and `xsolana approve --keypair` signs
+  going live with it, after showing you everything it sends. Whoever can read that file controls the project: keep it
+  where it is (outside any repository), back it up like a password, and never paste it anywhere. Unless your spec
+  names a `treasury`, what the economy earns for you lands at that key's address. To sign in a browser wallet
+  instead, ask for it: `xsolana approve --browser`.
 - **The program can be upgraded, and an upgrade can mean starting again.** Its upgrade authority can replace the
   program's code, which is power over every economy on it (on mainnet that key is to be a multisig). Most versions
   so far have not carried accounts over from the one before: an economy made on 0.25 is made again for 0.26 (0.27

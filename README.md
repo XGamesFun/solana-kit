@@ -8,8 +8,8 @@
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.XGamesFun%2Fsolana--kit-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.XGamesFun/solana-kit)
 
 You describe your game's or community's economy in a small JSON file: what players buy, open, stake, win or craft.
-The tools check it, show you where the money goes, tell you what it costs, and then you put it live by approving it in
-your own wallet. It runs on **loot**, one Solana program that every project shares, so there is no Anchor or Rust to
+The tools check it, show you where the money goes, tell you what it costs, and then it goes live, signed on your own
+computer once you have read what will be sent and said yes. It runs on **loot**, one Solana program that every project shares, so there is no Anchor or Rust to
 write, deploy or audit yourself.
 
 Most people never touch the JSON: they ask an AI agent (Claude Code, Codex, Cursor, ChatGPT or Claude) for _"a fishing
@@ -39,8 +39,17 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 1. **Describe it.** In a sentence to your agent, or as a spec file (`xsolana.json`).
 2. **Check it.** `check` refuses anything the program would refuse; `simulate` shows where the money goes, day by
    day; `cost` prices going live and each player action; `review` shows what a cheater could get.
-3. **Approve it.** A page opens on your own computer, lists every transaction, and you approve them in your wallet.
-   Nothing here ever signs for you or asks for a key.
+3. **Put it live.** `approve` lists every transaction with what it pays and trusts, and sends nothing until you say
+   yes. A key file on your own computer signs (`keygen` makes one for the project). Nothing here asks for a seed
+   phrase or for the key of a wallet you already have, and no page opens unless you ask for your browser wallet.
+
+**Why a key file and not a browser wallet?** Setting an economy up is several transactions. A key file made for the
+project signs each one exactly as it was prepared and shown, holds only the SOL you send it, and needs no page; a
+browser wallet may add to a transaction before signing it, and it is the wallet that holds everything else you own.
+The key file is the project's owner, so keep it like one: outside any repository (the tools refuse one inside), never
+pasted anywhere, backed up. Unless your spec names a `treasury`, what the economy earns for you lands at the key's
+address: name a wallet you hold (`"treasury": "wallet:<address>"`) before going live. To sign in a browser wallet
+anyway, `approve --browser` serves the page for it.
 
 New here? The [loot box tutorial](docs/tutorial-loot-box.md) walks through all three with real output.
 
@@ -89,8 +98,10 @@ npx -y @xgamesfun/solana@0.27.1 cost xsolana.json
 npx -y @xgamesfun/solana@0.27.1 explain xsolana.json
 npx -y @xgamesfun/solana@0.27.1 review xsolana.json
 
-# go live, approved in your own wallet
-npx -y @xgamesfun/solana@0.27.1 approve xsolana.json
+# go live: a key file for the project (it prints the address to send devnet SOL to, never the key)…
+npx -y @xgamesfun/solana@0.27.1 keygen ~/.config/xsolana/my-game.json
+# …then everything going live sends; nothing is sent until you say yes
+npx -y @xgamesfun/solana@0.27.1 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -147,7 +158,7 @@ built yet: read the [known limits](docs/program.md#known-limits) before promisin
 ## Questions
 
 **How do I make a loot box or gacha on Solana without writing a smart contract?** Describe it as a box (its price,
-its outcomes and their odds), run `check` and `simulate`, then `approve` it in your wallet. If the randomness oracle
+its outcomes and their odds), run `check` and `simulate`, then `approve` it with your project's key file. If the randomness oracle
 never answers, the buyer can get a refund. See the [tutorial](docs/tutorial-loot-box.md) and the
 [examples](examples).
 

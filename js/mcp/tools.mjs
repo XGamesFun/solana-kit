@@ -1,5 +1,6 @@
 // The xsolana tools: what an agent needs to turn a person's idea into an economy on the shared loot program, check it,
-// simulate it, price it, explain it, save it and hand the person the step that puts it live in their own wallet.
+// simulate it, price it, explain it, save it and say how it is put live: signed by a key file on the person's own
+// machine, once they have read what would be sent and said yes.
 // Each tool is { name, description, inputSchema, annotations, handler(input, ctx) → { text, ...data } }; the server
 // (server.mjs) and the terminal (`xsolana tool`) run them the same way. No tool signs, holds a key or talks to a wallet.
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -48,15 +49,30 @@ export function plainName(rel, paths = path) {
 const NOT_PLAIN = rel => `${JSON.stringify(String(rel))} is not a plain file name`;
 const RENAME = 'use letters, digits and . _ - (and / for a folder), as in xsolana.json';
 /**
- * The command an owner runs to approve going live in their own wallet, pinned to this package's exact version, with
- * the spec's file (relative to the project folder, by `paths`' rules: the system's own unless given) as one plain
- * word. A name that is not plain throws.
+ * The command that puts an economy live, pinned to this package's exact version, with the spec's file (relative to the
+ * project folder, by `paths`' rules: the system's own unless given) as one plain word. A name that is not plain
+ * throws. How it is signed goes after it: `--keypair <key file>` (the usual way), or `--browser` when the person
+ * asks for a browser wallet.
  */
 export function approveCommand(file = '', paths = path) {
   const name = file ? plainName(file, paths) : '';
   if (name === null) throw new Error(`${NOT_PLAIN(file)}: rename it (${RENAME}).`);
   return `npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve${name ? ` ${name}` : ''}`;
 }
+/**
+ * Where a project's key file is kept unless the person names another place: outside any repository, under the
+ * economy's own name (`~` is the home folder, in any shell: the commands read it themselves).
+ */
+export function keyFileFor(name) {
+  const slug = String(name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return `~/.config/xsolana/${slug || 'project'}.json`;
+}
+/** The command that makes a project's key file (it prints the key's address, never the key). */
+export const keygenCommand = keyFile => `npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ${keyFile}`;
 export const CLUSTER = 'devnet';
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 /** What every answer carries, so an agent never has to remember the program's address. */
@@ -235,7 +251,7 @@ function flagsToTell(economy, now) {
   const flags = legalFlags(check(economy, { now }));
   return flags.length
     ? [
-        "If you haven't told the person these yet, say each once, in a plain sentence (the approval page shows them too, and asks them to tick that they read them; after that, only when they ask):",
+        "If you haven't told the person these yet, say each once, in a plain sentence (what `approve` prints before anything is sent shows them too; after that, only when they ask):",
         ...flags.map(f => `- ${f.says}`),
         '',
       ]
@@ -565,7 +581,7 @@ export const tools = [
   {
     name: 'xsolana_publish',
     annotations: { ...READ, readOnlyHint: true },
-    description: `When the person says to put it live: returns what going live does (every step, in order, and its cost) and the one command they run themselves to approve it in their own wallet (\`${approveCommand()}\`, pinned to this exact version: give it as it is): it opens a local page where they connect a devnet wallet and approve each transaction. You never sign, never ask for a key, and never run the approval for them.`,
+    description: `When the person says to put it live: returns what going live does (every step, in order, and its cost) and the commands that do it, pinned to this exact version (give them as they are: \`${approveCommand()}\`). Going live is signed by a key file on the person’s own machine: \`keygen\` makes one for the project (it prints the address, never the key), and \`approve … --keypair <file>\` prints everything that would be sent and sends nothing until it is run again with the code it printed, which you do only after the person has read that printout and said yes. Never ask for, read or print a key, and open no signing page: the browser-wallet page (\`approve … --browser\`) is only for a person who asks for one.`,
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from, file } = await load(input, ctx);
@@ -608,21 +624,37 @@ export const tools = [
           steps: [],
           text: `Not published: ${NOT_PLAIN(target)}, and the approve command carries the file's name as it is. Ask the person to rename it (${RENAME}), then run xsolana_publish again with the new name.${footer}`,
         };
-      const command = approveCommand(target);
+      const keyFile = keyFileFor(economy.name);
+      const keygen = keygenCommand(keyFile);
+      const browserCommand = `${approveCommand(target)} --browser`;
+      const command = `${approveCommand(target)} --keypair ${keyFile}`;
       const text = [
         ...flagsToTell(economy, nowOf(ctx)),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, ${plural(p.approvals, 'wallet approval')}, about ${c.setup.totalSol} SOL on devnet:`,
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on devnet:`,
         ...steps.map((s, i) => `${i + 1}. ${s}`),
         '',
-        `To put it live, the person runs this in a terminal in the project folder (not you): ${command}`,
-        'It opens a page on their own computer; they connect a wallet set to devnet and approve. What lands is written back into the file.',
-        'The page also says the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them (DISCLAIMER.md in the package). They tick that they read it, so it needs no repeating unless they ask.',
-        ...(file ? [] : [`(Save it first with xsolana_save: the approval reads ${DEFAULT_FILE}.)`]),
+        `${change.scope.live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
+        ...(change.scope.live
+          ? [
+              `1. The key that owns the project signs, as when it went live: its key file (${keyFile} is the usual place; give the file’s own path if it is elsewhere), or, for a project that was set up in a browser wallet, that wallet (the --browser command below). It needs about ${c.setup.totalSol} SOL of devnet SOL.`,
+            ]
+          : [
+              `1. A key file for this project, unless it has one: ${keygen}`,
+              `   It prints the key’s address, never the key. The person sends that address devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some). The key file is the project’s owner: whoever can read it controls the project. It stays where it is: never in a chat, a spec, a repository or a page, and you never read or print it.`,
+            ]),
+        `2. ${command}`,
+        '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them: DISCLAIMER.md in the package) and a code. It sends nothing.',
+        '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file; if it stops part way, the same command goes on from where it stopped.',
+        `${change.scope.live ? 'Only for a project a browser wallet owns, or when' : 'Only if'} the person asks to sign in a browser wallet instead: ${browserCommand} serves a page on their own computer where they connect a wallet set to devnet and approve (${plural(p.approvals, 'approval')}). Don’t open it otherwise.`,
+        ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');
       return {
         ok: true,
         command,
+        keygen,
+        keyFile,
+        browserCommand,
         transactions: p.transactions.length,
         approvals: p.approvals,
         setupSol: c.setup.totalSol,

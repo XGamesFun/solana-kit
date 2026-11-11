@@ -59,3 +59,39 @@ test('a node behind the cluster (-32005, -32016) is asked again; minContextSlot 
   assert.equal(bodies[2].params[1].minContextSlot, 516_494_860);
   assert.equal(bodies[2].params[1].commitment, 'confirmed');
 });
+
+test('a send refused for a blockhash the node has not seen yet is sent again; one truly gone is refused', async () => {
+  const notFound = {
+    jsonrpc: '2.0',
+    id: 1,
+    error: {
+      code: -32002,
+      message: 'Transaction simulation failed: Blockhash not found',
+      data: { err: 'BlockhashNotFound', logs: [] },
+    },
+  };
+  let calls = 0;
+  const waits = [];
+  const behind = async () =>
+    ++calls <= 2 ? answer(200, notFound) : answer(200, { jsonrpc: '2.0', id: 3, result: 'sig' });
+  const rpc = rpcClient('http://rpc', { fetchImpl: behind, sleepImpl: async ms => waits.push(ms) });
+  assert.equal(await rpc.send(new Uint8Array(3)), 'sig');
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [500, 1000]);
+
+  calls = 0;
+  const gone = rpcClient('http://rpc', {
+    fetchImpl: async () => (calls++, answer(200, notFound)),
+    sleepImpl: async () => {},
+  });
+  await assert.rejects(gone.send(new Uint8Array(3)), e => {
+    assert.equal(e.code, -32002);
+    assert.match(e.message, /Blockhash not found/);
+    return true;
+  });
+  assert.equal(calls, 5, 'asked again four times, then the refusal is the answer');
+  // (only a send: a read that names a blockhash is not asked again for it)
+  calls = 0;
+  await assert.rejects(gone.call('simulateTransaction', ['x']), /Blockhash not found/);
+  assert.equal(calls, 1);
+});

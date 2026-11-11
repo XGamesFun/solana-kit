@@ -184,7 +184,7 @@ test(
     // a tool that does not read the chain says what approving will do, and that it reads the record first
     const said = await runTool('xsolana_publish', { spec: next }, { now: NOW });
     assert.equal(said.transactions, 1);
-    assert.match(said.text, /at most 1 transaction, 1 wallet approval, about 0\.000005002 SOL/);
+    assert.match(said.text, /at most 1 transaction, about 0\.000005002 SOL/);
     assert.match(
       said.text,
       /Change what the token BUBL \(mint \w+\) is called on chain.*\(sent only if the token has a name record its owner can still change, read when approving\)/,

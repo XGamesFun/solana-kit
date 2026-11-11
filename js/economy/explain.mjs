@@ -613,7 +613,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   lines.push(
     '',
-    'Devnet only: nothing here is real money. Going live is your approval in your own wallet: no one else signs, and no key is ever shared.',
+    'Devnet only: nothing here is real money. Nothing is sent before your yes to exactly what going live does, and it is signed on your own machine by the project’s key file: no seed phrase or wallet key is ever asked for.',
   );
   return {
     ok: true,

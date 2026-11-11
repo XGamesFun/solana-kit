@@ -54,7 +54,7 @@ describe('a key file', () => {
     }
     const key = await readKeyFile(file);
     assert.equal(key.address, made.address);
-    assert.deepEqual(Object.keys(key).sort(), ['address', 'drop', 'file', 'sign']);
+    assert.deepEqual(Object.keys(key).sort(), ['address', 'drop', 'file', 'sign', 'signTransaction']);
     const message = new TextEncoder().encode('a message');
     assert.ok(verifySignature(made.address, message, key.sign(message)), 'it signs as its address');
     key.drop();

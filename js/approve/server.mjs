@@ -1,4 +1,6 @@
-// `xsolana approve`: a page on 127.0.0.1 where the owner of an economy approves going live in their own wallet. The
+// `xsolana approve --browser`: a page on 127.0.0.1 where the owner of an economy approves going live in a browser
+// wallet, served only when asked for (`xsolana approve --keypair`, js/approve/with-key.mjs, drives this same approval
+// with a key file and no page). The
 // server builds each transaction (js/economy/plan.mjs), has the fresh keys a setup makes sign their part, and sends
 // only what it prepared: a wallet's answer must carry the exact message prepared for it and that wallet's valid
 // signature. Each prepared batch answers once and expires after 90 seconds. What lands is written back into the spec
@@ -14,9 +16,9 @@ import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
-import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
+import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
-import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { compileMessage, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
@@ -895,6 +897,48 @@ const sameText = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
+/** What a Compute Budget instruction asks for, by its first byte. */
+const BUDGET_ASKS = {
+  1: 'a heap size',
+  2: 'a compute unit limit',
+  3: 'a compute unit price (a priority fee of its own)',
+  4: 'a limit on the account data loaded',
+};
+
+/**
+ * What a wallet did to a message it was to sign as it stood, in words for the refusal: " (it added …)" when the
+ * message it signed is the prepared one with instructions added (a wallet that adds its own priority fee, or checks
+ * of its own), " (it put another blockhash on it)", or '' when the change is anything else or can't be read.
+ */
+export function walletChange(ours, theirs) {
+  try {
+    const [a, b] = [readMessage(ours), readMessage(theirs)];
+    const told = m =>
+      m.instructions.map(ix => ({
+        program: m.keys[ix.programIndex],
+        kind: ix.data[0],
+        text: `${m.keys[ix.programIndex]} ${ix.accountIndexes.map(i => m.keys[i] ?? `#${i}`).join(',')} ${toBase64(ix.data)}`,
+      }));
+    const mine = told(a);
+    const added = [];
+    let at = 0;
+    for (const ix of told(b)) {
+      if (at < mine.length && ix.text === mine[at].text) at++;
+      else added.push(ix);
+    }
+    if (at !== mine.length || !added.length)
+      return a.blockhash !== b.blockhash ? ' (it put another blockhash on it)' : '';
+    const what = added.map(ix =>
+      ix.program === COMPUTE_BUDGET_PROGRAM
+        ? (BUDGET_ASKS[ix.kind] ?? 'a compute budget instruction')
+        : `an instruction of the program ${ix.program}`,
+    );
+    return ` (it added ${[...new Set(what)].join(', ')})`;
+  } catch {
+    return '';
+  }
+}
+
 /** The wallet's signed copies: each the exact prepared message, each with the wallet's valid signature. */
 function checkSigned(prepared, signed, wallet) {
   if (!Array.isArray(signed) || signed.length !== prepared.length)
@@ -909,7 +953,10 @@ function checkSigned(prepared, signed, wallet) {
       throw new ApproveError(400, 'The wallet returned something that is not a transaction.');
     }
     if (!equalBytes(mine.message, theirs.message))
-      throw new ApproveError(400, 'The wallet changed the transaction before signing it, so nothing was sent.');
+      throw new ApproveError(
+        400,
+        `The wallet changed the transaction before signing it${walletChange(mine.message, theirs.message)}, so nothing was sent: only what was prepared and shown here is ever sent. A wallet that adds to what it signs can’t approve this way. Sign with a key file instead, which signs each transaction as it stands: xsolana approve --keypair (xsolana keygen makes one).`,
+      );
     const slot = mine.signers.indexOf(wallet);
     if (slot < 0) throw new ApproveError(400, 'This transaction was not prepared for that wallet.');
     const signature = theirs.signatures[slot];

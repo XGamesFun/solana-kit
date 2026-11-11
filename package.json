@@ -70,6 +70,10 @@
       "types": "./types/results/index.d.ts",
       "default": "./js/results/index.js"
     },
+    "./keyfile": {
+      "types": "./types/approve/keyfile.d.mts",
+      "default": "./js/approve/keyfile.mjs"
+    },
     "./idl.json": "./js/client/idl/loot.json",
     "./package.json": "./package.json",
     "./release.json": "./release.json",
