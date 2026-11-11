@@ -129,3 +129,78 @@ test('a send the cluster has already taken is a send: its signature is the trans
   const other = rpcClient('http://rpc', { fetchImpl: async () => answer(200, refused), sleepImpl: async () => {} });
   await assert.rejects(other.send(wire), /custom program error/);
 });
+
+test('a refusal says whether an earlier try of the same send went unanswered, and a program’s words are its own', async () => {
+  const { alreadyProcessed } = await import('../chain/rpc.js');
+  const notFound = {
+    jsonrpc: '2.0',
+    id: 1,
+    error: {
+      code: -32002,
+      message: 'Transaction simulation failed: Blockhash not found',
+      data: { err: 'BlockhashNotFound', logs: [] },
+    },
+  };
+  // The first try's connection drops (a node may have taken it); every later one is refused by a node behind.
+  let calls = 0;
+  const dropped = rpcClient('http://rpc', {
+    fetchImpl: async () => {
+      if (++calls === 1) throw new Error('socket hang up');
+      return answer(200, notFound);
+    },
+    sleepImpl: async () => {},
+  });
+  await assert.rejects(dropped.send(new Uint8Array(3)), e => {
+    assert.equal(e.code, -32002);
+    assert.equal(e.err, 'BlockhashNotFound');
+    assert.equal(e.maybeTaken, true);
+    return true;
+  });
+  // A gateway's failure is no answer either.
+  calls = 0;
+  const gateway = rpcClient('http://rpc', {
+    fetchImpl: async () => (++calls === 1 ? answer(502, null) : answer(200, notFound)),
+    sleepImpl: async () => {},
+  });
+  await assert.rejects(gateway.send(new Uint8Array(3)), e => e.maybeTaken === true);
+  // Every try answered with a refusal: no node took it.
+  const answered = rpcClient('http://rpc', { fetchImpl: async () => answer(200, notFound), sleepImpl: async () => {} });
+  await assert.rejects(answered.send(new Uint8Array(3)), e => e.maybeTaken === false);
+  // (a read is never a send that may have been taken)
+  calls = 0;
+  const read = rpcClient('http://rpc', {
+    fetchImpl: async () => {
+      if (++calls === 1) throw new Error('socket hang up');
+      return answer(200, { jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'Invalid params' } });
+    },
+    sleepImpl: async () => {},
+  });
+  await assert.rejects(read.call('getAccountInfo', ['x']), e => e.maybeTaken === false);
+
+  // "Already processed" is the node's own word for a transaction it has, never a program's log line or error name.
+  assert.equal(alreadyProcessed({ err: 'AlreadyProcessed', message: 'anything' }), true);
+  assert.equal(
+    alreadyProcessed({ message: 'Transaction simulation failed: This transaction has already been processed' }),
+    true,
+  );
+  const programs = {
+    jsonrpc: '2.0',
+    id: 1,
+    error: {
+      code: -32002,
+      message: 'Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1771',
+      data: {
+        err: { InstructionError: [0, { Custom: 6001 }] },
+        logs: [
+          'Program log: AnchorError occurred. Error Code: AlreadyProcessed. Error Number: 6001. Error Message: This claim has already been processed.',
+        ],
+      },
+    },
+  };
+  const refusing = rpcClient('http://rpc', { fetchImpl: async () => answer(200, programs), sleepImpl: async () => {} });
+  await assert.rejects(refusing.send(new Uint8Array(3)), e => {
+    assert.match(e.message, /This claim has already been processed/);
+    assert.equal(alreadyProcessed(e), false);
+    return true;
+  });
+});

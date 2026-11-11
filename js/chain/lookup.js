@@ -167,6 +167,17 @@ export function compileFitting({ payer, blockhash, instructions, tables = [] }) 
 }
 
 /**
+ * The message for a transaction that has two forms, `led` (the instructions with something put first for a wallet's
+ * sake: a compute budget) and `plain` (without it), keeping the kind of transaction `plain` alone would be: legacy
+ * when `plain` fits one (led when that fits too), else v0 with `tables` (led when that fits). null when neither fits.
+ */
+export function compileKeepingKind({ payer, blockhash, led, plain, tables = [] }) {
+  const legacy = instructions => compileFitting({ payer, blockhash, instructions });
+  const loaded = instructions => compileFitting({ payer, blockhash, instructions, tables });
+  return legacy(led) ?? legacy(plain) ?? loaded(led) ?? loaded(plain);
+}
+
+/**
  * The plan for sending `instructions` from `payer` as v0 with a table of their accounts made at `slot`, `first` the
  * addresses it holds first:
  * { table: { address, addresses }, steps: [instructions…] (each a legacy transaction: the table's creation and as

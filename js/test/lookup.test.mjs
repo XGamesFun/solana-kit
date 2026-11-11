@@ -10,6 +10,7 @@ import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
 import {
   compileFitting,
+  compileKeepingKind,
   createTableIx,
   deactivateTableIx,
   extendTableIx,
@@ -538,5 +539,47 @@ describe('xsolana_check sizes every box’s settle', async () => {
       heap.message,
       /send a settle too big for a legacy transaction as a v0 one with a lookup table \(W-SETTLE-V0\): it lands/,
     );
+  });
+});
+
+describe('a transaction with two forms keeps the kind its plain form has', () => {
+  // An instruction of `bytes` of data naming `accounts` addresses, from `payer`.
+  const random = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (n * 31 + i * 7 + 1) % 256));
+  const big = (payer, bytes, accounts) => ({
+    programId: random(99),
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      ...Array.from({ length: accounts }, (_, i) => ({ pubkey: random(i), isSigner: false, isWritable: false })),
+    ],
+    data: new Uint8Array(bytes),
+  });
+  const lead = { programId: random(98), keys: [], data: new Uint8Array(40) };
+  const payer = random(200);
+  const blockhash = random(201);
+  const kind = message => (message ? (message[0] & 0x80 ? 'v0' : 'legacy') : null);
+  const carries = (message, ix) =>
+    Buffer.from(message).includes(Buffer.from(ix.data.length === 40 ? [40, ...ix.data] : []));
+
+  test('legacy stays legacy, with the lead where it fits and without it where it does not; v0 only for what needed it', () => {
+    const tables = [{ address: random(202), addresses: Array.from({ length: 20 }, (_, i) => random(i)) }];
+    const form = plain => compileKeepingKind({ payer, blockhash, led: [lead, ...plain], plain, tables });
+    // Small: legacy, led.
+    const small = [big(payer, 100, 4)];
+    assert.equal(kind(form(small)), 'legacy');
+    assert.ok(carries(form(small), lead));
+    // Fits a legacy transaction alone, and not with the lead: legacy still, without it (v0 with it would fit).
+    const tight = [big(payer, 380, 20)];
+    assert.equal(kind(compileFitting({ payer, blockhash, instructions: tight })), 'legacy');
+    assert.equal(kind(compileFitting({ payer, blockhash, instructions: [lead, ...tight] })), null);
+    assert.equal(kind(compileFitting({ payer, blockhash, instructions: [lead, ...tight], tables })), 'v0');
+    assert.equal(kind(form(tight)), 'legacy');
+    assert.ok(!carries(form(tight), lead));
+    // Needs the tables anyway: v0, led.
+    const wide = [big(payer, 520, 20)];
+    assert.equal(kind(compileFitting({ payer, blockhash, instructions: wide })), null);
+    assert.equal(kind(form(wide)), 'v0');
+    assert.ok(carries(form(wide), lead));
+    // Fits neither way: null.
+    assert.equal(form([big(payer, 1300, 2)]), null);
   });
 });

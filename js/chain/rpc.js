@@ -22,11 +22,19 @@ const BEHIND = [-32005, -32016];
 
 /** A JSON-RPC failure, with the node's own message (and logs for a failed simulation). */
 export class RpcError extends Error {
-  constructor(message, { code, logs } = NO_OPTIONS) {
+  /**
+   * `code`: the node's own error code, when a node answered. `logs`: a failed dry run's program logs. `err`: the
+   * node's own name for why a transaction was refused ("BlockhashNotFound", "AlreadyProcessed", or the program's
+   * error as the chain writes it). `maybeTaken`: a send whose earlier try got no answer, so a node may have taken the
+   * transaction although the last try was refused.
+   */
+  constructor(message, { code, logs, err, maybeTaken } = NO_OPTIONS) {
     super(message);
     this.name = 'RpcError';
     this.code = code;
     this.logs = logs;
+    this.err = err;
+    this.maybeTaken = Boolean(maybeTaken);
   }
 }
 
@@ -73,8 +81,16 @@ export function programError(err, logs) {
   return last ?? (typeof err === 'string' ? err : JSON.stringify(err));
 }
 
-/** Whether a send was refused because the cluster has this very transaction already (it was sent before). */
-export const alreadyProcessed = error => /already been processed|AlreadyProcessed/i.test(String(error?.message ?? ''));
+/**
+ * Whether a send was refused because the cluster has this very transaction already (it was sent before): the node's
+ * own word for it (`err`), or, from a node that gives only a sentence, its sentence. Never a program's log line: a
+ * dry run that failed inside a program is that program's refusal, whatever its words.
+ */
+export const alreadyProcessed = error =>
+  error?.err === 'AlreadyProcessed' ||
+  (error?.err === undefined &&
+    !error?.logs?.length &&
+    /this transaction has already been processed/i.test(String(error?.message ?? '')));
 
 /** Whether a send's refusal is the dry run not knowing the transaction's blockhash. */
 const blockhashNotFound = error =>
@@ -84,6 +100,8 @@ const blockhashNotFound = error =>
 export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
   let id = 0;
   async function call(method, params = []) {
+    // A try that got no answer (the connection dropped, a gateway failed): a node may have taken what it carried.
+    let unanswered = false;
     for (let attempt = 0; ; attempt++) {
       let response;
       try {
@@ -94,6 +112,7 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
       } catch (error) {
+        unanswered = true;
         if (attempt < RETRIES) {
           await sleepImpl(500 * 2 ** attempt);
           continue;
@@ -106,6 +125,7 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
         continue;
       }
       // Sending the same signed transaction again is safe: it has one signature, so it lands once at most.
+      if (PASSING.includes(response.status)) unanswered = true;
       if (PASSING.includes(response.status) && attempt < RETRIES) {
         await sleepImpl(500 * 2 ** attempt);
         continue;
@@ -136,7 +156,12 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
         const said = logs?.length
           ? `The network refused this in a dry run: ${programError(body.error.data.err, logs)}`
           : message;
-        throw new RpcError(said, { code: body?.error?.code, logs });
+        throw new RpcError(said, {
+          code: body?.error?.code,
+          logs,
+          err: body?.error?.data?.err,
+          maybeTaken: method === 'sendTransaction' && unanswered,
+        });
       }
       return body.result;
     }

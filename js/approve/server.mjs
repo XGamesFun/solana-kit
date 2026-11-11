@@ -617,9 +617,11 @@ export async function createApproval({
           await chain.send(wire);
         } catch (e) {
           // A refusal alone does not say it was never taken: when the answer to a first send is lost, the same
-          // transaction sent again is refused as already processed, and it has landed. So the chain is asked before
-          // the signature is forgotten. Only one the chain has not seen and the node refused for another reason can
-          // never land; one whose fate can't be read is kept, and looked up before anything is sent again.
+          // transaction sent again is refused as already processed, and it has landed; or the second try reaches a
+          // node a moment behind, which refuses it for a blockhash or an account it has not seen yet. So the chain
+          // is asked before the signature is forgotten, and it is forgotten only when it can never land: the chain
+          // says it failed, or a node answered this send with a refusal and no earlier try of it went unanswered
+          // (`maybeTaken`). Anything else is kept, and looked up before anything is sent again.
           let status = null;
           let read = Boolean(chain.signatureStatus);
           if (read)
@@ -630,7 +632,8 @@ export async function createApproval({
             }
           const taken = landedStatus(status) || (!status?.err && (Boolean(status) || alreadyProcessed(e)));
           if (!taken) {
-            if (!chain.signatureStatus || status?.err || (read && e.code !== undefined)) await forget(signature);
+            if (!chain.signatureStatus || status?.err || (read && e.code !== undefined && !e.maybeTaken))
+              await forget(signature);
             throw e;
           }
         }

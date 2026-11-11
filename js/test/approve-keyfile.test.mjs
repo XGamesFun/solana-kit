@@ -149,14 +149,19 @@ describe('a key file', () => {
       mkdirSync(path.join(open, '.git'), { recursive: true });
       await assert.rejects(makeKeyFile(path.join(open, 'owner.json')), /inside the git repository/);
       // git is asked about the folder the key is in, whatever repository the caller's own environment names.
+      // (the caller's settings name another repository, whose work tree is the whole disk and which ignores
+      // everything: asked with them, git would call the key ignored)
       const elsewhere = folder();
       execFileSync('git', ['init', '-q', elsewhere]);
-      writeFileSync(path.join(elsewhere, '.gitignore'), '*\n');
+      writeFileSync(path.join(elsewhere, '.git', 'info', 'exclude'), '*\n');
       const env = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE };
       process.env.GIT_DIR = path.join(elsewhere, '.git');
-      process.env.GIT_WORK_TREE = elsewhere;
+      process.env.GIT_WORK_TREE = path.parse(repo).root;
       try {
+        const asked = spawnSync('git', ['-C', repo, 'check-ignore', '-q', '--', path.join(repo, 'env.json')]);
+        assert.equal(asked.status, 0, 'with the caller’s settings git calls the key ignored: the test bites');
         await assert.rejects(makeKeyFile(path.join(repo, 'env.json')), /inside the git repository/);
+        assert.equal(existsSync(path.join(repo, 'env.json')), false);
       } finally {
         for (const [name, value] of Object.entries(env))
           if (value === undefined) delete process.env[name];
@@ -552,10 +557,21 @@ describe('xsolana approve --keypair', () => {
       approvalCode({ ...named('AnotherFreshMint111111111111111111111111111'), fresh: again.fresh }, spec),
       approvalCode(named('FreshMintAddress1111111111111111111111111111'), spec),
     );
+    // Any other address in a line is in the code (these two are real ones: nothing but times and new accounts is
+    // left out of the lines).
     assert.notEqual(
-      approvalCode(named('SomeOtherAddress1111111111111111111111111111'), spec),
-      approvalCode(named('FreshMintAddress1111111111111111111111111111'), spec),
+      approvalCode(named('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'), spec),
+      approvalCode(named('So11111111111111111111111111111111111111112'), spec),
     );
+    // A time years off is written by the day, with the years it is away: the same code a day on.
+    const far = day =>
+      step(1, { details: [`It draws on ${day} November 2030, 4 years from now: what waits on it is locked`] });
+    assert.equal(approvalCode(far(11), spec), approvalCode(far(12), spec));
+    assert.equal(
+      approvalCode({ ...state, warnings: ['“draw” lands on 11 November 2030, 4 years after go-live'] }, spec),
+      approvalCode({ ...state, warnings: ['“draw” lands on 12 November 2031, 5 years after go-live'] }, spec),
+    );
+    assert.notEqual(approvalCode(far(11), spec), approvalCode(step(1, { details: ['It draws in 4 days'] }), spec));
   });
 
   test('a time counted from “publish” is not a new code a second later', { skip: skip ?? false }, async () => {
@@ -760,10 +776,123 @@ describe('xsolana approve --keypair', () => {
     assert.equal(two.ok, false);
     assert.equal(later.signed.length, 1, 'the batch that was shown was signed, and no other');
     assert.match(two.text, /Stopped after 1 transaction: what is left to send is not what was shown above/);
+    // What the chain says of the tokens changed after a batch (a line that was not read): it stops there too.
+    const reread = fake({ prepared: ['a'], left: ['b'] });
+    reread.approval = (inner => async () => {
+      const s = await inner();
+      let turn = 0;
+      return { ...s, stateFor: async w => ({ ...(await s.stateFor(w)), read: turn++ ? 'r1' : 'r0' }) };
+    })(reread.approval);
+    const three = await go(reread);
+    assert.equal(three.ok, false);
+    assert.equal(reread.signed.length, 1);
+    assert.match(three.text, /what is left to send is not what was shown above/);
+    // A batch that does not say which steps it carries can't be held against the printout: nothing is signed.
+    const mute = fake({ prepared: ['a'], left: [] });
+    mute.approval = (inner => async () => {
+      const s = await inner();
+      return { ...s, prepare: async () => ({ ...(await s.prepare()), steps: undefined }) };
+    })(mute.approval);
+    assert.equal((await go(mute)).ok, false);
+    assert.equal(mute.signed.length, 0);
     // Shown steps, batch by batch, go through.
     const fine = fake({ prepared: ['a'], left: [] });
     await go(fine);
     assert.equal(fine.signed.length, 1);
+  });
+
+  test('a refused send is forgotten only when it can never land', { skip: skip ?? false }, async () => {
+    const refusal = more =>
+      Object.assign(new Error('Transaction simulation failed: Blockhash not found'), { code: -32002, ...more });
+    const once = async (seed, { fail, statusOf }) => {
+      const w = world({ project: false, seed });
+      w.chain.warp(NOW);
+      const file = path.join(folder(), 'xsolana.json');
+      writeFileSync(file, JSON.stringify(example('coin-flip-arena'), null, 2));
+      const keyFile = path.join(folder(), 'owner.json');
+      w.chain.airdrop((await makeKeyFile(keyFile)).address, 100_000_000_000n);
+      const held = [];
+      let sends = 0;
+      const real = approvalChain(w);
+      const chain = {
+        ...real,
+        send: async wire => {
+          if (++sends !== 2) return w.chain.sendWire(wire);
+          return fail(wire, w, held);
+        },
+        signatureStatus: async signature =>
+          statusOf ? statusOf(signature, real, sends) : real.signatureStatus(signature),
+      };
+      const lines = [];
+      const run = () => approveWithKey({ file, keyFile, chain, now: () => NOW, yes: true, out: l => lines.push(l) });
+      const first = await run();
+      return {
+        w,
+        file,
+        run,
+        first,
+        lines,
+        held,
+        sends: () => sends,
+        saved: () => JSON.parse(readFileSync(file, 'utf8')),
+      };
+    };
+    // An earlier try of this send got no answer (`maybeTaken`), and the node that answered was behind: kept. It
+    // lands after all, the next run finds it, and it is sent once.
+    const lagging = await once('refused-may-be-taken', {
+      fail: (wire, _w, held) => {
+        held.push(wire);
+        throw refusal({ maybeTaken: true });
+      },
+    });
+    assert.equal(lagging.first.ok, false);
+    assert.equal(lagging.saved().live.pending.length, 1, 'kept, not forgotten');
+    assert.match(lagging.lines.at(-1), /1 more was sent and is not known to have landed yet/);
+    lagging.w.chain.sendWire(lagging.held[0]);
+    const before = lagging.sends();
+    const next = await lagging.run();
+    assert.equal(next.done, true, lagging.lines.join('\n'));
+    // (four more went, and the one that had landed was not among them: five transactions in all, each once)
+    assert.equal(lagging.saved().live.transactions.length, 5);
+    assert.equal(lagging.sends() - before, 3);
+
+    // The same refusal with every try answered: no node took it, so it is forgotten and made again at once.
+    const answered = await once('refused-never-taken', {
+      fail: () => {
+        throw refusal({});
+      },
+    });
+    assert.equal(answered.first.ok, false);
+    assert.equal(answered.saved().live.pending, undefined);
+    assert.equal((await answered.run()).done, true);
+
+    // The chain can't be asked about it just then: kept.
+    const unread = await once('refused-unread', {
+      fail: () => {
+        throw refusal({});
+      },
+      statusOf: (signature, real, sends) => {
+        if (sends === 2) throw new Error('RPC getSignatureStatuses did not answer');
+        return real.signatureStatus(signature);
+      },
+    });
+    assert.equal(unread.first.ok, false);
+    assert.equal(unread.saved().live.pending.length, 1);
+
+    // Refused as already processed while the node asked has not seen it yet: it goes on to wait for it, and lands.
+    const hidden = new Set();
+    const early = await once('already-processed-unseen', {
+      fail: (wire, w) => {
+        hidden.add(w.chain.sendWire(wire));
+        throw Object.assign(new Error('Transaction simulation failed: This transaction has already been processed'), {
+          code: -32002,
+          err: 'AlreadyProcessed',
+        });
+      },
+      statusOf: (signature, real) => (hidden.delete(signature) ? null : real.signatureStatus(signature)),
+    });
+    assert.equal(early.first.done, true, early.lines.join('\n'));
+    assert.equal(early.saved().live.transactions.length, early.sends());
   });
 });
 

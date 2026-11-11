@@ -44,6 +44,7 @@ import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { extension, mayStartFrozen, mintPowers, resolveTransfers } from '../chain/token2022.js';
 import {
   compileFitting,
+  compileKeepingKind,
   closeTableIx,
   deactivateTableIx,
   readTable,
@@ -815,10 +816,13 @@ export function solanaApp({
         ...instructions,
         ...(back > 0n ? [sponsorGiveBack(sponsor.address, me, back)] : []),
       ];
-      const led = withComputeBudget(list, { units: SPONSORED_UNITS, microLamports: 0n });
-      const legacy = instructions => compileFitting({ payer: sponsor.address, blockhash, instructions });
-      const loaded = instructions => compileFitting({ payer: sponsor.address, blockhash, instructions, tables });
-      return legacy(led) ?? legacy(list) ?? loaded(led) ?? loaded(list);
+      return compileKeepingKind({
+        payer: sponsor.address,
+        blockhash,
+        led: withComputeBudget(list, { units: SPONSORED_UNITS, microLamports: 0n }),
+        plain: list,
+        tables,
+      });
     };
     const tried = compile();
     if (!tried) return null;
