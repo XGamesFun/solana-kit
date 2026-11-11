@@ -2316,10 +2316,15 @@ export function solanaApp({
     let { closes, waits } = proof ? await closesOf(asset, found, proof) : { closes: [], waits: found };
     let why = '';
     if (closes.length) {
-      const tried = await dryRun(wallet.address, [
-        computeUnitLimit(1_400_000),
-        ...closes.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM),
-      ]);
+      const trial = [computeUnitLimit(1_400_000), ...closes.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM)];
+      // Tried in a dry run when they are one transaction as they stand; a longer list is made to fit as it is sent.
+      const one = compileFitting({
+        payer: wallet.address,
+        blockhash: NOBODY,
+        instructions: trial,
+        tables: await standing(),
+      });
+      const tried = one ? await dryRun(wallet.address, trial) : { ok: true };
       if (!tried.ok) {
         why = tried.error ? ` Closing it was refused in a dry run: ${tried.error.msg} (${tried.error.name}).` : '';
         [closes, waits] = [[], found];

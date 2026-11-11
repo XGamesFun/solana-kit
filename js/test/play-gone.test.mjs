@@ -199,6 +199,31 @@ test(
   },
 );
 
+test(
+  'the devnet scenario’s steps: a third wallet closes a running hold whose NFT was taken, and every lamport of rent goes to its payer',
+  { skip },
+  async () => {
+    const { w, controller, collection, mint, landed } = fixture('gone-stranger');
+    const [player, stranger] = [appOf(w, w.player), appOf(w, w.who())];
+    const nft = mint(w.player);
+    const { freeAt } = await player.hold(nft, 3600);
+    const hold = pda.hold(nft, freeAt);
+    await assert.rejects(stranger.closeGone(nft), /Nothing shows that the project no longer holds/);
+    assert.ok(w.chain.get(hold), 'held: nothing closes');
+
+    takeBack(w, controller, collection, nft);
+    assert.equal((await player.claims()).find(c => c.asset === nft)?.gone, true);
+    const [rent, payer, sender] = [lamports(w, hold), lamports(w, w.player), lamports(w, stranger.wallet)];
+    const closed = await stranger.closeGone(nft);
+    assert.deepEqual([closed.closed, closed.waits], [[{ kind: 'hold', address: hold }], []]);
+    closedGone(w, logged(landed, closed.signature), hold, nft, stranger.wallet);
+    assert.equal(lamports(w, w.player), payer + rent, 'all of its rent to the player who paid it');
+    assert.equal(lamports(w, stranger.wallet), sender - FEE, 'the sender pays the network fee only');
+    assert.equal(coreOwner(w, nft), controller, 'nothing moved');
+    assert.deepEqual(await stranger.closeGone(nft), { signature: null, closed: [], waits: [] }, 'nothing left');
+  },
+);
+
 // ---------------------------------------------------------------- a loan
 
 test(
@@ -604,6 +629,37 @@ test(
     assert.equal(receipt(tx, 'Held').player, next);
     assert.equal(lamports(w, earlier), before + rent, 'its rent to the earlier owner who paid it');
     assert.equal(w.read('Hold', pda.hold(nft, until)).player, next);
+  },
+);
+
+test(
+  'a deposit too wide to carry its closes sends them first, in a transaction of their own',
+  { skip: skipCompressed },
+  async () => {
+    // A compressed NFT of a deep tree: its proof of 17 nodes, the close and the deposit do not fit one transaction.
+    const { w, controller, collection, landed } = fixture('gone-deposit-wide', { compressed: true });
+    const tree = cnftTree(w, { maker: controller, collection, depth: 17, buffer: 64 });
+    const [earlier, next] = [w.who(), w.who()];
+    const nft = tree.mint(earlier);
+    const before = appOf(w, earlier, { rpc: tree.rpc });
+    const left = await before.hold(nft, 3600);
+    tree.moved(nft, w.project);
+    const hold = pda.hold(nft, left.freeAt);
+    tree.take(nft, controller, next);
+
+    const app = appOf(w, next, { rpc: tree.rpc });
+    const sent = landed.length;
+    const { signature, freeAt } = await app.hold(nft, 600);
+    tree.moved(nft, w.project);
+    assert.ok(app.calls.prompts > 1, `${app.calls.prompts} prompts: the closes went first`);
+    // The close landed before the deposit, in an earlier transaction.
+    const mine = landed.slice(sent);
+    const closing = mine.findIndex(tx => tx.receipts.some(r => r.name === 'NftGone' && r.data.record === hold));
+    const deposit = mine.findIndex(tx => tx.id === signature);
+    assert.ok(closing >= 0 && closing < deposit, `the close at ${closing}, the deposit at ${deposit}`);
+    assert.ok(!names(mine[deposit]).includes('NftGone') && names(mine[deposit]).includes('Held'));
+    assert.equal(w.chain.get(hold), null, 'the earlier hold is closed');
+    assert.equal(w.read('Hold', pda.hold(nft, freeAt)).player, next);
   },
 );
 
