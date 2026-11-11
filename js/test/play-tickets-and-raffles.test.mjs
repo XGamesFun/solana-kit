@@ -297,3 +297,54 @@ test(
     assert.ok(claims >= 1 && claims < 20, `${claims} claims`);
   },
 );
+
+test(
+  'tickets that cost an entry a recipe makes: the player crafts what they lack and buys, in one transaction and one approval',
+  { skip: skip ?? false },
+  async () => {
+    const w = world({ seed: 'tickets-make' });
+    const owner = freshKeypair();
+    w.chain.airdrop(owner.address, 100_000_000_000n);
+    const spec = await goLive(w, owner, {
+      version: 2,
+      network: loot.cluster(),
+      name: 'Bubble entries',
+      currency: 'sol',
+      tokens: [
+        { key: 'sol', source: 'sol' },
+        { key: 'entry', source: 'game', name: 'Entry', symbol: 'ENTRY', decimals: 0 },
+      ],
+      recipes: [
+        {
+          key: 'entry',
+          name: 'An entry',
+          in: [{ takes: 'pay', amount: 0.001, currency: 'sol', to: 'treasury' }],
+          out: [{ gives: 'tokens', amount: 1, currency: 'entry', from: 'mint' }],
+        },
+      ],
+      lotteries: [
+        { key: 'weekly', name: 'Weekly', pot: 0, price: 1, ticketCurrency: 'entry', places: [100], every: '7d' },
+      ],
+    });
+    const player = freshKeypair();
+    w.chain.airdrop(player.address, 10_000_000_000n);
+    let prompts = 0;
+    const wallet = {
+      address: player.address,
+      async signTransaction(wire) {
+        prompts++;
+        return asWallet(player).signTransaction(wire);
+      },
+    };
+    const app = solanaApp({ spec, rpc: w.chain.rpc, wallet, now: () => w.chain.now() });
+    const listing = (await app.lotteries()).find(l => l.key === 'weekly');
+    const recipe = (await app.recipes()).find(r => r.key === 'entry');
+    // short of four entries: the recipe makes them first, in the purchase's own transaction
+    await app.buyTickets('weekly', 4, { listing, make: { recipe: 'entry', times: 4, listing: recipe } });
+    assert.equal(prompts, 1, 'one approval for both');
+    assert.equal(BigInt((await app.lotteries()).find(l => l.key === 'weekly').sold), 4n, 'four tickets sold');
+    // a recipe that rolls can't ride along (none here): a recipe the spec doesn't have is refused before anything
+    await assert.rejects(app.buyTickets('weekly', 1, { listing, make: { recipe: 'nope', listing: recipe } }));
+    assert.equal(prompts, 1);
+  },
+);

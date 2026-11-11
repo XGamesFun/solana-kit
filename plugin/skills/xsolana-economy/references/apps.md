@@ -38,6 +38,11 @@ await app.openBox('chest', { listing: boxes.find(l => l.key === 'chest') }); // 
 await app.pay('entry'); // a payment of the spec
 const lotteries = await app.lotteries(); // [{ key, name, price, currency, status, round, sold, drawsAt, nftTicket, … }]
 await app.buyTickets('weekly', 2, { listing: lotteries.find(l => l.key === 'weekly') }); // an NFT ticket: { nft: asset, listing }
+// tickets that cost a token a recipe makes: craft what the player lacks in the same transaction, one approval
+await app.buyTickets('weekly', 10, {
+  listing,
+  make: { recipe: 'entry', times: 4, listing: recipes.find(r => r.key === 'entry') },
+});
 await app.payNft(asset, { to, reference }); // pay with an NFT (burned, or given to `to`): admit the player by the receipt
 await app.stake('farm', '10', 0); // tokens, at lock tier 0;  app.stakeNft('farm', asset) for a collectible
 await app.harvest('farm'); // rewards;  app.unstake('farm', '10') once the lock has run

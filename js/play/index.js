@@ -3220,7 +3220,9 @@ export function solanaApp({
      * `chosenRecipient`: the wallet (or collectible) the player names for a share the lottery lets them choose (a
      * referrer). A lottery whose ticket costs an NFT (`nft_ticket`) sells one ticket for one of the player's NFTs that
      * passes its rule: `nft`, its address (held by the project until the draw, then burned, given on or stashed; back to
-     * the player if the round is cancelled). `listProof`: for a list gate.
+     * the player if the round is cancelled). `listProof`: for a list gate. `make`: { recipe, times, listing (or
+     * version), assets }, a recipe crafted first in the same transaction, so a player short of what a ticket costs (an
+     * entry a recipe makes) approves once for both; a recipe that rolls can't ride along.
      */
     async buyTickets(
       lotteryKey,
@@ -3233,12 +3235,13 @@ export function solanaApp({
         listing,
         maxPrice,
         acceptLeftover,
+        make,
         ...others
       } = NO_OPTIONS,
     ) {
       only(
         others,
-        ['shown', 'chosenRecipient', 'listProof', 'nft', 'listing', 'maxPrice', 'acceptLeftover'],
+        ['shown', 'chosenRecipient', 'listProof', 'nft', 'listing', 'maxPrice', 'acceptLeftover', 'make'],
         'buyTickets',
       );
       const l = part('lotteries', lotteryKey);
@@ -3368,7 +3371,24 @@ export function solanaApp({
             );
         }
       }
-      const buy = [...before, ...withSolWrap(wallet.address, mint, BigInt(terms.price) * BigInt(count), [ix])];
+      // `make`: { recipe, times, listing (or version), assets }: a recipe crafted first in the same transaction, so a
+      // player short of what a ticket costs (an entry a recipe makes) approves once for both. Its outputs land before
+      // the purchase takes them; if either fails, neither happens.
+      const made = make
+        ? (
+            await this.craft(make.recipe, make.assets ?? [], make.times ?? 1, {
+              listing: make.listing,
+              version: make.version,
+              build: true,
+            })
+          ).instructions.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM)
+        : [];
+      const buy = [
+        ...(made.length ? [computeUnitLimit(1_400_000)] : []),
+        ...made,
+        ...before,
+        ...withSolWrap(wallet.address, mint, BigInt(terms.price) * BigInt(count), [ix]),
+      ];
       return send(
         await closesFirst(
           clears,
@@ -3799,8 +3819,13 @@ export function solanaApp({
      * read now is never signed in its place. `extra`: the tail a Core collection's plugins need when the craft moves or
      * rolls on a Core NFT (sent after the Memo program's account, as on every other Core move).
      */
-    async craft(recipeKey, assets = [], times = 1, { version, listing, extra = [], ...others } = NO_OPTIONS) {
-      only(others, ['version', 'listing', 'extra'], 'craft');
+    async craft(
+      recipeKey,
+      assets = [],
+      times = 1,
+      { version, listing, extra = [], build = false, ...others } = NO_OPTIONS,
+    ) {
+      only(others, ['version', 'listing', 'extra', 'build'], 'craft');
       const r = part('recipes', recipeKey);
       version ??= listing?.version ?? undefined;
       if (version === undefined || version === null)
@@ -3933,6 +3958,13 @@ export function solanaApp({
             rollOn ? loot.namedRollNonce(given.boxes[rollOn.box_id], on, nonce) : loot.prizeRollNonce(nonce),
           )
         : null;
+      // `build`: its instructions, unsent, for a step that rides in another's transaction (buyTickets' `make`). A recipe
+      // that rolls is settled after its transaction, so it can't ride along.
+      if (build) {
+        if (rolls)
+          throw new Error(`“${r.name ?? recipeKey}” rolls: it is crafted on its own (craft), not with another step.`);
+        return { instructions, made };
+      }
       const { signature, rolls: rolled } = await sendRolling(instructions);
       return { signature, made, ...(roll ? { roll } : {}), ...(rolled.length ? { rolled: rolled[0] } : {}) };
     },
