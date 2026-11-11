@@ -64,7 +64,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.26.3 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.26.4 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -75,22 +75,22 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.26.3 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.26.4 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.26.3 token <its mint address>
+npx -y @xgamesfun/solana@0.26.4 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.26.3 check xsolana.json
-npx -y @xgamesfun/solana@0.26.3 simulate xsolana.json
-npx -y @xgamesfun/solana@0.26.3 cost xsolana.json
+npx -y @xgamesfun/solana@0.26.4 check xsolana.json
+npx -y @xgamesfun/solana@0.26.4 simulate xsolana.json
+npx -y @xgamesfun/solana@0.26.4 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.26.3 explain xsolana.json
-npx -y @xgamesfun/solana@0.26.3 review xsolana.json
+npx -y @xgamesfun/solana@0.26.4 explain xsolana.json
+npx -y @xgamesfun/solana@0.26.4 review xsolana.json
 
 # go live, approved in your own wallet
-npx -y @xgamesfun/solana@0.26.3 approve xsolana.json
+npx -y @xgamesfun/solana@0.26.4 approve xsolana.json
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.

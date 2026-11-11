@@ -4,7 +4,9 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased: a live token's name can be changed (loot 0.26.1, unchanged)
+## 0.26.4: a live token's name, ticker or link can be changed (loot 0.26.1, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.26.1's.
 
 - **A change to a live token's name, ticker or link is written to its record at the next approve** (Token Metadata's
   UpdateMetadataAccountV2, signed by the owner, the record's update authority; `updateFungibleMetadataIx`). It costs
