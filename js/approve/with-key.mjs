@@ -68,9 +68,9 @@ export function approvalCode(state, spec) {
   return createHash('sha256').update(text).digest('hex').slice(0, 8);
 }
 
-/** A new account of the setup in words: "mint:gold" is the mint of the token “gold”. */
+/** A new account of the setup in words: "mint/gold" is the mint of the token “gold”. */
 const freshName = name =>
-  name.startsWith('mint:')
+  /^mint[/:]/.test(name)
     ? `the mint of the token “${name.slice(5)}”`
     : name === 'collection'
       ? 'the collection'

@@ -256,6 +256,12 @@ describe('xsolana approve --keypair', () => {
         for (const d of s.details) assert.ok(shown.text.includes(d), d);
       }
       assert.ok(shown.text.includes(`Project: ${state.project}`));
+      // The accounts the setup makes new, each named by what it is.
+      assert.match(
+        shown.text,
+        /New, made by this setup: the mint of the token “arena”, at [1-9A-HJ-NP-Za-km-z]{32,44} /,
+      );
+      assert.match(shown.text, /New, made by this setup: the collection, at [1-9A-HJ-NP-Za-km-z]{32,44} /);
       assert.match(shown.text, /The key holds 100 SOL\. Going live takes about [\d.]+ SOL\./);
       assert.ok(!shown.text.includes(JSON.parse(readFileSync(keyFile, 'utf8')).slice(0, 4).join(',')), 'never the key');
 
