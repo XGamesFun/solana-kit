@@ -10,7 +10,7 @@ const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
 export const PARTS = {
   tokens: {
     def: 'token',
-    says: 'The currencies: SOL, any existing mint by address (classic or Token-2022, coins from a token launchpad or an AMM included), or a token the game makes when it goes live: one the game mints as its rules say (points, tickets, shards, an emission), or one with a fixed `supply` minted once to the owner with minting turned off for good (a community token you keep). A token the game makes is named on chain as it is made (`name`, `symbol`, and `uri`: a link to a JSON file naming its picture), which is what wallets show; only the owner’s wallet can change that later, and changing them in a spec that is already live changes nothing on chain yet. loot does not put a token on a market: for trading, launch it on a token launchpad or an AMM, then name the mint.',
+    says: 'The currencies: SOL, any existing mint by address (classic or Token-2022, coins from a token launchpad or an AMM included), or a token the game makes when it goes live: one the game mints as its rules say (points, tickets, shards, an emission), or one with a fixed `supply` minted once to the owner with minting turned off for good (a community token you keep). A token the game makes is named on chain as it is made (`name`, `symbol`, and `uri`: a link to a JSON file naming its picture), which is what wallets show; only the owner’s wallet can change that later, and changing them in a spec that is already live changes nothing on chain yet. loot does not put a token on a market: for trading, launch it on a token launchpad or an AMM, then name the mint. `xsolana token <mint>` (xsolana_token) reads any existing mint into its entry, with its decimals, program and `powers` (what its own keys can do), so none of it is typed by hand.',
     acts: 'nobody: a token is a fact',
   },
   currency: {
@@ -160,7 +160,7 @@ export const CANNOT = [
     words: 'bonding curve market trading fees launch pump.fun meteora swap liquidity sell back creator coin',
     why: 'loot runs no market: it moves and sells what the game owns, it doesn’t trade between strangers',
     nearest: [
-      'launch the coin on a token launchpad or an AMM (a launchpad’s creator fees pay on trades), then name its mint as an existing token: loot’s shops, boxes, farms and gates use it; gives up nothing on loot’s side',
+      'launch the coin on a token launchpad or an AMM (a launchpad’s creator fees pay on trades), then name its mint as an existing token (`xsolana token <mint>` reads it into its entry): loot’s shops, boxes, farms and gates use it; gives up minting, since a coin launched this way usually has nobody left who can mint it, so the economy pays out only what its owner puts into its pools',
       'a shop listing whose price rises after each sale (`rise`), and a recipe that buys the token back at a fixed price from a reserve pool a share of each sale fills (`in`: a `pay` line burned; `out`: tokens from the pool): a one-way curve with a floor; gives up a market price, and the reserve is the authority’s to spend',
       'a game token with a fixed `supply` minted once to the owner, minting off for good: a community token the owner keeps and hands out; gives up a public market',
     ],

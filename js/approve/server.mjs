@@ -153,6 +153,11 @@ export async function createApproval({
 
   /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   const live = () => spec.live ?? null;
+  /**
+   * What the chain says the keys of the mints this spec names can do, where the spec doesn't say it (`checkMints`,
+   * read when a wallet connects): shown with the legal flags, so the owner ticks having read them before approving.
+   */
+  let mintPowers = [];
 
   /**
    * The owner a setup for `wallet` is built for, and its project, once every mint the spec names is held against the
@@ -162,7 +167,7 @@ export async function createApproval({
    */
   async function trust(wallet) {
     try {
-      await checkMints({ m: model(spec, { now: at }), chain });
+      mintPowers = (await checkMints({ m: model(spec, { now: at }), chain })).powers;
     } catch (e) {
       if (!(e instanceof MintMismatch)) throw e;
       throw new ApproveError(
@@ -319,8 +324,9 @@ export async function createApproval({
         ].filter(Boolean),
       ],
       // The legal flags in plain words, shown in a block of their own whatever the agent said: Approve waits until the
-      // owner ticks that they read them.
-      legal,
+      // owner ticks that they read them. With them, what the chain says a named token's mint can do that the spec
+      // doesn't say.
+      legal: [...legal, ...mintPowers.map(t => ({ code: 'W-MINT-POWERS', says: t.says }))],
       authority: model(spec).authority,
       steps,
       landed: [...done].map(id => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),

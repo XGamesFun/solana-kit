@@ -5,6 +5,9 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { addressBytes } from '../chain/base58.js';
+import { metadataAddress } from '../chain/metadata.js';
+import { parseMint, tokenEntry } from '../chain/mint.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
@@ -82,6 +85,7 @@ export const REMOTE_TOOLS = new Set([
   'xsolana_explain',
   'xsolana_review',
   'xsolana_status',
+  'xsolana_token',
   'xsolana_client',
 ]);
 
@@ -686,6 +690,100 @@ export const tools = [
         .filter(Boolean)
         .join('\n');
       return { ok: true, rows, text: text + footer };
+    },
+  },
+  {
+    name: 'xsolana_token',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    description:
+      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads devnet (or XSOLANA_RPC_URL): the mint and its name record only, never the link the record names.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mint: { type: 'string', description: 'The token’s mint address.' },
+        key: {
+          type: 'string',
+          pattern: '^[a-z][a-z0-9-]{0,31}$',
+          description: 'What the spec will call it (default: its ticker, in the letters a key takes).',
+        },
+      },
+      required: ['mint'],
+      additionalProperties: false,
+    },
+    async handler(input, ctx) {
+      const mint = String(input.mint ?? '').trim();
+      try {
+        addressBytes(mint);
+      } catch {
+        return {
+          ok: false,
+          text: `${JSON.stringify(mint)} is not a Solana address. Give the token’s mint address.${footer}`,
+        };
+      }
+      // Devnet only: a mainnet URL is refused, and so is a chain whose first block is mainnet's or testnet's.
+      const rpc = (ctx?.rpc ?? rpcClient)(notMainnet(process.env.XSOLANA_RPC_URL || DEVNET_RPC));
+      if (!ctx?.rpc) await checkCluster(rpc);
+      const [account, record] = await rpc.accounts([mint, metadataAddress(mint)]);
+      const token = tokenEntry(mint, account, record?.data ?? null, input.key ? { key: input.key } : {});
+      if (!token)
+        return {
+          ok: false,
+          text: `${
+            account
+              ? `${mint} is not a token mint on ${CLUSTER} (a token account or a wallet is not the mint: an explorer’s token page names it)`
+              : `There is nothing at ${mint} on ${CLUSTER}. A coin launched on mainnet is not on ${CLUSTER}, where loot runs for now`
+          }.${footer}`,
+        };
+      if (token.source === 'sol')
+        return {
+          ok: true,
+          token,
+          text: `${mint} is wrapped SOL: in a spec that is SOL itself.\n\nIn the spec’s "tokens":\n${JSON.stringify(token)}${footer}`,
+        };
+      const read = parseMint(mint, account.owner, account.data, record?.data ?? null);
+      const supply = Number(BigInt(read.supply)) / 10 ** read.decimals;
+      const p = token.powers;
+      // What each power lets whoever holds it do, in the checker's words (check.mjs W-MINT-POWERS).
+      const can = [
+        p.mintAuthority === 'someone else' && `mint more of it whenever they want (${read.mintAuthority} can)`,
+        p.freeze && 'freeze any account holding it, an economy’s pools and vaults included',
+        p.permanentDelegate && 'move or burn it out of any account',
+        p.transferHook && 'run a program of their own on every transfer, which can refuse one',
+        p.transferFeePercent > 0 && `keep ${p.transferFeePercent}% of every transfer`,
+        p.feeChangeable && 'raise its transfer fee, up to all of a transfer',
+        p.closeAuthority && 'close the mint and make it again with other powers',
+        p.pausable && 'pause every transfer of it',
+        p.defaultFrozen && 'have every new account of it start frozen',
+        !p.defaultFrozen && p.defaultState && p.freeze && 'switch every new account of it to start frozen',
+      ].filter(Boolean);
+      const also = [
+        p.nonTransferable && 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
+        p.confidentialTransfers &&
+          'Its holders can turn plain transfers into their account away (confidential transfers).',
+      ].filter(Boolean);
+      const text = [
+        `${read.symbol ?? 'A token with no name record'}${read.name && read.name !== read.symbol ? ` (“${read.name}”)` : ''} at ${mint} on ${CLUSTER}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}.`,
+        can.length
+          ? `Whoever controls its mint can:\n${can.map(c => `- ${c}`).join('\n')}\nAn economy in it is only as safe as the token: say so where players pay, stake or are paid.`
+          : 'Its mint has no key that can freeze it, take it, charge on it or stop a transfer.',
+        ...also,
+        `In the spec’s "tokens" (xsolana_check then says what each power means for the economy’s parts):\n${JSON.stringify(token, null, 2)}`,
+      ].join('\n\n');
+      return {
+        ok: true,
+        token,
+        mint: {
+          address: mint,
+          program: read.program,
+          decimals: read.decimals,
+          supply: read.supply,
+          name: read.name,
+          symbol: read.symbol,
+          mintAuthority: read.mintAuthority,
+          freezeAuthority: read.freezeAuthority,
+        },
+        text: text + footer,
+      };
     },
   },
   {

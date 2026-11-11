@@ -51,6 +51,7 @@ describe('the hosted xsolana MCP server', () => {
       'xsolana_review',
       'xsolana_simulate',
       'xsolana_status',
+      'xsolana_token',
     ]);
     for (const t of tools) assert.ok(!('file' in (t.inputSchema.properties ?? {})), `${t.name} takes no file`);
   });

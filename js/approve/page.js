@@ -60,6 +60,8 @@ export function approvalPage(token) {
 
   // The last state shown: ticking the legal box shows it again, with Approve enabled or not.
   let last = null;
+  // The legal lines the box was last shown with.
+  let legalShown = new Set();
   function render(state) {
     last = state;
     $('title').textContent = state.done ? `“${state.name}” is live` : `Approve “${state.name}”`;
@@ -97,6 +99,11 @@ export function approvalPage(token) {
     // The notice (no warranty, at the owner's own risk, legal where it runs) and this economy's legal flags, in a
     // block of their own whatever the agent said: Approve waits until the owner ticks that they read them.
     const legal = state.legal ?? [];
+    // A line that was not there when the box was ticked (what the chain says of a token, read once a wallet connects)
+    // has not been read: the box is cleared, and Approve waits for it again.
+    const lines = legal.map(f => f.says);
+    if (lines.some(l => !legalShown.has(l))) $('legalok').checked = false;
+    legalShown = new Set(lines);
     $('legalbox').hidden = Boolean(state.done);
     $('legal').hidden = !legal.length;
     $('legal').replaceChildren(...legal.map(f => Object.assign(document.createElement('li'), { textContent: f.says })));

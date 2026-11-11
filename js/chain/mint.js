@@ -5,6 +5,7 @@ import { encodeBase58 } from './base58.js';
 import { fromUtf8, readUintLE } from './bytes.js';
 import { NATIVE_MINT, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from './pda.js';
 import { MINT_BYTES, TOKEN_ACCOUNT_BYTES } from './token.js';
+import { powersOf } from './token2022.js';
 
 /** Where Token-2022 writes what an account with extensions is (1 a mint, 2 a token account): right after a token
  * account's classic bytes. */
@@ -96,5 +97,41 @@ export function parseMint(address, owner, data, metadataData = null) {
     name: native ? 'Solana' : meta?.name || null,
     symbol: native ? 'SOL' : meta?.symbol || null,
     uri: meta?.uri || null,
+  };
+}
+
+/** A ticker as a spec's key: lower case, the letters a key takes, a letter first; null when nothing is left. */
+function keyOf(symbol) {
+  const key = String(symbol ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, 32);
+  return key || null;
+}
+/** The first `most` characters of a text (whole characters, not halves of one). */
+const clip = (text, most) => [...String(text)].slice(0, most).join('');
+
+/**
+ * A token made elsewhere as an economy spec names it: its `tokens` entry (`source: "existing"`), every field read from
+ * the chain so nothing is typed in by hand: the mint, its decimals and token program, its name and ticker when it has
+ * a name record, and `powers` (token2022.js `powersOf`: what the mint's own keys can do). `account`: the mint's
+ * ({ owner, data }); `record`: its Token Metadata record's data, when there is one. `key`: what the spec will call it
+ * (default: its ticker in the letters a key takes, else "token"). `project`: the loot project, whose own tokens read
+ * `mintAuthority: "project"`. Wrapped SOL is SOL (`{ key: "sol", source: "sol" }`). Null when `account` is no mint.
+ */
+export function tokenEntry(address, account, record = null, { key = null, project = null } = {}) {
+  const mint = account ? parseMint(address, account.owner, account.data, record) : null;
+  if (!mint) return null;
+  if (mint.native) return { key: key ?? 'sol', source: 'sol' };
+  return {
+    key: key ?? keyOf(mint.symbol) ?? 'token',
+    source: 'existing',
+    ...(mint.name ? { name: clip(mint.name, 32) } : {}),
+    ...(mint.symbol ? { symbol: clip(mint.symbol, 10) } : {}),
+    decimals: mint.decimals,
+    program: mint.program,
+    mint: mint.mint,
+    powers: powersOf(account, { project }),
   };
 }

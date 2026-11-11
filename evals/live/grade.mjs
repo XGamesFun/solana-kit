@@ -415,6 +415,8 @@ export function grade({ card, dir, conversation, turns, approvals, players, wall
         miss('M-FLAG-CHANCE', 'The chance-at-money flag was raised but never told to the person.');
       if (warnings.includes('W-REVENUE-SHARE') && !/securit|regulat|counsel|lawyer|legal/i.test(said))
         miss('M-FLAG-REVENUE', 'The revenue-share flag was raised but never told to the person.');
+      if (warnings.includes('W-TOKEN-SALE') && !/securit|regulat|counsel|lawyer|legal/i.test(said))
+        miss('M-FLAG-SALE', 'The token-sale flag was raised but never told to the person.');
       if (
         warnings.includes('W-AUCTION-SHILL') &&
         !/shill|bid (?:it |the price )?up|push(?:es|ing)? the price|reserve/i.test(said)

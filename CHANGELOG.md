@@ -4,6 +4,32 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.26.3: a token made elsewhere is read from the chain, and one place to choose a token (loot 0.26.1, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.26.1's.
+
+- **`xsolana token <mint>` (`xsolana_token`)** reads a token made elsewhere and gives its ready `tokens` entry: name,
+  ticker, decimals, token program, and `powers` filled in (who can mint more, a freeze authority, a transfer fee and
+  whether it can be raised, a transfer hook, a permanent delegate, a close authority, a pause, accounts that start
+  frozen, a token that can't be transferred, confidential transfers), with each in words. Before, the person looked the
+  mint up and typed them. It reads the mint and its name record only, never the link the record names; the hosted
+  server offers it too. In code: `powersOf` (`js/chain/token2022.js`) and `tokenEntry` (`js/chain/mint.js`).
+- **Going live holds a named mint's powers against the chain.** A power the spec denies and the mint has (`"freeze":
+false` on a mint with a freeze authority, `"mintAuthority": "none"` on one somebody can mint, a transfer fee lower
+  than the mint's) is refused before anything is sent: the checker's warnings were worked out from the spec. A power
+  the spec says nothing of is not refused: the approval page says it, in the block the owner ticks before approving,
+  and a line that appears after the box was ticked clears it.
+- **One place to choose a token** (the skill, "When they ask for a token"; the guide's `tokens`): points the project
+  mints, a fixed supply kept and handed out, a coin that trades (outside loot: launched elsewhere, then named), or a
+  coin that exists. The guide says what a coin launched on a market gives up: usually nobody can mint it, so the
+  economy pays out only what its owner puts into its pools.
+- **A presale is flagged for the law** (`W-TOKEN-SALE`): a one-sided contest that splits a token the project makes
+  among its backers sells a share of a new token. Said once, like the other legal flags, and shown on the approval
+  page.
+- New example: `community-coin` (a fixed supply of 100 million: a presale with refunds, sealed team vesting, a pool
+  that drips to stakers).
+- The checker's fixes for an existing token point at `xsolana token` instead of an explorer.
+
 ## 0.26.2: a token the setup makes is named on chain (loot 0.26.1, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.26.1's.

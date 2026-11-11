@@ -996,7 +996,7 @@ export function check(
         'E-TOKEN',
         where,
         `“${t.key}” is an existing token, so the economy needs its mint address and its decimals.`,
-        'Add "mint" (the token’s address) and "decimals", read from the mint (an explorer shows them): `xsolana approve` reads the mint and refuses decimals that differ.',
+        'Add "mint" (the token’s address) and "decimals": `xsolana token <mint>` (xsolana_token) reads the mint and gives the whole entry. `xsolana approve` reads the mint too and refuses decimals that differ.',
       );
     if (source === 'game' && t.program === 'token-2022')
       refuse(
@@ -1110,7 +1110,7 @@ export function check(
         'W-MINT-POWERS',
         where,
         `The checker cannot read the mint of “${t.key}” from here, so it does not know what its owner can do (freeze, a permanent delegate, a transfer hook, which no rolled box can give a prize in, or fee).`,
-        'Look the mint up on an explorer and list what it can do under "powers".',
+        `Run \`xsolana token ${t.mint ?? '<mint>'}\` (xsolana_token): it reads the mint and gives this entry with "powers" filled in.`,
       );
   }
   if (!m.currency) {
@@ -5002,6 +5002,16 @@ export function check(
         `${where}.prize.amount`,
         `${label(c)} splits a prize of 0 among its winners: the program opens the contest but can never name its winner (PrizeNotCovered), so it runs past its result and is called off, every entry refunded.`,
         'Give the prize an amount above 0, or leave the prize out.',
+      );
+    // A presale: one side, entries paid in one currency, and a token the project makes split among the backers by
+    // what each put in. People pay for a share of a new token: what the law on selling securities looks at first.
+    const sold = cp?.gives === 'tokens' ? m.tokens.get(c.prize.currency ?? m.currencyKey) : null;
+    if (c.prize?.split && c.sides === 1 && sold?.source === 'game' && sold.key !== tok?.key)
+      warn(
+        'W-TOKEN-SALE',
+        `${where}.prize`,
+        `${label(c)} sells ${sold.symbol ?? sold.key} for ${tok?.symbol ?? 'what backers pay'}: each backer pays in and takes a share of the tokens by what they put in. Selling a new token to raise money is what securities law looks at first, and many places limit who may buy.`,
+        'Fine on devnet. Before mainnet, ask counsel.',
       );
     // One NFT, the last units of an item, a pool's prize: the winning entries share it in the order they are claimed.
     const scarce =

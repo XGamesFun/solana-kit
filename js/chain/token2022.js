@@ -20,8 +20,12 @@ export const EXECUTE_DISCRIMINATOR = Uint8Array.of(105, 37, 101, 197, 75, 251, 1
 
 const ACCOUNT_TYPE_MINT = 1;
 const EXTENSION = {
+  TransferFeeConfig: 1,
+  MintCloseAuthority: 3,
+  ConfidentialTransferMint: 4,
   DefaultAccountState: 6,
   MemoTransfer: 8,
+  NonTransferable: 9,
   PermanentDelegate: 12,
   TransferHook: 14,
   PausableConfig: 26,
@@ -106,6 +110,56 @@ export function mintPowers({ owner, data }) {
   if (hook) out.push({ power: 'hook', holder: hook, authority: address(extension(data, EXTENSION.TransferHook), 0) });
   const delegate = address(extension(data, EXTENSION.PermanentDelegate), 0);
   if (delegate) out.push({ power: 'delegate', holder: delegate });
+  return out;
+}
+
+/**
+ * What a mint's own keys can do, as an economy spec's `powers` says it (schema `token.powers`), read from the mint's
+ * account (`owner`, its token program; `data`), so nobody has to look it up and type it in. Only what is so is named:
+ * a plain mint nobody can mint more of reads `{ mintAuthority: 'none' }`. `project`: the loot project's address, when
+ * known, whose own tokens read `mintAuthority: 'project'`; any other minter is `'someone else'`.
+ *   freeze: a freeze authority; permanentDelegate; transferHook (a hook program, or an authority who can name one);
+ *   transferFeePercent (the higher of the fee in force and the one scheduled) and feeChangeable (its authority is
+ *   still there); closeAuthority; pausable; defaultState (the mint sets what new accounts start as) and
+ *   defaultFrozen (they start frozen); nonTransferable; confidentialTransfers.
+ * Returns null when the account is not a mint of either token program.
+ */
+export function powersOf({ owner, data }, { project = null } = {}) {
+  const classic = owner === TOKEN_PROGRAM;
+  if (!classic && owner !== TOKEN_2022_PROGRAM) return null;
+  const extended = !classic && data.length > TOKEN_ACCOUNT_BYTES && data[TOKEN_ACCOUNT_BYTES] === ACCOUNT_TYPE_MINT;
+  if (data.length !== MINT_BYTES && !extended) return null;
+  if (data[45] !== 1) return null;
+  const minter = readUintLE(data, 0, 4) === 1n ? encodeBase58(data.subarray(4, 36)) : null;
+  const out = { mintAuthority: !minter ? 'none' : project && minter === project ? 'project' : 'someone else' };
+  if (readUintLE(data, 46, 4) === 1n) out.freeze = true;
+  if (!extended) return out;
+  /** An address a Token-2022 extension holds at `at`, or null when it holds none (all zeros). */
+  const held = (value, at = 0) => {
+    const a = value && value.length >= at + 32 ? encodeBase58(value.subarray(at, at + 32)) : null;
+    return a === NO_ADDRESS ? null : a;
+  };
+  if (held(extension(data, EXTENSION.PermanentDelegate))) out.permanentDelegate = true;
+  const hook = extension(data, EXTENSION.TransferHook);
+  if (held(hook, 0) || held(hook, 32)) out.transferHook = true;
+  // TransferFeeConfig: its authority, the withdraw authority, what is withheld, then the fee in force and the one to
+  // come, each { epoch u64, most u64, basis points u16 }.
+  const fee = extension(data, EXTENSION.TransferFeeConfig);
+  if (fee && fee.length >= 108) {
+    const points = Math.max(Number(readUintLE(fee, 88, 2)), Number(readUintLE(fee, 106, 2)));
+    if (points > 0) out.transferFeePercent = points / 100;
+    if (held(fee, 0)) out.feeChangeable = true;
+  }
+  if (held(extension(data, EXTENSION.MintCloseAuthority))) out.closeAuthority = true;
+  const pause = extension(data, EXTENSION.PausableConfig);
+  if (pause && (held(pause) || (pause.length > 32 && pause[32] !== 0))) out.pausable = true;
+  const state = extension(data, EXTENSION.DefaultAccountState);
+  if (state) {
+    out.defaultState = true;
+    if (state[0] === 2) out.defaultFrozen = true;
+  }
+  if (extension(data, EXTENSION.NonTransferable)) out.nonTransferable = true;
+  if (extension(data, EXTENSION.ConfidentialTransferMint)) out.confidentialTransfers = true;
   return out;
 }
 
