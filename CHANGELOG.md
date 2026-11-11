@@ -4,6 +4,17 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.3: a request to a results server names its cluster (loot 0.28.0, unchanged)
+
+The JavaScript alone. One results server answers for devnet and for mainnet, and a request that names no cluster is
+devnet's, as every request was before.
+
+- A request for mainnet says so: `cluster=mainnet` on its URL (`serverUrl`), from `report`, `fetchVouchers`, the draws
+  and giveaways calls, and a page's `claimWins`. On devnet nothing is added. The texts a host signs already carried
+  their cluster; the request now agrees with them.
+- A page on mainnet that reads through a relay names the cluster on the relay's address the same way
+  (`rpcUrl: '/loot/v1/rpc?cluster=mainnet'`).
+
 ## 0.28.2: loot on mainnet, and a cluster for each economy (loot 0.28.0, unchanged)
 
 loot has an address of its own on each cluster. Devnet's is `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`; mainnet's

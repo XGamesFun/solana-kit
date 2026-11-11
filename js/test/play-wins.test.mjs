@@ -148,7 +148,9 @@ test(
       },
     };
     const posted = [];
-    const fetchImpl = async (url, init) => {
+    const fetchImpl = async (asked, init) => {
+      // (a request names its cluster on mainnet, cluster=mainnet: this server answers by the path and its own query)
+      const url = String(asked).replace(/[?&]cluster=mainnet$/, '');
       if (init?.method === 'POST' && url === `${server}/v1/claims`) {
         posted.push(JSON.parse(init.body));
         // a sign-in that ran out: the server refuses it

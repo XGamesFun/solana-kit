@@ -195,6 +195,9 @@ test('a list’s proof is fetched only from the results server’s own origin', 
   const spec = { version: 2, tokens: [], live: { project: A }, grants: [{ key: 'prize', name: 'Prize', id: 1 }] };
   const app = solanaApp({ spec, rpc: { call: async () => null }, wallet: { address: B } });
   const server = 'https://r.invalid/base';
+  // (a request to the results server names its cluster: nothing on devnet, cluster=mainnet on mainnet)
+  const here = url =>
+    loot.cluster() === 'devnet' ? url : `${url}${url.includes('?') ? '&' : '?'}cluster=${loot.cluster()}`;
   /** What claimWins asked for, past the wins and vouchers, with the proof the server names. */
   const run = async proof => {
     const asked = [];
@@ -223,12 +226,12 @@ test('a list’s proof is fetched only from the results server’s own origin', 
   }
   assert.deepEqual(
     (await run('/v1/draws/g/r/list?grant=1')).asked,
-    ['https://r.invalid/base/v1/draws/g/r/list?grant=1'],
+    [here('https://r.invalid/base/v1/draws/g/r/list?grant=1')],
     'a path is on the server',
   );
   assert.deepEqual(
     (await run('https://r.invalid/base/v1/draws/g/r/list')).asked,
-    ['https://r.invalid/base/v1/draws/g/r/list'],
+    [here('https://r.invalid/base/v1/draws/g/r/list')],
     'a whole URL on its origin',
   );
   assert.deepEqual(

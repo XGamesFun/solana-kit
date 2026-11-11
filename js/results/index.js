@@ -135,7 +135,7 @@ export async function report({
 }) {
   const result = { game, round, endedAt, winners };
   const all = [await signResult(signer, result, cluster)];
-  const response = await fetchImpl(`${server.replace(/\/$/, '')}/v1/results`, {
+  const response = await fetchImpl(serverUrl(server, '/v1/results', cluster), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...result, cert, signatures: all }),
@@ -165,9 +165,16 @@ async function answerOf(response) {
 }
 
 /** A wallet's vouchers for a round it won: [{ grant, publicKey, signature, round, expires, … }]. */
-export async function fetchVouchers({ server, game, round, wallet, fetchImpl = globalThis.fetch }) {
+export async function fetchVouchers({
+  server,
+  game,
+  round,
+  wallet,
+  cluster = onCluster(),
+  fetchImpl = globalThis.fetch,
+}) {
   const response = await fetchImpl(
-    `${server.replace(/\/$/, '')}/v1/vouchers?game=${q(game)}&round=${q(round)}&wallet=${q(wallet)}`,
+    serverUrl(server, `/v1/vouchers?game=${q(game)}&round=${q(round)}&wallet=${q(wallet)}`, cluster),
   );
   return (await answerOf(response)).vouchers;
 }
@@ -226,9 +233,19 @@ export async function signVoucher({
   };
 }
 
+/**
+ * A path on a results server, for the cluster the request is on. One server answers for both clusters, and a request
+ * that names none is devnet's: so nothing is added on devnet (as every request was before), and `cluster=mainnet` on
+ * mainnet.
+ */
+export function serverUrl(server, path, cluster = onCluster()) {
+  const url = `${String(server).replace(/\/$/, '')}${path}`;
+  return cluster === 'devnet' ? url : `${url}${url.includes('?') ? '&' : '?'}cluster=${encodeURIComponent(cluster)}`;
+}
+
 /** Posts JSON to the server and answers its body, or throws its { code, why }. */
-async function post(server, path, body, fetchImpl) {
-  const response = await fetchImpl(`${server.replace(/\/$/, '')}${path}`, {
+async function post(server, path, body, fetchImpl, cluster = onCluster()) {
+  const response = await fetchImpl(serverUrl(server, path, cluster), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -237,7 +254,8 @@ async function post(server, path, body, fetchImpl) {
 }
 
 /** Gets JSON from the server and answers its body, or throws its { code, why }. */
-const fetchJson = async (server, path, fetchImpl) => answerOf(await fetchImpl(`${server.replace(/\/$/, '')}${path}`));
+const fetchJson = async (server, path, fetchImpl, cluster = onCluster()) =>
+  answerOf(await fetchImpl(serverUrl(server, path, cluster)));
 
 /**
  * A draw, from the organizer's side and the players'. `signMessage(text) → signature bytes` is the organizer's wallet
@@ -278,13 +296,14 @@ export const draws = {
     cluster = onCluster(),
     fetchImpl = globalThis.fetch,
   }) => {
-    if (token) return post(server, `/v1/draws/${seg(game)}/${seg(draw)}/entries`, { token }, fetchImpl);
+    if (token) return post(server, `/v1/draws/${seg(game)}/${seg(draw)}/entries`, { token }, fetchImpl, cluster);
     const text = entryText({ cluster, game, draw });
     return post(
       server,
       `/v1/draws/${seg(game)}/${seg(draw)}/entries`,
       { wallet, text, signature: encodeBase58(await signMessage(new TextEncoder().encode(text))) },
       fetchImpl,
+      cluster,
     );
   },
   /** Locks the players the server holds now to `beacon`, a drand round still to come. Checks their hash itself. */
@@ -300,7 +319,7 @@ export const draws = {
     net = 'quicknet',
     fetchImpl = globalThis.fetch,
   }) => {
-    const { draw: view } = await fetchJson(server, `/v1/draws/${seg(game)}/${seg(draw)}`, fetchImpl);
+    const { draw: view } = await fetchJson(server, `/v1/draws/${seg(game)}/${seg(draw)}`, fetchImpl, cluster);
     const text = lockText({
       cluster,
       game,
@@ -320,6 +339,7 @@ export const draws = {
         ...(cert ? { cert } : {}),
       },
       fetchImpl,
+      cluster,
     );
   },
   /** The draw as anyone may check it; settled, with its result, once its beacon round is out. */
@@ -358,6 +378,7 @@ export const giveaways = {
       `/v1/giveaways/${seg(game)}/${seg(giveaway)}/result`,
       { endedAt, winners: winners.map(({ wallet, place }) => ({ wallet, place })), signature },
       fetchImpl,
+      cluster,
     );
   },
 };

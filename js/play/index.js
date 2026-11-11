@@ -4922,7 +4922,12 @@ export function solanaApp({
       only(others, ['server', 'token', 'fetchImpl'], 'claimWins');
       const base = server.replace(/\/$/, '');
       const ask = async (path, init) => {
-        const r = await fetchImpl(path.startsWith('http') ? path : `${base}${path}`, init);
+        // (one server answers for both clusters: a request for mainnet says so, one for devnet names none, as before)
+        const at = path.startsWith('http') ? path : `${base}${path}`;
+        const on = loot.cluster();
+        const url =
+          on === 'devnet' || /[?&]cluster=/.test(at) ? at : `${at}${at.includes('?') ? '&' : '?'}cluster=${on}`;
+        const r = await fetchImpl(url, init);
         // The status first: a proxy's error page is no JSON, and says nothing a player can act on but its status.
         const body = await r.json().catch(() => null);
         if (!r.ok)
