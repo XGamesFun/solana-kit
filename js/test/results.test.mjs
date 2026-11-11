@@ -8,7 +8,10 @@ import { addressBytes, decodeBase58 } from '../chain/base58.js';
 import { fromHex, readUintLE, utf8 } from '../chain/bytes.js';
 import { MPL_CORE_PROGRAM } from '../chain/core.js';
 import * as loot from '../client/index.js';
+import { withCluster } from '../mcp/with-cluster.mjs';
 import {
+  draws,
+  fetchVouchers,
   giveawayHostText,
   hostCertText,
   keyFromSecret,
@@ -19,6 +22,7 @@ import {
   report,
   RESULT_DOMAIN,
   resultBytes,
+  serverUrl,
   signResult,
   signVoucher,
 } from '../results/index.js';
@@ -112,7 +116,8 @@ test('report posts the signed result and answers the server’s refusal as its c
     }),
     e => e.code === 'R-CERT' && e.status === 403,
   );
-  assert.equal(seen[0][0], 'https://results.test/loot/v1/results');
+  // (the request names its cluster: nothing on devnet, cluster=mainnet on mainnet)
+  assert.equal(seen[0][0], serverUrl('https://results.test/loot', '/v1/results'));
   assert.ok(
     verifies(
       host.address,
@@ -219,3 +224,51 @@ test(
     );
   },
 );
+
+test('a request to a results server names its cluster: nothing on devnet, as before, and cluster=mainnet on mainnet', async () => {
+  assert.equal(serverUrl('https://r.example/x/', '/v1/health', 'devnet'), 'https://r.example/x/v1/health');
+  assert.equal(
+    serverUrl('https://r.example/x', '/v1/health', 'mainnet'),
+    'https://r.example/x/v1/health?cluster=mainnet',
+  );
+  assert.equal(
+    serverUrl('https://r.example/x', '/v1/vouchers?game=a&round=b', 'mainnet'),
+    'https://r.example/x/v1/vouchers?game=a&round=b&cluster=mainnet',
+  );
+  // What names no cluster is on the one the work is on.
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push([String(url), init?.method ?? 'GET', init?.body ? JSON.parse(init.body) : null]);
+    return new Response(JSON.stringify({ vouchers: [], result: {}, draw: {} }), { status: 200 });
+  };
+  const [game, host] = [await newKey(), await newKey()];
+  const ask = async () => {
+    await fetchVouchers({
+      server: 'https://r.example/x',
+      game: game.address,
+      round: 'ab'.repeat(16),
+      wallet: host.address,
+      fetchImpl,
+    });
+    await report({
+      server: 'https://r.example/x',
+      cert: null,
+      signer: host,
+      game: game.address,
+      round: 'ab'.repeat(16),
+      endedAt: 1,
+      winners: [],
+      fetchImpl,
+    });
+    await draws.get({ server: 'https://r.example/x', game: game.address, draw: 'cd'.repeat(16), fetchImpl });
+  };
+  await withCluster('devnet', ask);
+  await withCluster('mainnet', ask);
+  const [dv, dr, dg, mv, mr, mg] = seen;
+  for (const [url] of [dv, dr, dg]) assert.ok(!url.includes('cluster='), url);
+  assert.ok(mv[0].endsWith(`&wallet=${host.address}&cluster=mainnet`), mv[0]);
+  assert.equal(mr[0], 'https://r.example/x/v1/results?cluster=mainnet');
+  assert.ok(mg[0].endsWith('?cluster=mainnet'), mg[0]);
+  // The result a host signs carries the same cluster as the request that reports it.
+  assert.notDeepEqual(dr[2].signatures, mr[2].signatures);
+});
