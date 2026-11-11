@@ -21,7 +21,7 @@ import {
   TOKEN_PROGRAM,
 } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
-import { createFungibleMetadataIx, METADATA_BYTES, METADATA_FEE } from '../chain/metadata.js';
+import { createFungibleMetadataIx, METADATA_BYTES, METADATA_FEE, METADATA_LIMITS } from '../chain/metadata.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import {
   computeUnitLimit,
@@ -740,16 +740,24 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   for (const t of m.tokens.values()) {
     if (t.source !== 'game' || live?.mints?.[t.key] || (t.mint && !t.mint.startsWith('@'))) continue;
     const key = `new:mint/${t.key}`;
-    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? 'with its picture’s link' : 'no picture link'}: only you can change it later, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
+    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, which these tools don’t do yet, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
     const record = { what: `the name of ${t.symbol} on chain`, bytes: METADATA_BYTES, fee: Number(METADATA_FEE) };
+    // The checker refuses a name, ticker or link too long for a record before any plan is made, except on a token
+    // that is live already, whose words are only labels. Such a token is made here only when a live economy is
+    // planned as if it were new (explain's cost of the whole setup, which is never sent): its record is left out.
+    const fits = ['name', 'symbol', 'uri'].every(f => utf8(String(t[f] ?? '')).length <= METADATA_LIMITS[f]);
     const name = ctx =>
-      createFungibleMetadataIx({
-        mint: ctx.keys[key],
-        authority: ctx.owner,
-        name: t.name,
-        symbol: t.symbol,
-        uri: t.uri ?? '',
-      });
+      fits
+        ? [
+            createFungibleMetadataIx({
+              mint: ctx.keys[key],
+              authority: ctx.owner,
+              name: t.name,
+              symbol: t.symbol,
+              uri: t.uri ?? '',
+            }),
+          ]
+        : [];
     if (t.fixedSupply) {
       const supply = amount(t.supply, t);
       add({
@@ -759,7 +767,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
         signers: [owner, key],
         creates: [
           { what: `the mint of ${t.symbol}`, bytes: MINT_BYTES },
-          record,
+          ...(fits ? [record] : []),
           { what: `your ${t.symbol} account`, bytes: 165 },
         ],
         build: ctx => [
@@ -771,7 +779,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
             owner: TOKEN_PROGRAM,
           }),
           initializeMint2Ix({ mint: ctx.keys[key], decimals: t.decimals, authority: ctx.owner }),
-          name(ctx),
+          ...name(ctx),
           createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, ctx.keys[key]),
           mintToIx({
             mint: ctx.keys[key],
@@ -789,7 +797,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
       part: `token:${t.key}`,
       says: `Make the token ${t.symbol} (${t.decimals} decimals), ${named}, then hand its minting to the project`,
       signers: [owner, key],
-      creates: [{ what: `the mint of ${t.symbol}`, bytes: MINT_BYTES }, record],
+      creates: [{ what: `the mint of ${t.symbol}`, bytes: MINT_BYTES }, ...(fits ? [record] : [])],
       build: ctx => [
         createAccountIx({
           from: ctx.owner,
@@ -799,7 +807,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
           owner: TOKEN_PROGRAM,
         }),
         initializeMint2Ix({ mint: ctx.keys[key], decimals: t.decimals, authority: ctx.owner }),
-        name(ctx),
+        ...name(ctx),
         setAuthorityIx({ account: ctx.keys[key], current: ctx.owner, newAuthority: ctx.project }),
       ],
     });

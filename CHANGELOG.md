@@ -21,9 +21,10 @@ The JavaScript alone: the program, its IDL and every account are 0.26.1's.
 - **The cost says it**: the record's rent (607 bytes) and the 0.01 SOL Token Metadata keeps for each, apart from rent
   (`metadataFeesSol`): about 0.014 SOL a token.
 - **Refused before anything is signed**: a name over 32 bytes, a ticker over 10 or a link over 200, counted in bytes
-  as the record counts them (`E-TOKEN`).
+  as the record counts them, and a name or ticker left blank (`E-TOKEN`). A token that is live already is not named
+  again, so its words stay labels and none of this applies to it.
 - `xsolana explain` lists the tokens going live makes and says when one will show with no picture; the approval page's
-  step names the record, its fee and who can change it.
+  step names the record, its link, its fee and who can change it.
 - The tests' world loads Token Metadata as mainnet runs it, and the evals' test wallet signs the one instruction of
   it a setup sends.
 

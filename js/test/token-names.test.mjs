@@ -16,6 +16,7 @@ import { setAuthorityIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
+import { explainEconomy } from '../economy/explain.mjs';
 import { freshAddresses, prepare } from '../economy/live.mjs';
 import { plan } from '../economy/plan.mjs';
 import { BUDGET } from '../economy/txsize.mjs';
@@ -181,5 +182,48 @@ test('the cost of going live counts the record: its rent, and Token Metadata’s
     s => s.id === 'token:bubl',
   );
   assert.match(step.says, /write its name on chain \(“Bubble”, BUBL, no picture link/);
-  assert.match(step.says, /only you can change it later/);
+  assert.match(step.says, /only your wallet can change it later, which these tools don’t do yet/);
+  // the link is said whole: the approval page shows the step's words, and nothing else of this instruction
+  const linked = plan(spec({ key: 'bubl', source: 'project', name: 'Bubble', symbol: 'BUBL', uri: LINK }), {
+    now: NOW,
+  }).steps.find(s => s.id === 'token:bubl');
+  assert.ok(linked.says.includes(`with the link ${LINK}`), linked.says);
+});
+
+test('explain lists the tokens going live makes, and says when one will show with no picture', () => {
+  const words = token => explainEconomy(spec(token), { now: NOW }).text;
+  const bare = words({ key: 'bubl', source: 'project', name: 'Bubble', symbol: 'BUBL' });
+  assert.match(bare, /The tokens going live makes/);
+  assert.match(bare, /BUBL \(“Bubble”\): minted by the project as its rules say/);
+  assert.match(bare, /its name and ticker and no picture: for one, give it a `uri`/);
+  assert.match(bare, /these tools don’t change a live token’s yet/);
+  assert.match(bare, /Token Metadata’s fees 0\.01 SOL/);
+  const pictured = words({ key: 'gem', source: 'project', symbol: 'GEM', supply: 500, uri: LINK });
+  assert.match(pictured, /GEM: a fixed supply of 500, all of it to your wallet, and no more ever/);
+  assert.match(pictured, /its name, its ticker and the picture its link gives/);
+});
+
+test('a token that is live already is not named again: no step, no limits on its labels, no line in explain', () => {
+  const MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+  const live = {
+    ...spec({ key: 'old', source: 'project', name: '🫧'.repeat(11), symbol: 'OLD' }),
+    live: { program: loot.LOOT_PROGRAM, project: MINT, mints: { old: MINT }, published: {} },
+  };
+  const verdict = check(live, { now: NOW });
+  assert.deepEqual(
+    verdict.refusals.filter(r => r.code === 'E-TOKEN'),
+    [],
+    'its name was only ever a label',
+  );
+  // the same name on a token still to be made is refused, and so is a blank one
+  const fresh = token => check(spec(token), { now: NOW }).refusals.filter(r => r.code === 'E-TOKEN');
+  assert.equal(fresh({ key: 'old', source: 'project', name: '🫧'.repeat(11), symbol: 'OLD' }).length, 1);
+  const blank = fresh({ key: 'blank', source: 'project', name: '  ', symbol: '' });
+  assert.deepEqual(blank.map(r => r.where.split('.').pop()).sort(), ['name', 'symbol']);
+  assert.match(blank[0].message, /has an empty/);
+  // explained and priced all the same (its whole setup as if new, which is never sent), with no line for the token
+  assert.doesNotMatch(explainEconomy(live, { now: NOW }).text, /The tokens going live makes/);
+  assert.ok(cost(live, { now: NOW }).setup.totalSol > 0);
+  // and a change to it makes no token step
+  assert.ok(!plan(live, { now: NOW, live: live.live }).steps.some(s => s.id.startsWith('token:')));
 });

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { addressBytes } from '../chain/base58.js';
 import { concat, uintLE } from '../chain/bytes.js';
+import { createFungibleMetadataIx, metadataAddress } from '../chain/metadata.js';
 import { createAssociatedTokenAccountIdempotent, meta, transferLamports } from '../chain/programs.js';
 import { compileMessage } from '../chain/tx.js';
 import { TOKEN_PROGRAM } from '../chain/pda.js';
@@ -154,4 +155,30 @@ test('reads a v0 transaction’s accounts from its lookup tables: a SOL-priced o
     verdict([closeTableIx({ table: plan.table.address, authority: me, recipient: thief })]).findings.join(' '),
     /rent to/,
   );
+});
+
+test('an owner signs the name of a token the setup makes, and no other Token Metadata record', () => {
+  const naming = createFungibleMetadataIx({ mint, authority: me, name: 'Bubble', symbol: 'BUBL' });
+  const owner = verdict([naming], 'owner');
+  assert.equal(owner.ok, true, owner.findings.join(' '));
+  assert.deepEqual(owner.summary, [`name the token ${mint} on chain`]);
+  // never a player's to sign
+  assert.match(verdict([naming], 'player').findings.join(' '), /unexpected Token Metadata instruction/);
+  // another authority, payer or update authority
+  const theirs = createFungibleMetadataIx({ mint, authority: thief, payer: me, name: 'Bubble', symbol: 'BUBL' });
+  assert.match(verdict([theirs], 'owner').findings.join(' '), /authority that is not this wallet/);
+  // the same instruction made an NFT's: its standard, or an edition account in the place of none
+  const standardAt = 2 + 4 + 6 + 4 + 4 + 4 + 0 + 2 + 1 + 2;
+  const nft = { ...naming, data: Uint8Array.from(naming.data) };
+  assert.equal(nft.data[standardAt], 2, 'the Fungible standard, where the policy reads it');
+  nft.data[standardAt] = 0;
+  assert.match(verdict([nft], 'owner').findings.join(' '), /not a plain token’s/);
+  const edition = {
+    ...naming,
+    keys: naming.keys.map((k, i) => (i === 1 ? meta(metadataAddress(thief), false, true) : k)),
+  };
+  assert.match(verdict([edition], 'owner').findings.join(' '), /not a plain token’s/);
+  // and any other instruction of Token Metadata's
+  const other = { ...naming, data: Uint8Array.of(43, 0) };
+  assert.match(verdict([other], 'owner').findings.join(' '), /unexpected Token Metadata instruction \(43, 0\)/);
 });

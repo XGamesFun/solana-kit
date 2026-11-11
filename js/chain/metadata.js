@@ -28,9 +28,11 @@ export const metadataAddress = mint =>
  * Token Metadata's CreateV1 for a fungible token whose mint exists: its name, its ticker and a link to a JSON file with
  * its picture ('' for none). `authority` is the mint's authority and signs; it becomes the record's update authority,
  * the only one who can change the record later. `payer` pays its rent and Token Metadata's fee (`METADATA_FEE`).
- * The mint is passed read-only, so the instruction can't touch its supply or its authorities. The record says a
- * fungible token whatever the decimals (CreateMetadataAccountV3 would call one of 0 decimals an asset, which wallets
- * list with collectibles).
+ * The mint is listed read-only: this path of Token Metadata writes nothing to a mint that exists. That is the
+ * program's behaviour, not a lock: in a setup's own transaction the mint is writable all the same (the same
+ * transaction makes it), so the tests read its supply and authorities back after the record is made. The record says
+ * a fungible token whatever the decimals (CreateMetadataAccountV3 would call one of 0 decimals an asset, which
+ * wallets list with collectibles).
  */
 export function createFungibleMetadataIx({ mint, authority, payer = authority, name, symbol, uri = '' }) {
   for (const [field, value] of Object.entries({ name, symbol, uri })) {

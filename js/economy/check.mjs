@@ -1015,20 +1015,30 @@ export function check(
         'Remove "mint" for a token the setup makes, or make it an existing token (source "existing", with its "decimals").',
       );
     // A token the setup makes is named on chain as it is made (its Token Metadata record), and the record takes so
-    // many bytes of each, not characters: a longer one would be refused on chain, in the middle of going live.
-    if (source === 'game')
+    // many bytes of each, not characters: a longer one would be refused on chain, in the middle of going live. One
+    // with no name or ticker at all would be written blank, and show as an unknown token for the record's price. A
+    // token that is live already is not named again: its words here stay labels, as they were.
+    if (source === 'game' && !economy.live?.mints?.[t.key])
       for (const [field, what] of [
         ['name', 'name'],
         ['symbol', 'ticker'],
         ['uri', 'link'],
       ]) {
-        const bytes = utf8(String(tok[field] ?? '')).length;
+        const value = String(tok[field] ?? '');
+        const bytes = utf8(value).length;
         if (bytes > METADATA_LIMITS[field])
           refuse(
             'E-TOKEN',
             `${where}.${field}`,
             `The ${what} of “${t.key}” is ${bytes} bytes, and a token’s ${what} on chain is at most ${METADATA_LIMITS[field]} (a letter outside plain English takes two or more).`,
             `Shorten it to ${METADATA_LIMITS[field]} bytes${field === 'uri' ? ', for instance with a shorter path or host' : ''}.`,
+          );
+        else if (field !== 'uri' && !value.trim())
+          refuse(
+            'E-TOKEN',
+            `${where}.${field}`,
+            `“${t.key}” has an empty ${what}: going live writes it on chain as it is, and wallets would show a token with no ${what}.`,
+            `Give it a ${what}, or leave "${field}" out (${field === 'symbol' ? 'its key in capitals is used' : 'its ticker is used'}).`,
           );
       }
     if (t.supply !== undefined && source !== 'game')
