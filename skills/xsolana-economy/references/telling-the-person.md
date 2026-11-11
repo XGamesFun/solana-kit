@@ -124,8 +124,8 @@ Don'ts:
   Ask for the name, the ticker and a picture before going live: with no `uri` it shows by name and ticker with no
   picture. Only the owner's wallet can change the three later (Token Metadata's rule, not loot's): change them in the
   spec and approve again, and the record is written again for the price of a transaction (approving reads the record
-  first: one its owner handed to another wallet or made unchangeable outside these tools is left as it is, and the
-  page says so). The record costs about 0.014 SOL (`xsolana_cost` says it:
+  first: one its owner handed to another wallet, made unchangeable or gave a royalty or creators outside these tools
+  is left as it is, and the page says so at each approve until the spec gives the old name back). The record costs about 0.014 SOL (`xsolana_cost` says it:
   rent, and 0.01 SOL Token Metadata keeps). A token that went live before the tools wrote one has none and
   can't be given one: only a mint's own authority can name it, and its minting was handed on or turned off.
 - **NFTs the project has no authority over** (any collection but its own): they count as they are. Say that

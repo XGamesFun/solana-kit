@@ -57,10 +57,12 @@ function createdStandard(data) {
   }
 }
 /**
- * Whether a Token Metadata UpdateMetadataAccountV2 is a rename and nothing more: new data (three strings, no royalty,
- * no creators, collection or uses), and then the update authority, the primary sale and whether it can be changed
- * each left as they are (their options empty), with nothing after. Anything else (the record handed on, frozen for
- * good, a royalty set) is not this package's rename.
+ * Whether a Token Metadata UpdateMetadataAccountV2 is this package's rename: new data (three strings, no royalty, no
+ * creators, collection or uses), and then the update authority, the primary sale and whether it can be changed each
+ * left as they are (their options empty), with nothing after. Anything else (the record handed on, frozen for good,
+ * a royalty set) is not. On a record a setup made, which has none of those, it changes the three words and nothing
+ * more; the approval builds one only for such a record (js/approve/live-check.mjs readRenames), which this wallet,
+ * seeing the instruction alone, can't tell.
  */
 function onlyRenames(data) {
   try {

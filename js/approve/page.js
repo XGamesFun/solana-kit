@@ -64,9 +64,19 @@ export function approvalPage(token) {
   let legalShown = new Set();
   function render(state) {
     last = state;
-    $('title').textContent = state.done ? `“${state.name}” is live` : `Approve “${state.name}”`;
+    // A token's name the spec changes and the chain can't take (`unwritten`): said whether or not anything else was
+    // sent. With nothing else to send, the page never calls that a landing.
+    const unwritten = state.unwritten ?? [];
+    const nothingSent = state.done && unwritten.length > 0 && !state.signatures?.length;
+    $('title').textContent = state.done
+      ? nothingSent
+        ? `Nothing to send for “${state.name}”`
+        : `“${state.name}” is live`
+      : `Approve “${state.name}”`;
     $('sub').textContent = state.done
-      ? `Every step landed on devnet. ${state.file} now holds the project’s addresses: you can close this page.`
+      ? nothingSent
+        ? `The only change in ${state.file} is a token’s name, and it can’t be written on chain: nothing was sent, and the file is as it was. See below.`
+        : `Every step landed on devnet. ${state.file} now holds the project’s addresses: you can close this page.`
       : `${state.mode === 'change' ? 'A change to a live economy' : state.mode === 'resume' ? 'A setup that was cut short goes on' : 'A new economy'} from ${state.file}, on the shared loot program ${state.program.slice(0, 6)}…${state.project ? `, in the project ${state.project}${state.wallet ? `, made from your wallet ${state.wallet}` : ''}` : ''}`;
     $('cost').textContent = state.setupSol !== null && state.mode === 'new' ? `about ${state.setupSol} SOL` : '';
     const steps = $('steps');
@@ -91,8 +101,10 @@ export function approvalPage(token) {
         return li;
       }),
     );
-    const warnings = state.warnings ?? [];
-    $('warnbox').hidden = !warnings.length || state.done;
+    // Once done, what was to be read before approving is past; what could not be written still stands.
+    const warnings = state.done ? unwritten : (state.warnings ?? []);
+    $('warnbox').hidden = !warnings.length;
+    $('warnhead').textContent = state.done ? 'Not written' : 'Before you approve';
     $('warnings').replaceChildren(
       ...warnings.map(w => Object.assign(document.createElement('li'), { textContent: w })),
     );
@@ -114,7 +126,9 @@ export function approvalPage(token) {
     // A live section the chain does not bear out: nothing can be approved.
     $('approve').disabled = state.done || !account || busy || Boolean(state.refused) || unread || reading;
     $('status').textContent = state.done
-      ? 'Done.'
+      ? nothingSent
+        ? 'Nothing to approve.'
+        : 'Done.'
       : state.refused
         ? 'Nothing can be approved: see above.'
         : !account

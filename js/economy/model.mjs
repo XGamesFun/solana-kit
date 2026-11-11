@@ -392,7 +392,6 @@ export const spendOf = (then, m) => {
   return { Give: [then.giveTo] };
 };
 
-/** What a token is on chain: its mint (or "@mint:<key>" until it exists), program, decimals, and who can mint it. */
 /**
  * What a token the setup makes is called on chain, from its entry in a spec as written: [name, ticker, link], with
  * the names it gets when the spec gives none (`tokenOf`: its key in capitals for a ticker, its ticker or key for a
@@ -403,6 +402,7 @@ export function tokenLabels(t) {
   return [t.name ?? t.symbol ?? t.key, symbol, t.uri ?? ''];
 }
 
+/** What a token is on chain: its mint (or "@mint:<key>" until it exists), program, decimals, and who can mint it. */
 function tokenOf(given) {
   // "project" is the spec's word for a token the project mints; "game" is the older spelling of it.
   const t = given.source === 'project' ? { ...given, source: 'game' } : given;

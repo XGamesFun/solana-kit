@@ -434,7 +434,16 @@ export const tools = [
           ? `This economy is live: this prices only the change (${[...change.scope.only, ...change.scope.renames.map(key => `the name of ${key}`)].join(', ')}).\n`
           : 'This economy is live and nothing has changed since it went live: publishing costs nothing.\n'
         : '';
-      return { ok: true, from, setup: c.setup, actions: c.actions, fees: c.fees, text: head + explainCost(c) + footer };
+      // (a name's price is a transaction's, if it is sent at all: only approving reads the token's record)
+      const names = change.scope.renames?.length ? `\n${renamesNote(change.scope.renames)}` : '';
+      return {
+        ok: true,
+        from,
+        setup: c.setup,
+        actions: c.actions,
+        fees: c.fees,
+        text: head + explainCost(c) + names + footer,
+      };
     },
   },
   {
@@ -580,7 +589,15 @@ export const tools = [
       const p = plan(economy, { now: nowOf(ctx), ...change.scope });
       if (!p.ok) return refused(p, from);
       const c = cost(economy, { now: nowOf(ctx), ...change.scope });
-      const steps = p.transactions.flatMap(t => t.steps.map(s => s.says));
+      // A token's new name is listed as the file has it: whether it is sent is the chain's to say, as approving reads it.
+      const steps = p.transactions.flatMap(t =>
+        t.steps.map(s =>
+          s.id.startsWith('name:')
+            ? `${s.says} (sent only if the token has a name record its owner can still change, read when approving)`
+            : s.says,
+        ),
+      );
+      const renaming = Boolean(change.scope.renames?.length);
       // the file as the approve command names it, relative to the project folder (projectFile's), and plain (plainName)
       const target = file ? path.relative(realPath(path.resolve(cwdOf(ctx))), file) || DEFAULT_FILE : DEFAULT_FILE;
       if (plainName(target) === null)
@@ -594,7 +611,7 @@ export const tools = [
       const command = approveCommand(target);
       const text = [
         ...flagsToTell(economy, nowOf(ctx)),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${plural(p.transactions.length, 'transaction')}, ${plural(p.approvals, 'wallet approval')}, about ${c.setup.totalSol} SOL on devnet:`,
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, ${plural(p.approvals, 'wallet approval')}, about ${c.setup.totalSol} SOL on devnet:`,
         ...steps.map((s, i) => `${i + 1}. ${s}`),
         '',
         `To put it live, the person runs this in a terminal in the project folder (not you): ${command}`,

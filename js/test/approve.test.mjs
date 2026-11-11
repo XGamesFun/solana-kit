@@ -118,6 +118,57 @@ describe('xsolana approve', () => {
     },
   );
 
+  // A setup cut short after the project's own transaction never made what follows it (the project's lookup table,
+  // or the rest of it): the plan made those only while the project was not there. And the file was recorded as live
+  // in the middle of the batch, so it was left marked as under way for good.
+  for (const send of [3, 4])
+    test(
+      `a setup cut short after the project’s step makes the lookup table${send === 4 ? '’s rest' : ''} when it is gone on with`,
+      { skip: skip ?? false },
+      async () => {
+        const spec = {
+          version: 2,
+          network: 'devnet',
+          name: 'Tabled',
+          currency: 'sol',
+          tokens: [
+            { key: 'sol', source: 'sol' },
+            { key: 'ember', source: 'project' },
+            { key: 'ash', source: 'project' },
+            { key: 'soot', source: 'project' },
+          ],
+          collection: false,
+        };
+        const fails = { on: true, send };
+        const { w, owner, file, chain } = setup(spec, { fails });
+        const session = await createApproval({ file, chain, now: () => NOW });
+        const batch = await session.prepare(owner.address);
+        // the tokens and the project (two transactions), then the table, then the rest of its addresses
+        assert.equal(batch.transactions.length, 4, batch.says.map(x => x.slice(0, 40)).join(' | '));
+        await assert.rejects(
+          session.complete(owner.address, batch.id, signAll(owner, batch.transactions)),
+          /blockhash/,
+        );
+        const mid = JSON.parse(readFileSync(file, 'utf8'));
+        assert.ok(mid.live.partial && !mid.live.published && mid.live.project, 'cut short, the project made');
+        assert.deepEqual(mid.live.landed.includes('table'), send === 4);
+        fails.on = false;
+        const again = await createApproval({ file, chain, now: () => NOW });
+        const state = await again.stateFor(owner.address);
+        assert.deepEqual(
+          state.steps.map(s => s.id),
+          send === 4 ? ['table:1'] : ['table', 'table:1'],
+        );
+        await runAll(again, owner);
+        const saved = JSON.parse(readFileSync(file, 'utf8'));
+        assert.ok(again.state().done && !saved.live.partial && saved.live.published);
+        // one table, of the slot it was made at, with every address in it (56 bytes, then 32 an address)
+        if (send === 4) assert.deepEqual(saved.live.tables, mid.live.tables);
+        const table = w.chain.get(saved.live.tables[0]);
+        assert.ok(table && (table.data.length - 56) / 32 > 20, `${(table.data.length - 56) / 32} addresses`);
+      },
+    );
+
   // A batch cut short after its first transaction wrote the project and every mint
   // into the file as live, so going on never opened the project.
   for (const restart of [false, true])

@@ -2037,6 +2037,12 @@
                   "tree": {
                     "$ref": "#/$defs/address"
                   },
+                  "tables": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/address"
+                    }
+                  },
                   "mints": {
                     "type": "object",
                     "additionalProperties": {

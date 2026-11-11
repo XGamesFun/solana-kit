@@ -84,6 +84,7 @@ import {
   weights,
   wholeCount,
   windowOf,
+  tokenLabels,
 } from './model.mjs';
 import { BUDGET } from './txsize.mjs';
 
@@ -737,7 +738,11 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   const landed = new Set(live?.landed ?? []);
   const add = step => want(step.part) && !landed.has(step.id) && steps.push({ creates: [], signers: [owner], ...step });
   const project = ctx => ctx.project;
-  const fresh = !live?.project;
+  // The project's own first steps (its collection, the project, the accounts it pays into, its lookup table) belong to
+  // a new setup, and to one cut short before the file was recorded as live (`partial`, with nothing `published`): gone
+  // on with, whichever of them has not landed is still made. Before, a setup cut short after the project's step never
+  // made the rest.
+  const fresh = !live?.project || Boolean(given?.partial && !given?.published);
 
   // Tokens the project mints: a classic mint with the owner as its authority, handed to the project right after.
   // Each is named on chain in the same step (its Token Metadata record: the name, the ticker and the link wallets
@@ -760,7 +765,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
         signers: [owner],
         id: `name:${t.key}`,
         part: `name:${t.key}`,
-        says: `Change what the token ${t.symbol} (mint ${live.mints[t.key]}) is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: its name record is written again, and stays only your wallet’s to change`,
+        // (named by the ticker it was published with: the new one is what it is changed to)
+        says: `Change what the token ${tokenLabels((given?.published?.tokens ?? []).find(x => x.key === t.key) ?? t)[1]} (mint ${live.mints[t.key]}) is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: its name record is written again, and stays only your wallet’s to change`,
         build: ctx => [
           updateFungibleMetadataIx({
             mint: ctx.mints[t.key],
@@ -970,13 +976,14 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
           ? [{ what: `room for ${group.length} addresses in the lookup table`, bytes: 32 * group.length, grows: true }]
           : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
         build: ctx => {
+          const addresses = group.map(at => at(ctx)).filter(Boolean);
+          // A table made already (its first step landed in an earlier batch, or before the setup was cut short) is the
+          // one the rest is added to: its address is of the slot it was made at, never of this batch's.
+          if (i && ctx.tables?.[0]) return [extendTableIx({ table: ctx.tables[0], authority: ctx.owner, addresses })];
           // With no recent slot known (a plan built offline), there is no table to make.
           if (ctx.slot == null) return [];
           const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
-          return [
-            ...(i ? [] : [instruction]),
-            extendTableIx({ table, authority: ctx.owner, addresses: group.map(at => at(ctx)).filter(Boolean) }),
-          ];
+          return [...(i ? [] : [instruction]), extendTableIx({ table, authority: ctx.owner, addresses })];
         },
       }),
     );
@@ -1842,6 +1849,8 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent 
     project: own,
     treasury: live.treasury ?? m.treasuryWallet ?? ownerKey,
     mints,
+    // the project's lookup table, once its first step landed
+    tables: live.tables ?? null,
     keys,
     rent,
   };

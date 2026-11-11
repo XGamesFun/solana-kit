@@ -189,4 +189,4 @@ export function changedParts(economy) {
  * of that is decided when the change is approved.
  */
 export const renamesNote = renames =>
-  `The spec changes what ${renames.join(', ')} ${renames.length === 1 ? 'is' : 'are'} called. A token’s name on chain is its name record: approving reads it, and writes the new name, ticker and link there when the token has a record its owner can still change. A token that went live before setups named tokens has none and can’t be given one, and the approval page says so.`;
+  `The spec changes what ${renames.join(', ')} ${renames.length === 1 ? 'is' : 'are'} called. A token’s name on chain is its name record: approving reads it, and writes the new name, ticker and link there when the token has a record its owner can still change (and nothing when the record says them already). A token that went live before setups named tokens has no record and can’t be given one, and a record handed on, made unchangeable or given a royalty outside these tools is left as it is: the approval page says so, sends nothing for that token, and the change stays listed here until the spec gives its old name back.`;

@@ -39,9 +39,10 @@ import { inAll, round, simulate } from './simulate.mjs';
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
 const sol = lamports => round(Number(lamports) / Number(LAMPORTS_PER_SOL));
-/** Setup steps that are no loot instruction, and so charge no fee: a token minted, the collection made, SOL put in a
- * grant's funds. Every other step is the owner or the authority calling loot, which charges the project fee. */
-const NO_FEE_STEP = /^(token:|collection$|fund:|rent:)/;
+/** Setup steps that are no loot instruction, and so charge no fee: a token minted, a token's name written again, the
+ * collection made, SOL put in a grant's funds. Every other step is the owner or the authority calling loot, which
+ * charges the project fee. */
+const NO_FEE_STEP = /^(token:|name:|collection$|fund:|rent:)/;
 /** Setup cost from a plan (plan.mjs `plan`). */
 export function setupCost(plan, economy) {
   const m = model(economy);

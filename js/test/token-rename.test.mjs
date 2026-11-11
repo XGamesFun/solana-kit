@@ -1,8 +1,9 @@
 // A token's name on chain, changed after it is live: the spec's new name, ticker or link is written to its record
 // (Token Metadata's UpdateMetadataAccountV2) at the next approve, signed by the owner, the record's update authority.
 // Which tokens have a record their owner can change is read from the chain as the change is approved, never taken
-// from the file: one with no record (it went live before setups named tokens), or a record handed on or made
-// unchangeable, is said so and nothing is sent for it. Through the approval page's own server, on the real programs.
+// from the file: one with no record (it went live before setups named tokens), or a record handed on, made
+// unchangeable or given a royalty or creators, is said so and nothing is sent for it; the file never calls such a
+// name published. Through the approval page's own server, on the real programs.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,10 +13,11 @@ import { freshKeypair } from '../approve/ed25519.mjs';
 import { readRenames } from '../approve/live-check.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { addressBytes } from '../chain/base58.js';
-import { fromBase64, toBase64 } from '../chain/bytes.js';
+import { concat, fromBase64, toBase64, uintLE, utf8 } from '../chain/bytes.js';
 import { metadataAddress, parseRecord } from '../chain/metadata.js';
 import { parseMint } from '../chain/mint.js';
-import { TOKEN_PROGRAM } from '../chain/pda.js';
+import { METAPLEX_METADATA_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { meta } from '../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, setAuthorityIx } from '../chain/token.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { check } from '../economy/check.mjs';
@@ -23,6 +25,7 @@ import { cost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
 import { model } from '../economy/model.mjs';
 import { runTool } from '../mcp/server.mjs';
+import { pda } from '../client/pda.js';
 import { approvalChain, cannotRun, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
@@ -139,6 +142,11 @@ test(
       ),
       before.steps[0].says,
     );
+    // (a token is named by the ticker it was published with: the new one is what it is changed to)
+    assert.ok(
+      before.steps[1].says.startsWith(`Change what the token GEM (mint ${gem}) is called on chain to “Gem”, GEMS,`),
+      before.steps[1].says,
+    );
     const b = named(w, bubl),
       g = named(w, gem);
     assert.deepEqual([b.name, b.symbol, b.uri], ['Bubble Day', 'BUBL', LINK]);
@@ -146,25 +154,45 @@ test(
     assert.equal(b.mintAuthority, after.live.project, 'minting is still the project’s');
     assert.deepEqual(
       parseRecord(b.record.data),
-      { updateAuthority: owner.address, mint: bubl, name: 'Bubble Day', symbol: 'BUBL', uri: LINK, mutable: true },
-      'the record is still the owner’s to change',
+      {
+        updateAuthority: owner.address,
+        mint: bubl,
+        name: 'Bubble Day',
+        symbol: 'BUBL',
+        uri: LINK,
+        royalty: 0,
+        creators: 0,
+        mutable: true,
+        collection: false,
+        uses: false,
+        plain: true,
+      },
+      'the record is still the owner’s to change, and nothing else of it changed',
     );
     assert.equal(b.record.data.length, 607);
     assert.deepEqual([after.live.mints.bubl, after.live.mints.gem], [bubl, gem], 'the same mints');
     assert.ok(!after.live.partial && !after.live.landed, 'the file is live, with nothing left over');
     // nothing more to publish; and a change of name costs a transaction, no rent and no fee to Token Metadata
     assert.deepEqual([changedParts(after).only.size, changedParts(after).renames], [0, []]);
+    // (loot is not called, so its project fee is not charged: the network's fee for one signature is all)
     const priced = cost(next, { now: NOW, ...change, live: next.live }).setup;
-    assert.deepEqual([priced.accounts.length, priced.rentSol, priced.metadataFeesSol], [0, 0, 0]);
+    assert.deepEqual(
+      [priced.accounts.length, priced.rentSol, priced.metadataFeesSol, priced.programFeesSol, priced.totalSol],
+      [0, 0, 0, 0, 0.000005],
+    );
     // a tool that does not read the chain says what approving will do, and that it reads the record first
     const said = await runTool('xsolana_publish', { spec: next }, { now: NOW });
     assert.equal(said.transactions, 1);
-    assert.match(said.text, /Change what the token BUBL \(mint \w+\) is called on chain/);
-    assert.ok(said.text.includes(renamesNote(['bubl', 'gem'])), said.text);
+    assert.match(said.text, /at most 1 transaction, 1 wallet approval, about 0\.000005 SOL/);
     assert.match(
-      (await runTool('xsolana_cost', { spec: next }, { now: NOW })).text,
-      /prices only the change \(the name of bubl, the name of gem\)/,
+      said.text,
+      /Change what the token BUBL \(mint \w+\) is called on chain.*\(sent only if the token has a name record its owner can still change, read when approving\)/,
     );
+    assert.ok(said.text.includes(renamesNote(['bubl', 'gem'])), said.text);
+    const priceSaid = (await runTool('xsolana_cost', { spec: next }, { now: NOW })).text;
+    assert.match(priceSaid, /prices only the change \(the name of bubl, the name of gem\)/);
+    assert.match(priceSaid, /program fees 0 SOL/);
+    assert.ok(priceSaid.includes(renamesNote(['bubl', 'gem'])), priceSaid);
 
     // a name too long for the record is refused before anything is signed, on a live token too now that it is written
     const long = edit(after, 'bubl', { name: '🫧'.repeat(11) });
@@ -228,8 +256,16 @@ test(
       warned(state, /BUBL is called, but it went live before setups named tokens.*Nothing is sent for it/),
       state.warnings.join('\n'),
     );
+    // the page shows it by itself, done or not (`unwritten`), and the file is as it was
+    assert.deepEqual(
+      state.unwritten,
+      state.warnings.filter(x => /went live before setups named tokens/.test(x)),
+    );
+    assert.equal(state.unwritten.length, 1);
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), next);
     assert.equal(w.chain.get(metadataAddress(bare)).data.length, 0, 'nothing written');
-    // a change beside it goes through, and the name is not asked about again once the file is published as it is
+    // a change beside it goes through; the file never calls the name published, so it is said again at each approve
+    // until the spec gives the old one back
     writeFileSync(file, JSON.stringify({ ...next, pools: [{ key: 'pot', currency: 'sol' }] }, null, 2));
     const { before, saved: after } = await approveAll(file, chain, owner);
     assert.deepEqual(
@@ -237,7 +273,17 @@ test(
       ['pool:pot'],
     );
     assert.ok(after.pools[0].index !== undefined && !after.live.partial, 'the pool landed, and the file is not stuck');
-    assert.deepEqual(changedParts(after).renames, []);
+    assert.deepEqual(
+      [after.tokens.find(t => t.key === 'bubl').name, after.live.published.tokens.find(t => t.key === 'bubl').name],
+      ['Bubble Day', 'Bubble'],
+      'published as the chain has it',
+    );
+    assert.deepEqual([[...changedParts(after).only], changedParts(after).renames], [[], ['bubl']]);
+    const later = await (await createApproval({ file, chain, now: () => NOW })).stateFor(owner.address);
+    assert.deepEqual([later.steps.length, later.done, later.unwritten.length], [0, true, 1]);
+    writeFileSync(file, JSON.stringify(edit(after, 'bubl', { name: 'Bubble' }), null, 2));
+    const back = await (await createApproval({ file, chain, now: () => NOW })).stateFor(owner.address);
+    assert.deepEqual([back.steps.length, back.done, back.unwritten], [0, true, []]);
     // its words as it went live are labels, held to nothing; changed, they are held to what a record takes
     const long = '🫧'.repeat(11);
     const wasLong = edit(old, 'bubl', { name: long });
@@ -252,14 +298,14 @@ test(
 );
 
 test(
-  'a record handed on or made unchangeable is not written, is said, and holds nothing else up',
+  'a record handed on, made unchangeable or given a royalty is not written, is said, and holds nothing else up',
   { skip },
   async () => {
     for (const [what, change, says] of [
       [
         'handed on',
         (data, thief) => data.set(addressBytes(thief), 1),
-        /BUBL is called, but its name record is no longer the project owner’s to change.*wallets keep showing “Bubble”, BUBL/,
+        /BUBL is called, but its name record is no longer the project owner’s to change.*wallets keep showing “Bubble” \(“BUBL”\)/,
       ],
       [
         'made unchangeable',
@@ -268,7 +314,17 @@ test(
           assert.equal(data[at], 1, 'the record’s own flag');
           data[at] = 0;
         },
-        /BUBL is called, but its name record can no longer be changed.*wallets keep showing “Bubble”, BUBL/,
+        /BUBL is called, but its name record can no longer be changed.*wallets keep showing “Bubble” \(“BUBL”\)/,
+      ],
+      [
+        'given a royalty',
+        data => {
+          const at = 65 + 3 * 4 + 32 + 10 + 200;
+          assert.deepEqual([data[at], data[at + 1]], [0, 0], 'the record’s own royalty');
+          data[at] = 0xf4;
+          data[at + 1] = 0x01;
+        },
+        /BUBL is called, but its name record was given a royalty outside these tools.*wallets keep showing “Bubble” \(“BUBL”\)/,
       ],
     ]) {
       const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
@@ -285,10 +341,56 @@ test(
         ['pool:pot'],
         what,
       );
+      const record = Uint8Array.from(w.chain.get(metadataAddress(mint)).data);
       const { saved: after } = await approveAll(file, chain, owner);
       assert.ok(after.pools[0].index !== undefined && !after.live.partial && !after.live.changing, what);
-      assert.equal(named(w, mint).name, 'Bubble', `${what}: unchanged on chain`);
+      assert.deepEqual(w.chain.get(metadataAddress(mint)).data, record, `${what}: the record is untouched`);
+      assert.equal(after.live.published.tokens[1].name, 'Bubble', `${what}: and the file does not say otherwise`);
     }
+  },
+);
+
+test(
+  'a record with a verified creator, which Token Metadata would refuse to write over, stops nothing in its batch',
+  { skip },
+  async () => {
+    const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+    const { saved } = await approveAll(file, chain, owner);
+    const mint = saved.live.mints.bubl;
+    // as another tool would write it: the same words, with a royalty and the owner as a verified creator
+    const text = t => concat(uintLE(utf8(t).length, 4), utf8(t));
+    w.chain.send(owner.address, [
+      {
+        programId: METAPLEX_METADATA_PROGRAM,
+        keys: [meta(metadataAddress(mint), false, true), meta(owner.address, true, false)],
+        data: concat(
+          Uint8Array.of(15, 1),
+          ...['Bubble', 'BUBL', ''].map(text),
+          uintLE(500, 2),
+          Uint8Array.of(1),
+          uintLE(1, 4),
+          addressBytes(owner.address),
+          Uint8Array.of(1, 100),
+          Uint8Array.of(0, 0, 0, 0, 0),
+        ),
+      },
+    ]);
+    const was = parseRecord(w.chain.get(metadataAddress(mint)).data);
+    assert.deepEqual([was.royalty, was.creators, was.plain], [500, 1, false]);
+    writeFileSync(
+      file,
+      JSON.stringify({ ...edit(saved, 'bubl', { name: 'Bubble Day' }), pools: [{ key: 'pot', currency: 'sol' }] }),
+    );
+    const session = await createApproval({ file, chain, now: () => NOW });
+    const state = await session.stateFor(owner.address);
+    assert.deepEqual(
+      state.steps.map(s => s.id),
+      ['pool:pot'],
+    );
+    assert.ok(warned(state, /was given a royalty, creators outside these tools/), state.warnings.join('\n'));
+    const { saved: after } = await approveAll(file, chain, owner);
+    assert.ok(!after.live.partial && w.chain.get(pda.pool(after.live.project, 0)), 'the pool landed');
+    assert.deepEqual(parseRecord(w.chain.get(metadataAddress(mint)).data), was, 'the record keeps what it was given');
   },
 );
 
@@ -362,11 +464,18 @@ test('a name edited while a setup or a change was cut short is written when it i
   const third = await createApproval({ file, chain: flaky, now: () => NOW });
   const rest = await third.stateFor(owner.address);
   assert.ok(rest.steps.length && !rest.steps.some(s => s.id.startsWith('name:')), rest.steps.map(s => s.id).join(' '));
+  // the name is changed once more before going on: its step is to do again, and is never shown as the one that landed
+  writeFileSync(file, JSON.stringify(edit(JSON.parse(readFileSync(file, 'utf8')), 'bubl', { name: 'Bubbly' })));
+  const fourth = await createApproval({ file, chain: flaky, now: () => NOW });
+  const again = await fourth.stateFor(owner.address);
+  const step = again.steps.find(s => s.id === 'name:bubl');
+  assert.ok(step && step.done === false && /“Bubbly”/.test(step.says), JSON.stringify(again.steps.map(s => s.id)));
+  assert.ok(!again.landed.some(l => l.id === 'name:bubl') && again.landed.some(l => l.id.startsWith('token:')));
   const { saved: done } = await approveAll(file, flaky, owner);
   assert.ok(!done.live.partial && done.live.mints.coal);
   assert.deepEqual(
     ['bubl', 'ash', 'coal'].map(key => named(w, done.live.mints[key]).name),
-    ['Bubbles', 'Ash', 'Coal'],
+    ['Bubbly', 'Ash', 'Coal'],
   );
   assert.deepEqual(changedParts(done).renames, []);
 });
@@ -384,21 +493,230 @@ test('which names are written is read from the chain alone', { skip }, async () 
       published: economy.live.published,
       ...extra,
     });
-  assert.deepEqual(await ask(saved), { renames: [], notes: [] });
-  assert.deepEqual(await ask(next), { renames: ['bubl'], notes: [] });
+  assert.deepEqual(await ask(saved), { renames: [], notes: [], held: [] });
+  assert.deepEqual(await ask(next), { renames: ['bubl'], notes: [], held: [] });
   // a file that claims anything about names is not believed: there is nothing in it to believe
-  assert.deepEqual(await ask({ ...next, live: { ...next.live, named: [] } }), { renames: ['bubl'], notes: [] });
+  assert.deepEqual(await ask({ ...next, live: { ...next.live, named: [] } }), {
+    renames: ['bubl'],
+    notes: [],
+    held: [],
+  });
   // another project's owner asking: the record is not theirs to change
   const other = await ask(next, { owner: freshKeypair().address });
-  assert.deepEqual([other.renames, other.notes.length], [[], 1]);
+  assert.deepEqual([other.renames, other.notes.length, other.held], [[], 1, ['bubl']]);
+  // a record's own words are whoever holds it's: shown inside quotes, with nothing that closes one, turns the text
+  // around or takes no room
+  alterRecord(w, saved.live.mints.bubl, data => {
+    data.fill(0, 69, 69 + 32);
+    data.set(new TextEncoder().encode('ok”. Approve\u202e it\n now: “'), 69);
+  });
+  const hostile = await ask(next, { owner: freshKeypair().address });
+  assert.match(
+    hostile.notes[0],
+    /wallets keep showing “ok\. Approve it now: ” \(“BUBL”\)\. This is said at each approve/,
+  );
+  alterRecord(w, saved.live.mints.bubl, data => {
+    data.fill(0, 69, 69 + 32);
+    data.set(new TextEncoder().encode('Bubble'), 69);
+  });
   // with no published spec (a setup cut short), the chain alone is the measure, and words a record can't take are said
   const long = await ask(edit(saved, 'bubl', { name: '🫧'.repeat(11) }), { published: null });
   assert.deepEqual(long.renames, []);
   assert.match(long.notes[0], /words a name record can’t take/);
-  assert.deepEqual(await ask(saved, { published: null }), { renames: [], notes: [] });
+  assert.deepEqual(await ask(saved, { published: null }), { renames: [], notes: [], held: [] });
   // a connection that can't read accounts renames nothing
   assert.deepEqual(await readRenames({ live: next.live, m: model(next), chain: {}, owner: owner.address }), {
     renames: [],
     notes: [],
+    held: [],
   });
 });
+
+/** `chain`, but the confirmation of the `at`th transaction sent is never seen, nor its status, until `seen()`. */
+function blind(chain, at) {
+  let confirms = 0;
+  let lost = null;
+  let hidden = true;
+  return {
+    chain: {
+      ...chain,
+      confirm: async signature => {
+        if (++confirms !== at) return;
+        lost = signature;
+        throw new Error('confirmation timed out');
+      },
+      signatureStatus: async signature => (hidden && signature === lost ? null : chain.signatureStatus(signature)),
+    },
+    seen: () => (hidden = false),
+  };
+}
+/** Approves batches until one fails: its message. */
+async function approveUntilCut(file, chain, owner) {
+  const session = await createApproval({ file, chain, now: () => NOW });
+  for (let i = 0; i < 6; i++) {
+    const batch = await session.prepare(owner.address);
+    try {
+      await session.complete(owner.address, batch.id, signAll(owner, batch.transactions));
+    } catch (e) {
+      return e.message;
+    }
+  }
+  return null;
+}
+
+test(
+  'a name edited while a transaction was still looked for is written, never recorded as published unsent',
+  { skip },
+  async () => {
+    // a change (a pool) whose transaction landed unseen; the name is edited before approving again
+    {
+      const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+      const { saved } = await approveAll(file, chain, owner);
+      writeFileSync(file, JSON.stringify({ ...saved, pools: [{ key: 'pot', currency: 'sol' }] }));
+      const lost = blind(chain, 1);
+      assert.match(await approveUntilCut(file, lost.chain, owner), /may still land/);
+      const mid = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(mid.live.partial && mid.live.pending.length === 1);
+      lost.seen();
+      writeFileSync(file, JSON.stringify(edit(mid, 'bubl', { name: 'Bubble Day' })));
+      const session = await createApproval({ file, chain: lost.chain, now: () => NOW });
+      const state = await session.stateFor(owner.address);
+      assert.deepEqual(
+        [state.steps.map(s => s.id), state.done],
+        [['name:bubl'], false],
+        'the pool is found landed, and the name is still to write',
+      );
+      const held = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(held.live.partial && held.live.published.tokens[1].name === 'Bubble', 'not recorded as live yet');
+      const { saved: after } = await approveAll(file, lost.chain, owner);
+      assert.ok(!after.live.partial && w.chain.get(pda.pool(after.live.project, 0)));
+      assert.deepEqual(
+        [named(w, saved.live.mints.bubl).name, after.live.published.tokens[1].name],
+        ['Bubble Day', 'Bubble Day'],
+      );
+    }
+    // a first setup whose first transaction (the token, named as it was then) landed unseen
+    {
+      const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+      const lost = blind(chain, 1);
+      assert.match(await approveUntilCut(file, lost.chain, owner), /may still land/);
+      const mid = JSON.parse(readFileSync(file, 'utf8'));
+      // (what a pending transaction made, the project's lookup table too, is a file that checks)
+      assert.ok(check(mid, { now: NOW }).ok);
+      lost.seen();
+      writeFileSync(file, JSON.stringify(edit(mid, 'bubl', { name: 'Bubble Day' })));
+      const { saved: after } = await approveAll(file, lost.chain, owner);
+      assert.ok(!after.live.partial && after.live.project);
+      assert.equal(named(w, after.live.mints.bubl).name, 'Bubble Day');
+    }
+    // a first setup whose lookup table's transaction landed unseen: what it made is in the file, which still checks
+    {
+      const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+      const lost = blind(chain, 2);
+      assert.match(await approveUntilCut(file, lost.chain, owner), /may still land/);
+      const mid = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(mid.live.pending[0].made.tables?.length === 1 && check(mid, { now: NOW }).ok);
+      lost.seen();
+      const session = await createApproval({ file, chain: lost.chain, now: () => NOW });
+      assert.equal((await session.stateFor(owner.address)).done, true);
+      const after = JSON.parse(readFileSync(file, 'utf8'));
+      assert.ok(!after.live.partial && !after.live.pending);
+      assert.deepEqual(after.live.tables, mid.live.pending[0].made.tables);
+      assert.ok(w.chain.get(after.live.tables[0]), 'the table is on chain');
+    }
+    // a rename with a typo landed unseen; the typo is fixed before approving again: the fix is written, in the
+    // session that found the first one landed
+    for (const more of [[], ['ash', 'soot', 'coal', 'tar']]) {
+      const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+      const { saved } = await approveAll(file, chain, owner);
+      const typo = edit(saved, 'bubl', { name: 'Buble Day' });
+      typo.tokens = [...typo.tokens, ...more.map(key => ({ key, source: 'project' }))];
+      writeFileSync(file, JSON.stringify(typo));
+      const lost = blind(chain, 1);
+      assert.match(await approveUntilCut(file, lost.chain, owner), /may still land/);
+      assert.equal(named(w, saved.live.mints.bubl).name, 'Buble Day');
+      lost.seen();
+      writeFileSync(file, JSON.stringify(edit(JSON.parse(readFileSync(file, 'utf8')), 'bubl', { name: 'Bubble Day' })));
+      const session = await createApproval({ file, chain: lost.chain, now: () => NOW });
+      const state = await session.stateFor(owner.address);
+      const again = state.steps.find(s => s.id === 'name:bubl');
+      // the step is to do, and never shown as landed for what an earlier one of its name did
+      assert.ok(again && !again.done && /“Bubble Day”/.test(again.says), JSON.stringify(state.steps.map(s => s.id)));
+      assert.ok(!state.landed.some(l => l.id === 'name:bubl'));
+      const { saved: after } = await approveAll(file, lost.chain, owner);
+      assert.ok(!after.live.partial);
+      assert.deepEqual(
+        [named(w, saved.live.mints.bubl).name, after.live.published.tokens[1].name, changedParts(after).renames],
+        ['Bubble Day', 'Bubble Day', []],
+      );
+    }
+  },
+);
+
+test(
+  'a change that is a name alone, cut short, is still that change; a part added since is sent, never recorded unsent',
+  { skip },
+  async () => {
+    const { w, owner, file, chain } = setup({ ...SPEC, tokens: SPEC.tokens.slice(0, 2) });
+    const { saved } = await approveAll(file, chain, owner);
+    const next = edit(saved, 'bubl', { name: 'Bubble Day' });
+    writeFileSync(file, JSON.stringify(next, null, 2));
+    // the node refuses the send: nothing of the change can land, so the file reads as live again, as it was
+    const refuses = {
+      ...chain,
+      send: async () => {
+        throw Object.assign(new Error('RPC: blockhash not found'), { code: -32002 });
+      },
+    };
+    assert.match(await approveUntilCut(file, refuses, owner), /blockhash/);
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), next);
+    const fresh = await createApproval({ file, chain, now: () => NOW });
+    assert.deepEqual(
+      [fresh.state().mode, fresh.state().steps.map(s => s.id), fresh.state().done],
+      ['change', ['name:bubl'], false],
+    );
+
+    // as an earlier build left such a file (marked as under way, changing nothing), with a pool added since: first
+    // with the new name kept, then with nothing but another pool
+    for (const [name, pool, steps] of [
+      ['Bubble Day', 'pot', ['name:bubl', 'pool:pot']],
+      ['Bubble Day', 'jar', ['pool:jar']],
+    ]) {
+      const base = JSON.parse(readFileSync(file, 'utf8'));
+      const stuck = {
+        ...edit(base, 'bubl', { name }),
+        pools: [...(base.pools ?? []), { key: pool, currency: 'sol' }],
+        live: { ...base.live, partial: true, changing: [], landed: [] },
+      };
+      writeFileSync(file, JSON.stringify(stuck, null, 2));
+      const session = await createApproval({ file, chain, now: () => NOW });
+      // before a wallet connects the page lists the change, and never calls a file under way done
+      assert.deepEqual(
+        [
+          session.state().done,
+          session
+            .state()
+            .steps.map(s => s.id)
+            .sort(),
+        ],
+        [false, steps],
+      );
+      const state = await session.stateFor(owner.address);
+      assert.deepEqual(state.steps.map(s => s.id).sort(), steps);
+      const { saved: after } = await approveAll(file, chain, owner);
+      assert.ok(!after.live.partial && !after.live.changing);
+      assert.equal(named(w, saved.live.mints.bubl).name, name);
+      for (const p of after.pools)
+        assert.ok(w.chain.get(pda.pool(after.live.project, p.index)), `${p.key} is on chain`);
+      assert.deepEqual([[...changedParts(after).only], changedParts(after).renames], [[], []]);
+    }
+
+    // a file left marked as under way with nothing left to do is recorded as live once a wallet's read says so
+    const done = JSON.parse(readFileSync(file, 'utf8'));
+    writeFileSync(file, JSON.stringify({ ...done, live: { ...done.live, partial: true, changing: [], landed: [] } }));
+    const session = await createApproval({ file, chain, now: () => NOW });
+    assert.equal(session.state().done, false);
+    assert.equal((await session.stateFor(owner.address)).done, true);
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).live.partial, undefined);
+  },
+);
