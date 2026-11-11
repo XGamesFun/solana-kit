@@ -4,6 +4,31 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.8: the tools challenge a request before building it (loot 0.28.0, unchanged)
+
+The tools alone, from a game that went live with these traps (Bubble Day).
+
+- **Six warnings** in the checker, each also a finding of the review:
+  - `W-REFUND-NOT-PAID` (medium): a lottery with a least sale whose ticket token players buy with another token. A
+    cancelled round refunds the ticket token, not what was paid for it.
+  - `W-SWAP-BACK-OPEN` (medium): a recipe that turns a ticket token back into what bought it, open with no window.
+    Anyone can undo a purchase at any time, and a free ticket becomes money.
+  - `W-FREE-IS-PAID` (medium): a grant that gives, for nothing, a token a recipe sells and another recipe turns back
+    into a token. Each claim is worth what the way back pays.
+  - `W-MINSOLD-VS-SCENARIO` (medium): a least sale above what the scenario sells in a round (its count a day, or its
+    players times `perWallet`). The warning says the least sale can change only before the round's first ticket.
+  - `W-TWO-PROMPTS` (low): a ticket token a recipe makes. It points to `buyTickets(..., { make })`, which crafts and
+    buys with one approval.
+  - `W-AFTER-THE-END` (low): a grant or recipe that keeps giving a token after the last draw it was good for.
+- **`xsolana explain` and the review's trade-offs end with a walk-through.** It covers each route, one line per state:
+  - the states: before it opens, while it runs, cancelled or failed, won, after it ends, a change of mind;
+  - in each state, what a player, the owner and a cheater see;
+  - and what can change only before a first sale or claim.
+- **The skill's rule 9** is now "Challenge before you build". Name the simplest version that delivers most of a
+  request, and say what it gives up and what the asked-for version costs (wallet prompts, moving parts, failure
+  states, who must act later). Recommend one, and build the asked-for version only once the person has seen that trade
+  and still wants it. The MCP server's instructions say the same.
+
 ## 0.28.7: tickets and the entries they cost, in one approval (loot 0.28.0, unchanged)
 
 The JavaScript alone. `buyTickets(key, count, { listing, make: { recipe, times, listing } })` crafts the recipe first

@@ -1,6 +1,7 @@
 // The economy in plain words, from the checker, the simulation, the cost and the play-time steps: what players do
 // and what it costs them, how the pools fill and drain, what runs by itself, what the authority must sign, what
 // going live costs, and what the owner must know. Deterministic. Pure.
+import { walkThrough } from './walk.mjs';
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
 import {
@@ -616,6 +617,8 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     '',
     `${realMoney() ? 'This economy is on mainnet: what it takes and what it pays is real money, and loot has not been independently audited.' : 'This economy is on devnet: nothing here is real money.'} Going live is signed on your own machine by the project’s key file, which is what “your wallet” means above. The command first prints everything it would send and sends nothing; it sends only when run again with the code it printed, which your agent is told to do only after your yes. No seed phrase or wallet key is ever asked for.`,
   );
+  const walk = walkThrough(m, { now });
+  if (walk.length) lines.push('', ...walk);
   return {
     ok: true,
     text: lines.join('\n').trim(),

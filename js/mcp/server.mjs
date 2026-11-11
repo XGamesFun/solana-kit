@@ -15,9 +15,14 @@ import { withCluster } from './with-cluster.mjs';
 /** Where loot runs, for every agent that connects. */
 const WHERE = `loot ${VERSION} runs on devnet (program ${CLUSTERS.devnet.program}) and on mainnet (program ${CLUSTERS.mainnet.program}). An economy is on devnet, where nothing is real money, unless its file says "network": "mainnet", where everything is. Build and try an economy on devnet first. loot has not been independently audited.`;
 
+/** How to meet a request: the simplest version first, its trade said, before building what was asked. */
+const CHALLENGE =
+  'Challenge before you build. For every request, name the simplest version that delivers most of it. Say what it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it. Challenge economy, flow and irreversible choices; don’t challenge taste. Composing parts is still how you find the versions; xsolana_explain ends with each route’s states as a player, the owner and a cheater see them.';
+
 export const INSTRUCTIONS = [
   'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live. Going live is signed by a key file on their own machine (xsolana keygen makes one; never ask for, read or print a key) with xsolana approve --keypair, which prints everything it would send and sends nothing until it is run again with the code it printed: do that only after they have read the printout and said yes. That key owns the project for good: a change to an economy that is already live is signed by the key that owns it, never by a new one. A browser wallet’s signing page (approve --browser) only if they ask for one, and they run it themselves.',
+  CHALLENGE,
   WHERE,
 ].join(' ');
 
@@ -27,6 +32,7 @@ export const INSTRUCTIONS = [
  */
 export const REMOTE_INSTRUCTIONS = [
   INSTRUCTIONS.split(' Start with')[0],
+  CHALLENGE,
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec and pass it whole as "spec" to every tool (this hosted server reads no files); xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets).',
   `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address devnet SOL), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner for good (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
   WHERE,
