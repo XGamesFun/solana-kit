@@ -58,6 +58,7 @@ import {
   utf8Bytes,
   wholeCount,
   weights,
+  tokenLabels,
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
 import { boxArgs, boxOrderBytes, placeholderContext, recipeArgs, setupSteps, stepAloneBytes } from './plan.mjs';
@@ -1017,8 +1018,15 @@ export function check(
     // A token the setup makes is named on chain as it is made (its Token Metadata record), and the record takes so
     // many bytes of each, not characters: a longer one would be refused on chain, in the middle of going live. One
     // with no name or ticker at all would be written blank, and show as an unknown token for the record's price. A
-    // token that is live already is not named again: its words here stay labels, as they were.
-    if (source === 'game' && !economy.live?.mints?.[t.key])
+    // token that is live keeps its words as labels, held to nothing, until they are changed: a change is written to
+    // its record, so the new words are held to what a record takes.
+    const liveAs = economy.live?.mints?.[t.key]
+      ? (economy.live.published?.tokens ?? []).find(x => x.key === t.key)
+      : null;
+    const written =
+      !economy.live?.mints?.[t.key] ||
+      (liveAs && JSON.stringify(tokenLabels(liveAs)) !== JSON.stringify(tokenLabels(t)));
+    if (source === 'game' && written)
       for (const [field, what] of [
         ['name', 'name'],
         ['symbol', 'ticker'],

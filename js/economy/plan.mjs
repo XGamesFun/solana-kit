@@ -21,7 +21,13 @@ import {
   TOKEN_PROGRAM,
 } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
-import { createFungibleMetadataIx, METADATA_BYTES, METADATA_FEE, METADATA_LIMITS } from '../chain/metadata.js';
+import {
+  createFungibleMetadataIx,
+  METADATA_BYTES,
+  METADATA_FEE,
+  METADATA_LIMITS,
+  updateFungibleMetadataIx,
+} from '../chain/metadata.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import {
   computeUnitLimit,
@@ -78,6 +84,7 @@ import {
   weights,
   wholeCount,
   windowOf,
+  tokenLabels,
 } from './model.mjs';
 import { BUDGET } from './txsize.mjs';
 
@@ -723,7 +730,7 @@ const placeholderKey = name => encodeBase58(sha256(utf8(`loot-plan:${name}`)));
  * seats there as it is released, its clock stopped while nobody is in. A seed that lands
  * before the first stake or after it is released the same way from that stake on, so seeding first would change nothing.
  */
-export function setupSteps(economy, { now = 0, only = null, live: given = null } = {}) {
+export function setupSteps(economy, { now = 0, only = null, live: given = null, renames = null } = {}) {
   const m = model(economy, { now });
   const live = madeSoFar(given);
   const steps = [];
@@ -731,19 +738,51 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   const landed = new Set(live?.landed ?? []);
   const add = step => want(step.part) && !landed.has(step.id) && steps.push({ creates: [], signers: [owner], ...step });
   const project = ctx => ctx.project;
-  const fresh = !live?.project;
+  // The project's own first steps (its collection, the project, the accounts it pays into, its lookup table) belong to
+  // a new setup, and to one cut short before the file was recorded as live (`partial`, with nothing `published`): gone
+  // on with, whichever of them has not landed is still made. Before, a setup cut short after the project's step never
+  // made the rest.
+  const fresh = !live?.project || Boolean(given?.partial && !given?.published);
 
   // Tokens the project mints: a classic mint with the owner as its authority, handed to the project right after.
   // Each is named on chain in the same step (its Token Metadata record: the name, the ticker and the link wallets
   // show), while the owner is still its mint authority: Token Metadata takes a record from nobody else, so a mint whose
   // minting was handed on or turned off without one can never have one. The owner stays the record's update authority.
   for (const t of m.tokens.values()) {
+    // A live token whose name record is to be written again (`renames`: its key; the approval reads the chain for
+    // which, live-check.mjs readRenames): the new name, ticker and link, signed by the owner, the record's update
+    // authority. Not a part a change scopes (`only`), and never held back as landed: the chain says when it is done.
+    const labels = [t.name, t.symbol, t.uri ?? ''];
+    const writable =
+      labels.every(
+        (v, i) => utf8(String(v)).length <= [METADATA_LIMITS.name, METADATA_LIMITS.symbol, METADATA_LIMITS.uri][i],
+      ) &&
+      String(t.name).trim() !== '' &&
+      String(t.symbol).trim() !== '';
+    if (t.source === 'game' && live?.mints?.[t.key] && renames && new Set(renames).has(t.key) && writable)
+      steps.push({
+        creates: [],
+        signers: [owner],
+        id: `name:${t.key}`,
+        part: `name:${t.key}`,
+        // (named by the ticker it was published with: the new one is what it is changed to)
+        says: `Change what the token ${tokenLabels((given?.published?.tokens ?? []).find(x => x.key === t.key) ?? t)[1]} (mint ${live.mints[t.key]}) is called on chain to “${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: its name record is written again, and stays only your wallet’s to change`,
+        build: ctx => [
+          updateFungibleMetadataIx({
+            mint: ctx.mints[t.key],
+            authority: ctx.owner,
+            name: t.name,
+            symbol: t.symbol,
+            uri: t.uri ?? '',
+          }),
+        ],
+      });
     if (t.source !== 'game' || live?.mints?.[t.key] || (t.mint && !t.mint.startsWith('@'))) continue;
     const key = `new:mint/${t.key}`;
-    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, which these tools don’t do yet, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
+    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
     const record = { what: `the name of ${t.symbol} on chain`, bytes: METADATA_BYTES, fee: Number(METADATA_FEE) };
     // The checker refuses a name, ticker or link too long for a record before any plan is made, except on a token
-    // that is live already, whose words are only labels. Such a token is made here only when a live economy is
+    // that is live already and whose words were not changed. Such a token is made here only when a live economy is
     // planned as if it were new (explain's cost of the whole setup, which is never sent): its record is left out.
     const fits = ['name', 'symbol', 'uri'].every(f => utf8(String(t[f] ?? '')).length <= METADATA_LIMITS[f]);
     const name = ctx =>
@@ -926,26 +965,39 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   // the first of its addresses, then extended a group a step.
   if (fresh) {
     const named = standingAddresses(m);
-    groupsOf(named, TABLE_GROUP).forEach((group, i) =>
-      add({
-        id: i ? `table:${i}` : 'table',
-        part: 'project',
-        says: i
-          ? `Add ${group.length} more addresses to the project’s lookup table`
-          : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
-        creates: i
-          ? [{ what: `room for ${group.length} addresses in the lookup table`, bytes: 32 * group.length, grows: true }]
-          : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
-        build: ctx => {
-          // With no recent slot known (a plan built offline), there is no table to make.
-          if (ctx.slot == null) return [];
-          const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
-          return [
-            ...(i ? [] : [instruction]),
-            extendTableIx({ table, authority: ctx.owner, addresses: group.map(at => at(ctx)).filter(Boolean) }),
-          ];
-        },
-      }),
+    // A table whose making landed with no address kept (a file an earlier release left, which recorded a transaction
+    // found landed without what it made) can't be added to: its address is of a slot nobody recorded. It stays as it
+    // is, and nothing more is planned for it.
+    const lost = landed.has('table') && !given?.tables?.[0];
+    groupsOf(named, TABLE_GROUP).forEach(
+      (group, i) =>
+        (i && lost) ||
+        add({
+          id: i ? `table:${i}` : 'table',
+          part: 'project',
+          says: i
+            ? `Add ${group.length} more addresses to the project’s lookup table`
+            : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
+          creates: i
+            ? [
+                {
+                  what: `room for ${group.length} addresses in the lookup table`,
+                  bytes: 32 * group.length,
+                  grows: true,
+                },
+              ]
+            : [{ what: 'the project’s lookup table', bytes: 56 + 32 * group.length }],
+          build: ctx => {
+            const addresses = group.map(at => at(ctx)).filter(Boolean);
+            // A table made already (its first step landed in an earlier batch, or before the setup was cut short) is the
+            // one the rest is added to: its address is of the slot it was made at, never of this batch's.
+            if (i && ctx.tables?.[0]) return [extendTableIx({ table: ctx.tables[0], authority: ctx.owner, addresses })];
+            // With no recent slot known (a plan built offline), there is no table to make.
+            if (ctx.slot == null) return [];
+            const { address: table, instruction } = createTableIx({ authority: ctx.owner, slot: ctx.slot });
+            return [...(i ? [] : [instruction]), extendTableIx({ table, authority: ctx.owner, addresses })];
+          },
+        }),
     );
   }
 
@@ -1809,6 +1861,8 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent 
     project: own,
     treasury: live.treasury ?? m.treasuryWallet ?? ownerKey,
     mints,
+    // the project's lookup table, once its first step landed
+    tables: live.tables ?? null,
     keys,
     rent,
   };
@@ -1876,11 +1930,14 @@ export function pack(steps, ctx) {
  * The plan for a spec: refusals, or every step packed into transactions. With `ctx` the transactions carry the
  * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing).
  */
-export function plan(economy, { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null } = {}) {
+export function plan(
+  economy,
+  { now = Math.floor(Date.now() / 1000), ctx = null, only = null, live = null, renames = null } = {},
+) {
   // With a real context the project is known: a box's write is checked with its own address searches counted.
   const checked = check(economy, { now, ...(ctx?.project ? { project: ctx.project } : {}) });
   if (!checked.ok) return { ok: false, refusals: checked.refusals, warnings: checked.warnings };
-  const { steps, model: m } = setupSteps(economy, { now, only, live });
+  const { steps, model: m } = setupSteps(economy, { now, only, live, renames });
   if (ctx)
     ctx.tokenPrograms ??= Object.fromEntries(
       [...m.tokens.values()]

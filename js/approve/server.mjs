@@ -27,7 +27,7 @@ import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
-import { checkLive, checkMints, LiveMismatch, MintMismatch } from './live-check.mjs';
+import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames } from './live-check.mjs';
 
 const PREPARE_TTL_MS = 90_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -150,8 +150,41 @@ export async function createApproval({
   const signatures = [];
   const at = now();
   const mode = !spec.live ? 'new' : spec.live.partial ? 'resume' : 'change';
-  /** The parts this session publishes: all of them for a new economy, what changed for a live one. */
-  let only = mode === 'change' ? changedParts(spec).only : spec.live?.changing ? new Set(spec.live.changing) : null;
+  /**
+   * The parts this session publishes: all of them for a new economy, what changed for a live one. A change that was
+   * cut short (`partial`, with what was `published` before it) goes on as what the file says changed now, with what
+   * it was changing when it stopped: a part added to the spec since is published too, never recorded as live unsent,
+   * and a change that had no part to publish (a token's name alone) is still a change.
+   */
+  let only =
+    mode === 'change'
+      ? changedParts(spec).only
+      : spec.live?.published
+        ? new Set([...(spec.live.changing ?? []), ...changedParts(spec).only])
+        : spec.live?.changing
+          ? new Set(spec.live.changing)
+          : null;
+  if (mode === 'resume' && spec.live.published) spec = { ...spec, live: { ...spec.live, changing: [...only] } };
+  /**
+   * The live tokens whose name record this session writes again (plan.mjs `renames`), and in words the names the spec
+   * changes that can't be written (`held`: their keys). Until a wallet connects: what the file itself says changed
+   * since it was published. Once one has: what the chain says (`readRenames`), which is all that is ever sent.
+   */
+  let renames = new Set(spec.live?.published ? changedParts(spec).renames : []);
+  let renameNotes = [];
+  let held = new Set();
+  /** The tokens whose record already says the spec's new name, though the file's published spec says the old one. */
+  let settled = new Set();
+  /**
+   * The names this session has written itself, with this spec's words: never offered again, even to a connection
+   * that reads a slot behind. (A name an earlier session sent is not among them: the spec may have changed since, so
+   * the chain alone says whether it is the one wanted.)
+   */
+  const renamed = new Set();
+  /** The transactions this session sent itself. */
+  const sentHere = new Set();
+  /** What a plan of this session is scoped by. */
+  const scope = () => ({ only, renames });
 
   /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   const live = () => spec.live ?? null;
@@ -192,7 +225,21 @@ export async function createApproval({
       );
     }
     try {
-      return await checkLive({ live: live(), m: model(spec, { now: at }), wallet, chain });
+      const m = model(spec, { now: at });
+      const trusted = await checkLive({ live: live(), m, wallet, chain });
+      // which names are written again is the chain's to say, read for the project's owner
+      const read = await readRenames({
+        live: live(),
+        m,
+        chain,
+        owner: trusted.owner,
+        published: spec.live?.published ?? null,
+      });
+      renames = new Set(read.renames.filter(key => !renamed.has(key)));
+      renameNotes = read.notes;
+      held = new Set(read.held);
+      settled = new Set(read.settled);
+      return trusted;
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
       throw new ApproveError(
@@ -203,7 +250,7 @@ export async function createApproval({
   }
 
   async function build(owner) {
-    const p0 = plan(spec, { now: at, live: live(), only });
+    const p0 = plan(spec, { now: at, live: live(), ...scope() });
     if (!p0.ok) throw new ApproveError(400, describe({ refusals: p0.refusals, warnings: [] }));
     for (const name of p0.freshKeys) if (!keys.has(name)) keys.set(name, freshKeypair());
     // The accounts the owner makes outside loot: a mint, and the project's tree of compressed NFTs.
@@ -229,7 +276,7 @@ export async function createApproval({
       live: live() ?? {},
       now: at,
       rent,
-      only,
+      ...scope(),
       slot: hashes[0] ?? null,
     });
     if (!p.ok) throw new ApproveError(400, describe({ refusals: p.refusals, warnings: [] }));
@@ -305,8 +352,11 @@ export async function createApproval({
 
   /** What each step does, in words, kept after it lands (the plan no longer lists it then). */
   const said = new Map();
+  /** The same for the steps still to do: a step's words become `said` when this session's own transaction lands it. */
+  const planned = new Map();
   function view(p, n = names(), extra = {}) {
-    const done = new Set(live()?.landed ?? []);
+    // A step the plan lists is still to do, whatever landed under its id before (a token's name written, then changed
+    // again before the change was gone on with): it is never shown as done, nor among what landed.
     const steps = p.ok
       ? p.transactions.flatMap(t =>
           t.steps.map((s, i) => ({
@@ -314,23 +364,27 @@ export async function createApproval({
             says: s.says,
             details: detailsOf(t, i, n),
             signer: t.signer,
-            done: done.has(s.id),
+            done: false,
           })),
         )
       : [];
-    for (const s of steps) said.set(s.id, s);
+    const todo = new Set(steps.map(s => s.id));
+    const done = new Set((live()?.landed ?? []).filter(id => !todo.has(id)));
+    // (what a landed step did is kept in its own words: a later step of the same id never rewrites them)
+    for (const s of steps) planned.set(s.id, s);
     return {
       name: spec.name ?? path.basename(file),
       file: path.basename(file),
       mode,
       program: LOOT_PROGRAM,
       cluster: 'devnet',
-      setupSol: cost(spec, { now: at, live: live(), only }).setup?.totalSol ?? null,
+      setupSol: cost(spec, { now: at, live: live(), ...scope() }).setup?.totalSol ?? null,
       warnings: [
         ...(extra.refused ? [extra.refused] : []),
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
+          ...renameNotes,
           unread(),
           remadeLists(),
           outsideAddresses(
@@ -344,6 +398,8 @@ export async function createApproval({
       // doesn't say.
       legal: [...legal, ...mintPowers.map(t => ({ code: 'W-MINT-POWERS', says: t.says }))],
       ...(readKey() ? { read: readKey() } : {}),
+      // A token's name the spec changes and the chain can't take: said whatever else is on the page, done or not.
+      unwritten: [...renameNotes],
       authority: model(spec).authority,
       steps,
       landed: [...done].map(id => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),
@@ -372,9 +428,14 @@ export async function createApproval({
     },
     /** The steps still to go and what is done, built on stand-in addresses until a wallet connects. */
     state() {
-      const p = plan(spec, { now: at, live: live(), only });
+      const p = plan(spec, { now: at, live: live(), ...scope() });
       const v = view(p);
-      return { ...v, remaining: p.ok ? p.transactions.length : 0, done: p.ok && p.transactions.length === 0 };
+      // (a file still marked as under way is settled, and recorded as live, only by a connected wallet's read)
+      return {
+        ...v,
+        remaining: p.ok ? p.transactions.length : 0,
+        done: p.ok && p.transactions.length === 0 && !spec.live?.partial,
+      };
     },
     /**
      * The same, for the connected `wallet`: built exactly as its batches will be (its own project, the treasury on
@@ -401,11 +462,15 @@ export async function createApproval({
 
   async function stateFor(wallet) {
     let trusted;
-    let p0 = plan(spec, { now: at, live: live(), only });
+    let p0 = plan(spec, { now: at, live: live(), ...scope() });
     try {
       await settlePending();
-      p0 = plan(spec, { now: at, live: live(), only });
+      // (what a transaction found landed leaves to do: shown as it is under a refusal too)
+      p0 = plan(spec, { now: at, live: live(), ...scope() });
       trusted = await trust(wallet);
+      await finish({ owner: trusted.owner });
+      await settle();
+      p0 = plan(spec, { now: at, live: live(), ...scope() });
     } catch (e) {
       if (!(e instanceof ApproveError)) throw e;
       const v = view(p0, namesOf(model(spec, { now: at }), { now: at, owner: wallet }), { refused: e.message });
@@ -414,6 +479,14 @@ export async function createApproval({
     if (!p0.ok || !p0.transactions.length)
       return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
     const p = await build(trusted.owner);
+    if (!p.transactions.length) {
+      // Steps are planned and none builds: the lookup table's, which can't be made without a recent slot (the chain's
+      // slot hashes did not read). Nothing needs the table, or the build would have refused, so the setup is as live
+      // as it can be made and is recorded so.
+      await finish(p.ctx, { nothingBuilds: true });
+      const left = plan(spec, { now: at, live: live(), ...scope() });
+      return { ...view(left, names(), { project: trusted.project }), remaining: 0, done: !spec.live?.partial };
+    }
     await readLive(p);
     const v = view(p, namesOf(model(spec, { now: at }), { now: at, owner: wallet, treasury: p.ctx.treasury }), {
       project: p.ctx.project,
@@ -433,6 +506,8 @@ export async function createApproval({
       return answer(prepared);
     await settlePending();
     const trusted = await trust(wallet);
+    await finish({ owner: trusted.owner });
+    await settle();
     // What the chain says a named token's mint can do, where the spec doesn't say it, is read with the wallet's own
     // state: nothing is handed out to sign until the page has shown those very lines and the owner ticked after.
     if (readKey() && read !== readKey())
@@ -441,7 +516,11 @@ export async function createApproval({
         'What the chain says of this economy’s tokens was not on the page when the box was ticked: read the lines above, tick the box again, then approve.',
       );
     const p = await build(trusted.owner);
-    if (!p.transactions.length) throw new ApproveError(409, 'Everything has landed already.');
+    if (!p.transactions.length) {
+      // (planned steps none of which builds: see stateFor)
+      await finish(p.ctx, { nothingBuilds: true });
+      throw new ApproveError(409, 'Everything has landed already.');
+    }
     await readLive(p);
     const authority = p.ctx.authority;
     const first = p.transactions[0];
@@ -510,6 +589,7 @@ export async function createApproval({
         // sent twice (`settlePending`).
         const signature = encodeBase58(readTransaction(wire).signatures[0]);
         const sent = batch.batch[i];
+        sentHere.add(signature);
         await remember({
           signature,
           steps: sent.steps.map(s => s.id),
@@ -540,7 +620,7 @@ export async function createApproval({
           }
         }
         signatures.push(signature);
-        await landed(sent, batch.ctx, signature);
+        await landed(sent, batch.ctx, signature, { more: i < wires.length - 1 });
       }
     } finally {
       busy = false;
@@ -600,6 +680,12 @@ export async function createApproval({
     const pending = spec.live.pending.filter(p => p.signature !== signature);
     const { pending: _, ...rest } = spec.live;
     spec = { ...spec, live: pending.length ? { ...rest, pending } : rest };
+    // A change of which nothing was sent that could land is no change under way: the file reads as live again, and
+    // the next approve works out the change afresh.
+    if (!pending.length && rest.partial && rest.published && !rest.landed?.length) {
+      const { partial: _p, landed: _l, changing: _c, ...asItWas } = rest;
+      spec = { ...spec, live: asItWas };
+    }
     generation++;
     await write(file, `${JSON.stringify(spec, null, 2)}\n`);
   }
@@ -627,10 +713,13 @@ export async function createApproval({
       const status = await chain.signatureStatus(entry.signature);
       if (landedStatus(status)) {
         if (!signatures.includes(entry.signature)) signatures.push(entry.signature);
+        // (never recorded as the whole setup here: whether a token's name is still to write is read from the chain
+        // first, in `trust`, and `finish` records it after)
         await landed(
           { steps: entry.steps.map(id => ({ id })) },
           { ...(entry.made ?? {}), owner: await projectOwner(entry.made?.project ?? spec.live?.project) },
           entry.signature,
+          { more: true },
         );
         continue;
       }
@@ -654,15 +743,28 @@ export async function createApproval({
   /**
    * One transaction landed: the spec's live section learns its steps, and the file is written at once. It names only
    * what those steps made (the project once `project` landed, a mint once its `token:` step did, …): an account whose
-   * own transaction has not landed is made again when the setup goes on.
+   * own transaction has not landed is made again when the setup goes on. `more`: more of the same batch is still to
+   * send, or the chain has not been read yet for what is left (a transaction found landed from an earlier session):
+   * the file is not recorded as live on this landing.
    */
-  async function landed(transaction, ctx, signature) {
+  async function landed(transaction, ctx, signature, { more = false } = {}) {
     const was = spec.live ?? {};
     const ids = transaction.steps.map(s => s.id);
     const made = new Set(ids);
     const mints = { ...(was.mints ?? {}) };
     for (const id of ids)
       if (id.startsWith('token:') && ctx.mints?.[id.slice(6)]) mints[id.slice(6)] = ctx.mints[id.slice(6)];
+    // What this session sent itself did what its steps were shown to do (one found landed from an earlier session
+    // was built from the file as it was then, which may have been edited since: only the chain says what it did).
+    if (sentHere.has(signature))
+      for (const id of ids) {
+        if (planned.has(id)) said.set(id, planned.get(id));
+        // a name written with this spec's words is done
+        if (id.startsWith('name:')) {
+          renames.delete(id.slice(5));
+          renamed.add(id.slice(5));
+        }
+      }
     const progress = {
       ...was,
       program: LOOT_PROGRAM,
@@ -670,6 +772,8 @@ export async function createApproval({
       ...(made.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
       ...(made.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
+      // (a transaction found landed from an earlier session names the table it made itself)
+      ...(made.has('table') && ctx.slot == null && ctx.tables?.length ? { tables: ctx.tables } : {}),
       mints,
       landed: [...new Set([...(was.landed ?? []), ...ids])],
       partial: true,
@@ -685,22 +789,77 @@ export async function createApproval({
     if (!progress.collection) delete progress.collection;
     spec = { ...spec, live: progress };
     generation++;
-    const rest = plan(spec, { now: at, live: spec.live, only });
-    if (rest.ok && rest.transactions.length === 0) {
-      const { live: _, ...bare } = spec;
-      // Everything the setup made, whichever session or transaction made it.
-      const all = {
-        ...ctx,
-        ...Object.fromEntries(
-          ['project', 'treasury', 'authority', 'collection', 'tree', 'tables'].map(k => [k, progress[k] ?? ctx[k]]),
-        ),
-        mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
+    if (!more) record(ctx);
+    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+  }
+
+  /**
+   * Records the setup or the change as live, once nothing of it is left: no transaction still looked for, and no step
+   * in a plan made with what the chain says of the tokens' names (`trust`, read for this session's wallet before this
+   * is ever called). `published` becomes the spec as it is, but for a token's name the chain could not take (`held`):
+   * that token keeps the name, ticker and link it was published with, so the file never says of a name what the chain
+   * does not, and the next approve says it again. Returns whether it did.
+   */
+  function record(ctx = {}, { nothingBuilds = false } = {}) {
+    const progress = spec.live;
+    if (!progress?.partial || progress.pending?.length) return false;
+    // `nothingBuilds`: the plan built for this wallet has no transaction, whatever a plan on stand-in addresses lists
+    const rest = plan(spec, { now: at, live: progress, ...scope() });
+    if (!rest.ok || (rest.transactions.length && !nothingBuilds)) return false;
+    const { live: _, ...bare } = spec;
+    // Everything the setup made, whichever session or transaction made it.
+    const all = {
+      ...ctx,
+      ...Object.fromEntries(
+        ['project', 'treasury', 'authority', 'collection', 'tree', 'tables'].map(k => [k, progress[k] ?? ctx[k]]),
+      ),
+      mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
+    };
+    const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
+    const before = progress.published?.tokens ?? null;
+    if (before && held.size)
+      final.live.published.tokens = final.live.published.tokens.map(t => {
+        const was = held.has(t.key) ? before.find(x => x.key === t.key) : null;
+        if (!was) return t;
+        const { name: _n, symbol: _s, uri: _u, ...kept } = t;
+        return {
+          ...kept,
+          ...Object.fromEntries(['name', 'symbol', 'uri'].filter(f => was[f] !== undefined).map(f => [f, was[f]])),
+        };
+      });
+    final.live = { ...final.live, transactions: progress.transactions ?? [] };
+    spec = final;
+    only = changedParts(spec).only;
+    return true;
+  }
+
+  /** `record`, with the file written when it did: after a wallet's read found nothing left of a setup under way. */
+  async function finish(ctx, options) {
+    if (!record(ctx, options)) return;
+    generation++;
+    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+  }
+
+  /**
+   * A name the chain already carries is the published one from here on (`settled`, from this wallet's read): only
+   * that token's name, ticker and link move in the file's published spec, so no tool keeps announcing a change that
+   * is done. A setup or change under way records it when it is recorded as live.
+   */
+  async function settle() {
+    const now = spec.live;
+    if (!now?.published || now.partial || !settled.size) return;
+    const tokens = (now.published.tokens ?? []).map(t => {
+      const said = settled.has(t.key) ? (spec.tokens ?? []).find(x => x.key === t.key) : null;
+      if (!said) return t;
+      const { name: _n, symbol: _s, uri: _u, ...kept } = t;
+      return {
+        ...kept,
+        ...Object.fromEntries(['name', 'symbol', 'uri'].filter(f => said[f] !== undefined).map(f => [f, said[f]])),
       };
-      const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
-      final.live = { ...final.live, transactions: progress.transactions };
-      spec = final;
-      only = changedParts(spec).only;
-    }
+    });
+    spec = { ...spec, live: { ...now, published: { ...now.published, tokens } } };
+    settled = new Set();
+    generation++;
     await write(file, `${JSON.stringify(spec, null, 2)}\n`);
   }
 }

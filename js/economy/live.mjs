@@ -3,7 +3,7 @@
 import { encodeBase58 } from '../chain/base58.js';
 import { randomBytes } from '../chain/bytes.js';
 import { LOOT_PROGRAM } from '../client/pda.js';
-import { compressedTree, listOf, model } from './model.mjs';
+import { compressedTree, listOf, model, tokenLabels } from './model.mjs';
 import { auctionSeller, plan, setupContext } from './plan.mjs';
 
 /** A key for each fresh account the plan creates. Their secret halves are made by whoever signs (the page). */
@@ -17,12 +17,12 @@ export function freshAddresses(names, random = randomBytes) {
  */
 export function prepare(
   economy,
-  { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null },
+  { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null, renames = null },
 ) {
   const m = model(economy, { now });
   // `slot`: a recent slot (in the slot hashes now), which the project's standing lookup table is made at.
   const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent }), slot };
-  const p = plan(economy, { now, ctx, live, only });
+  const p = plan(economy, { now, ctx, live, only, renames });
   if (!p.ok) return p;
   // Going live always makes the project's standing lookup table (the plan's "table" step). Without a recent slot it
   // can't be made: refused when a part's widest transaction needs it (`wideParts`), so no player is left with a
@@ -133,10 +133,11 @@ const FIXED = new Set(['farm', 'pool', 'auction']);
  */
 export function changedParts(economy) {
   const published = economy.live?.published;
-  if (!published) return { only: null, fixed: [], removed: [], settings: [] };
+  if (!published) return { only: null, fixed: [], removed: [], settings: [], renames: [] };
   const only = new Set();
   const fixed = [];
   const removed = [];
+  const renames = [];
   // A grant's `trust` is the spec's own note about its server, never sent on chain: changing it publishes nothing.
   const strip = ({ id, index, shopBox, seller, trust, ...rest }) => JSON.stringify(rest);
   for (const [list, kind] of Object.entries(PART_LISTS)) {
@@ -155,8 +156,20 @@ export function changedParts(economy) {
     }
     for (const key of before.keys()) removed.push(`${kind}:${key}`);
   }
-  for (const t of economy.tokens ?? [])
-    if (!(published.tokens ?? []).some(x => x.key === t.key)) only.add(`token:${t.key}`);
+  // A token is made once. One whose name, ticker or link the spec now gives otherwise than it was published with
+  // (`renames`; by what they come to, not how they are spelled: model.mjs tokenLabels) has its name record written
+  // again, when it has one its owner can still change: that is read from the chain as the change is approved
+  // (approve/live-check.mjs readRenames), never taken from this file.
+  for (const t of economy.tokens ?? []) {
+    const was = (published.tokens ?? []).find(x => x.key === t.key);
+    if (!was) only.add(`token:${t.key}`);
+    else if (
+      ['project', 'game'].includes(t.source) &&
+      economy.live.mints?.[t.key] &&
+      JSON.stringify(tokenLabels(was)) !== JSON.stringify(tokenLabels(t))
+    )
+      renames.push(t.key);
+  }
   // The first compressed prize opens the project's tree.
   if (!economy.live.tree && compressedTree(model(economy))) only.add('tree');
   // A traits root set again replaces the last.
@@ -168,5 +181,12 @@ export function changedParts(economy) {
   if ((published.treasury ?? null) !== (economy.treasury ?? null)) settings.push('its treasury');
   if (JSON.stringify(published.collections ?? []) !== JSON.stringify(economy.collections ?? []))
     settings.push('the collections it takes');
-  return { only, fixed, removed, settings };
+  return { only, fixed, removed, settings, renames };
 }
+
+/**
+ * In words, for a tool that does not read the chain: the spec changes what these tokens are called, and what becomes
+ * of that is decided when the change is approved.
+ */
+export const renamesNote = renames =>
+  `The spec changes what ${renames.join(', ')} ${renames.length === 1 ? 'is' : 'are'} called. A token’s name on chain is its name record: approving reads it, and writes the new name, ticker and link there when the token has a record its owner can still change (and nothing when the record says them already). A token that went live before setups named tokens has no record and can’t be given one, and a record handed on, made unchangeable or given a royalty outside these tools is left as it is: the approval page says so, sends nothing for that token, and the change stays listed here until the spec gives its old name back.`;

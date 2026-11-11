@@ -205,14 +205,15 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   if (economy.prompt) lines.push(`Asked for: “${economy.prompt}”`);
 
   // A token the setup makes is named on chain as it is made (plan.mjs): what wallets will show, and that a picture
-  // needs its link before going live. One that is live already keeps what it has.
+  // needs its link before going live. One that is live already keeps what it has until the spec changes its name,
+  // which is written at the next approve (live.mjs changedParts, approve/live-check.mjs readRenames).
   section(
     'The tokens going live makes',
     [...m.tokens.values()]
       .filter(t => t.source === 'game' && !economy.live?.mints?.[t.key])
       .map(
         t =>
-          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later, and these tools don’t change a live token’s yet: get them right first.`,
+          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later: change them here and approve again.`,
       ),
   );
 

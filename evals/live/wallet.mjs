@@ -56,6 +56,27 @@ function createdStandard(data) {
     return null;
   }
 }
+/**
+ * Whether a Token Metadata UpdateMetadataAccountV2 is this package's rename: new data (three strings, no royalty, no
+ * creators, collection or uses), and then the update authority, the primary sale and whether it can be changed each
+ * left as they are (their options empty), with nothing after. Anything else (the record handed on, frozen for good,
+ * a royalty set) is not. On a record a setup made, which has none of those, it changes the three words and nothing
+ * more; the approval builds one only for such a record (js/approve/live-check.mjs readRenames), which this wallet,
+ * seeing the instruction alone, can't tell.
+ */
+function onlyRenames(data) {
+  try {
+    let at = 1;
+    if (data[at++] !== 1) return false;
+    for (let i = 0; i < 3; i++) at += 4 + Number(readUintLE(data, at, 4));
+    if (Number(readUintLE(data, at, 2)) !== 0) return false;
+    at += 2;
+    for (let i = 0; i < 6; i++) if (data[at++] !== 0) return false;
+    return at === data.length;
+  } catch {
+    return false;
+  }
+}
 /** A loot instruction's name, by its tag (1 byte; 8 for the oracle's callbacks). */
 const lootIxName = data => instructionOf(data)?.name ?? null;
 /**
@@ -215,6 +236,18 @@ export function checkTransaction(message, { address, role, game = null, grants =
     if (program === METAPLEX_METADATA_PROGRAM) {
       // The setup names each token it makes (js/chain/metadata.js: CreateV1, with this wallet its mint authority, its
       // payer and the record's update authority). Nothing else of Token Metadata's is the economy's to ask.
+      // …and writes a record again when the owner changes a token's name (UpdateMetadataAccountV2, this wallet the
+      // record's update authority): the new name, ticker and link and nothing else of the record (`onlyRenames`).
+      if (role === 'owner' && ix.data[0] === 15) {
+        if (acct(1) !== address)
+          findings.push(`Changes a token’s name record with an authority that is not this wallet.`);
+        else if (!onlyRenames(ix.data))
+          findings.push(
+            `Changes more of a token’s name record than its name, ticker and link (its authority, whether it can be changed, a royalty).`,
+          );
+        else summary.push(`change the name record ${acct(0)}`);
+        continue;
+      }
       if (role !== 'owner' || ix.data[0] !== 42 || ix.data[1] !== 0)
         findings.push(`An unexpected Token Metadata instruction (${ix.data[0]}, ${ix.data[1]}).`);
       else if (acct(3) !== address || acct(4) !== address || acct(5) !== address)

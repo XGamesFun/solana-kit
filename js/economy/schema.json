@@ -363,7 +363,7 @@
       "type": "object",
       "required": ["key", "source"],
       "additionalProperties": false,
-      "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (xgames.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep). A token made this way is named on chain as it is made (its `name`, `symbol` and `uri`), which is what wallets show. Only the owner's wallet can change that later, and a change to them in a spec that is already live changes nothing on chain yet.",
+      "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (xgames.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep). A token made this way is named on chain as it is made (its `name`, `symbol` and `uri`), which is what wallets show. Only the owner's wallet can change that later: a change to them in a spec that is live is written to the token's name record at the next approve, when it has one its owner can still change (a token that went live before setups named tokens has none).",
       "properties": {
         "key": {
           "$ref": "#/$defs/key"
@@ -2036,6 +2036,12 @@
                   },
                   "tree": {
                     "$ref": "#/$defs/address"
+                  },
+                  "tables": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/address"
+                    }
                   },
                   "mints": {
                     "type": "object",

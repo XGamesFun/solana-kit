@@ -4,6 +4,50 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.26.4: a live token's name, ticker or link can be changed (loot 0.26.1, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.26.1's.
+
+- **A change to a live token's name, ticker or link is written to its record at the next approve** (Token Metadata's
+  UpdateMetadataAccountV2, signed by the owner, the record's update authority; `updateFungibleMetadataIx`). It costs
+  a transaction: no rent, no fee to Token Metadata, no project fee. This is how a token that went live with no
+  picture gets one. A fixed supply's record changes the same way: turning minting off does not freeze its name.
+- **Which tokens have a record to write is read from the chain as the change is approved** (`readRenames`), never
+  taken from the file: a file from any earlier release works as it is. A record is written again only when the spec
+  gives a name, ticker or link otherwise than it was published with, the record says something else, and it is still
+  the project owner's to change. The same names spelled out (a ticker the spec used to leave to its key) send nothing.
+- **A name the chain can't take is said, and never recorded as published.** A token that went live before setups
+  named tokens (0.26.1 and earlier) has no record and can't be given one. A record its owner handed to another
+  wallet, made unchangeable, or gave a royalty, creators, a collection or uses outside these tools is left as it is
+  (writing its words from here would take those away, or be refused). Nothing is sent for such a token, the rest of
+  the change goes through, and the file keeps the name the token was published with: the approval page says why at
+  each approve, also when the name is the only change (it then says nothing was sent, not that it landed), until the
+  spec gives the old name back. `xsolana_publish` and `xsolana_cost`, which do not read the chain, list the change
+  as one sent only if the record can be written, and say that approving reads it first.
+- **A name edited while a setup or a change was cut short is written when it is gone on with**, also when the
+  transaction before it landed unseen: a transaction found landed from an earlier run is recorded, the chain is read
+  for the names, and only then is the file recorded as live. A name that landed is not sent twice, and one changed
+  again since is: a name put back to what was published, after its change was written and before the change was
+  finished, is written back. A name the record already carries (written by another tool) sends nothing and becomes
+  the published one in the file, so no tool keeps announcing it.
+- **A change cut short goes on as what the file says changed now.** A part added to the spec since is published
+  with the rest, never recorded as live unsent. A change of which nothing was sent that could land (the node refused
+  it) leaves the file as it was, not marked as under way. A file an earlier build left marked as under way with
+  nothing to do is recorded as live once a wallet connects; until then the page does not call it done.
+- **A setup cut short after the project's own step makes the rest when it is gone on with**: the accounts the
+  economy pays into and the project's lookup table (added to at its own address, of the slot it was made at). Before,
+  those were planned only while the project was not there, the file was recorded as live in the middle of the batch
+  and then left marked as under way for good. A transaction still looked for that made the lookup table no longer
+  makes the file fail its own schema (`live.pending[].made.tables`). A table an earlier release found made without
+  keeping its address is left as it is, and the setup finishes (every approve failed on it otherwise). With no
+  recent slot to make a table at (the chain's slot hashes do not read), a setup that needs none is recorded as live
+  without it. Steps a transaction found landed has done are not shown as left under a refusal.
+- The byte limits and the blank-name refusal apply to a live token whose name, ticker or link is changed, since the
+  new words are written to a record; what it went live with stays a label, held to nothing.
+- `parseRecord` (`chain/metadata.js`) reads a Token Metadata record: its update authority, mint, name, ticker, link,
+  royalty, how many creators, whether it names a collection or uses, and whether it can still be changed. A record's
+  own words are shown in quotes, with nothing in them that closes one, turns the text around or takes no room.
+
 ## 0.26.3: a token made elsewhere is read from the chain, and one place to choose a token (loot 0.26.1, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.26.1's.

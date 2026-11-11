@@ -5,11 +5,14 @@
 // the tree the file calls made must be on chain and be that project's.
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
+import { utf8 } from '../chain/bytes.js';
+import { METADATA_LIMITS, metadataAddress, parseRecord } from '../chain/metadata.js';
 import { parseMint } from '../chain/mint.js';
 import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { BUBBLEGUM_PROGRAM, LOOT_PROGRAM, pda } from '../client/pda.js';
-import { SYSTEM_PROGRAM } from '../chain/pda.js';
+import { METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
+import { tokenLabels } from '../economy/model.mjs';
 import { madeSoFar } from '../economy/plan.mjs';
 
 /** A `live` section that does not match the chain: the message says what differs, in plain words. */
@@ -114,6 +117,108 @@ export async function checkLive({ live, m, wallet, chain }) {
       throw new LiveMismatch(`The file names the tree ${made.tree}, which is not a tree of the project ${project}.`);
   }
   return { owner, project };
+}
+
+/**
+ * A record's own words, to show: whoever holds the record wrote them, so they are put on one line, cut short, with
+ * nothing in them that hides, reorders or closes a quote (controls, marks that turn text around or take no room, line
+ * breaks, quote marks), and are only ever shown inside quotes.
+ */
+const HIDES = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}"“”„‟«»]/gu;
+const clip = text => [...String(text).replace(HIDES, '')].slice(0, 40).join('');
+
+/**
+ * The tokens whose name record this approval writes again, read from the chain: `renames`, their keys; `notes`, in
+ * words, for a name the spec changes that can't be written; and `held`, the keys of those. A token the setup made
+ * (`live.mints`) is called on chain what its record says. Its spec's name, ticker or link is written there again when
+ *   - the spec gives them otherwise than it was published with (`published`: the file's own snapshot; with none, a
+ *     setup cut short, the chain alone is the measure, so a name edited before a resume is written), and
+ *   - the record says something else, is the mint's, is the project owner's to change (its update authority, and
+ *     still changeable) and holds nothing a write of its words would take away (a royalty, creators, a collection,
+ *     uses: `parseRecord`'s `plain`).
+ * A token with no record (one that went live before setups named tokens), or a record handed on, made unchangeable
+ * or given a royalty or creators outside these tools, is not written: said in `notes`, and nothing else is held up.
+ * A name so held is not recorded as published (approve/server.mjs), so it is said again at each approve until the
+ * spec gives the old name back. Nothing here trusts the file for what is on chain. `owner`: the project's owner.
+ */
+export async function readRenames({ live, m, chain, owner, published = null }) {
+  const out = { renames: [], notes: [], held: [], settled: [] };
+  const made = madeSoFar(live) ?? {};
+  // A name this setup or change wrote already, or sent and has not seen land (the file is still `partial`): the
+  // record no longer says what was published, so the published spec is no measure of it and the chain is read.
+  const step = key => `name:${key}`;
+  const written = key =>
+    Boolean(live?.partial) &&
+    ((live.landed ?? []).includes(step(key)) || (live.pending ?? []).some(p => (p.steps ?? []).includes(step(key))));
+  if (typeof chain.account !== 'function') return out;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const hold = (key, note) => {
+    out.held.push(key);
+    out.notes.push(note);
+  };
+  for (const [key, address] of Object.entries(made.mints ?? {})) {
+    const t = m.tokens.get(key);
+    if (t?.source !== 'game' || (t.mint && !t.mint.startsWith('@'))) continue;
+    const want = [t.name, t.symbol, t.uri ?? ''];
+    const was = published ? (published.tokens ?? []).find(x => x.key === key) : null;
+    const said = was ? tokenLabels(was) : null;
+    // as it was published: nothing asked for, and a record its owner changed elsewhere is left as it is
+    const asPublished = Boolean(said) && same(said, want);
+    if (asPublished && !written(key)) continue;
+    // (the token as the person knows it: by the ticker it was published with)
+    const what = `the token ${said?.[1] ?? t.symbol ?? key}`;
+    const again = 'This is said at each approve until the spec gives the old name, ticker and link back.';
+    const account = await chain.account(metadataAddress(address));
+    const record = account?.owner === METAPLEX_METADATA_PROGRAM ? parseRecord(account.data) : null;
+    if (!record || record.mint !== address) {
+      if (said && !asPublished)
+        hold(
+          key,
+          account?.owner === METAPLEX_METADATA_PROGRAM
+            ? `The spec changes what ${what} is called, but the name record of its mint ${address} can’t be read as one: nothing is sent for it. ${again}`
+            : `The spec changes what ${what} is called, but it went live before setups named tokens on chain: it has no name record, and none can be made now (only a mint’s own authority makes one, and its minting was handed on or turned off). Nothing is sent for it, and wallets keep showing it as before. ${again}`,
+        );
+      continue;
+    }
+    if (same([record.name, record.symbol, record.uri], want)) {
+      // the chain says the spec's name already (written by another tool, or by a session whose file was lost): it is
+      // the published one from here on
+      if (said && !asPublished) out.settled.push(key);
+      continue;
+    }
+    const called = `“${clip(record.name)}” (“${clip(record.symbol)}”)`;
+    const kept = `nothing is sent for it, and wallets keep showing ${called}. ${said ? again : ''}`.trim();
+    if (record.updateAuthority !== owner)
+      hold(
+        key,
+        `The spec changes what ${what} is called, but its name record is no longer the project owner’s to change (it was handed to another wallet, outside these tools): ${kept}`,
+      );
+    else if (!record.mutable)
+      hold(
+        key,
+        `The spec changes what ${what} is called, but its name record can no longer be changed (it was made unchangeable, outside these tools): ${kept}`,
+      );
+    else if (!record.plain)
+      hold(
+        key,
+        `The spec changes what ${what} is called, but its name record was given ${[record.royalty ? 'a royalty' : null, record.creators ? 'creators' : null, record.collection ? 'a collection' : null, record.uses ? 'uses' : null].filter(Boolean).join(', ')} outside these tools, which writing its name from here would take away or be refused for: ${kept} Change its name with the tool that set those.`,
+      );
+    // (the checker holds a changed name to what a record takes; a setup cut short has no published spec to say it
+    // changed, so it is held to it here)
+    else if (
+      want.some(
+        (v, i) => utf8(String(v)).length > [METADATA_LIMITS.name, METADATA_LIMITS.symbol, METADATA_LIMITS.uri][i],
+      ) ||
+      !String(t.name).trim() ||
+      !String(t.symbol).trim()
+    )
+      hold(
+        key,
+        `The spec changes what ${what} is called to words a name record can’t take (a name of at most ${METADATA_LIMITS.name} bytes, a ticker of at most ${METADATA_LIMITS.symbol}, a link of at most ${METADATA_LIMITS.uri}, and neither name nor ticker blank): ${kept}`,
+      );
+    else out.renames.push(key);
+  }
+  return out;
 }
 
 /** A token the spec names by its mint address that is not that mint on chain: the message says what differs. */
