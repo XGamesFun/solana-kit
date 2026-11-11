@@ -19,6 +19,7 @@ import { MPL_CORE_PROGRAM, ownedAssetFilters, parseCoreAsset } from '../chain/co
 import { rpcClient } from '../chain/rpc.js';
 import { sha256 } from '../chain/sha256.js';
 import { signVoucher } from './index.js';
+import { cluster as onCluster } from '../client/cluster.js';
 
 const subtle = () => globalThis.crypto.subtle;
 const rpcOf = rpc => (typeof rpc === 'string' ? rpcClient(rpc) : rpc);
@@ -70,7 +71,7 @@ const oneLine = (name, value) => {
 };
 
 /** The exact text a wallet signs to prove it is its owner's: fixed lines, so nothing else can be passed off as it. */
-export const proofText = ({ cluster = 'devnet', game, wallet, purpose, nonce, expires }) =>
+export const proofText = ({ cluster = onCluster(), game, wallet, purpose, nonce, expires }) =>
   [
     PROOF_TITLE,
     ...PROOF_FIELDS.map(f => `${f}: ${oneLine(f, { cluster, game, wallet, purpose, nonce, expires }[f])}`),
@@ -83,7 +84,7 @@ export const proofText = ({ cluster = 'devnet', game, wallet, purpose, nonce, ex
  * (unix seconds, `seconds` from now) and takes each nonce once, so a signed proof can't be replayed.
  */
 export function proofRequest({
-  cluster = 'devnet',
+  cluster = onCluster(),
   game,
   wallet,
   purpose = 'sign in',
@@ -127,7 +128,7 @@ export async function verifyProof({
   wallet,
   game,
   purpose = null,
-  cluster = 'devnet',
+  cluster = onCluster(),
   now = Math.floor(Date.now() / 1000),
 }) {
   const fields = readProof(text);

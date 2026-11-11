@@ -20,7 +20,7 @@ import { meta } from '../chain/programs.js';
 import { sha256 } from '../chain/sha256.js';
 import { recordKey16 } from './accounts.js';
 import { ASSOCIATED_TOKEN_PROGRAM, gateAccounts, lootIx, prizeMetas, prizeNonce, shownFor, tailOf } from './ix.js';
-import { LOOT_PROGRAM, pda } from './pda.js';
+import { lootProgram, pda } from './pda.js';
 import IDL from './idl/loot.js';
 
 export const VOUCHER_DOMAIN = 'loot-grant-v5';
@@ -74,7 +74,7 @@ const roundsOf = (rounds, round, amount) =>
 
 /** A voucher's body, which its key signs the sha256 of (`voucherBytes`). */
 export function voucherBody({
-  program = LOOT_PROGRAM,
+  program = lootProgram(),
   grant,
   incarnation,
   wallet,

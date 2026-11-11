@@ -67,7 +67,7 @@ import {
   ata,
   BUBBLEGUM_PROGRAM,
   COMPRESSION_PROGRAM,
-  LOOT_PROGRAM,
+  lootProgram,
   MPL_CORE_PROGRAM,
   NOOP_PROGRAM,
   pda,
@@ -204,7 +204,7 @@ export function lootIx(
       if (a.pda && !a.pda.program) {
         const seeds = a.pda.seeds.map(s => seedBytes(s, known, args, def));
         if (seeds.every(Boolean)) {
-          known[a.name] = findProgramAddress(seeds, LOOT_PROGRAM)[0];
+          known[a.name] = findProgramAddress(seeds, lootProgram())[0];
           progress = true;
         }
       }
@@ -215,13 +215,13 @@ export function lootIx(
     const key = known[a.name];
     if (key === null || (key === undefined && a.optional)) {
       if (!a.optional) throw new Error(`${name}: ${a.name} is not optional`);
-      return meta(LOOT_PROGRAM, false, false);
+      return meta(lootProgram(), false, false);
     }
     if (key === undefined) throw new Error(`${name}: missing account ${a.group ? `${a.group}.` : ''}${a.name}`);
     const isWritable = (a.writable === true || writable.includes(a.name)) && !readonly.includes(a.name);
     return meta(key, a.signer === true || signer.includes(a.name), isWritable);
   });
-  return { programId: LOOT_PROGRAM, keys: [...keys, ...remaining], data: encodeInstruction(IDL, name, args) };
+  return { programId: lootProgram(), keys: [...keys, ...remaining], data: encodeInstruction(IDL, name, args) };
 }
 
 // ---------------------------------------------------------------- the accounts after an instruction's own
@@ -548,7 +548,7 @@ const PIECE = leaves(instructionDef('hold').accounts).filter(a => a.group === 'p
 function pieceMetas(p) {
   return PIECE.map(a => {
     const key = p.accounts[a.name];
-    if (key == null) return meta(LOOT_PROGRAM, false, false);
+    if (key == null) return meta(lootProgram(), false, false);
     return meta(key, false, a.writable === true || p.writable.includes(a.name));
   });
 }
@@ -1302,7 +1302,7 @@ export function callbackRollIx({
     );
   keys.push(...tailOf(extra));
   return {
-    programId: LOOT_PROGRAM,
+    programId: lootProgram(),
     keys,
     data: encodeInstruction(IDL, 'callback_roll', { randomness: Uint8Array.from(randomness) }),
   };
@@ -1643,7 +1643,7 @@ function orderPiece(project, orderAddress, order, subject = {}, receiver) {
  * own address, a record, a stash, a fee box), where nothing could move it again. A settle's fate and an NFT lottery
  * ticket's price take it as `handBack`.
  */
-export const handsBack = account => account?.owner === LOOT_PROGRAM;
+export const handsBack = account => account?.owner === lootProgram();
 
 /** Where an NFT that is burned but can't be (any kind but Core) is sent: an address nobody holds the key to. */
 export const INCINERATOR = '1nc1nerator11111111111111111111111111111111';
@@ -2079,7 +2079,7 @@ export const VERDICT_DOMAIN = 'loot-verdict-v4';
  * the contest it was signed for, never one opened later at the same id. `decide` rebuilds them from its own accounts
  * and arguments.
  */
-export function verdictBytes({ program = LOOT_PROGRAM, contest, incarnation, side, expires, recipient = null }) {
+export function verdictBytes({ program = lootProgram(), contest, incarnation, side, expires, recipient = null }) {
   if (incarnation == null) throw new Error('A verdict signs the contest’s incarnation (the decoded Contest’s).');
   const named = recipient == null ? new Uint8Array(0) : addressBytes(recipient);
   return concat(
@@ -2169,7 +2169,7 @@ export const rollIx = ({ authority, project, reference: ref }) =>
 
 /** The oracle's answer to a `roll` (for a local simulation). */
 export const callbackRandomIx = ({ project, reference: ref, randomness }) => ({
-  programId: LOOT_PROGRAM,
+  programId: lootProgram(),
   keys: [
     meta(pda.oracleIdentity(), true, false),
     meta(project, false, false),
@@ -2373,7 +2373,7 @@ export function drawLotteryIx({
 
 /** The oracle's answer to a round's draw (for a local simulation): the round's record is its only account. */
 export const callbackLotteryIx = ({ round, randomness }) => ({
-  programId: LOOT_PROGRAM,
+  programId: lootProgram(),
   keys: [meta(pda.oracleIdentity(), true, false), meta(round, false, true)],
   data: encodeInstruction(IDL, 'callback_lottery', { randomness: Uint8Array.from(randomness) }),
 });
@@ -3053,7 +3053,7 @@ export function anotherMetas(p) {
   const writable = new Set([...p.writable, ...PIECE.filter(a => a.writable).map(a => a.name)]);
   return [
     ...ANOTHER[p.kind].map(name =>
-      p.accounts[name] == null ? meta(LOOT_PROGRAM, false, false) : meta(p.accounts[name], false, writable.has(name)),
+      p.accounts[name] == null ? meta(lootProgram(), false, false) : meta(p.accounts[name], false, writable.has(name)),
     ),
     ...p.proof,
   ];
@@ -3310,7 +3310,7 @@ export const closeLeafIx = ({ asset, tree, payer, signs = true }) =>
 
 const PROVE_LEAF = leaves(instructionDef('prove_leaf').accounts).map(a => a.name);
 const CLOSE_LEAF = leaves(instructionDef('close_leaf').accounts).map(a => a.name);
-const isLoot = (ix, name) => ix.programId === LOOT_PROGRAM && instructionOf(ix.data)?.name === name;
+const isLoot = (ix, name) => ix.programId === lootProgram() && instructionOf(ix.data)?.name === name;
 
 /**
  * `instructions` with a `close_leaf` after them for each compressed NFT's record a `prove_leaf` among them makes, its
@@ -3469,8 +3469,8 @@ function nftSeat({
 const seatGroup = (seat, p, box = null, order = null) => [
   meta(seat, false, true),
   ...anotherMetas({ ...p, proof: [] }),
-  meta(box ?? LOOT_PROGRAM, false, false),
-  meta(order ?? LOOT_PROGRAM, false, Boolean(order)),
+  meta(box ?? lootProgram(), false, false),
+  meta(order ?? lootProgram(), false, Boolean(order)),
   ...p.proof,
 ];
 
@@ -3653,8 +3653,8 @@ export const harvestIx = ({
   );
   const groups = rest.flatMap(x => [
     meta(x.seat, false, true),
-    meta(x.held ?? LOOT_PROGRAM, false, false),
-    meta(x.tree ?? LOOT_PROGRAM, false, false),
+    meta(x.held ?? lootProgram(), false, false),
+    meta(x.tree ?? lootProgram(), false, false),
   ]);
   return lootIx(
     'harvest',

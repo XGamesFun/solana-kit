@@ -76,7 +76,8 @@ await app.balances(); // what they hold of each of the economy's tokens
     }
   </script>
   ```
-  Tell the person the one command that starts it, and that it serves on devnet.
+  Tell the person the one command that starts it, and which cluster its economy is on (devnet unless its file says
+  mainnet).
 - **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
   waits for it. Show the player that it is rolling.
 - **A page that closes before the settle**: the SOL its settle key holds is not lost in the same browser (on another device, with nothing stored, it can't be found yet). Build the wallet with

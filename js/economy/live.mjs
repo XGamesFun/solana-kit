@@ -2,7 +2,7 @@
 // the approval page (js/approve) has the owner's wallet sign, and the full simulation sends them to a local chain.
 import { encodeBase58 } from '../chain/base58.js';
 import { randomBytes } from '../chain/bytes.js';
-import { LOOT_PROGRAM } from '../client/pda.js';
+import { lootProgram } from '../client/pda.js';
 import { compressedTree, listOf, model, tokenLabels } from './model.mjs';
 import { auctionSeller, plan, setupContext } from './plan.mjs';
 
@@ -95,7 +95,7 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
   };
   const { live: _, previous: __, ...published } = out;
   out.live = {
-    program: LOOT_PROGRAM,
+    program: lootProgram(),
     project: ctx.project,
     // A project made with no collection (`"collection": false`) has none to write: the schema takes an address only.
     ...(ctx.collection ? { collection: ctx.collection } : {}),

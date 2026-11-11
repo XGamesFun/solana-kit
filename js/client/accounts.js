@@ -7,7 +7,7 @@ import { decodeAccount, decodeBorsh, decodeEvents } from '../chain/borsh.js';
 import { compareBytes, concat, readUintLE, toHex, uintLE } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { LOOT_PROGRAM, pda } from './pda.js';
+import { lootProgram, pda } from './pda.js';
 import IDL from './idl/loot.js';
 
 /** The bytes of one time in a farm's record of ends (`decodeEnds`): rent its writer pays, not refunded when a seat leaves. */
@@ -243,7 +243,7 @@ export function readListAccount(account) {
     !account.executable
   )
     return null;
-  if (account.owner !== LOOT_PROGRAM || account.executable) throw new Error('The list has an invalid owner.');
+  if (account.owner !== lootProgram() || account.executable) throw new Error('The list has an invalid owner.');
   return decodeList(account.data);
 }
 
@@ -855,14 +855,14 @@ export function receipts(tx, err) {
       throw new Error(
         "loot.receipts(logs, err) needs the transaction's meta.err (null when it succeeded): a failed transaction keeps its logs",
       );
-    return err === null ? decodeEvents(IDL, tx) : [];
+    return err === null ? decodeEvents(IDL, tx, lootProgram()) : [];
   }
   const meta = tx?.meta;
   if (!meta || meta.err === undefined)
     throw new Error(
       'loot.receipts(tx) needs the transaction getTransaction returns, with its meta.err and meta.logMessages',
     );
-  return meta.err === null ? decodeEvents(IDL, meta.logMessages ?? []) : [];
+  return meta.err === null ? decodeEvents(IDL, meta.logMessages ?? [], lootProgram()) : [];
 }
 
 /** The program's errors by code: { code: { name, msg } }. */
@@ -886,7 +886,7 @@ export function lootError(logs) {
     }
     const failed = /^Program (\w+) failed: (.*)$/.exec(line);
     if (failed) {
-      if (failed[1] !== LOOT_PROGRAM) return null;
+      if (failed[1] !== lootProgram()) return null;
       const m = /custom program error: 0x([0-9a-f]+)/i.exec(failed[2]);
       const code = m ? parseInt(m[1], 16) : null;
       return code !== null && ERRORS[code] ? { code, ...ERRORS[code] } : null;
@@ -896,7 +896,7 @@ export function lootError(logs) {
       continue;
     }
     // A line that names no program (a log line, or an error's own text) is the running program's, when it is known.
-    if (running.length && running.at(-1) !== LOOT_PROGRAM) continue;
+    if (running.length && running.at(-1) !== lootProgram()) continue;
     const named = /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)\.?$/.exec(line);
     if (named)
       return {

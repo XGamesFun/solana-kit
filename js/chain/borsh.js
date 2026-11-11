@@ -242,9 +242,11 @@ export function isAccount(idl, name, data) {
  * [{ name, data }]. Only lines the program itself printed count: the log names which program each line comes from
  * (`Program <id> invoke [n]` … `success`), and any program can print a line that looks like an event. Logs alone
  * cannot say whether the transaction succeeded (the runtime can fail it after every instruction logged success), so
- * the caller decides that from the transaction's `meta.err` and reads events only when it is null.
+ * the caller decides that from the transaction's `meta.err` and reads events only when it is null. `program` is the
+ * address the program runs at: the IDL's own unless the caller names another (the program has an address of its own on
+ * each cluster, and an IDL holds one).
  */
-export function decodeEvents(idl, logs) {
+export function decodeEvents(idl, logs, program = idl.address) {
   const out = [];
   const stack = [];
   for (const line of logs ?? []) {
@@ -259,7 +261,7 @@ export function decodeEvents(idl, logs) {
       continue;
     }
     const m = /^Program data: (.+)$/.exec(line);
-    if (!m || stack[stack.length - 1] !== idl.address) continue;
+    if (!m || stack[stack.length - 1] !== program) continue;
     let bytes;
     try {
       bytes = fromBase64(m[1]);

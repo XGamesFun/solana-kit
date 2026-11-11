@@ -22,6 +22,7 @@ import { decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { toHex } from '../chain/bytes.js';
 import { pda, voucherBytes } from '../client/index.js';
 import { canonicalJson, drawText, entryText, lockText, resultBytes, rosterHash } from './wire.js';
+import { cluster as onCluster } from '../client/cluster.js';
 
 export {
   canonicalJson,
@@ -40,7 +41,7 @@ export {
   rosterHash,
 } from './wire.js';
 
-/** xgames.fun's results server, on its play host (devnet until the program's audit). */
+/** xgames.fun's results server, on its play host. One host answers for devnet and for mainnet: each request names its cluster. */
 export const RESULTS_SERVER = 'https://play.xgames.fun/xsolana';
 
 const subtle = () => globalThis.crypto.subtle;
@@ -112,7 +113,7 @@ function base64url(text) {
 }
 
 /** One signer's signature of a result: { key, signature }. `signer` is a key from newKey, or anything with sign(). */
-export async function signResult(signer, result, cluster = 'devnet') {
+export async function signResult(signer, result, cluster = onCluster()) {
   return { key: signer.address, signature: encodeBase58(await signer.sign(resultBytes({ ...result, cluster }))) };
 }
 
@@ -129,7 +130,7 @@ export async function report({
   round,
   endedAt,
   winners,
-  cluster = 'devnet',
+  cluster = onCluster(),
   fetchImpl = globalThis.fetch,
 }) {
   const result = { game, round, endedAt, winners };
@@ -274,7 +275,7 @@ export const draws = {
     token = null,
     wallet = null,
     signMessage = null,
-    cluster = 'devnet',
+    cluster = onCluster(),
     fetchImpl = globalThis.fetch,
   }) => {
     if (token) return post(server, `/v1/draws/${seg(game)}/${seg(draw)}/entries`, { token }, fetchImpl);
@@ -295,7 +296,7 @@ export const draws = {
     signMessage,
     by,
     cert = null,
-    cluster = 'devnet',
+    cluster = onCluster(),
     net = 'quicknet',
     fetchImpl = globalThis.fetch,
   }) => {
@@ -345,7 +346,7 @@ export const giveaways = {
     endedAt,
     winners,
     grant,
-    cluster = 'devnet',
+    cluster = onCluster(),
     fetchImpl = globalThis.fetch,
   }) => {
     const signed = winners.map(w => ({ wallet: w.wallet, place: w.place, grant }));

@@ -28,6 +28,7 @@ import {
 import { farmEnds, playSteps } from './plan.mjs';
 import { TRUST_WORDS } from './trust.mjs';
 import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
+import { realMoney } from '../client/cluster.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const num = x => (Number.isFinite(x) ? String(round(x, 6)) : String(x));
@@ -613,7 +614,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   lines.push(
     '',
-    'Devnet only: nothing here is real money. Going live is signed on your own machine by the project’s key file, which is what “your wallet” means above. The command first prints everything it would send and sends nothing; it sends only when run again with the code it printed, which your agent is told to do only after your yes. No seed phrase or wallet key is ever asked for.',
+    `${realMoney() ? 'This economy is on mainnet: what it takes and what it pays is real money, and loot has not been independently audited.' : 'This economy is on devnet: nothing here is real money.'} Going live is signed on your own machine by the project’s key file, which is what “your wallet” means above. The command first prints everything it would send and sends nothing; it sends only when run again with the code it printed, which your agent is told to do only after your yes. No seed phrase or wallet key is ever asked for.`,
   );
   return {
     ok: true,

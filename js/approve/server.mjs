@@ -14,14 +14,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
-import { alreadyProcessed, checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { alreadyProcessed, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
-import { LOOT_PROGRAM, pda } from '../client/pda.js';
+import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { cost } from '../economy/cost.mjs';
 import { LEGAL, legalFlags } from '../economy/legal.mjs';
@@ -35,7 +35,6 @@ import { walletAdded } from './wallet-adds.mjs';
 
 const PREPARE_TTL_MS = 90_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEVNET = 'https://api.devnet.solana.com';
 
 /** A refusal with the HTTP status the page gets. */
 class ApproveError extends Error {
@@ -46,37 +45,43 @@ class ApproveError extends Error {
 }
 
 /**
- * The chain the approval sends to: devnet by default (XSOLANA_RPC_URL to use another devnet RPC, or a local validator).
- * A mainnet URL is refused at once, and before anything is sent the chain's genesis block is checked: mainnet and
- * testnet are refused whatever the URL says.
+ * The chain the approval sends to: this process's cluster (`client/cluster.js`), through XSOLANA_RPC_URL or, on
+ * devnet, its public RPC (a local validator passes for devnet). A URL that names another cluster is refused at once,
+ * and before anything is sent the chain's genesis block is checked: another cluster is refused whatever the URL says.
  */
-export function devnetChain(url = process.env.XSOLANA_RPC_URL || DEVNET) {
-  const rpc = rpcClient(notMainnet(url));
-  let cluster = null;
+export function clusterChain(url) {
+  // A URL that names another cluster is refused here. With none to use (mainnet has no RPC of its own), the refusal
+  // waits for the first request, so what is wrong with the economy's file is said first.
+  let made = null;
+  const client = () => (made ??= rpcClient(clusterRpcUrl(url)));
+  if (url || process.env.XSOLANA_RPC_URL || CLUSTERS[cluster()].rpc) client();
+  let genesis = null;
   const checked = () =>
-    (cluster ??= checkCluster(rpc).catch(e => {
-      cluster = null;
+    (genesis ??= checkOnCluster(client()).catch(e => {
+      genesis = null;
       throw e;
     }));
   return {
-    url,
+    get url() {
+      return client().url ?? url;
+    },
     latestBlockhash: async () => {
       await checked();
-      return rpc.latestBlockhash();
+      return client().latestBlockhash();
     },
-    rent: async bytes => BigInt(await rpc.call('getMinimumBalanceForRentExemption', [bytes])),
+    rent: async bytes => BigInt(await client().call('getMinimumBalanceForRentExemption', [bytes])),
     send: async wire => {
       await checked();
-      return rpc.send(wire);
+      return client().send(wire);
     },
-    confirm: (signature, options) => rpc.confirm(signature, options),
-    account: address => rpc.account(address),
+    confirm: (signature, options) => client().confirm(signature, options),
+    account: address => client().account(address),
     /** A sent transaction's status from the whole history: { err, confirmationStatus }, or null when unseen. */
     signatureStatus: async signature =>
-      (await rpc.call('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])).value[0],
-    blockHeight: () => rpc.blockHeight(),
+      (await client().call('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])).value[0],
+    blockHeight: () => client().blockHeight(),
     /** The chain's current epoch (a mint's transfer fee changes on one). */
-    epoch: async () => Number((await rpc.call('getEpochInfo')).epoch),
+    epoch: async () => Number((await client().call('getEpochInfo')).epoch),
   };
 }
 
@@ -128,7 +133,7 @@ function walletAddress(wallet) {
  */
 export async function createApproval({
   file,
-  chain = devnetChain(),
+  chain = clusterChain(),
   now = () => Math.floor(Date.now() / 1000),
   clock = Date.now,
   write = writeWhole,
@@ -389,8 +394,8 @@ export async function createApproval({
       name: spec.name ?? path.basename(file),
       file: path.basename(file),
       mode,
-      program: LOOT_PROGRAM,
-      cluster: 'devnet',
+      program: lootProgram(),
+      cluster: cluster(),
       setupSol: cost(spec, { now: at, live: live(), ...scope() }).setup?.totalSol ?? null,
       warnings: [
         ...(extra.refused ? [extra.refused] : []),
@@ -738,7 +743,7 @@ export async function createApproval({
   async function projectOwner(project) {
     if (!project || !chain.account) return null;
     const account = await chain.account(project).catch(() => null);
-    return account && account.owner === LOOT_PROGRAM && accountKind(account.data) === 'Project'
+    return account && account.owner === lootProgram() && accountKind(account.data) === 'Project'
       ? decode('Project', account.data).owner
       : null;
   }
@@ -811,7 +816,7 @@ export async function createApproval({
       }
     const progress = {
       ...was,
-      program: LOOT_PROGRAM,
+      program: lootProgram(),
       ...(made.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
       ...(made.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
@@ -1076,7 +1081,7 @@ export async function approve({
   file = 'xsolana.json',
   port,
   open = true,
-  chain = devnetChain(),
+  chain = clusterChain(),
   log = (...a) => console.error(...a),
   openLink = openBrowser,
 } = {}) {

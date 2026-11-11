@@ -23,9 +23,9 @@ const HEX = `0x${CLAIMED.toString(16)}`;
 
 test("a send refused in preflight says the program's reason, not the bare code", async () => {
   const logs = message => [
-    'Program xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet invoke [1]',
+    `Program ${loot.LOOT_PROGRAM} invoke [1]`,
     `Program log: AnchorError occurred. Error Code: AlreadyClaimed. Error Number: ${CLAIMED}. Error Message: ${message}.`,
-    `Program xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet failed: custom program error: ${HEX}`,
+    `Program ${loot.LOOT_PROGRAM} failed: custom program error: ${HEX}`,
   ];
   const refusing = said => async () =>
     answer({

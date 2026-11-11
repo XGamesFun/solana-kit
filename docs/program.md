@@ -1,7 +1,9 @@
 # The loot program: how it behaves
 
-**Version 0.28.0**, program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, **on devnet** since slot 521,074,836
-(2026-11-11). This is the address loot keeps. 0.28.0 is 0.27.0 built for it: no instruction, argument, account or
+**Version 0.28.0**. On **devnet**: program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, since slot 521,074,836
+(2026-11-11). On **mainnet**: program ID `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, since slot 468,156,581 (2026-11-11), the
+same source built for that address. loot has an address of its own on each cluster, so nothing signed for one (a
+voucher, a verdict) counts on the other. What follows speaks of devnet's, the address loot keeps there. 0.28.0 is 0.27.0 built for it: no instruction, argument, account or
 record changed. Every address the program derives follows from its own, so nothing set up under the address it had
 before (`9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, 0.27.0 and earlier) exists under this one: make fresh
 economies. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`).

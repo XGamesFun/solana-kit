@@ -20,12 +20,12 @@ client builds, and every example's whole setup.
 To try the tools in your own agent from a clone, `node bin/xsolana.mjs connect --local` registers this checkout's MCP
 server and the skill with Claude Code and Codex (`--remove` takes them out again).
 
-| Variable              | What it does                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| `XSOLANA_RPC_URL`     | a devnet RPC of your own for `xsolana approve` and `xsolana status` (a mainnet URL is refused) |
-| `XSOLANA_NO_OPEN`     | `xsolana approve --browser` prints its link without opening a browser                          |
-| `XSOLANA_DEBUG`       | the CLI prints a failure's whole stack, not one line                                           |
-| `XSOLANA_PROGRAM_DIR` | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it       |
+| Variable              | What it does                                                                                                                                                                           |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `XSOLANA_RPC_URL`     | an RPC of your own for `xsolana approve` and `xsolana status`, on the economy's cluster (one that names another is refused); mainnet has no default, so an economy on mainnet needs it |
+| `XSOLANA_NO_OPEN`     | `xsolana approve --browser` prints its link without opening a browser                                                                                                                  |
+| `XSOLANA_DEBUG`       | the CLI prints a failure's whole stack, not one line                                                                                                                                   |
+| `XSOLANA_PROGRAM_DIR` | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it                                                                                               |
 
 ## Layout
 
@@ -62,7 +62,7 @@ server and the skill with Claude Code and Codex (`--remove` takes them out again
 - No tool asks for a seed phrase or for the key of a wallet a person already has, and none prints a key. Going live is
   signed by a key file on the owner's machine, shown first and sent only with the code of what was shown; the page
   for a browser wallet is served only when asked for (`AGENTS.md` has the whole rule).
-- Devnet only: nothing sends to mainnet until the program is independently audited.
+- Tests, evals and scripts send to devnet only: mainnet is real money.
 
 ## Security
 

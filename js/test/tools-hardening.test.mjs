@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
-import { createApproval, devnetChain } from '../approve/server.mjs';
+import { clusterChain, createApproval } from '../approve/server.mjs';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { TOKEN_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit } from '../chain/programs.js';
@@ -573,39 +573,53 @@ describe('a loan whose token someone can freeze is shown as such, and needs the 
   });
 });
 
-describe('devnet only, and MCP files inside the project folder', () => {
-  test('a mainnet RPC is refused by the approval page, by its genesis too, by xsolana_status and by the player module', async () => {
-    assert.throws(() => devnetChain('https://api.mainnet-beta.solana.com'), /mainnet RPC. loot runs on devnet only/);
+describe('one cluster a process, and MCP files inside the project folder', () => {
+  test('an RPC of another cluster is refused by the approval, by its genesis too, by xsolana_status and by the player module', async () => {
+    // This process's cluster, and the other one: its public RPC's URL, its first block, and how each is refused.
+    const here = loot.cluster();
+    const onDevnet = here === 'devnet';
+    const otherUrl = onDevnet ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com';
+    const otherGenesis = onDevnet
+      ? '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d'
+      : 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
+    const urlRefused = onDevnet
+      ? /is a mainnet RPC\. This works on devnet/
+      : /is not a mainnet RPC\. This works on mainnet/;
+    const chainRefused = onDevnet
+      ? /is on mainnet\. This works on devnet/
+      : /is not on mainnet\. This works on mainnet/;
+    assert.throws(() => clusterChain(otherUrl), urlRefused);
     const hits = [];
     const real = globalThis.fetch;
     globalThis.fetch = async (url, init) => {
       const { method } = JSON.parse(init.body);
       hits.push(method);
       const result =
-        method === 'getGenesisHash'
-          ? '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d'
-          : { value: { blockhash: NOBODY, lastValidBlockHeight: 1 } };
+        method === 'getGenesisHash' ? otherGenesis : { value: { blockhash: NOBODY, lastValidBlockHeight: 1 } };
       return { ok: true, status: 200, json: async () => ({ result }) };
     };
     const was = process.env.XSOLANA_RPC_URL;
     try {
-      const chain = devnetChain('https://rpc.example.invalid/my-key');
-      await assert.rejects(chain.latestBlockhash(), /is on mainnet/);
-      await assert.rejects(chain.send(new Uint8Array(1)), /is on mainnet/);
+      const chain = clusterChain('https://rpc.example.invalid/my-key');
+      await assert.rejects(chain.latestBlockhash(), chainRefused);
+      await assert.rejects(chain.send(new Uint8Array(1)), chainRefused);
       assert.deepEqual([...new Set(hits)], ['getGenesisHash'], 'nothing but the genesis is asked');
-      process.env.XSOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
+      process.env.XSOLANA_RPC_URL = otherUrl;
       const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-019-status-'));
-      writeFileSync(path.join(dir, 'xsolana.json'), JSON.stringify({ ...example, live: { project: NOBODY } }));
+      writeFileSync(
+        path.join(dir, 'xsolana.json'),
+        JSON.stringify({ ...example, network: here, live: { project: NOBODY } }),
+      );
       const status = await runTool('xsolana_status', {}, { cwd: dir, now: NOW });
-      assert.match(status.text, /mainnet RPC/);
+      assert.match(status.text, urlRefused);
       assert.throws(
         () =>
           solanaApp({
-            spec: { live: { project: NOBODY } },
-            rpcUrl: 'https://api.mainnet-beta.solana.com',
+            spec: { network: here, live: { project: NOBODY } },
+            rpcUrl: otherUrl,
             wallet: null,
           }),
-        /mainnet RPC/,
+        urlRefused,
       );
     } finally {
       globalThis.fetch = real;

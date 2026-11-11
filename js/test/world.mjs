@@ -24,9 +24,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export const program = process.env.XSOLANA_PROGRAM_DIR ? path.resolve(process.env.XSOLANA_PROGRAM_DIR) : null;
 /** The pinned programs, accounts and runtime the tests load. */
 export const fixtures = path.join(root, 'js/test/fixtures');
-/** The loot program the tests run: a local build when XSOLANA_PROGRAM_DIR names a checkout, else the pinned devnet build. */
-const localBuild = process.env.XSOLANA_PROGRAM_DIR ? path.join(program, 'target/deploy/loot.so') : null;
-const lootProgram = () => (localBuild ? readFileSync(localBuild) : pinned('loot.so'));
+/**
+ * The loot program the tests run, built for the address of the cluster this process works on (XSOLANA_CLUSTER): a
+ * local build when XSOLANA_PROGRAM_DIR names a checkout (`target/deploy/loot.so` is devnet's, `target/mainnet/loot.so`
+ * mainnet's), else the pinned build of that cluster, as it runs there (`loot.so`, `loot_mainnet.so`).
+ */
+const onMainnet = loot.cluster() === 'mainnet';
+const localBuild = process.env.XSOLANA_PROGRAM_DIR
+  ? path.join(program, onMainnet ? 'target/mainnet/loot.so' : 'target/deploy/loot.so')
+  : null;
+const lootProgram = () => (localBuild ? readFileSync(localBuild) : pinned(onMainnet ? 'loot_mainnet.so' : 'loot.so'));
 const FETCH = 'run `npm run fixtures`';
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const BPF_LOADER_2 = 'BPFLoader2111111111111111111111111111111111';

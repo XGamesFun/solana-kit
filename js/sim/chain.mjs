@@ -17,7 +17,7 @@ import { compileMessage, readMessage, readTransaction, signersOf } from '../chai
 import { programError } from '../chain/rpc.js';
 import { decode, lootError, receipts } from '../client/accounts.js';
 import { callbackLotteryIx, callbackRandomIx, callbackRollIx, IDL, instructionOf } from '../client/ix.js';
-import { BPF_LOADER_UPGRADEABLE, LOOT_PROGRAM, pda, VRF_QUEUE } from '../client/pda.js';
+import { BPF_LOADER_UPGRADEABLE, lootProgram, pda, VRF_QUEUE } from '../client/pda.js';
 
 /** Slots are about 400 ms. */
 const SLOTS_PER_SECOND = 2.5;
@@ -86,7 +86,7 @@ const ORACLE_UNITS = 340_000;
 
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
 export const lootName = ix => {
-  const def = ix.programId === LOOT_PROGRAM ? instructionOf(ix.data) : null;
+  const def = ix.programId === lootProgram() ? instructionOf(ix.data) : null;
   return def ? { name: def.name, names: NAMES.get(def.name), tag: def.discriminator.length } : null;
 };
 
@@ -344,7 +344,7 @@ export function simChain({
         restoreQueue();
         if (
           !held?.data?.length ||
-          held.owner !== LOOT_PROGRAM ||
+          held.owner !== lootProgram() ||
           decode('LotteryRound', held.data).status !== 'Drawing'
         )
           continue;

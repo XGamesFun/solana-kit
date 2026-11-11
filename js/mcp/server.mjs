@@ -5,13 +5,20 @@
 // (`xsolana tool`), with the same words. Answers go out as text and as structuredContent.
 //
 // stdout is the protocol: everything else goes to stderr.
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { validate } from '../economy/validate.mjs';
-import { PACKAGE_VERSION, PROGRAM_INFO, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
+import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
+import { PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
+import { withCluster } from './with-cluster.mjs';
+
+/** Where loot runs, for every agent that connects. */
+const WHERE = `loot ${VERSION} runs on devnet (program ${CLUSTERS.devnet.program}) and on mainnet (program ${CLUSTERS.mainnet.program}). An economy is on devnet, where nothing is real money, unless its file says "network": "mainnet", where everything is. Build and try an economy on devnet first. loot has not been independently audited.`;
 
 export const INSTRUCTIONS = [
   'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live. Going live is signed by a key file on their own machine (xsolana keygen makes one; never ask for, read or print a key) with xsolana approve --keypair, which prints everything it would send and sends nothing until it is run again with the code it printed: do that only after they have read the printout and said yes. That key owns the project for good: a change to an economy that is already live is signed by the key that owns it, never by a new one. A browser wallet’s signing page (approve --browser) only if they ask for one, and they run it themselves.',
-  `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
+  WHERE,
 ].join(' ');
 
 /**
@@ -22,7 +29,7 @@ export const REMOTE_INSTRUCTIONS = [
   INSTRUCTIONS.split(' Start with')[0],
   'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec and pass it whole as "spec" to every tool (this hosted server reads no files); xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets).',
   `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address devnet SOL), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner for good (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
-  `Program ${PROGRAM_INFO.program} on ${PROGRAM_INFO.cluster} (loot ${VERSION}). Devnet only until audited.`,
+  WHERE,
 ].join(' ');
 
 /** A tool as tools/list shows it; on a hosted server, without the `file` argument it can't take. */
@@ -67,10 +74,34 @@ export async function runTool(name, input = {}, ctx = {}) {
   const bad = inputProblems(tool.inputSchema, input);
   if (bad.length) return { isError: true, text: bad.join('; ') };
   try {
-    return await tool.handler(input, ctx);
+    // Each tool runs on the cluster of the economy it is given, so one server answers for devnet and mainnet alike.
+    return await withCluster(await clusterOfInput(input, ctx), () => tool.handler(input, ctx));
   } catch (e) {
     return { isError: true, text: e.message };
   }
+}
+
+/**
+ * The cluster a tool's call is for: the "network" of the economy it is given (passed whole as `spec`, or read from its
+ * `file`, which is xsolana.json when none is named), devnet when the economy names none. With no economy to read (no
+ * file there, a file that is not JSON, a tool that takes none) or a network loot does not know, it is the server's
+ * own cluster, and the tool says what is wrong in its own words.
+ */
+async function clusterOfInput(input, ctx) {
+  let economy = input?.spec && typeof input.spec === 'object' ? input.spec : null;
+  if (!economy && !ctx.remote) {
+    try {
+      const file = path.resolve(
+        ctx.cwd ?? process.cwd(),
+        typeof input?.file === 'string' ? input.file : 'xsolana.json',
+      );
+      economy = JSON.parse(await readFile(file, 'utf8'));
+    } catch {
+      economy = null;
+    }
+  }
+  const named = economy && typeof economy === 'object' ? networkOf(economy) : null;
+  return named && Object.hasOwn(CLUSTERS, named) ? named : cluster();
 }
 
 const jsonable = value =>

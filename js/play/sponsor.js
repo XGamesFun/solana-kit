@@ -36,7 +36,7 @@ import { transferLamports } from '../chain/programs.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readMessage, readTransaction, withSignature } from '../chain/tx.js';
-import { LOOT_PROGRAM, MPL_CORE_PROGRAM, pda, VRF_PROGRAM } from '../client/index.js';
+import { lootProgram, MPL_CORE_PROGRAM, pda, VRF_PROGRAM } from '../client/index.js';
 
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 /** What a signature costs the fee payer, in lamports. */
@@ -82,7 +82,7 @@ export function sponsoredCost({ addresses, pre, post, project, skip = [], progra
     }
     if (before) continue;
     const opened =
-      after.owner === LOOT_PROGRAM ||
+      after.owner === lootProgram() ||
       (after.owner === MPL_CORE_PROGRAM && !programs.includes(MPL_CORE_PROGRAM)) ||
       ((after.owner === TOKEN_PROGRAM || after.owner === TOKEN_2022_PROGRAM) &&
         after.data?.length >= 32 &&
@@ -97,7 +97,7 @@ export function stepShape(instructions) {
   return {
     programs: [...new Set(instructions.map(ix => ix.programId))],
     lootNamed: [
-      ...new Set(instructions.filter(ix => ix.programId === LOOT_PROGRAM).flatMap(ix => ix.keys.map(k => k.pubkey))),
+      ...new Set(instructions.filter(ix => ix.programId === lootProgram()).flatMap(ix => ix.keys.map(k => k.pubkey))),
     ],
   };
 }
@@ -180,7 +180,7 @@ export async function checkSponsored(
     if (program === COMPUTE_BUDGET_PROGRAM && ix.data[0] === 2 && ix.data.length >= 5)
       units = BigInt(u32At(ix.data, 1));
     if (program === COMPUTE_BUDGET_PROGRAM && ix.data[0] === 3 && ix.data.length >= 9) price = u64At(ix.data, 1);
-    if (program === LOOT_PROGRAM && accounts.includes(project)) ours = true;
+    if (program === lootProgram() && accounts.includes(project)) ours = true;
   }
   if (!ours) return no('It does nothing in this project.');
   if (price > BigInt(maxPriorityMicroLamports)) return no('Its priority fee is more than this sponsor pays.');

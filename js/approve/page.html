@@ -161,7 +161,7 @@
   <body>
     <main>
       <header>
-        <p class="muted mono flush">loot · devnet · runs on your computer only</p>
+        <p class="muted mono flush">loot · <span id="cluster">devnet</span> · runs on your computer only</p>
         <h1 id="title">Approve going live</h1>
         <p class="muted" id="sub">Loading…</p>
       </header>
@@ -173,8 +173,8 @@
         </div>
         <div class="row" id="wallets" hidden></div>
         <p class="muted note">
-          Set the wallet to <b>devnet</b>. Each approval shows you the transactions before you sign; nothing leaves your
-          wallet without it. Nobody else ever sees your key.
+          Set the wallet to <b id="walletcluster">devnet</b>. Each approval shows you the transactions before you sign;
+          nothing leaves your wallet without it. Nobody else ever sees your key.
         </p>
       </section>
 
@@ -202,8 +202,8 @@
         <ul class="warn gap" id="legal" hidden></ul>
         <p class="muted note">The full text is in DISCLAIMER.md, in the package.</p>
         <label class="row gap"
-          ><input type="checkbox" id="legalok" /> I have read this and accept it. Devnet is not real money; real money
-          needs every point above answered first.</label
+          ><input type="checkbox" id="legalok" /> I have read this and accept it.
+          <span id="money">Devnet is not real money; real money needs every point above answered first.</span></label
         >
       </section>
 

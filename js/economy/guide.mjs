@@ -123,7 +123,7 @@ export const CONVENTIONS = [
   'A box, a shop item and a recipe take `opens` and `closes` (times), and `perWallet` (in all) and `perWalletEach` ({ "count": 1, "every": "1d" }) to limit each wallet.',
   'Leave out `id`, `index`, `shopBox` and `live`: they are written when the economy goes live.',
   'Public data only. A spec never holds a private key or a seed phrase (the checker refuses one, E-SECRET).',
-  'Devnet only: "network": "devnet".',
+  '"network" is "devnet" (what a file that names none is on: nothing there is real money) or "mainnet" (real money). loot has an address of its own on each, and an economy is on one: build and try it on devnet first.',
 ];
 
 /**
@@ -252,8 +252,10 @@ export const CANNOT = [
   {
     what: 'mainnet',
     words: 'mainnet real money production',
-    why: 'the program isn’t audited yet',
-    nearest: ['devnet now; mainnet after the audit'],
+    why: 'loot runs on mainnet, with real money, and has not been independently audited; an economy is on devnet unless its file says "network": "mainnet"',
+    nearest: [
+      'try it on devnet first, then set "network": "mainnet" in a copy of the file and go live again with real SOL',
+    ],
   },
 ];
 
@@ -431,7 +433,7 @@ export function guideText(only) {
   return [
     only
       ? `The part “${only}” of a loot economy (* = required):`
-      : `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, devnet only. Nobody writes a contract: the spec is checked, simulated, and put live on the owner’s own machine, signed by the project’s key file once they have said yes. Its parts (* = required field):`,
+      : `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, on devnet or on mainnet (its "network"; devnet when it names none). Nobody writes a contract: the spec is checked, simulated, and put live on the owner’s own machine, signed by the project’s key file once they have said yes. Its parts (* = required field):`,
     ...parts.flatMap(p => [
       `\n${p.part} (${p.type}): ${p.says}${p.atPlayTime ? `\n  At play time: ${p.atPlayTime}.` : ''}`,
       ...p.fields.map(fieldLine),

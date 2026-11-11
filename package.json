@@ -1,6 +1,6 @@
 {
   "name": "@xgamesfun/solana",
-  "version": "0.28.1",
+  "version": "0.28.2",
   "mcpName": "io.github.XGamesFun/solana-kit",
   "description": "Loot boxes, gacha, shops, lotteries, auctions, NFT staking, crafting and rewards on Solana without writing a smart contract: one shared program, its JS client, a CLI, and an MCP server and skill so Claude Code, Codex or any AI agent can design, check, simulate and launch an economy.",
   "license": "Apache-2.0",
@@ -80,6 +80,10 @@
     "./mcp/http": {
       "types": "./types/mcp/http.d.mts",
       "default": "./js/mcp/http.mjs"
+    },
+    "./with-cluster": {
+      "types": "./types/mcp/with-cluster.d.mts",
+      "default": "./js/mcp/with-cluster.mjs"
     }
   },
   "sideEffects": [
@@ -102,6 +106,7 @@
   ],
   "scripts": {
     "test": "node --test \"js/test/**/*.test.mjs\"",
+    "test:mainnet": "node scripts/test-mainnet.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "types": "tsc -p tsconfig.types.json",

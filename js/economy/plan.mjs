@@ -1649,7 +1649,7 @@ const TABLE_GROUP = 24;
  */
 export function standingAddresses(m) {
   const fixed = [
-    loot.LOOT_PROGRAM,
+    loot.lootProgram(),
     loot.pda.platform(),
     loot.pda.identity(),
     loot.VRF_PROGRAM,
