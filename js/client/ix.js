@@ -2739,14 +2739,15 @@ export function endsToWalk(farm, ends, now) {
   return ends.filter(e => e.at > clock && e.at <= stop).length;
 }
 
-/** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes at most some 2,300 units, with a
- * halving rate (`js/test/farm-ends.test.mjs` measures it). */
-export const WALK_PER_TX = 500;
+/** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes at most some 3,800 units, with a
+ * halving rate and heavy seats (`js/test/farm-ends.test.mjs` measures it). Since loot 0.27 each end walked also frees
+ * the leaving weight's share of the carry, about 1,050 units more than before (500 ends fitted until then). */
+export const WALK_PER_TX = 320;
 /** The compute units a transaction that walks ends asks for: `walk_farm`, or a move with ends to walk first. */
 export const WALK_COMPUTE_UNITS = 1_400_000;
-/** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work: past this, the farm is walked
- * first (`farmNeedsWalk`). */
-export const MOVE_WALK_ROOM = 400;
+/** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work (some 400,000 units are left
+ * for it at the dearest end): past this, the farm is walked first (`farmNeedsWalk`). 400 until loot 0.27. */
+export const MOVE_WALK_ROOM = 240;
 
 /**
  * Whether a farm has passed more ends than a move can walk in its own transaction (`endsToWalk`, `MOVE_WALK_ROOM`): such

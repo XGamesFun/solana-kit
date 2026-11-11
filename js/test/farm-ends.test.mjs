@@ -311,10 +311,23 @@ test(
 );
 
 test('walk_farm fits its measured count in one transaction, at the dearest kind of farm', { skip }, () => {
-  const w = world({ seed: 'ends-budget' });
-  const address = farmOf(w, farmArgs([tier(10_000)], { per_day: 100_000_000n, halve_every: 3_600 }));
+  // The dearest end to walk: a halving rate, and seats so heavy that every number the walk divides is a wide one
+  // (4 × 10^16 base units each at a ×100 tier). Each end walked also frees its weight's share of the carry.
+  const heavy = 40_000_000_000_000_000n;
+  const dearest = seed => {
+    const w = world({ seed });
+    const rate = { per_day: 1_000_000_000_000_000n, halve_every: 3_600 };
+    const address = farmOf(w, farmArgs([{ ...tier(10_000), bps: 1_000_000 }], rate));
+    const join = () => {
+      const p = w.who();
+      w.fund(p, w.mint, heavy);
+      return stake(w, p, address, heavy);
+    };
+    return { w, address, join };
+  };
+  const { w, address, join } = dearest('ends-budget');
   for (let i = 0; i < loot.WALK_PER_TX + 3; i++) {
-    stake(w, staker(w), address);
+    join();
     w.chain.warp(w.chain.now() + 1);
   }
   w.chain.warp(w.chain.now() + 20_000);
@@ -323,8 +336,21 @@ test('walk_farm fits its measured count in one transaction, at the dearest kind 
     computeUnitLimit(loot.WALK_COMPUTE_UNITS),
     loot.walkFarmIx({ project: w.project, id: 1, farm }),
   ]);
-  assert.ok(r.units < loot.WALK_COMPUTE_UNITS, `${r.units} units`);
+  assert.ok(r.units < loot.WALK_COMPUTE_UNITS - 100_000, `${r.units} units`);
   assert.equal(loot.endsToWalk(w.read('Farm', address), endsOf(w, address), w.chain.now()), 3);
+
+  // A move that walks all the ends a move may (`MOVE_WALK_ROOM`) keeps some 400,000 units for its own work.
+  const m = dearest('ends-move-room');
+  for (let i = 0; i < loot.MOVE_WALK_ROOM; i++) {
+    m.join();
+    m.w.chain.warp(m.w.chain.now() + 1);
+  }
+  m.w.chain.warp(m.w.chain.now() + 20_000);
+  const before = m.w.read('Farm', m.address);
+  assert.equal(loot.endsToWalk(before, endsOf(m.w, m.address), m.w.chain.now()), loot.MOVE_WALK_ROOM);
+  assert.equal(loot.farmNeedsWalk(before, endsOf(m.w, m.address), m.w.chain.now()), false);
+  const moved = m.join();
+  assert.ok(moved.units < loot.WALK_COMPUTE_UNITS - 400_000, `${moved.units} units`);
 });
 
 test('what it costs is said: the record at setup, and a new end time at a stake', () => {
