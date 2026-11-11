@@ -1,4 +1,5 @@
-// Traps the program takes as written, each from a game that went live with it: a prize draw whose entries are bought
+// The analyses that challenge a spec (follow the value, one intent one step, check every assumption) and the
+// walk-through, on a game that went live with the traps they find: a prize draw whose entries are bought
 // with the game's token (100 BUBL burned into a pool for an entry), one free entry for everyone, a recipe that turns an
 // entry back into BUBL, two draws that draw once and need 100 tickets each, played by two people.
 import assert from 'node:assert/strict';
@@ -66,55 +67,115 @@ const spec = () => ({
   lotteries: [draw('draw', '2026-11-11T17:00:00Z'), draw('draw2', '2026-11-12T17:00:00Z')],
   scenario: { days: 1, players: 2, perDay: { 'lottery:draw': 8, 'lottery:draw2': 8 } },
 });
-const warned = (s, code) =>
+
+/** Where `code` warned, for the warnings whose message names `situation` ("cancelled", "undone"...) before a colon. */
+const found = (s, code, situation = '') =>
   check(s, { now: NOW })
-    .warnings.filter(w => w.code === code)
+    .warnings.filter(w => w.code === code && (!situation || w.message.includes(`${situation}:`)))
     .map(w => w.where);
 
-test('a cancelled round refunds the ticket token, not what was paid for it', () => {
-  assert.deepEqual(warned(spec(), 'W-REFUND-NOT-PAID'), [
+test('three analyses, three codes: the situation each found is in its message', () => {
+  const codes = new Set(
+    check(spec(), { now: NOW })
+      .warnings.map(w => w.code)
+      .filter(c => ['W-VALUE', 'W-STEPS', 'W-ASSUMPTION'].includes(c)),
+  );
+  assert.deepEqual([...codes].sort(), ['W-ASSUMPTION', 'W-STEPS', 'W-VALUE']);
+  const r = review(spec(), { now: NOW });
+  assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'medium'));
+  assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'medium'));
+  assert.ok(r.findings.some(f => f.id === 'R-STEPS' && f.severity === 'low'));
+});
+
+test('follow the value, cancelled: a refund in the ticket token, not what was paid for it', () => {
+  assert.deepEqual(found(spec(), 'W-VALUE', 'cancelled'), [
     'economy.lotteries.draw.minSold',
     'economy.lotteries.draw2.minSold',
   ]);
   // Tickets priced in BUBL itself: a refund pays BUBL back.
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
-  assert.deepEqual(warned(own, 'W-REFUND-NOT-PAID'), []);
+  assert.deepEqual(found(own, 'W-VALUE', 'cancelled'), []);
   // No least sale: no round is cancelled short.
   const none = spec();
   for (const l of none.lotteries) delete l.minSold;
-  assert.deepEqual(warned(none, 'W-REFUND-NOT-PAID'), []);
+  assert.deepEqual(found(none, 'W-VALUE', 'cancelled'), []);
 });
 
-test('a way back from the ticket token, open at all times, undoes any purchase', () => {
-  assert.deepEqual(warned(spec(), 'W-SWAP-BACK-OPEN'), ['economy.recipes.cashout']);
+test('follow the value, undone: a way back from the ticket token, open at all times', () => {
+  assert.deepEqual(found(spec(), 'W-VALUE', 'undone'), ['economy.recipes.cashout']);
   const off = spec();
   off.recipes[1].active = false;
-  assert.deepEqual(warned(off, 'W-SWAP-BACK-OPEN'), []);
+  assert.deepEqual(found(off, 'W-VALUE', 'undone'), []);
   const timed = spec();
   Object.assign(timed.recipes[1], { opens: '2026-11-12T18:00:00Z', closes: '2026-11-19T18:00:00Z' });
-  assert.deepEqual(warned(timed, 'W-SWAP-BACK-OPEN'), []);
+  assert.deepEqual(found(timed, 'W-VALUE', 'undone'), []);
 });
 
-test('a free entry that is also sold and turns back into BUBL is worth the paid one', () => {
-  const [w] = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-FREE-IS-PAID');
+test('follow the value, from nothing: a free entry that is also sold and turns back into BUBL', () => {
+  const [w] = check(spec(), { now: NOW }).warnings.filter(
+    x => x.code === 'W-VALUE' && x.message.includes('from nothing'),
+  );
   assert.equal(w.where, 'economy.grants.free-entry');
   assert.match(w.message, /each claim is worth 100 BUBL/);
   // Switched off, the way back still counts: the project can switch it on.
   const off = spec();
   off.recipes[1].active = false;
   assert.match(
-    check(off, { now: NOW }).warnings.find(x => x.code === 'W-FREE-IS-PAID').message,
+    check(off, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('from nothing')).message,
     /once it is switched on/,
   );
-  // With no way back an entry is only an entry; and the game's own currency given as a reward is what grants are for.
+  // With no way back an entry is only an entry; the game's own currency given as a reward is what grants are for.
   const oneWay = spec();
   oneWay.recipes.pop();
-  assert.deepEqual(warned(oneWay, 'W-FREE-IS-PAID'), []);
+  assert.deepEqual(found(oneWay, 'W-VALUE', 'from nothing'), []);
 });
 
-test('a least sale above what the scenario’s players buy before the draw, and when it can still change', () => {
-  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-MINSOLD-VS-SCENARIO');
+test('follow the value, after the end: a token still given after the last draw it was good for', () => {
+  // The way back is switched off: after the second draw an entry does nothing.
+  const off = spec();
+  off.recipes[1].active = false;
+  assert.deepEqual(found(off, 'W-VALUE', 'after the end'), ['economy.grants.free-entry', 'economy.recipes.entry']);
+  // The recipe closes at the last draw, the grant is switched off: nothing is given after it.
+  const ends = structuredClone(off);
+  ends.recipes[0].closes = '2026-11-12T17:00:00Z';
+  ends.grants[1].active = false;
+  assert.deepEqual(found(ends, 'W-VALUE', 'after the end'), []);
+  // A lottery that repeats keeps the token useful.
+  const again = structuredClone(off);
+  again.lotteries[1].every = '1d';
+  assert.deepEqual(found(again, 'W-VALUE', 'after the end'), []);
+});
+
+test('one intent, one step: a price the player crafts first points to make, one approval for both', () => {
+  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-STEPS');
+  assert.deepEqual(
+    ws.map(w => w.where),
+    ['economy.lotteries.draw', 'economy.lotteries.draw2'],
+  );
+  assert.match(ws[0].fix, /make: \{ recipe: "entry", times: count, listing \}/);
+  // Tickets in the game's currency need no craft.
+  const own = spec();
+  for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
+  assert.deepEqual(found(own, 'W-STEPS'), []);
+  // A box priced in the crafted token: the same two steps.
+  const box = spec();
+  box.boxes = [
+    {
+      key: 'chest',
+      name: 'Chest',
+      price: 2,
+      currency: 'entry',
+      outcomes: [{ gives: 'item', item: 'winner', weight: 1 }],
+    },
+  ];
+  assert.ok(found(box, 'W-STEPS').includes('economy.boxes.chest'));
+});
+
+test('check every assumption: a least sale above what the scenario’s players buy, and when it can change', () => {
+  const ws = check(spec(), { now: NOW }).warnings.filter(
+    x => x.code === 'W-ASSUMPTION' && x.where.endsWith('.minSold'),
+  );
   assert.deepEqual(
     ws.map(w => w.where),
     ['economy.lotteries.draw.minSold', 'economy.lotteries.draw2.minSold'],
@@ -126,42 +187,16 @@ test('a least sale above what the scenario’s players buy before the draw, and 
   for (const l of capped.lotteries) l.perWallet = 5;
   capped.scenario.perDay = { 'lottery:draw': 3000, 'lottery:draw2': 3000 };
   assert.match(
-    check(capped, { now: NOW }).warnings.find(x => x.code === 'W-MINSOLD-VS-SCENARIO').message,
+    check(capped, { now: NOW }).warnings.find(x => x.code === 'W-ASSUMPTION').message,
     /about 10 \(2 players, at most 5 each\)/,
   );
   const busy = spec();
   delete busy.scenario.players;
   busy.scenario.perDay = { 'lottery:draw': 3000, 'lottery:draw2': 3000 };
-  assert.deepEqual(warned(busy, 'W-MINSOLD-VS-SCENARIO'), []);
-});
-
-test('a ticket the player crafts first points to make, one approval for both', () => {
-  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-TWO-PROMPTS');
   assert.deepEqual(
-    ws.map(w => w.where),
-    ['economy.lotteries.draw', 'economy.lotteries.draw2'],
+    found(busy, 'W-ASSUMPTION').filter(w => w.endsWith('.minSold')),
+    [],
   );
-  assert.match(ws[0].fix, /make: \{ recipe: “entry”, times: count, listing \}/);
-  // Tickets in the game's currency need no craft.
-  const own = spec();
-  for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
-  assert.deepEqual(warned(own, 'W-TWO-PROMPTS'), []);
-});
-
-test('a token still given after the last draw it was good for', () => {
-  // The way back is switched off: after the second draw an entry does nothing.
-  const off = spec();
-  off.recipes[1].active = false;
-  assert.deepEqual(warned(off, 'W-AFTER-THE-END'), ['economy.grants.free-entry', 'economy.recipes.entry']);
-  // The recipe closes at the last draw, the grant is switched off: nothing is given after it.
-  const ends = structuredClone(off);
-  ends.recipes[0].closes = '2026-11-12T17:00:00Z';
-  ends.grants[1].active = false;
-  assert.deepEqual(warned(ends, 'W-AFTER-THE-END'), []);
-  // A lottery that repeats keeps the token useful.
-  const again = structuredClone(off);
-  again.lotteries[1].every = '1d';
-  assert.deepEqual(warned(again, 'W-AFTER-THE-END'), []);
 });
 
 test('explain and the review end with each route, state by state, as a player, the owner and a cheater see it', () => {
@@ -186,6 +221,4 @@ test('explain and the review end with each route, state by state, as a player, t
   assert.match(draw, /“100 BUBL for an Entry” turns it back once the project switches it on/);
   assert.match(walk, /“100 BUBL for an Entry”: a recipe\n {2}- Before it opens: It is switched off/);
   assert.match(review(s, { now: NOW }).tradeoffs, /Each route, state by state/);
-  const r = review(spec(), { now: NOW });
-  assert.ok(r.findings.some(f => f.id === 'R-SWAP-BACK-OPEN' && f.severity === 'medium'));
 });

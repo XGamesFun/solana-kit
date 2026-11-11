@@ -5824,11 +5824,10 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     }
   }
 
-  // ---- traps the program takes as written: a ticket token bought with another token, a way back left open, a free
-  // grant worth a paid one, a least sale the scenario never reaches, two wallet prompts a buy, a token after its end
+  // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
   if (!refusals.length) challenge(m, warn, now);
 
-  // ---- pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
+  // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
   // but pays out faster drains, and then skips or fails what it owes.
   if (!refusals.length) {
     let sim;
@@ -5845,7 +5844,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       const need = !p.outs.some(o => o.percentPerDay !== undefined) && short > 0 ? +(short * days).toFixed(6) : null;
       const takersText = p.outs.map(o => o.by).join(', ');
       warn(
-        'W-POOL-RUNS-DRY',
+        'W-ASSUMPTION',
         `economy.pools.${p.key}`,
         `At the scenario’s rates “${p.key}” pays out ${+p.outPerDay.toFixed(6)} ${sym} a day (${takersText}) and takes in ${+p.inPerDay.toFixed(6)}: its seed of ${p.seed} ${sym} is gone on day ${p.lastsDays} of ${days}. After that what it owes is skipped or fails until money comes in.`,
         `Seed it with ${need !== null ? `at least ${need} ${sym} (${days} days at that rate)` : 'more'}, fill it with a share of a sale (a split to "pool:${p.key}") or a schedule, or pay less from it.`,
