@@ -5166,8 +5166,16 @@ export function solanaApp({
         else if (hold.debt?.lender === me && time >= BigInt(hold.free_at))
           out.push({ ...claim, says: 'A loan you made is overdue and unpaid: take its NFT.' });
       }
-      // A compressed NFT's proof record this wallet paid for and left open: closing it brings its rent back.
-      for (const { account } of await client.programAccounts(loot.lootProgram(), [tag('Proven')])) {
+      // A compressed NFT's proof record this wallet paid for and left open: closing it brings its rent back. Found by its
+      // payer, which sits at one of two places (without an asset data hash, and with one: `loot.PROVEN_PAYER_AT`): a
+      // scan of every proof record of the program is refused by the play host's relay, and by any RPC that bounds what
+      // a scan may ask. These records only give rent back, so a scan that is refused leaves them out and lists the rest.
+      const proven = new Map();
+      for (const offset of loot.PROVEN_PAYER_AT) {
+        const found = await client.programAccounts(loot.lootProgram(), [tag('Proven'), at(offset, me)]).catch(() => []);
+        for (const x of found) proven.set(x.pubkey, x);
+      }
+      for (const { account } of proven.values()) {
         const leaf = (() => {
           try {
             return loot.decodeProven(account.data);

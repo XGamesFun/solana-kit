@@ -4,6 +4,17 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.4: claims() behind the play host's relay (loot 0.28.0, unchanged)
+
+The JavaScript alone.
+
+- **Fixed: `claims()` failed for every player behind xgames.fun's relay.** It looked for the player's open compressed-NFT
+  proof records (`close-leaf`) with a scan of every Proven record of the program, which the relay refuses (a scan of
+  loot's accounts names one kind and one address), so `claims()` threw and a player's page listed no refund at all.
+  It now scans Proven records by their payer, at each of the two places the payer sits (`PROVEN_PAYER_AT`: without an
+  asset data hash, and with one), and those scans pass the relay.
+- A proof record only gives rent back: when its scan is refused anyway, `claims()` leaves those out and lists the rest.
+
 ## 0.28.3: a request to a results server names its cluster (loot 0.28.0, unchanged)
 
 The JavaScript alone. One results server answers for devnet and for mainnet, and a request that names no cluster is
