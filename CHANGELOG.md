@@ -4,6 +4,63 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.27.1: every route that hands out an NFT finishes without one that is gone, whatever its kind (loot 0.27.0, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.27.0's.
+
+0.27.0's tools closed a hold, a loan, a listing and an order whose NFT the project no longer holds (its collection took
+it back or burned it). Four routes were left: a lottery's pulls, a contest's claims, an auction's end and `unraffle`.
+Where the program reads the NFT itself (a ticket whose price sends it on, an auction's end, a stash), a Core and a
+compressed NFT already finished, and a Token Metadata NFT mostly did not: one taken was passed without the account
+that shows it gone, and one burned was refused as a semi-fungible item before anything was sent. Where the program
+only hands the NFT out and reads nothing first (a ticket going back to its buyer, a place's NFT, a contest's NFT, a
+topped bid's NFT), the route failed for every kind. Each now finishes, for a Core, a Token Metadata and a compressed
+NFT, taken or burned, and nothing says the NFT moved.
+
+What `js/play` now does:
+
+- **`claims()`** flags a `pull`, a `contest` and an `auction` whose claim would hand out an NFT that is gone: it
+  carries `gone` (true), `assets` (those NFTs) and `says`, what claiming does about each in words. Before, it said
+  "take what you are owed", "your NFT back" or "take your lot back" for an NFT that could not come.
+- **`claim(c)` of a lottery's part** (`pull`, `payout`, the pull a cancelling `reveal` or `cancel-draw` carries, and
+  what `claimAll` sends):
+  - a ticket whose price sends it on (burned, given, stashed) passes what proves it gone: its part settles and nothing
+    moves (`NftGone`, the round its record). A Token Metadata ticket failed there before;
+  - a ticket going back to its buyer (a round called off, a lottery that returns its tickets) and a place's NFT (the
+    lottery's own stash's, or a project stash's named one) are passed as their hold, `["hold", nft, 0]`, and a
+    `release` on the proof follows the pull in the same transaction when it fits: the hold closes, nothing is sent,
+    and the signer gets the hold's rent back at once (`NftGone`, the hold its record). The round then closes as it
+    would have. Before, that pull failed for every kind, and the round stayed open;
+  - one pull of several places' NFTs with one of them gone makes holds of them all (a pull makes holds of all or of
+    none) and releases each: the one gone closes, the others go to their winner.
+- **`claim(c)` of a contest of NFTs**: an entry's own NFT that is gone (a contest that is off, or a winner's), and a
+  loser's NFT a winner picks, are passed as their hold and closed on the proof the same way, so the entry is claimed
+  and the contest can close. Before, that claim failed for every kind. A winner's picks now go first to the losers'
+  NFTs the project still holds (the first 8 left are read); `take` still names one.
+- **`endAuction`, `callOffSale` and the end `claim` sends**: a lot or an NFT of the winning bid that is gone is read
+  with what proves it, whatever its kind. A burned Token Metadata lot or bid no longer stops the end, and after a lot
+  went first, the second end passes a taken NFT of the bid over and pays the rest (before, the money waited). The
+  result says what the end did, in `gone` (true) and `says`: a lot gone with no bid (nothing went home and the auction
+  closed), a sale called off, or the project's own lot, or a lot sent first, ended without that NFT. A hold made at
+  the end whose NFT goes before its release is closed on the proof, and `releases` says so for it (`asset`, `gone`,
+  and `closed`, the signature).
+- **`bid`** over a high bid of NFTs one of which is gone: that NFT can't go back, so the bid makes it a hold for its
+  bidder and closes the hold on the proof in the same transaction. Before, no bid could top such a bid.
+- **`unraffle(id, nft)`** of an NFT that is gone takes its row out of the lottery's own stash on the proof, and nothing
+  is sent (`NftGone`, no `Stashed`): a Token Metadata NFT's too, which failed before. Only the project's owner or
+  authority may, as before: the program refuses anyone else (`NotAuthority`).
+- **`closeGone(asset)`** also takes the NFT's row off each of the project's stashes that lists it, for anyone and for
+  nothing: no roll then draws it, and a prize that names it is passed over. It returns those stashes in `unstashed`
+  (each its `address` and `id`; always there, empty when none), beside `closed`. A lottery's own stash that lists the
+  NFT is left alone and named in `waits` (its `kind` is `lottery-stash`, with its `address` and its `lottery`): that
+  row is the project's keys' to take out (`unraffle`). This costs one more search a call, of the project's stashes,
+  which returns each of them whole (36 bytes for each NFT a stash lists).
+
+What the receipts say: where the program reads the NFT itself (a ticket's price, an auction's end, a stash), it writes
+`NftGone` or `SaleCalledOff` and nothing else about the NFT. Where it makes a hold first, it writes that hold's
+receipts (`Held`, and `PrizeGiven` for a place's prize) before the release's `NftGone`. Read `NftGone` for that hold as
+the NFT not given: no `Released` follows it.
+
 ## 0.27.0: a record whose NFT is gone closes, and a deposit clears what an earlier owner left (loot 0.27.0, on devnet since 2026-11-11, slot 521,001,695)
 
 The program, 0.27.0: two changes. No stored record changed shape and no instruction's arguments or accounts changed:
