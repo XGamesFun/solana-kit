@@ -91,6 +91,8 @@ export function keccak(...parts) {
 
 const CREATE_TREE_V2 = Uint8Array.of(55, 99, 95, 215, 142, 203, 227, 205);
 const MINT_V2 = Uint8Array.of(120, 121, 23, 146, 173, 110, 199, 205);
+const TRANSFER_V2 = Uint8Array.of(119, 40, 6, 235, 234, 221, 248, 49);
+const BURN_V2 = Uint8Array.of(115, 210, 34, 240, 232, 143, 183, 16);
 const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
 /** `asset_data_hash` of a leaf with no asset data: Keccak-256 of nothing. */
 const NO_ASSET_DATA = keccak(new Uint8Array(0));
@@ -122,6 +124,8 @@ export function onChainRoot(w, tree) {
  * `maker`'s own tree (depth 5, a changelog of 8, no canopy: a proof of 5 nodes), and the indexer that mirrors it.
  * `mint(owner)` mints a leaf of `collection` (whose update authority `maker` is) to `owner`; `moved(n, to)` records a
  * leaf that went to `to` on chain; `das(n)` is what an indexer answers for it; `rpc` the world's RPC answering DAS too.
+ * `take(n, by, to)` and `burn(n, by)`: the collection's permanent transfer or burn delegate `by` takes the leaf out of
+ * whoever's hands it is in, or burns it (Bubblegum's TransferV2 and BurnV2, signed by `by` alone), mirrored here.
  */
 export function cnftTree(w, { maker = w.creator, collection = w.collection, depth = 5, buffer = 8 } = {}) {
   const address = newAddress(w.random);
@@ -219,6 +223,72 @@ export function cnftTree(w, { maker = w.creator, collection = w.collection, dept
     Object.assign(n, { owner: to, delegate: to });
     leaves.set(Number(n.nonce), leafHash(n));
   };
+  /** A leaf as Bubblegum's TransferV2 and BurnV2 take it: the root it is proven against, its hashes, nonce and index. */
+  const leafArgs = n =>
+    concat(
+      tree.root(),
+      n.dataHash,
+      n.creatorHash,
+      Uint8Array.of(0), // no asset data hash
+      Uint8Array.of(1, n.flags),
+      uintLE(n.nonce, 8),
+      uintLE(Number(n.nonce), 4),
+    );
+  const proofMetas = n => tree.proof(Number(n.nonce)).map(x => meta(encodeBase58(x), false, false));
+  /** The collection's permanent transfer delegate `by` moves the leaf of `id` to `to`, whoever holds it. */
+  tree.take = (id, by, to = by) => {
+    const n = tree.nfts.get(id);
+    w.chain.send(by, [
+      computeUnitLimit(1_400_000),
+      {
+        programId: loot.BUBBLEGUM_PROGRAM,
+        keys: [
+          meta(config, false, true),
+          meta(by, true, true),
+          meta(by, true, false),
+          meta(n.owner, false, false),
+          meta(n.delegate, false, false),
+          meta(to, false, false),
+          meta(address, false, true),
+          meta(n.collection, false, false),
+          meta(loot.NOOP_PROGRAM, false, false),
+          meta(loot.COMPRESSION_PROGRAM, false, false),
+          meta(SYSTEM_PROGRAM, false, false),
+          ...proofMetas(n),
+        ],
+        data: concat(TRANSFER_V2, leafArgs(n)),
+      },
+    ]);
+    tree.moved(id, to);
+  };
+  /** The collection's permanent burn delegate `by` burns the leaf of `id`: its slot in the tree is empty after. */
+  tree.burn = (id, by) => {
+    const n = tree.nfts.get(id);
+    w.chain.send(by, [
+      computeUnitLimit(1_400_000),
+      {
+        programId: loot.BUBBLEGUM_PROGRAM,
+        keys: [
+          meta(config, false, true),
+          meta(by, true, true),
+          meta(by, true, false),
+          meta(n.owner, false, false),
+          meta(n.delegate, false, false),
+          meta(address, false, true),
+          meta(n.collection, false, true),
+          meta(loot.BUBBLEGUM_CORE_SIGNER, false, false),
+          meta(loot.NOOP_PROGRAM, false, false),
+          meta(loot.COMPRESSION_PROGRAM, false, false),
+          meta(loot.MPL_CORE_PROGRAM, false, false),
+          meta(SYSTEM_PROGRAM, false, false),
+          ...proofMetas(n),
+        ],
+        data: concat(BURN_V2, leafArgs(n)),
+      },
+    ]);
+    n.burnt = true;
+    leaves.delete(Number(n.nonce));
+  };
   /** What DAS answers for `id`: { asset, proof }, as `getAsset` and `getAssetProof` do. */
   tree.das = id => {
     const n = tree.nfts.get(id);
@@ -233,10 +303,10 @@ export function cnftTree(w, { maker = w.creator, collection = w.collection, dept
           creator_hash: encodeBase58(n.creatorHash),
           asset_data_hash: null,
           flags: n.flags,
-          burnt: false,
         },
         ownership: { owner: n.owner, delegate: n.delegate },
         grouping: [{ group_key: 'collection', group_value: n.collection }],
+        burnt: Boolean(n.burnt),
       },
       proof: { root: encodeBase58(tree.root()), proof: tree.proof(Number(n.nonce)).map(x => encodeBase58(x)) },
     };
