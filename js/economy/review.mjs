@@ -711,12 +711,9 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ['W-LOTTERY-WEIGHT', 'R-LOTTERY-WEIGHT', 'info'],
     ['W-ZERO', 'R-ZERO', 'low'],
     ['W-ANSWER', 'R-ANSWER', 'low'],
-    ['W-REFUND-NOT-PAID', 'R-REFUND-NOT-PAID', 'medium'],
-    ['W-SWAP-BACK-OPEN', 'R-SWAP-BACK-OPEN', 'medium'],
-    ['W-FREE-IS-PAID', 'R-FREE-IS-PAID', 'medium'],
-    ['W-MINSOLD-VS-SCENARIO', 'R-MINSOLD-VS-SCENARIO', 'medium'],
-    ['W-AFTER-THE-END', 'R-AFTER-THE-END', 'low'],
-    ['W-TWO-PROMPTS', 'R-TWO-PROMPTS', 'low'],
+    ['W-VALUE', 'R-VALUE', 'medium'],
+    ['W-ASSUMPTION', 'R-ASSUMPTION', 'medium'],
+    ['W-STEPS', 'R-STEPS', 'low'],
   ])
     for (const w of warned(code)) find(id, severity, routeOf(w.where), w.message, w.fix);
 

@@ -4,6 +4,26 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.9: three analyses in place of six rules (loot 0.28.0, unchanged)
+
+The tools alone. The six warnings of 0.28.8 named one situation each. They are now what three general analyses of a
+spec find, one code each, and the situation is in the message:
+
+- **`W-VALUE`, follow the value** (medium in the review). For every token a player can hold, the analysis traces
+  what they hold in each end state: bought, cancelled, undone, given free, and after the end. It finds value that
+  comes back as something else (a cancelled round refunds the ticket token, not what bought it), value that converts
+  back after the outcome (a way back open at all times), value that appears from nothing (a free grant of a token
+  that is sold and turns back), and value still made after its last use.
+- **`W-STEPS`, one intent, one step** (low). It flags a purchase priced in a token the player must craft first: two
+  transactions, two wallet prompts. For tickets it points to `buyTickets(..., { make })`. For a box it suggests
+  pricing the box in what the recipe takes.
+- **`W-ASSUMPTION`, check every assumption** (medium). It checks numbers that depend on how many people take part
+  against the scenario: a lottery's least sale against the tickets a round sells (with what can change only before the
+  first ticket), and a pool's life against the scenario's rates. `W-POOL-RUNS-DRY` is now one of its findings.
+
+Who makes each later step happen is covered by the walk-through, and where each rule is enforced by the review's
+trust levels. The 0.28.8 codes are gone.
+
 ## 0.28.8: the tools challenge a request before building it (loot 0.28.0, unchanged)
 
 The tools alone, from a game that went live with these traps (Bubble Day).
