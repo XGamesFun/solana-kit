@@ -5,6 +5,7 @@ import { encodeBase58 } from './base58.js';
 import { fromUtf8, readUintLE } from './bytes.js';
 import { NATIVE_MINT, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from './pda.js';
 import { MINT_BYTES, TOKEN_ACCOUNT_BYTES } from './token.js';
+import { powersOf } from './token2022.js';
 
 /** Where Token-2022 writes what an account with extensions is (1 a mint, 2 a token account): right after a token
  * account's classic bytes. */
@@ -96,5 +97,59 @@ export function parseMint(address, owner, data, metadataData = null) {
     name: native ? 'Solana' : meta?.name || null,
     symbol: native ? 'SOL' : meta?.symbol || null,
     uri: meta?.uri || null,
+  };
+}
+
+/** A ticker as a spec's key: lower case, the letters a key takes, a letter first; null when nothing is left. */
+function keyOf(symbol) {
+  const key = String(symbol ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, 32);
+  // "sol" is SOL's own key in every spec: a coin that calls itself SOL is not it
+  return key === 'sol' ? 'sol-coin' : key || null;
+}
+/**
+ * A text cut to what a spec takes: at most `most` UTF-16 units (what its schema counts), never half a character, with
+ * no control characters (a name is a label on one line).
+ */
+function clip(text, most) {
+  let out = '';
+  for (const c of String(text)) {
+    const code = c.codePointAt(0);
+    // a control character or a line break is a space: a name is a label on one line
+    const plain = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 ? ' ' : c;
+    if (out.length + plain.length > most) break;
+    out += plain;
+  }
+  return out.replace(/ +/g, ' ').trim();
+}
+
+/**
+ * A token made elsewhere as an economy spec names it: its `tokens` entry (`source: "existing"`), every field read from
+ * the chain so nothing is typed in by hand: the mint, its decimals and token program, its name and ticker when it has
+ * a name record, and `powers` (token2022.js `powersOf`: what the mint's own keys can do). `account`: the mint's
+ * ({ owner, data }); `record`: its Token Metadata record's data, when there is one. `key`: what the spec will call it
+ * (default: its ticker in the letters a key takes, else "token"). `project`: the loot project, whose own tokens read
+ * `mintAuthority: "project"`; `epoch`: the chain's current epoch, for a transfer fee since changed (`powersOf`). The
+ * name and ticker are cut to what a spec takes, on one line. Wrapped SOL is SOL (`{ key: "sol", source: "sol" }`).
+ * Null when `account` is no mint.
+ */
+export function tokenEntry(address, account, record = null, { key = null, project = null, epoch = null } = {}) {
+  const mint = account ? parseMint(address, account.owner, account.data, record) : null;
+  if (!mint) return null;
+  if (mint.native) return { key: key ?? 'sol', source: 'sol' };
+  const name = mint.name ? clip(mint.name, 32) : '',
+    symbol = mint.symbol ? clip(mint.symbol, 10) : '';
+  return {
+    key: key ?? keyOf(symbol) ?? 'token',
+    source: 'existing',
+    ...(name ? { name } : {}),
+    ...(symbol ? { symbol } : {}),
+    decimals: mint.decimals,
+    program: mint.program,
+    mint: mint.mint,
+    powers: powersOf(account, { project, epoch }),
   };
 }

@@ -9,8 +9,9 @@ An economy is one JSON spec (`xsolana.json` in the project) on **loot**, a Solan
 writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and the project's
 owner puts it live by approving in their own wallet. It runs on **devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.26.2 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-or `npx -y @xgamesfun/solana@0.26.2 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.26.3 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.26.3 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.26.3 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -26,8 +27,9 @@ or `npx -y @xgamesfun/solana@0.26.2 tool <name> '<json>'` for any tool (always w
    `xsolana_simulate`, `xsolana_cost` and `xsolana_explain`, never your own arithmetic. What a player pays is the tools'
    "in all" number for that action (price, fee, oracle, network and rent that never comes back): quote it as is.
 6. **Flag the law once.** The first time the checker raises `W-CHANCE-PRIZE` (paid chance at money: boxes with
-   prizes, lotteries, contests), `W-CHANCE-ITEMS` (paid random collectibles a player can resell: loot boxes, gacha) or
-   `W-REVENUE-SHARE` (stakers paid from sales), say it in one plain sentence. Don't repeat it in later answers, or add
+   prizes, lotteries, contests), `W-CHANCE-ITEMS` (paid random collectibles a player can resell: loot boxes, gacha),
+   `W-REVENUE-SHARE` (stakers paid from sales) or `W-TOKEN-SALE` (a presale: people pay for a share of a new token),
+   say it in one plain sentence. Don't repeat it in later answers, or add
    legal notes to pages and apps you build, unless the person asks or a flag of a new kind appears. When they ask about
    the law, answer what you know and leave the rest to their lawyer: you are not one. Never call anything an
    investment, a return or passive income, and never promise it is safe. The approval page shows the flags and that
@@ -121,12 +123,32 @@ or `npx -y @xgamesfun/solana@0.26.2 tool <name> '<json>'` for any tool (always w
    level would cost. Run it again after every change that touches a route that pays.
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
    run it themselves in the project folder, exactly as `xsolana_publish` gives it (it names the exact version:
-   `npx -y @xgamesfun/solana@0.26.2 approve xsolana.json`; never drop the version). It opens a page on their computer where
+   `npx -y @xgamesfun/solana@0.26.3 approve xsolana.json`; never drop the version). It opens a page on their computer where
    they connect a devnet wallet and approve; what lands is written back into `xsolana.json`. You publish nothing.
 10. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
     happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the
     owner signs (open or decide a contest, pay out) goes on an owner page they approve in their own wallet:
     `references/after-launch.md`.
+
+## When they ask for a token
+
+"A token for my game" is one of four things. Find out which from what they say it is for, before writing anything
+(ask only when they haven't said):
+
+| They mean                                                                   | It is                                                | In the spec                                                                                                                                                     |
+| --------------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| points, tickets, shards: what players earn and spend in the game            | a token the project mints as its rules say           | `source: "project"`, given by a recipe's or a grant's prize (`"from": "mint"`), a farm's `rate` (`"minted": true`) or a schedule (`"does": "issue"`)            |
+| "our own coin, 10 million, we hand it out", a community token               | a fixed supply, all of it to the owner, no more ever | `source: "project"` with `supply`; pools are seeded from it, and a presale (a contest), sealed vesting (a schedule) and a farm hand it out                      |
+| "a coin people can trade", "on pump.fun", "a bonding curve", "creator fees" | a market, which loot does not run                    | they launch it on a launchpad or an AMM, in their own wallet; then `xsolana_token {"mint": …}` gives its entry, and loot's shops, boxes, farms and gates use it |
+| "our token", "the coin we launched", "this mint"                            | a coin that exists                                   | `xsolana_token {"mint": …}`: its entry with decimals, program and `powers` read from the chain. Never type them by hand, and never guess an address             |
+
+Say what each gives up. The first two have no public market: nobody trades them unless the project lists them
+somewhere itself. A coin launched on a market usually has nobody left who can mint it (`xsolana_token` says so): the
+economy pays out only what its owner puts into its pools. On devnet a coin trades nothing of value.
+
+A token the setup makes is named on chain as it goes live, so ask for its name, its ticker and a picture first
+(`references/telling-the-person.md`). Whatever the kind, rule 6 holds: never call a token an investment or promise it
+a price.
 
 ## Building the app around it
 

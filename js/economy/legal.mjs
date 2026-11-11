@@ -12,6 +12,8 @@ export const LEGAL = Object.freeze({
     'Anyone, the seller included, can bid to push an auction’s price up (shill bidding): a reserve is the honest way to set a floor.',
   'W-REVENUE-SHARE':
     'Stakers are paid from what players spend, which regulators look at when they decide whether a token is a security: before real money, get a lawyer, or pay rewards from emissions instead.',
+  'W-TOKEN-SALE':
+    'People pay for a share of a new token (a presale). Selling a token to raise money is what securities law looks at first, and many places limit who may buy: before real money, get a lawyer.',
 });
 
 /** The legal flags a checker verdict raises, each once, in the order the checker raised them: [{ code, says }]. */

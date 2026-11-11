@@ -42,7 +42,10 @@ async function approval(seed, specOf, { chain: overrides = {} } = {}) {
   const session = await createApproval({ file, chain: approvalChain(w, overrides), now: () => NOW });
   const runAll = async () => {
     for (let i = 0; i < 10 && !session.state().done; i++) {
-      const batch = await session.prepare(owner.address);
+      // as the page does: the wallet's own state first (what the chain says of the tokens comes with it), then a batch
+      // asked for with the lines that state showed
+      const shown = await session.stateFor(owner.address);
+      const batch = await session.prepare(owner.address, shown.read ?? null);
       await session.complete(owner.address, batch.id, signAll(owner, batch.transactions));
     }
     return JSON.parse(readFileSync(file, 'utf8'));
@@ -238,7 +241,7 @@ test('a change is held against the records on chain, not the file’s own copy o
     state.warnings.join('\n'),
   );
   // What the wallet is asked to sign is marked the same way.
-  const batch = await session.prepare(a.owner.address);
+  const batch = await session.prepare(a.owner.address, (await session.stateFor(a.owner.address)).read ?? null);
   assert.ok(batch.details.flat().some(d => d.includes(attacker) && d.includes('(changed:')));
 });
 

@@ -7,6 +7,7 @@
 //   xsolana guide [part] [--json]        what an economy can be made of, and what loot cannot do
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
+//   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
 //   xsolana approve [file] [--port n] [--no-open]   open the local page where the owner approves going live in their wallet
 //   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
@@ -30,13 +31,14 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana publish [file]          what going live does, and how to approve it
   xsolana approve [file]          approve going live in your own wallet (a local page; --port n, --no-open)
   xsolana status [file]           a live economy on chain
+  xsolana token <mint>            a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do
   xsolana connect                 add the xsolana tools to Claude Code or Codex (--agent claude|codex, --scope user|project, --local, --remove, --dry-run)
   xsolana mcp                     serve the tools over MCP (stdio)
   xsolana mcp --http              serve the hosted tools over HTTP at http://127.0.0.1:8787/mcp (--port n, --host h)
   xsolana tool --list             every tool; xsolana tool <name> '<json>' runs one (--args-file f)
   xsolana version                 this package's xsolana version and program
 
-  A tool's command (guide, examples, check … status, tool) takes --json for its whole answer as JSON.
+  A tool's command (guide, examples, check … status, token, tool) takes --json for its whole answer as JSON.
   review exits 1 when it finds something high.`;
 
 /** A failure the person caused (a bad flag, a missing file): said in one line, without a stack. */
@@ -57,6 +59,7 @@ const FLAGS = {
   review: TOOL_FLAGS,
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
+  token: TOOL_FLAGS,
   approve: ['--port', '--no-open'],
   connect: ['--agent', '--scope', '--local', '--remove', '--dry-run'],
   tool: ['--list', '--args-file', ...TOOL_FLAGS],
@@ -145,6 +148,10 @@ async function main(argv) {
     case 'publish':
     case 'status':
       await tool(`xsolana_${command}`, fileInput());
+      break;
+    case 'token':
+      if (!positional[0]) throw new UsageError('xsolana token <mint>: give the token’s mint address.');
+      await tool('xsolana_token', { mint: positional[0] });
       break;
     case 'approve': {
       const port = portOf(values.get('--port'));

@@ -43,6 +43,7 @@ describe('the xsolana MCP server', () => {
         'xsolana_save',
         'xsolana_simulate',
         'xsolana_status',
+        'xsolana_token',
       ].sort(),
     );
     for (const t of tools) {

@@ -26,7 +26,9 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
 6. **Flags for the law, once.** `W-CHANCE-PRIZE`: "Players pay for a chance at money. That is gambling in many places once
    it is real money; this runs on devnet only." `W-CHANCE-ITEMS`: "Players pay for random items they can resell: some
    places treat that as gambling, and many require the odds to be shown." `W-REVENUE-SHARE`: "Stakers are paid from
-   what players spend; regulators look at that when they decide whether a token is a security." Say each once, the
+   what players spend; regulators look at that when they decide whether a token is a security." `W-TOKEN-SALE`:
+   "People pay for a share of a new token; selling a token to raise money is what securities law looks at first."
+   Say each once, the
    first time the checker raises it; then leave them, saying them again only when the person asks or a flag of a new
    kind appears, and keep them out of pages and apps unless asked. The approval page shows them, with the program's
    status (not independently audited, as is, at their own risk, theirs to make legal where they offer it), and keeps

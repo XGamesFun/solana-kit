@@ -1,0 +1,100 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Community Coin",
+  "prompt": "Our own coin, EMBER: 100 million, a fixed supply, no more ever. 10 million go to a week-long presale, split by what each backer put in, and everyone is refunded if it raises under 50 SOL. 24 million vest to the team: nothing for three months, then 2 million a month for a year, and nobody can stop it. 30 million pay the people who stake it, a little every day. We keep the rest.",
+  "currency": "sol",
+  "tokens": [
+    {
+      "key": "sol",
+      "source": "sol"
+    },
+    {
+      "key": "ember",
+      "source": "project",
+      "name": "Ember",
+      "symbol": "EMBER",
+      "decimals": 6,
+      "supply": 100000000,
+      "uri": "https://example.com/ember.json"
+    }
+  ],
+  "collection": false,
+  "pools": [
+    {
+      "key": "presale",
+      "currency": "ember",
+      "seed": 10000000,
+      "about": "What the presale's backers split."
+    },
+    {
+      "key": "rewards",
+      "currency": "ember",
+      "seed": 30000000,
+      "about": "What stakers are paid from, a little every day."
+    }
+  ],
+  "contests": [
+    {
+      "key": "raise",
+      "name": "The presale",
+      "currency": "sol",
+      "sides": 1,
+      "sideNames": ["Back it"],
+      "entriesClose": "7d",
+      "resultDue": "8d",
+      "minPot": 50,
+      "split": [
+        {
+          "to": "treasury",
+          "percent": 100
+        }
+      ],
+      "prize": {
+        "gives": "tokens",
+        "amount": 10000000,
+        "from": "pool:presale",
+        "currency": "ember",
+        "split": true
+      }
+    }
+  ],
+  "schedules": [
+    {
+      "key": "team",
+      "name": "Team vesting",
+      "does": "pay",
+      "sealed": true,
+      "currency": "ember",
+      "to": "wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T",
+      "amount": 2000000,
+      "start": "publish+90d",
+      "every": "30d",
+      "maxRuns": 12,
+      "fund": 24000000
+    },
+    {
+      "key": "drip",
+      "name": "Stakers' drip",
+      "does": "pay",
+      "from": "rewards",
+      "to": "farm:hearth",
+      "percent": 1,
+      "every": "1d"
+    }
+  ],
+  "farms": [
+    {
+      "key": "hearth",
+      "name": "The hearth",
+      "stakes": "ember",
+      "rewards": "ember",
+      "tiers": [
+        {
+          "lock": "7d",
+          "multiplier": 1
+        }
+      ]
+    }
+  ]
+}

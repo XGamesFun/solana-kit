@@ -603,7 +603,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   for (const n of sim.notes) lines.push(`- ${n}`);
 
-  const flagged = verdict.warnings.filter(w => w.code === 'W-CHANCE-PRIZE' || w.code === 'W-REVENUE-SHARE');
+  const flagged = verdict.warnings.filter(w => ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE', 'W-TOKEN-SALE'].includes(w.code));
   const others = verdict.warnings.filter(w => !flagged.includes(w));
   if (flagged.length) section('Flagged for the law, once it is real money', [...new Set(flagged.map(w => w.message))]);
   section(

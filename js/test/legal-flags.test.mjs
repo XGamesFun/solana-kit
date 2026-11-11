@@ -17,7 +17,14 @@ test('each legal flag once, in plain words, and none for an economy that raises 
   const flags = legalFlags(check(example('coin-flip-arena').spec, { now: NOW }));
   assert.deepEqual(flags.map(f => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
   for (const f of flags) assert.equal(f.says, LEGAL[f.code]);
-  assert.deepEqual(legalFlags(check(example('fair-presale').spec, { now: NOW })), []);
+  assert.deepEqual(legalFlags(check(example('team-vesting').spec, { now: NOW })), []);
+  // a presale sells a share of a new token: flagged, once, as a sale of a token
+  for (const name of ['fair-presale', 'community-coin'])
+    assert.deepEqual(
+      legalFlags(check(example(name).spec, { now: NOW })).map(f => f.code),
+      ['W-TOKEN-SALE'],
+      name,
+    );
   assert.deepEqual(
     legalFlags({ warnings: [{ code: 'W-CHANCE-PRIZE' }, { code: 'W-CHANCE-PRIZE' }, { code: 'toString' }] }),
     [{ code: 'W-CHANCE-PRIZE', says: LEGAL['W-CHANCE-PRIZE'] }],
@@ -32,7 +39,7 @@ test('xsolana_publish leads its answer with the legal flags, to say once if they
   assert.equal(lines[1], `- ${LEGAL['W-REVENUE-SHARE']}`);
   assert.equal(lines[2], `- ${LEGAL['W-CHANCE-PRIZE']}`);
   // with no flags, the answer starts with what going live does
-  const plain = (await runTool('xsolana_publish', { example: 'fair-presale' }, { now: NOW })).text;
+  const plain = (await runTool('xsolana_publish', { example: 'team-vesting' }, { now: NOW })).text;
   assert.match(plain, /^Going live: /);
   // and with or without, it says the program is unaudited, as is, at their own risk, and the law is theirs
   for (const text of [r.text, plain])
@@ -56,6 +63,11 @@ test('the approval state carries the legal flags apart from the other warnings',
   assert.deepEqual(flagged.legal.map(f => f.code).sort(), ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE']);
   for (const f of flagged.legal) assert.ok(!flagged.warnings.some(w => w.includes(f.says)), 'not said twice');
   assert.ok(!flagged.warnings.some(w => /gambling|security/.test(w)), flagged.warnings.join('\n'));
-  writeFileSync(file, JSON.stringify(example('fair-presale').spec));
+  writeFileSync(file, JSON.stringify(example('team-vesting').spec));
   assert.deepEqual((await createApproval({ file, chain, now: () => NOW })).state().legal, []);
+  writeFileSync(file, JSON.stringify(example('fair-presale').spec));
+  assert.deepEqual(
+    (await createApproval({ file, chain, now: () => NOW })).state().legal.map(f => f.code),
+    ['W-TOKEN-SALE'],
+  );
 });

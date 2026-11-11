@@ -5,7 +5,11 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { addressBytes } from '../chain/base58.js';
+import { metadataAddress } from '../chain/metadata.js';
+import { parseMint, tokenEntry } from '../chain/mint.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
@@ -82,6 +86,7 @@ export const REMOTE_TOOLS = new Set([
   'xsolana_explain',
   'xsolana_review',
   'xsolana_status',
+  'xsolana_token',
   'xsolana_client',
 ]);
 
@@ -686,6 +691,145 @@ export const tools = [
         .filter(Boolean)
         .join('\n');
       return { ok: true, rows, text: text + footer };
+    },
+  },
+  {
+    name: 'xsolana_token',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    description:
+      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads devnet (or XSOLANA_RPC_URL): the mint and its name record only, never the link the record names.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mint: { type: 'string', description: 'The token’s mint address.' },
+        key: {
+          type: 'string',
+          pattern: '^[a-z][a-z0-9-]{0,31}$',
+          description: 'What the spec will call it (default: its ticker, in the letters a key takes).',
+        },
+        project: {
+          type: 'string',
+          description:
+            'The loot project’s address, when the token is one the project is to mint on a mint of its own: its mint authority then reads as the project’s, or as not handed over yet.',
+        },
+      },
+      required: ['mint'],
+      additionalProperties: false,
+    },
+    async handler(input, ctx) {
+      const mint = String(input.mint ?? '').trim();
+      try {
+        addressBytes(mint);
+      } catch {
+        return {
+          ok: false,
+          text: `${JSON.stringify(mint)} is not a Solana address. Give the token’s mint address.${footer}`,
+        };
+      }
+      // Devnet only: a mainnet URL is refused, and so is a chain whose first block is mainnet's or testnet's.
+      const rpc = (ctx?.rpc ?? rpcClient)(notMainnet(process.env.XSOLANA_RPC_URL || DEVNET_RPC));
+      if (!ctx?.rpc) await checkCluster(rpc);
+      let project = null;
+      if (input.project !== undefined) {
+        project = String(input.project).trim();
+        try {
+          addressBytes(project);
+        } catch {
+          return {
+            ok: false,
+            text: `${JSON.stringify(project)} is not a Solana address. Give the project’s address, or leave it out.${footer}`,
+          };
+        }
+      }
+      const [account, record] = await rpc.accounts([mint, metadataAddress(mint)]);
+      // A transfer fee changes on an epoch: with the chain's current one, a fee since lowered reads as it is now.
+      const epoch =
+        account && typeof rpc.call === 'function'
+          ? await rpc.call('getEpochInfo').then(
+              e => Number(e.epoch),
+              () => null,
+            )
+          : null;
+      const token = tokenEntry(mint, account, record?.data ?? null, {
+        ...(input.key ? { key: input.key } : {}),
+        project,
+        epoch,
+      });
+      if (!token)
+        return {
+          ok: false,
+          text: `${
+            account
+              ? `${mint} is not a token mint on ${CLUSTER} (a token account or a wallet is not the mint: an explorer’s token page names it)`
+              : `There is nothing at ${mint} on ${CLUSTER}. A coin launched on mainnet is not on ${CLUSTER}, where loot runs for now`
+          }.${footer}`,
+        };
+      if (token.source === 'sol')
+        return {
+          ok: true,
+          token,
+          text: `${mint} is wrapped SOL: in a spec that is SOL itself.\n\nIn the spec’s "tokens":\n${JSON.stringify(token)}${footer}`,
+        };
+      const read = parseMint(mint, account.owner, account.data, record?.data ?? null);
+      const supply = Number(BigInt(read.supply)) / 10 ** read.decimals;
+      const p = token.powers;
+      const state = mintState(account);
+      // The name and ticker are the token's own writing, anyone's to set: given as the entry has them (one line, cut
+      // to a spec's lengths), in quotes, as labels and never as words of this tool.
+      const called =
+        token.symbol || token.name
+          ? `calls itself ${[token.name && `“${token.name}”`, token.symbol && `ticker “${token.symbol}”`].filter(Boolean).join(', ')} (its own record’s words: a label anyone can write, not a fact)`
+          : 'has no name record, so wallets show it as an unknown token';
+      // What each power lets whoever holds it do, in the checker's words (check.mjs W-MINT-POWERS).
+      const can = [
+        p.mintAuthority === 'someone else' && `mint more of it whenever they want (${read.mintAuthority} can)`,
+        p.mintAuthority === 'project' && null,
+        p.freeze && 'freeze any account holding it, an economy’s pools and vaults included',
+        p.permanentDelegate && 'move or burn it out of any account',
+        p.transferHook && 'run a program of their own on every transfer, which can refuse one',
+        p.transferFeePercent > 0 && `keep ${p.transferFeePercent}% of every transfer`,
+        p.feeChangeable && 'raise its transfer fee, up to all of a transfer',
+        p.closeAuthority && 'close the mint and make it again with other powers',
+        p.pausable && 'pause every transfer of it',
+        p.defaultFrozen && 'have every new account of it start frozen',
+        !p.defaultFrozen && p.defaultState && p.freeze && 'switch every new account of it to start frozen',
+      ].filter(Boolean);
+      const also = [
+        p.nonTransferable && 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
+        p.confidentialTransfers &&
+          'Its holders can turn plain transfers into their account away (confidential transfers).',
+        state.paused && 'It is paused now: nothing of it moves until its issuer ends the pause.',
+        state.scaled &&
+          `Wallets show its amounts multiplied by a rate its mint carries${state.scaler ? ', which its issuer can change' : ''}: an economy counts the amounts under it, so a price in a spec is not the number a wallet shows.`,
+        p.mintAuthority === 'project' &&
+          'Its mint authority is the project given: the project mints it, as its rules say.',
+        project &&
+          p.mintAuthority === 'someone else' &&
+          `Its mint authority is not the project given (${project}): until it is handed over, nothing the economy mints in it lands.`,
+      ].filter(Boolean);
+      const text = [
+        `The token at ${mint} on ${CLUSTER}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}. It ${called}.`,
+        can.length
+          ? `Whoever controls its mint can:\n${can.map(c => `- ${c}`).join('\n')}\nAn economy in it is only as safe as the token: say so where players pay, stake or are paid.`
+          : `Its mint has no key that can freeze it, take it, charge on it or stop a transfer${p.mintAuthority === 'project' ? ' (the project mints it)' : ''}.`,
+        ...also,
+        `In the spec’s "tokens" (xsolana_check then says what each power means for the economy’s parts):\n${JSON.stringify(token, null, 2)}`,
+      ].join('\n\n');
+      return {
+        ok: true,
+        token,
+        mint: {
+          address: mint,
+          program: read.program,
+          decimals: read.decimals,
+          supply: read.supply,
+          name: token.name ?? null,
+          symbol: token.symbol ?? null,
+          mintAuthority: read.mintAuthority,
+          freezeAuthority: read.freezeAuthority,
+        },
+        text: text + footer,
+      };
     },
   },
   {
