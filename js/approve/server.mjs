@@ -408,6 +408,9 @@ export async function createApproval({
       // authority of).
       project: extra.project ?? null,
       wallet: n.owner ?? null,
+      // The accounts this session made new keys for (a token's mint, the collection, the tree): their addresses are
+      // this session's own, new each time, so what is shown twice differs in them and in nothing else.
+      fresh: [...keys].map(([name, k]) => ({ name: name.replace(/^new:/, ''), address: k.address })),
       ...(extra.refused ? { refused: extra.refused } : {}),
     };
   }
