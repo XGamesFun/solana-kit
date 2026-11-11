@@ -37,12 +37,14 @@ import {
   requestHeapFrame,
   syncNative,
   transferLamports,
+  withComputeBudget,
   withSolWrap,
 } from '../chain/programs.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { extension, mayStartFrozen, mintPowers, resolveTransfers } from '../chain/token2022.js';
 import {
   compileFitting,
+  compileKeepingKind,
   closeTableIx,
   deactivateTableIx,
   readTable,
@@ -74,6 +76,9 @@ export {
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 /** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
+/** The compute units a sponsored step asks for: all a transaction can have. It sets a price of 0, so they cost nothing. */
+const SPONSORED_UNITS = 1_400_000;
+
 const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 /** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
 const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...LOTTERY_STEPS]);
@@ -799,17 +804,26 @@ export function solanaApp({
     const { blockhash, lastValidBlockHeight } = await client.latestBlockhash();
     // Lent the most, the step is tried; then sent lent the same, the player giving back last all but what it costs in
     // fees and rent: a step can need more SOL midway than it costs (a wrapped-SOL account it opens and closes).
-    const compile = (back = 0n) =>
-      compileFitting({
+    // It leads with a compute unit limit (all a transaction can have) and a unit price of 0, the price a sponsor
+    // pays unless its server says more: a wallet that adds its own priority fee only where a transaction sets none
+    // (Phantom does, to one with no signature on it yet) is then handed one it signs as it stands, and the sponsor's
+    // server, which refuses a price it did not agree to, takes it. A step keeps the kind of transaction it had: one
+    // that fits a legacy transaction stays one (without the two where they would not fit), and only a step that
+    // needed the project's lookup tables before goes as v0.
+    const compile = (back = 0n) => {
+      const list = [
+        sponsorTopUp(sponsor.address, me, sponsorMax),
+        ...instructions,
+        ...(back > 0n ? [sponsorGiveBack(sponsor.address, me, back)] : []),
+      ];
+      return compileKeepingKind({
         payer: sponsor.address,
         blockhash,
-        instructions: [
-          sponsorTopUp(sponsor.address, me, sponsorMax),
-          ...instructions,
-          ...(back > 0n ? [sponsorGiveBack(sponsor.address, me, back)] : []),
-        ],
+        led: withComputeBudget(list, { units: SPONSORED_UNITS, microLamports: 0n }),
+        plain: list,
         tables,
       });
+    };
     const tried = compile();
     if (!tried) return null;
     const addresses = namedIn([sponsorTopUp(sponsor.address, me, 0n), ...instructions]);

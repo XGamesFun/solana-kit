@@ -68,7 +68,24 @@ describe('the xsolana MCP server', () => {
     const pub = await client.callTool({ name: 'xsolana_publish', arguments: { example: 'coin-flip-arena' } });
     // Pinned to this package's exact version (an unpinned npx runs whatever the name holds when it runs).
     const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-    assert.equal(pub.structuredContent.command, `npx -y @xgamesfun/solana@${version} approve xsolana.json`);
+    const npx = `npx -y @xgamesfun/solana@${version}`;
+    const keyFile = '~/.config/xsolana/coin-flip-arena.json';
+    assert.equal(pub.structuredContent.keyFile, keyFile);
+    assert.equal(pub.structuredContent.keygen, `${npx} keygen ${keyFile}`);
+    assert.equal(pub.structuredContent.command, `${npx} approve xsolana.json --keypair ${keyFile}`);
+    assert.equal(pub.structuredContent.browserCommand, `${npx} approve xsolana.json --browser`);
+    // A key file signs, after the person's yes; the page is only for one who asks.
+    assert.match(text(pub), /you run these; nothing opens, and nothing is sent before the person’s yes/);
+    assert.match(text(pub), /run the same command with --yes <code>/);
+    assert.match(text(pub), /run it again without --yes: it prints what is left and a new code/);
+    assert.match(text(pub), /which key goes live is for good/);
+    assert.match(text(pub), /Everything the setup takes from the owner must be at that address first/);
+    assert.match(text(pub), /set "treasury": "wallet:<address>" first/);
+    assert.match(
+      text(pub),
+      /Only if the person asks to sign in a browser wallet instead: give them this to run in their own terminal: .* --browser \(/,
+    );
+    assert.match(text(pub), /Don’t run or open it otherwise\./);
   });
 
   // Every npx line a person or an agent is handed names this exact version.

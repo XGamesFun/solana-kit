@@ -8,7 +8,9 @@
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
 //   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
-//   xsolana approve [file] [--port n] [--no-open]   open the local page where the owner approves going live in their wallet
+//   xsolana keygen <file>                 make a key file for a project's owner (outside any repository; the key is never printed)
+//   xsolana approve [file] --keypair <keyfile> [--yes <code>]   put the economy live, signed by a key file: no browser, no page
+//   xsolana approve [file] --browser [--port n] [--no-open]     the same in a browser wallet, on a local page: only when the person asks for it
 //   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
 //   xsolana version
@@ -29,7 +31,9 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana explain [file]          the economy in plain words
   xsolana review [file]           what a cheater gets on each route, and what to fix before going live
   xsolana publish [file]          what going live does, and how to approve it
-  xsolana approve [file]          approve going live in your own wallet (a local page; --port n, --no-open)
+  xsolana keygen <file>           make a key file for the project’s owner, outside any repository (prints its address, never the key)
+  xsolana approve [file] --keypair <keyfile>   what going live sends, then (--yes <code>) send it, signed by that key file
+  xsolana approve [file] --browser             the same on a local page, signed in a browser wallet (--port n, --no-open)
   xsolana status [file]           a live economy on chain
   xsolana token <mint>            a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do
   xsolana connect                 add the xsolana tools to Claude Code or Codex (--agent claude|codex, --scope user|project, --local, --remove, --dry-run)
@@ -45,7 +49,7 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
 class UsageError extends Error {}
 
 /** The flags that take a value: `--name value` or `--name=value`. */
-const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host']);
+const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host', '--keypair', '--yes']);
 /** The flags each command takes; any other is refused. */
 const TOOL_FLAGS = ['--json'];
 const FLAGS = {
@@ -60,7 +64,8 @@ const FLAGS = {
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
   token: TOOL_FLAGS,
-  approve: ['--port', '--no-open'],
+  keygen: [],
+  approve: ['--keypair', '--yes', '--browser', '--port', '--no-open'],
   connect: ['--agent', '--scope', '--local', '--remove', '--dry-run'],
   tool: ['--list', '--args-file', ...TOOL_FLAGS],
   version: [],
@@ -73,12 +78,16 @@ function parseArgs(rest) {
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (!a.startsWith('--') || a === '--') {
+    // (a bare -- is the shell's own end of flags, not a file's name)
+    if (a === '--') continue;
+    if (!a.startsWith('--')) {
       positional.push(a);
       continue;
     }
     const eq = a.indexOf('=');
     const name = eq > 0 ? a.slice(0, eq) : a;
+    if (VALUED.has(name) && flags.has(name)) throw new UsageError(`${name} is given twice: give it once.`);
+    if (eq > 0 && !VALUED.has(name)) throw new UsageError(`${name} takes no value: write it alone, or leave it out.`);
     flags.add(name);
     if (eq > 0) values.set(name, a.slice(eq + 1));
     else if (VALUED.has(name)) {
@@ -90,7 +99,17 @@ function parseArgs(rest) {
   return { flags, values, positional };
 }
 
-/** The port `xsolana approve` listens on: a whole number from 1 to 65535, or undefined for any free one. */
+/** What `xsolana approve` says when it is not told how the setup is signed. */
+const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
+
+  --keypair <keyfile>   a key file on this machine signs (the usual way: no browser, no page). It shows everything that
+                        would be sent, with a code, and sends nothing; run again with --yes <code>, it sends exactly
+                        that. \`xsolana keygen <file>\` makes a new project's key file; one that is live is signed
+                        only by the key it went live with.
+  --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
+                        when the person whose economy it is asks for that; they run it themselves.`;
+
+/** The port `xsolana approve --browser` listens on: a whole number from 1 to 65535, or undefined for any free one. */
 function portOf(value) {
   if (value === undefined) return undefined;
   const n = Number(value);
@@ -153,10 +172,56 @@ async function main(argv) {
       if (!positional[0]) throw new UsageError('xsolana token <mint>: give the token’s mint address.');
       await tool('xsolana_token', { mint: positional[0] });
       break;
+    case 'keygen': {
+      if (!positional[0])
+        throw new UsageError(
+          'xsolana keygen <file>: say where the key file goes, outside any repository (for example ~/.config/xsolana/my-game.json).',
+        );
+      if (positional.length > 1)
+        throw new UsageError(
+          'xsolana keygen <file> makes one key file: give one path (in quotes when it has a space).',
+        );
+      const { makeKeyFile } = await import('../js/approve/keyfile.mjs');
+      const { PACKAGE_VERSION } = await import('../js/mcp/tools.mjs');
+      const made = await makeKeyFile(positional[0]);
+      // The file as it was named when that is the home folder's (`~/…` reads the same in any shell), else whole; in
+      // quotes when a shell would split it.
+      const named = positional[0].startsWith('~') ? positional[0] : made.file;
+      const word = /^[\w./~:\\-]+$/.test(named) ? named : `"${named}"`;
+      console.log(
+        [
+          `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
+          `  ${made.address}`,
+          'Whatever is set up with it, it owns, for good: anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
+          `It holds nothing yet. Send it devnet SOL (\`xsolana cost\` says what going live takes; https://faucet.solana.com gives some), then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
+        ].join('\n'),
+      );
+      break;
+    }
     case 'approve': {
+      const file = positional[0] ?? 'xsolana.json';
+      const keyFile = values.get('--keypair');
+      const page = flags.has('--browser');
+      if (keyFile !== undefined && page)
+        throw new UsageError('--keypair and --browser are two ways to sign: give one.');
+      if (keyFile !== undefined) {
+        if (flags.has('--port') || flags.has('--no-open'))
+          throw new UsageError('--port and --no-open go with --browser.');
+        const { approveWithKey } = await import('../js/approve/with-key.mjs');
+        // It shows, and sends only when given the code of what it showed: it never stops to ask.
+        const r = await approveWithKey({ file, keyFile, yes: values.get('--yes') ?? null });
+        if (!r.ok) process.exitCode = 1;
+        break;
+      }
+      if (flags.has('--yes')) throw new UsageError('--yes goes with --keypair.');
+      if (!page) {
+        console.error(HOW_TO_SIGN);
+        process.exitCode = 1;
+        break;
+      }
       const port = portOf(values.get('--port'));
       const { approve } = await import('../js/approve/server.mjs');
-      await approve({ file: positional[0] ?? 'xsolana.json', port, open: !flags.has('--no-open') });
+      await approve({ file, port, open: !flags.has('--no-open') });
       break;
     }
     case 'connect': {

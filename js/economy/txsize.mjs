@@ -11,8 +11,9 @@
 // - instruction data is sized byte for byte from the program's IDL (idl.mjs), and other programs' data from their
 //   documented layouts at its longest;
 // - no address lookup tables are assumed.
-// A wallet may add its own compute-budget instructions (a price and a limit: about 52 bytes), so the plan keeps
-// WALLET_ROOM free below the network's 1,232-byte limit.
+// A transaction's compute budget instructions (a unit limit and a unit price) take 52 bytes. A setup transaction
+// leads with its own (plan.mjs `withSetupBudget`), and a player's wallet may add its own to a transaction that sets
+// none. So an estimate keeps WALLET_ROOM free below the network's 1,232-byte limit.
 
 export const MAX_TRANSACTION_BYTES = 1232;
 export const WALLET_ROOM = 64;

@@ -10,7 +10,7 @@ You need Node 22 or later. With an AI coding agent you only type the sentence; t
 
 In Claude Code with the plugin installed (`/plugin marketplace add XGamesFun/solana-kit`, then
 `/plugin install xsolana@xgamesfun`), in Codex, or in any agent with the MCP server
-(`npx -y --package=@xgamesfun/solana@0.27.1 xsolana mcp`):
+(`npx -y --package=@xgamesfun/solana@0.27.2 xsolana mcp`):
 
 > A mystery crate for 0.1 SOL: a 1% legendary sword, a 9% epic shield, a 30% rare helmet, otherwise nothing. Most of
 > the money goes to the treasury.
@@ -58,7 +58,7 @@ An economy is one JSON file, `xsolana.json`. This one has three collectible item
 ## 3. Check it
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 check xsolana.json
+npx -y @xgamesfun/solana@0.27.2 check xsolana.json
 ```
 
 The checker refuses anything the program would refuse, before anything is signed. This spec is ready, with two
@@ -68,7 +68,7 @@ treated as gambling in some places (show the odds, and take advice before real m
 ## 4. Simulate it
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 simulate xsolana.json
+npx -y @xgamesfun/solana@0.27.2 simulate xsolana.json
 ```
 
 ```
@@ -88,31 +88,37 @@ the rent of the collectible they win.
 ## 5. Price it
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 cost xsolana.json
+npx -y @xgamesfun/solana@0.27.2 cost xsolana.json
 ```
 
-Going live takes 3 transactions, one wallet approval and about 0.017 SOL, almost all of it rent for 10 accounts (the
+Going live takes 3 transactions and about 0.017 SOL, almost all of it rent for 10 accounts (the
 project, the collection, the three items, the box, a lookup table and the token accounts).
 
 ## 6. Review it the way a cheater would
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 review xsolana.json
+npx -y @xgamesfun/solana@0.27.2 review xsolana.json
 ```
 
 For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the
 chain and the most one cheater gets. Here the only route is the box, and its roll comes from MagicBlock's VRF:
-“nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's wallet controls the
-project, so keep it in a hardware wallet or a multisig.
+“nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's key controls the
+project, so keep it safe: the key file readable by you alone on devnet, a hardware wallet or a multisig with real money.
 
-## 7. Go live, in your own wallet
+## 7. Go live, signed on your own computer
 
 ```bash
-npx -y @xgamesfun/solana@0.27.1 approve xsolana.json
+npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/loot-box.json
+npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana/loot-box.json
 ```
 
-This opens a page on your own computer. Connect a devnet wallet and approve the transactions it lists. Neither the
-tools nor the agent ever signs or asks for a key. `xsolana status xsolana.json` then reads the live economy back.
+`keygen` makes a key file for the project and prints its address, never the key: send that address the devnet SOL
+`cost` named. The key file is the project's owner, for good: keep it where it is, back it up yourself, and never
+paste it anywhere. `approve` then lists every transaction with what it pays and trusts, ends with a code, and sends
+nothing. Run the same command again with `--yes <code>` to send exactly what was listed (an agent does that only
+after you have read the list and said yes). Nothing asks for a seed phrase or for the key of a wallet you already
+have. To sign in a browser wallet instead, run the page yourself: `approve xsolana.json --browser`.
+`xsolana status xsolana.json` then reads the live economy back.
 
 ## 8. Let players open it
 

@@ -5673,7 +5673,7 @@ export function check(
     warn(
       'W-AUTHORITY',
       'economy.keys.authority',
-      `This economy needs the authority while it runs, for what only the game knows: ${needs.join('; ')}. ${m.authority === 'owner' ? 'That is your wallet, approving each one.' : `That is the key ${m.authority}.`}`,
+      `This economy needs the authority while it runs, for what only the game knows: ${needs.join('; ')}. ${m.authority === 'owner' ? 'That is the project’s owner key, which signs each one.' : `That is the key ${m.authority}.`}`,
     );
   const voucherKeys = [...new Set(m.grants.flatMap(g => [...(g.vouchers ?? []), ...(g.keys ?? [])]))];
   if (voucherKeys.length)
@@ -5802,7 +5802,7 @@ export function check(
       refuse(
         'E-TX-SIZE',
         paths[kind] ? `economy.${paths[kind]}${part ? `.${key}` : ''}` : 'economy',
-        `${named} takes ${bytes} bytes to set up in one transaction, more than the ${BUDGET} a setup transaction may hold (${MAX_TRANSACTION_BYTES}, less ${WALLET_ROOM} kept for what the owner’s wallet adds), so it could never go live.`,
+        `${named} takes ${bytes} bytes to set up in one transaction, more than the ${BUDGET} a setup transaction may hold (${MAX_TRANSACTION_BYTES}, less ${WALLET_ROOM} kept for the compute unit limit and price it leads with), so it could never go live.`,
         fix,
       );
     }

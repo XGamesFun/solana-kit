@@ -34,6 +34,7 @@ import {
   createAssociatedTokenAccountIdempotent,
   syncNative,
   transferLamports,
+  withComputeBudget,
 } from '../chain/programs.js';
 import {
   createAccountIx,
@@ -43,7 +44,7 @@ import {
   setAuthorityIx,
   transferCheckedIx,
 } from '../chain/token.js';
-import { compileMessage, transactionSize } from '../chain/tx.js';
+import { compileMessage, MAX_TRANSACTION_BYTES, transactionSize } from '../chain/tx.js';
 import { sha256 } from '../chain/sha256.js';
 import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
@@ -1878,13 +1879,33 @@ export const stepBytes = (instructions, ctx) =>
 const budgeted = (instructions, compute) =>
   compute ? [computeUnitLimit(MAX_COMPUTE_UNITS), ...instructions] : instructions;
 
-/** The bytes of a transaction of `step` alone, as `pack` sends it (its compute limit included). */
+/** The bytes of a transaction of `step` alone, as `pack` holds it against the budget (a box's compute limit included). */
 export const stepAloneBytes = (step, ctx) => stepBytes(budgeted(step.build(ctx), Boolean(step.compute)), ctx);
 
 /**
- * Packs steps into transactions under the size budget, one signer set at a time; each step whole. A transaction that
- * carries a step needing more compute than an instruction has by default (`compute`: a box's write) asks for all a
- * transaction can have, first.
+ * The compute unit price every setup transaction sets, in micro-lamports a unit: 1, the least that is not 0 (a wallet
+ * may read 0 as no price set). With the unit limit below it comes to 1.4 lamports, charged as 2 lamports a transaction
+ * on top of the 5,000 a signature.
+ */
+export const SETUP_UNIT_PRICE = 1n;
+
+/**
+ * A setup transaction's instructions as the owner's wallet is handed them: led by a compute unit limit and a compute
+ * unit price, each once. A wallet that adds its own priority fee (Phantom does) adds it only to a transaction that
+ * sets neither, and the approval page sends a transaction only as it prepared it, so every setup transaction sets both
+ * itself. The limit is all a transaction can have (1,400,000 units): nothing here measures what a step takes, a box's
+ * write needs it, and no step may fail for want of compute. A limit or a price the instructions already carry is
+ * kept.
+ */
+export const withSetupBudget = instructions =>
+  withComputeBudget(instructions, { units: MAX_COMPUTE_UNITS, microLamports: SETUP_UNIT_PRICE });
+
+/**
+ * Packs steps into transactions under the size budget, one signer set at a time; each step whole. Every transaction
+ * leads with its compute budget (`withSetupBudget`): `BUDGET` keeps 64 bytes of a transaction free, and the two
+ * instructions take 52 of them (12 where a box's write, `compute`, had its limit counted with the steps already). So
+ * the steps pack as they did before the plan set a price, and `bytes`, the size of the transaction as it is sent, is
+ * held to what one transaction carries.
  */
 export function pack(steps, ctx) {
   const transactions = [];
@@ -1922,7 +1943,14 @@ export function pack(steps, ctx) {
     };
     transactions.push(current);
   }
-  for (const t of transactions) t.bytes = sizeOf(t.instructions);
+  for (const t of transactions) {
+    t.instructions = withSetupBudget(t.instructions);
+    t.bytes = sizeOf(t.instructions);
+    if (t.bytes > MAX_TRANSACTION_BYTES)
+      throw new Error(
+        `The steps “${t.steps.map(s => s.says).join('”, “')}” take ${t.bytes} bytes with their compute budget: too big for one transaction.`,
+      );
+  }
   return transactions;
 }
 

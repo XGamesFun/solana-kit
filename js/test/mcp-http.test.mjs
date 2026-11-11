@@ -56,11 +56,22 @@ describe('the hosted xsolana MCP server', () => {
     for (const t of tools) assert.ok(!('file' in (t.inputSchema.properties ?? {})), `${t.name} takes no file`);
   });
 
-  test('its instructions say to pass the spec whole and how the owner goes live in their own wallet', () => {
+  test('its instructions say to pass the spec whole and how it goes live: a key file, and no page unless asked', () => {
     assert.equal(client.getInstructions(), REMOTE_INSTRUCTIONS);
     assert.match(REMOTE_INSTRUCTIONS, /pass it whole as "spec"/);
     assert.ok(REMOTE_INSTRUCTIONS.includes(`npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json`));
-    assert.match(REMOTE_INSTRUCTIONS, /never ask for a key/);
+    assert.ok(REMOTE_INSTRUCTIONS.includes(`npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/`));
+    assert.match(REMOTE_INSTRUCTIONS, /--keypair <that file> prints everything that would be sent and sends nothing/);
+    assert.match(REMOTE_INSTRUCTIONS, /Never ask for, read or print a key/);
+    assert.match(
+      REMOTE_INSTRUCTIONS,
+      /A change to an economy that is already live is signed by the key that owns it: never make a new key for it/,
+    );
+    assert.match(REMOTE_INSTRUCTIONS, /the project’s owner for good/);
+    assert.match(
+      REMOTE_INSTRUCTIONS,
+      /--browser in place of --keypair\), which the person runs themselves, only if they ask for one or a browser wallet owns the project/,
+    );
   });
 
   test('checks, simulates and reviews a spec passed whole, and a worked example by name', async () => {

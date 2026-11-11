@@ -1,26 +1,38 @@
 ---
 name: xsolana-economy
-description: Build a web3, token or NFT economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops, loot boxes and gacha, packs, random NFT and token prizes from a stash of NFTs the project holds, coin flips and prize pools, lotteries and raffles, auctions where the highest bid wins and the outbid get their money back, staking farms with lock tiers and NFT boosts, crafting and merging, seasons and emissions, prediction pools and contests, quests, airdrops and capped rewards, holder-gated drops, and perks or staking for any NFT, whether the project minted it or not. Turns a person's idea into a JSON spec, then checks, simulates and prices it, explains it in plain words, and hands the person the command that puts it live in their own wallet. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
+description: Build a web3, token or NFT economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops, loot boxes and gacha, packs, random NFT and token prizes from a stash of NFTs the project holds, coin flips and prize pools, lotteries and raffles, auctions where the highest bid wins and the outbid get their money back, staking farms with lock tiers and NFT boosts, crafting and merging, seasons and emissions, prediction pools and contests, quests, airdrops and capped rewards, holder-gated drops, and perks or staking for any NFT, whether the project minted it or not. Turns a person's idea into a JSON spec, then checks, simulates and prices it, explains it in plain words, and puts it live with a key file on their own machine, after their yes. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
 ---
 
 # Build an economy on loot
 
 An economy is one JSON spec (`xsolana.json` in the project) on **loot**, a Solana program every project shares. Nobody
-writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and the project's
-owner puts it live by approving in their own wallet. It runs on **devnet** until the program is audited.
+writes or deploys a contract: the spec is checked, simulated and priced by the `xsolana_*` tools, and it goes live
+signed by a key file on the owner's own machine, once they have read what will be sent and said yes. It runs on
+**devnet** until the program is audited.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.27.1 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.27.1 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.27.1 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.27.2 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.27.2 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.27.2 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
 1. **Never write, build or deploy a program.** No Anchor, Rust, Solidity or custom program, and no deploy: not by you,
    not by a command or page you give the person, not even "just on devnet". Unaudited code holding people's money is
    the risk loot exists to remove. If the idea needs something loot can't do, follow rule 9.
-2. **You never sign, and you never ask for or handle a key.** No private key, seed phrase or keypair file: not in
-   chat, not in a spec, not in a file. Going live is the person running `xsolana approve` and approving in their own
-   wallet. If they paste a key, tell them to treat it as exposed and move its funds; write it nowhere.
+2. **Going live is signed by a key file on the person's own machine, after their yes; you never ask for, read or
+   print a key, and you open no signing page.** `xsolana keygen <file>` makes the project's key file (outside any
+   repository, unless git ignores it there; it prints the address, never the key). It is read only through the tools:
+   `xsolana approve <spec> --keypair <file>`, which prints everything it would send and sends nothing until it is run
+   again with the code it printed, which you do only after the person has read that printout and said yes; and, for
+   what only the authority signs later, `readKeyFile` in a script (`references/after-launch.md`). A key file is the
+   safer way to set up: it is a new key that has never held anything else, so the wallet that holds what the person
+   owns is never connected or asked to sign; it signs each transaction exactly as it was prepared and shown; and
+   nothing opens in their browser. What it costs: the key is a plain file, so anything on the machine that can read
+   it can sign as the project, and by default what the economy earns lands at its address. The page for a browser
+   wallet (`xsolana approve <spec> --browser`) is only for a person who asks for it. The key file is the project's
+   owner: whoever can read it controls the project. Never open it, copy it or print it, and never put it in a chat, a
+   spec, a repository or a page. Never ask for a seed phrase or the key of a wallet the person already has; if they
+   paste one, tell them to treat it as exposed and move its funds, and write it nowhere.
 3. **Devnet only.** Nothing here is real money yet; say so.
 4. **The checker decides.** Never save or publish a spec with refusals. Fix each refusal the way its `fix` says.
 5. **Numbers come from the tools.** What a box gives back, how long a pool lasts, what going live costs: quote
@@ -32,9 +44,10 @@ or `npx -y @xgamesfun/solana@0.27.1 tool <name> '<json>'` for any tool (always w
    say it in one plain sentence. Don't repeat it in later answers, or add
    legal notes to pages and apps you build, unless the person asks or a flag of a new kind appears. When they ask about
    the law, answer what you know and leave the rest to their lawyer: you are not one. Never call anything an
-   investment, a return or passive income, and never promise it is safe. The approval page shows the flags and that
-   the program is not independently audited and comes as is, and asks the owner to tick that they read them, so going
-   live needs nothing more from you. For an auction, say once how bidding works (`W-AUCTION-SHILL`): anyone, the
+   investment, a return or passive income, and never promise it is safe. What `xsolana approve` prints before
+   anything is sent shows the flags and that the program is not independently audited and comes as is: the person
+   reads it before their yes (on the browser page, they tick that they read it), so going live needs nothing more
+   from you. For an auction, say once how bidding works (`W-AUCTION-SHILL`): anyone, the
    seller included, can bid to push the price up.
 7. **Take addresses from the tools, never from memory**: the program, its accounts, the IDL. Every answer names them.
 8. **Public data only in a spec**: names, prices, percents, public addresses. Leave out `id`, `index`, `shopBox`,
@@ -121,14 +134,40 @@ or `npx -y @xgamesfun/solana@0.27.1 tool <name> '<json>'` for any tool (always w
 8. **Review it before they approve**: `xsolana_review` (rule 12). Fix the high findings, declare `trust` on every
    voucher grant, and tell the person which level each signed route uses, what a cheater gets and what the stronger
    level would cost. Run it again after every change that touches a route that pays.
-9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the command. Tell them to
-   run it themselves in the project folder, exactly as `xsolana_publish` gives it (it names the exact version:
-   `npx -y @xgamesfun/solana@0.27.1 approve xsolana.json`; never drop the version). It opens a page on their computer where
-   they connect a devnet wallet and approve; what lands is written back into `xsolana.json`. You publish nothing.
+9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
+   run in the project folder exactly as given (they name the exact version; never drop it):
+   - **A new economy gets a key file**, unless the project has one:
+     `npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
+     looking for one.
+   - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
+     its treasury (what sales leave lands at its address) and its authority (it signs what only the game decides).
+     Which key goes live is for good: every later change, and everything only the authority signs, is signed by this
+     file, and these tools can't hand a project to another owner. If they will want to sign in a browser wallet
+     later, go live in one now. If the economy takes money in, ask for the public address of a wallet they hold and
+     set `"treasury": "wallet:<address>"` first: it can't be changed through the spec once live. Tell them to back
+     the file up themselves (a USB stick, a password manager): if it is lost, nobody can change the economy, decide
+     a contest or move what its address holds, and nothing restores it. You never open or copy it.
+   - **Everything the setup takes from the owner must be at the key's address first**: the devnet SOL
+     (`xsolana_cost`), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
+     collection they already have needs the key's address as its update authority. If they would rather not move
+     those, offer the browser wallet.
+   - **Show it**: `npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair <key file>` prints every step with
+     what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
+     it is, not a summary of it, and ask.
+   - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it
+     stops part way, run it again without `--yes`: it prints what is left and a new code. What is left is part of what
+     they said yes to, so go on with that code; if it shows a step or a warning they have not seen, ask again.
+   - **A change to an economy that is live** is signed by the key that owns it, and by no other: the key file it went
+     live with, or the browser wallet it went live in. Never make a new key for it, and never remove the file's live
+     section because a key was refused: ask the person how it went live.
+   - **A browser wallet** (`… approve xsolana.json --browser`) only when they ask for one, or when a browser wallet
+     owns the project: give them the command to run in their own terminal. It serves a page on their computer and
+     keeps running until the page says it is live. Never run it because it seems easier.
 10. **After it is live**: `xsolana_status` shows each part on chain; read it before acting on what the person says
-    happened. A later change is the same loop: save, publish, and the approval sends only what changed. What only the
-    owner signs (open or decide a contest, pay out) goes on an owner page they approve in their own wallet:
-    `references/after-launch.md`.
+    happened. A later change is the same loop: save, publish, and `approve` shows and sends only what changed, signed
+    by the same key. What only the authority signs while it runs (open or decide a contest, pay out) is signed where
+    its key is, a key file on their machine or a browser wallet on an owner page: `references/after-launch.md`.
 
 ## When they ask for a token
 

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { example } from '../economy/examples.mjs';
 import { runTool } from '../mcp/server.mjs';
-import { approveCommand } from '../mcp/tools.mjs';
+import { approveCommand, keyFileFor } from '../mcp/tools.mjs';
 
 const NOW = 1_790_000_000;
 const spec = example('coin-flip-arena').spec;
@@ -35,7 +35,8 @@ test('xsolana_save refuses a file name the shell would read as code', async () =
     assert.equal((await runTool('xsolana_save', { spec, file }, { cwd: dir, now: NOW })).ok, true, file);
     assert.match(
       (await runTool('xsolana_publish', { file }, { cwd: dir, now: NOW })).command,
-      new RegExp(` approve ${file.replace(/\./g, '\\.')}$`),
+      // (the spec's file as one plain word, then the key file by the economy's name: letters, digits and - only)
+      new RegExp(` approve ${file.replace(/\./g, '\\.')} --keypair ~/\\.config/xsolana/[a-z0-9-]+\\.json$`),
     );
   }
   // a name already on disk (written by hand, not by xsolana_save) is refused by xsolana_publish too: see below
@@ -104,11 +105,19 @@ test('xsolana_publish refuses a file name that is not plain, whatever shell the 
   // a plain name, in a folder or not, is the command's word as it is
   mkdirSync(path.join(dir, 'economy'));
   writeFileSync(path.join(dir, 'economy/shop_v2.json'), JSON.stringify(spec));
-  assert.ok(
-    (await runTool('xsolana_publish', { file: 'economy/shop_v2.json' }, { cwd: dir, now: NOW })).command.endsWith(
-      ' approve economy/shop_v2.json',
-    ),
-  );
+  const plain = await runTool('xsolana_publish', { file: 'economy/shop_v2.json' }, { cwd: dir, now: NOW });
+  assert.match(plain.command, / approve economy\/shop_v2\.json --keypair ~\/\.config\/xsolana\/[a-z0-9-]+\.json$/);
+  assert.ok(plain.browserCommand.endsWith(' approve economy/shop_v2.json --browser'));
+  // The key file is named after the economy, and an economy's name is the person's own words: only letters, digits
+  // and - of it reach the command.
+  const named = { ...spec, name: "x'; touch PWNED; $(calc) `id` & ../../etc" };
+  writeFileSync(path.join(dir, 'named.json'), JSON.stringify(named));
+  const odd = await runTool('xsolana_publish', { file: 'named.json' }, { cwd: dir, now: NOW });
+  assert.equal(odd.keyFile, '~/.config/xsolana/x-touch-pwned-calc-id-etc.json');
+  assert.equal(odd.keygen, `${approveCommand().replace(/ approve$/, ' keygen')} ${odd.keyFile}`);
+  assert.equal(keyFileFor(''), '~/.config/xsolana/project.json');
+  assert.equal(keyFileFor('💎'.repeat(9)), '~/.config/xsolana/project.json');
+  assert.match(keyFileFor('A'.repeat(90)), /^~\/\.config\/xsolana\/a{40}\.json$/);
 });
 
 test('a spec in a folder on Windows is written with / in the approve command, never quoted', () => {

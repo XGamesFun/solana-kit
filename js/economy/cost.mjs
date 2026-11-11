@@ -3,7 +3,16 @@
 //
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
-import { boxOrderBytes, plan as compile, contestBytes, entryShape, farmEnds, roundRentOf } from './plan.mjs';
+import { priorityFee } from '../chain/programs.js';
+import {
+  boxOrderBytes,
+  plan as compile,
+  contestBytes,
+  entryShape,
+  farmEnds,
+  roundRentOf,
+  withSetupBudget,
+} from './plan.mjs';
 import {
   ACCOUNT_BYTES,
   CONTEST_ENTRY_BYTES,
@@ -63,7 +72,12 @@ export function setupCost(plan, economy) {
   const metadataLamports = accounts.reduce((n, a) => n + BigInt(a.fee ?? 0), 0n);
   const charged = plan.transactions.flatMap(t => t.steps).filter(s => !NO_FEE_STEP.test(s.id));
   const feeLamports = BigInt(charged.length) * FEES.project;
-  const networkLamports = plan.transactions.reduce((n, t) => n + BigInt(t.signers.length) * SIGNATURE_FEE, 0n);
+  // The network's fee: 5,000 lamports a signature, and each transaction's own priority fee (its unit limit times the
+  // unit price the plan sets: 2 lamports; none for a transaction listed without its instructions).
+  const networkLamports = plan.transactions.reduce(
+    (n, t) => n + BigInt(t.signers.length) * SIGNATURE_FEE + priorityFee(t.instructions ?? []),
+    0n,
+  );
   // Only the seeds and grant funds this plan puts in: a change to a live economy doesn't pay its seeds again.
   const steps = new Set(plan.transactions.flatMap(t => t.steps).map(s => s.id));
   const seeds = {};
@@ -101,7 +115,9 @@ export function setupCost(plan, economy) {
     notes.push(
       'The total includes the SOL put in grants’ funds, which pays their claims; what is left goes back to you when a grant closes.',
     );
-  notes.push('The network fee is 5,000 lamports a signature; a wallet may add a priority fee of its own.');
+  notes.push(
+    `The network fee is 5,000 lamports a signature and a priority fee of ${priorityFee(withSetupBudget([]))} lamports a transaction: each sets its own compute unit limit and price, so a wallet that adds a priority fee of its own leaves it as it is.`,
+  );
   return {
     accounts,
     rentSol: sol(rentLamports),
@@ -489,7 +505,7 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
 export function explainCost(c) {
   const s = c.setup;
   const lines = [
-    `Going live takes ${s.transactions} transaction${s.transactions === 1 ? '' : 's'} (${s.approvals} wallet approval${s.approvals === 1 ? '' : 's'}) and about ${s.totalSol} SOL:`,
+    `Going live takes ${s.transactions} transaction${s.transactions === 1 ? '' : 's'} and about ${s.totalSol} SOL:`,
   ];
   lines.push(
     `  rent ${s.rentSol} SOL for ${s.accounts.length} accounts; program fees ${s.programFeesSol} SOL; network fees ${s.networkFeesSol} SOL${

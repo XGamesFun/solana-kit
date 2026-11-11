@@ -174,16 +174,28 @@ test(
     assert.ok(!after.live.partial && !after.live.landed, 'the file is live, with nothing left over');
     // nothing more to publish; and a change of name costs a transaction, no rent and no fee to Token Metadata
     assert.deepEqual([changedParts(after).only.size, changedParts(after).renames], [0, []]);
-    // (loot is not called, so its project fee is not charged: the network's fee for one signature is all)
+    // (loot is not called, so its project fee is not charged: the network's fee for one signature, and the
+    // transaction's own priority fee of 2 lamports, are all)
     const priced = cost(next, { now: NOW, ...change, live: next.live }).setup;
     assert.deepEqual(
       [priced.accounts.length, priced.rentSol, priced.metadataFeesSol, priced.programFeesSol, priced.totalSol],
-      [0, 0, 0, 0, 0.000005],
+      [0, 0, 0, 0, 0.000005002],
     );
     // a tool that does not read the chain says what approving will do, and that it reads the record first
     const said = await runTool('xsolana_publish', { spec: next }, { now: NOW });
     assert.equal(said.transactions, 1);
-    assert.match(said.text, /at most 1 transaction, 1 wallet approval, about 0\.000005 SOL/);
+    assert.match(said.text, /at most 1 transaction, about 0\.000005002 SOL/);
+    // A live economy is changed only by the key that owns it: no command here makes another key.
+    assert.equal(said.keygen, undefined);
+    assert.doesNotMatch(said.text, / keygen /);
+    assert.match(said.text, /Only the key that owns the project can change it: the key file it went live with/);
+    assert.match(said.text, /Never make a new key for a live project/);
+    assert.match(said.text, /never remove the file’s live section because a key was refused/);
+    assert.match(
+      said.text,
+      /For a project a browser wallet owns: give them this to run in their own terminal: .* --browser \(/,
+    );
+    assert.match(said.text, /A project a key file owns can’t be signed in a browser wallet\./);
     assert.match(
       said.text,
       /Change what the token BUBL \(mint \w+\) is called on chain.*\(sent only if the token has a name record its owner can still change, read when approving\)/,

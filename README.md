@@ -8,8 +8,8 @@
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.XGamesFun%2Fsolana--kit-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.XGamesFun/solana-kit)
 
 You describe your game's or community's economy in a small JSON file: what players buy, open, stake, win or craft.
-The tools check it, show you where the money goes, tell you what it costs, and then you put it live by approving it in
-your own wallet. It runs on **loot**, one Solana program that every project shares, so there is no Anchor or Rust to
+The tools check it, show you where the money goes, tell you what it costs, and then it goes live, signed on your own
+computer once you have read what will be sent and said yes. It runs on **loot**, one Solana program that every project shares, so there is no Anchor or Rust to
 write, deploy or audit yourself.
 
 Most people never touch the JSON: they ask an AI agent (Claude Code, Codex, Cursor, ChatGPT or Claude) for _"a fishing
@@ -39,8 +39,20 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 1. **Describe it.** In a sentence to your agent, or as a spec file (`xsolana.json`).
 2. **Check it.** `check` refuses anything the program would refuse; `simulate` shows where the money goes, day by
    day; `cost` prices going live and each player action; `review` shows what a cheater could get.
-3. **Approve it.** A page opens on your own computer, lists every transaction, and you approve them in your wallet.
-   Nothing here ever signs for you or asks for a key.
+3. **Put it live.** `approve` lists every transaction with what it pays and trusts, ends with a code, and sends
+   nothing; run again with that code, it sends exactly what it listed. A key file on your own computer signs
+   (`keygen` makes one for the project). Nothing here asks for a seed phrase or for the key of a wallet you already
+   have, and no page opens unless you ask for your browser wallet.
+
+**Why a key file and not a browser wallet?** A key file made for the project is a new key that has never held
+anything else, so the wallet that holds what you own is never connected or asked to sign; it signs each transaction
+exactly as it was prepared and shown; and nothing opens in your browser. What it costs: the key is a plain file, so
+anything on your machine that can read it can sign as the project. It is the project's owner, for good (these tools
+can't hand a project to another owner), so keep it like one: outside any repository (the tools refuse one inside,
+unless git ignores it there), never pasted anywhere, and backed up by you, because nothing restores a lost one.
+Unless your spec names a `treasury`, what the economy earns for you lands at the key's address: name a wallet you
+hold (`"treasury": "wallet:<address>"`) before going live. To sign in a browser wallet instead, `approve --browser`
+serves the page for it.
 
 New here? The [loot box tutorial](docs/tutorial-loot-box.md) walks through all three with real output.
 
@@ -64,7 +76,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.27.1 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.27.2 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -75,22 +87,26 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.27.1 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.27.2 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.27.1 token <its mint address>
+npx -y @xgamesfun/solana@0.27.2 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.27.1 check xsolana.json
-npx -y @xgamesfun/solana@0.27.1 simulate xsolana.json
-npx -y @xgamesfun/solana@0.27.1 cost xsolana.json
+npx -y @xgamesfun/solana@0.27.2 check xsolana.json
+npx -y @xgamesfun/solana@0.27.2 simulate xsolana.json
+npx -y @xgamesfun/solana@0.27.2 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.27.1 explain xsolana.json
-npx -y @xgamesfun/solana@0.27.1 review xsolana.json
+npx -y @xgamesfun/solana@0.27.2 explain xsolana.json
+npx -y @xgamesfun/solana@0.27.2 review xsolana.json
 
-# go live, approved in your own wallet
-npx -y @xgamesfun/solana@0.27.1 approve xsolana.json
+# go live: a key file for the project (it prints the address to send devnet SOL to, never the key)…
+npx -y @xgamesfun/solana@0.27.2 keygen ~/.config/xsolana/my-game.json
+# …then everything going live would send, and a code; nothing is sent
+npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+# …and with that code, exactly what it listed is sent
+npx -y @xgamesfun/solana@0.27.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -122,6 +138,7 @@ module covers buying, opening boxes, staking, crafting, tickets, bids and claims
 | `@xgamesfun/solana/client`       | one builder per instruction, every address, account and receipt decoders              |
 | `@xgamesfun/solana/sponsor`      | your server pays players' fees (never their price), so players with no SOL can play   |
 | `@xgamesfun/solana/results`      | results and vouchers your game's server signs                                         |
+| `@xgamesfun/solana/keyfile`      | the project's key file as a signer, for a script of the owner's own steps (Node)      |
 | `@xgamesfun/solana`              | the tools themselves: `check`, `simulate`, `cost`, `review`, `explainEconomy`, `plan` |
 | `@xgamesfun/solana/mcp/http`     | the MCP server as a web handler, to host it yourself                                  |
 | `@xgamesfun/solana/chain/*`      | small browser-safe Solana building blocks: base58, Borsh, transactions, tokens, Core  |
@@ -132,7 +149,7 @@ Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction
 
 ## Good to know
 
-- **Devnet only, not yet audited.** Use a devnet wallet. Mainnet waits for an independent audit.
+- **Devnet only, not yet audited.** Mainnet waits for an independent audit.
 - **Upgrades can mean setting up again.** No program version so far has carried accounts over. Pin the package version.
 - **Players trust the project.** Your keys can mint and move your project's pools. The program protects players from
   each other and from mistakes, not from the project they chose.
@@ -147,7 +164,7 @@ built yet: read the [known limits](docs/program.md#known-limits) before promisin
 ## Questions
 
 **How do I make a loot box or gacha on Solana without writing a smart contract?** Describe it as a box (its price,
-its outcomes and their odds), run `check` and `simulate`, then `approve` it in your wallet. If the randomness oracle
+its outcomes and their odds), run `check` and `simulate`, then `approve` it with your project's key file. If the randomness oracle
 never answers, the buyer can get a refund. See the [tutorial](docs/tutorial-loot-box.md) and the
 [examples](examples).
 

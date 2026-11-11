@@ -102,8 +102,10 @@ Run `xsolana_review` and go through what it reports; these are the points behind
 10. **The gate.** A farm or a route gated on the project's items (`items`, `item_id`, `rarity`) is as strong as the
     ways those items are had. A gate on another collection's attributes trusts whoever can write them.
 11. **The authority and the treasury.** The owner's wallet alone changes every price, rate, grant, limit and voucher
-    key; the authority mints, moves pool funds, decides contests and releases holds, with no caps. Keep them in a
-    hardware wallet or a multisig; a server that signs gets an authority key of its own, never the owner's.
+    key; the authority mints, moves pool funds, decides contests and releases holds, with no caps. On devnet the
+    owner's key is the key file the setup was signed with: readable by its user alone, outside any repository, never
+    pasted anywhere. With real money (mainnet is not open) those keys belong in a hardware wallet or a multisig; a
+    server that signs gets an authority key of its own, never the owner's.
 12. **The page is untrusted.** A page builds the player's transactions, and a cheater builds their own: the program's
     checks are what count, never the page's. Anything the page decides (a score, a reward amount, who won) is only as
     good as the server that checks it.

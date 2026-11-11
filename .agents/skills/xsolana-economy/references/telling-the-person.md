@@ -16,8 +16,13 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    4 SOL a week: start it with about 12.5 SOL rather than 2, or a bad week stops casts until it refills." A pool that
    runs dry is the first thing to say. A prize bigger than its pool is left out of the roll until the pool fills, so
    the odds players are shown don't hold until then (`W-PRIZE-SEED`).
-4. **What going live costs.** "About 12.51 SOL on devnet, in one wallet approval: 12.5 SOL is the pond's seed, the
-   rest is rent and fees."
+4. **What going live costs, and who signs it.** "About 12.51 SOL on devnet: 12.5 SOL is the pond's seed, the rest is
+   rent and fees. A key file on your computer signs it, once you have read what it sends and said yes." Then what the
+   key file is, once: "That key owns the project, so whoever can read its file controls it, and it is the key for
+   good: every later change is signed by it. Keep the file where it is and never paste it anywhere. Copy it yourself
+   to a USB stick or a password manager (I won't open or copy it): if it is lost, nobody can change the game's
+   economy or move what its address holds. Unless we name another wallet as the treasury, what the game earns for you
+   lands at the key's address, and moving it from there takes a script signed by the key file."
 5. **Who does what while it runs** (`after-launch.md` has the table): what anyone can send (a draw, an
    auction's end, claims), what only they can (a contest's result, a payout, a held item, a collectible's new level, each run of a schedule that isn't sealed: without them or a server holding a project key, an emission stops)
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,
@@ -30,9 +35,10 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    "People pay for a share of a new token; selling a token to raise money is what securities law looks at first."
    Say each once, the
    first time the checker raises it; then leave them, saying them again only when the person asks or a flag of a new
-   kind appears, and keep them out of pages and apps unless asked. The approval page shows them, with the program's
-   status (not independently audited, as is, at their own risk, theirs to make legal where they offer it), and keeps
-   Approve off until the owner ticks that they read it.
+   kind appears, and keep them out of pages and apps unless asked. What `xsolana approve` prints before anything is
+   sent shows them, with the program's status (not independently audited, as is, at their own risk, theirs to make
+   legal where they offer it): the person reads it before their yes. The page for a browser wallet keeps Approve off
+   until the owner ticks that they read it.
 7. **For an auction**, say how it ends, in their words: "The highest bid when the 48 hours are up wins. Each bid must
    be at least 0.5 SOL and 5% over the last; a bid in the last 10 minutes gives everyone 10 more. Whoever is outbid
    has their SOL back at once, in the same transaction. With no bid, the lot goes back (an item's unit is never
@@ -122,10 +128,10 @@ Don'ts:
 - **A token the setup makes is named on chain as it goes live**: its `name`, its `symbol` and its `uri` (a link to a
   JSON file the project hosts, `{ "name", "symbol", "image": "https://…" }`), which is what wallets and explorers show.
   Ask for the name, the ticker and a picture before going live: with no `uri` it shows by name and ticker with no
-  picture. Only the owner's wallet can change the three later (Token Metadata's rule, not loot's): change them in the
-  spec and approve again, and the record is written again for the price of a transaction (approving reads the record
-  first: one its owner handed to another wallet, made unchangeable or gave a royalty or creators outside these tools
-  is left as it is, and the page says so at each approve until the spec gives the old name back). The record costs about 0.014 SOL (`xsolana_cost` says it:
+  picture. Only the project's owner (its key) can change the three later (Token Metadata's rule, not loot's): change
+  them in the spec and approve again, and the record is written again for the price of a transaction (approving reads
+  the record first: one its owner handed to another wallet, made unchangeable or gave a royalty or creators outside
+  these tools is left as it is, and `approve` says so each time until the spec gives the old name back). The record costs about 0.014 SOL (`xsolana_cost` says it:
   rent, and 0.01 SOL Token Metadata keeps). A token that went live before the tools wrote one has none and
   can't be given one: only a mint's own authority can name it, and its minting was handed on or turned off.
 - **NFTs the project has no authority over** (any collection but its own): they count as they are. Say that
@@ -168,5 +174,6 @@ Don'ts:
   prize also opens the winner's account from the funds:
   `xsolana_simulate` gives the funds a claim needs. When the funds run out, claims still land: whoever pays for the claim
   (the winner, who always signs it, or anyone paying its fees for them) pays the rest. Only the winner can claim.
-- **Never walk the person through creating, exporting or pasting a private key**, for anything (a keeper, a server,
-  a bot). Public steps need no key of theirs (`after-launch.md`).
+- **Never walk the person through exporting or pasting a private key or a seed phrase**, for anything (a keeper, a
+  server, a bot). The project's key file is made by `xsolana keygen` and read only by the tools; public steps need no
+  key of theirs (`after-launch.md`).

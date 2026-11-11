@@ -670,7 +670,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     m.authority === 'owner' ? 'info' : 'low',
     'economy',
     `${owner[0].toUpperCase()}${owner.slice(1)} alone changes every price, rate, grant, limit and voucher key (publishing again), and closes parts. ${m.authority === 'owner' ? 'It is also the authority, which' : `The authority, ${authority},`} mints the project’s tokens, moves what pools hold, names contest results and releases holds, with no caps. ${m.treasuryWallet ? `What sales leave goes to the wallet ${m.treasuryWallet}.` : 'What sales leave goes to the owner’s wallet (the treasury).'} Money held for a record (a farm’s stakes and rewards, a pot, an order) leaves only by its record’s rules: neither key pays it out.`,
-    'Keep these keys in a hardware wallet or a multisig; never on a server that players can reach, unless it is an authority made for that server.',
+    'Keep these keys safe: on devnet, the key file the setup was signed with, readable by you alone and never pasted anywhere; with real money, a hardware wallet or a multisig. Never on a server that players can reach, unless it is an authority made for that server.',
   );
   for (const w of warned('W-MINT-POWERS')) {
     const key = /^economy\.tokens\.([^.]+)/.exec(w.where)?.[1];

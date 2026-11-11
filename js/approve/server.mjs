@@ -1,4 +1,6 @@
-// `xsolana approve`: a page on 127.0.0.1 where the owner of an economy approves going live in their own wallet. The
+// `xsolana approve --browser`: a page on 127.0.0.1 where the owner of an economy approves going live in a browser
+// wallet, served only when asked for (`xsolana approve --keypair`, js/approve/with-key.mjs, drives this same approval
+// with a key file and no page). The
 // server builds each transaction (js/economy/plan.mjs), has the fresh keys a setup makes sign their part, and sends
 // only what it prepared: a wallet's answer must carry the exact message prepared for it and that wallet's valid
 // signature. Each prepared batch answers once and expires after 90 seconds. What lands is written back into the spec
@@ -11,12 +13,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
-import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { alreadyProcessed, checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
-import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
+import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
-import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { compileMessage, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
@@ -221,7 +223,7 @@ export async function createApproval({
       if (!(e instanceof MintMismatch)) throw e;
       throw new ApproveError(
         409,
-        `${e.message} Nothing was sent: correct ${path.basename(file)}, then run \`xsolana approve\` again.`,
+        `${e.message} Nothing was sent: correct ${path.basename(file)}, then run the same approve command again.`,
       );
     }
     try {
@@ -242,9 +244,16 @@ export async function createApproval({
       return trusted;
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
-      throw new ApproveError(
-        409,
-        `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file \`xsolana approve\` wrote, or remove its live section to start a new setup.`,
+      // Another key's project: the owner with the wrong key, or a file that came with someone else's live section
+      // (the two look the same from here). Anything else: the file is not what the chain says.
+      throw Object.assign(
+        new ApproveError(
+          409,
+          e.notOwner
+            ? `${e.message} Nothing was sent. If the project is yours, sign with the key that owns it (its key file, or \`approve --browser\` when a browser wallet owns it): ${path.basename(file)} needs no change, and a new key can change nothing. If it is not yours (the file came from someone else with their live section in it), that section is theirs: only then is it removed, to set up a project of your own.`
+            : `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. (Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.)`,
+        ),
+        { notOwner: Boolean(e.notOwner) },
       );
     }
   }
@@ -408,6 +417,9 @@ export async function createApproval({
       // authority of).
       project: extra.project ?? null,
       wallet: n.owner ?? null,
+      // The accounts this session made new keys for (a token's mint, the collection, the tree): their addresses are
+      // this session's own, new each time, so what is shown twice differs in them and in nothing else.
+      fresh: [...keys].map(([name, k]) => ({ name: name.replace(/^new:/, ''), address: k.address })),
       ...(extra.refused ? { refused: extra.refused } : {}),
     };
   }
@@ -474,7 +486,12 @@ export async function createApproval({
     } catch (e) {
       if (!(e instanceof ApproveError)) throw e;
       const v = view(p0, namesOf(model(spec, { now: at }), { now: at, owner: wallet }), { refused: e.message });
-      return { ...v, remaining: p0.ok ? p0.transactions.length : 0, done: false };
+      return {
+        ...v,
+        ...(e.notOwner ? { notOwner: true } : {}),
+        remaining: p0.ok ? p0.transactions.length : 0,
+        done: false,
+      };
     }
     if (!p0.ok || !p0.transactions.length)
       return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
@@ -599,9 +616,26 @@ export async function createApproval({
         try {
           await chain.send(wire);
         } catch (e) {
-          // The node answered and refused it: it was never taken, so it can never land.
-          if (e.code !== undefined || !chain.signatureStatus) await forget(signature);
-          throw e;
+          // A refusal alone does not say it was never taken: when the answer to a first send is lost, the same
+          // transaction sent again is refused as already processed, and it has landed; or the second try reaches a
+          // node a moment behind, which refuses it for a blockhash or an account it has not seen yet. So the chain
+          // is asked before the signature is forgotten, and it is forgotten only when it can never land: the chain
+          // says it failed, or a node answered this send with a refusal and no earlier try of it went unanswered
+          // (`maybeTaken`). Anything else is kept, and looked up before anything is sent again.
+          let status = null;
+          let read = Boolean(chain.signatureStatus);
+          if (read)
+            try {
+              status = await chain.signatureStatus(signature);
+            } catch {
+              read = false;
+            }
+          const taken = landedStatus(status) || (!status?.err && (Boolean(status) || alreadyProcessed(e)));
+          if (!taken) {
+            if (!chain.signatureStatus || status?.err || (read && e.code !== undefined && !e.maybeTaken))
+              await forget(signature);
+            throw e;
+          }
         }
         try {
           await chain.confirm(signature, { lastValidBlockHeight: batch.lastValidBlockHeight });
@@ -635,6 +669,8 @@ export async function createApproval({
       project: b.ctx.project,
       transactions: b.wires.map(toBase64),
       says: b.batch.map(t => t.steps.map(s => s.says).join('; ')),
+      // each transaction's steps, by id and in words: what a signer that showed the steps first holds them against
+      steps: b.batch.map(t => t.steps.map(s => ({ id: s.id, says: s.says }))),
       details: b.details,
     };
   }
@@ -892,6 +928,48 @@ const sameText = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
+/** What a Compute Budget instruction asks for, by its first byte. */
+const BUDGET_ASKS = {
+  1: 'a heap size',
+  2: 'a compute unit limit',
+  3: 'a compute unit price (a priority fee of its own)',
+  4: 'a limit on the account data loaded',
+};
+
+/**
+ * What a wallet did to a message it was to sign as it stood, in words for the refusal: " (it added …)" when the
+ * message it signed is the prepared one with instructions added (a wallet that adds its own priority fee, or checks
+ * of its own), " (it put another blockhash on it)", or '' when the change is anything else or can't be read.
+ */
+export function walletChange(ours, theirs) {
+  try {
+    const [a, b] = [readMessage(ours), readMessage(theirs)];
+    const told = m =>
+      m.instructions.map(ix => ({
+        program: m.keys[ix.programIndex],
+        kind: ix.data[0],
+        text: `${m.keys[ix.programIndex]} ${ix.accountIndexes.map(i => m.keys[i] ?? `#${i}`).join(',')} ${toBase64(ix.data)}`,
+      }));
+    const mine = told(a);
+    const added = [];
+    let at = 0;
+    for (const ix of told(b)) {
+      if (at < mine.length && ix.text === mine[at].text) at++;
+      else added.push(ix);
+    }
+    if (at !== mine.length || !added.length)
+      return a.blockhash !== b.blockhash ? ' (it put another blockhash on it)' : '';
+    const what = added.map(ix =>
+      ix.program === COMPUTE_BUDGET_PROGRAM
+        ? (BUDGET_ASKS[ix.kind] ?? 'a compute budget instruction')
+        : `an instruction of the program ${ix.program}`,
+    );
+    return ` (it added ${[...new Set(what)].join(', ')})`;
+  } catch {
+    return '';
+  }
+}
+
 /** The wallet's signed copies: each the exact prepared message, each with the wallet's valid signature. */
 function checkSigned(prepared, signed, wallet) {
   if (!Array.isArray(signed) || signed.length !== prepared.length)
@@ -906,7 +984,10 @@ function checkSigned(prepared, signed, wallet) {
       throw new ApproveError(400, 'The wallet returned something that is not a transaction.');
     }
     if (!equalBytes(mine.message, theirs.message))
-      throw new ApproveError(400, 'The wallet changed the transaction before signing it, so nothing was sent.');
+      throw new ApproveError(
+        400,
+        `The wallet changed the transaction before signing it${walletChange(mine.message, theirs.message)}, so nothing was sent: only what was prepared and shown here is ever sent. A wallet that adds to what it signs can’t approve this way: use one that signs a transaction as it stands. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
+      );
     const slot = mine.signers.indexOf(wallet);
     if (slot < 0) throw new ApproveError(400, 'This transaction was not prepared for that wallet.');
     const signature = theirs.signatures[slot];

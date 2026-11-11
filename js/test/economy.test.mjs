@@ -47,7 +47,8 @@ describe('every example', () => {
       assert.ok(explain(sim, spec).length > 0);
       const p = plan(spec, { now: NOW });
       assert.ok(p.ok);
-      for (const t of p.transactions) assert.ok(t.bytes <= 1168, `${t.bytes} bytes`);
+      // (`bytes`: the transaction as it is sent, its compute unit limit and price included)
+      for (const t of p.transactions) assert.ok(t.bytes <= 1232, `${t.bytes} bytes`);
     });
   }
 });
