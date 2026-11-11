@@ -301,6 +301,65 @@ for (const kind of KINDS)
     },
   );
 
+for (const kind of KINDS)
+  test(
+    `one pull of two raffled ${kind.name} NFTs, one of them gone: both are made holds, the one gone closes and the other goes to its winner`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-places');
+      const { w } = k;
+      const lotteries = [{ key: 'raffle', name: 'Raffle', id: 1 }];
+      const [winner, stranger] = [w.player, w.who()].map(a => k.app(a, { lotteries }));
+      // Two NFTs in the lottery's own stash, raffled to two places: the one buyer wins both.
+      const [lost, kept] = [k.mint(w.authority), k.mint(w.authority)];
+      for (const nft of [lost, kept]) {
+        k.send(w.authority, nft, piece =>
+          loot.stashIx({ signer: w.authority, project: w.project, lottery: 1, asset: nft, ...piece }),
+        );
+        k.into(nft);
+      }
+      const drawsAt = w.chain.now() + HOUR;
+      w.upsert({
+        Lottery: {
+          id: 1,
+          args: {
+            price: 100n,
+            mint: w.mint,
+            pays_from: { Round: { rest: 'Treasury' } },
+            shares: [],
+            places: [{ bps: 0, prize: 'Raffled', times: 2 }],
+            ticket_mint: NOBODY,
+            every: 0n,
+            draws_at: BigInt(drawsAt),
+            gate: null,
+          },
+        },
+      });
+      await winner.buyTickets('raffle', 2, { listing: (await winner.lotteries())[0] });
+      w.chain.warp(drawsAt + 1);
+      await claimOf(k, stranger, 'reveal', 'raffle');
+      k.lose(lost);
+
+      const offered = (await winner.claims()).find(c => c.kind === 'pull' && c.key === 'raffle');
+      assert.deepEqual([offered.gone, offered.assets], [true, [lost]]);
+      const from = k.landed.length;
+      await winner.claim(offered);
+      const txs = since(k.landed, from);
+      // The round makes holds of all a pull's NFTs or of none: both are holds, and each is released at once.
+      assert.deepEqual(goneIn(txs), [`${pda.hold(lost, 0)} ${lost} ${winner.wallet}`]);
+      assert.deepEqual(
+        receiptsOf(txs, 'Released').map(x => [x.asset, x.to]),
+        [[kept, winner.wallet]],
+        'only the NFT still there was sent on',
+      );
+      k.into(kept, winner.wallet);
+      assert.equal(k.owner(kept), winner.wallet);
+      k.still(lost);
+      for (const nft of [lost, kept]) assert.equal(w.chain.get(pda.hold(nft, 0)), null, 'no hold is left');
+      assert.ok(!(await winner.claims()).some(c => c.kind === 'pull'), 'nothing left to take');
+    },
+  );
+
 // ---------------------------------------------------------------- a contest's claims
 
 /** The authority opens contest `id` of NFTs that pass `rule`: two sides, entries for 100 seconds, a result within 200. */

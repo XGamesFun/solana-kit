@@ -449,13 +449,14 @@ export function solanaApp({
     return { before: proof.before, hasAuthority: false, ...proof.kind, gone: true };
   }
   /**
-   * The release that closes a hold a route just made of `asset`, an NFT it owed and could only hand out, which is
-   * proven gone from the project (`kind`: what shows it, from `leaving`). The program makes such a hold at
-   * `["hold", asset, 0]` for `player`, the route's `signer` paying its rent and `rentTo` named for its NFT's account's
-   * (`hold::owe`); the release right after it, by the same signer, closes it on the proof: nothing is sent, and the
-   * hold's rent comes back to the signer (`NftGone`). `g`: the project, for a hold owed to the treasury.
+   * The release of a hold a route just made of `asset`, an NFT it owed and could only hand out (`kind`: from
+   * `leaving`). The program makes such a hold at `["hold", asset, 0]` for `player`, the route's `signer` paying its
+   * rent and `rentTo` named for its NFT's account's (`hold::owe`). The release right after it, by the same signer,
+   * ends it: for an NFT proven gone from the project it closes the hold on the proof and nothing is sent (`NftGone`);
+   * for any other it sends the NFT on to `player` (`Released`). Either way the hold's rent comes back to the signer.
+   * `g`: the project, for a hold owed to the treasury.
    */
-  const closeOwed = (asset, kind, { player, rentTo }, signer, g) =>
+  const releaseOwed = (asset, kind, { player, rentTo }, signer, g) =>
     loot.releaseIx({
       signer,
       project,
@@ -2739,10 +2740,10 @@ export function solanaApp({
     const extra = await hookTail([...roundMints(r), ...r.prizes.map(p => p.mint)]);
     for (const [k, part] of parts.entries()) {
       const more = {};
-      // The NFTs this pull is to hand out that are proven gone from the project, each with the hold the round makes
-      // of it in its place (`hold::owe`: for whom, and whose its NFT's account's rent is): the round only hands such
-      // an NFT out and reads nothing, so it is made a hold, and the hold closes on the proof right after the pull.
-      const lost = new Map();
+      // The NFTs this pull makes holds in place of handing them out (`hold::owe`: for whom, and whose its NFT's
+      // account's rent is), each released right after it. The round only hands an NFT out and reads nothing, so one
+      // proven gone from the project is made a hold, and that hold closes on the proof.
+      const holdsMade = new Map();
       if (part === 'Own' && e.nft !== NOBODY) {
         const then = r.status === 'Cancelled' || r.terms.returns ? null : r.terms.nft_ticket?.then;
         more.handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
@@ -2753,7 +2754,7 @@ export function solanaApp({
         // nowhere and the part settles. Going back to its buyer it is only handed out: made a hold, closed below.
         if (gone && !then) {
           more.hold = true;
-          lost.set(e.nft, { kind, player: e.buyer, rentTo: e.buyer });
+          holdsMade.set(e.nft, { kind, player: e.buyer, rentTo: e.buyer });
         } else more.ticket = kind;
       } else if (part.Prize && !loot.tokenRun(r, Number(part.Prize[0]))) {
         // Each of the entry's places in the run: an NFT of the lottery's own stash (which one, as the pull takes them
@@ -2763,12 +2764,13 @@ export function solanaApp({
         // An NFT's kind is read below, with whether the project still holds it.
         const inputs = await prizeInputs([given.Nft || given.Held ? null : given], signer, e.buyer);
         out.push(...inputs.before);
+        const handed = new Map();
         const hand = async nft => {
           if (inputs.nfts[nft]) return;
           const { before, hasAuthority: _, gone, ...kind } = await leaving(nft, signer, { to: e.buyer });
           inputs.nfts[nft] = kind;
           out.push(...before);
-          if (gone) lost.set(nft, { kind, player: e.buyer, rentTo: signer });
+          handed.set(nft, { kind, gone, player: e.buyer, rentTo: signer });
         };
         const stash = loot.ownStash(r.terms.places[run])
           ? loot.decodeStash((await client.account(loot.pda.lotteryStash(r.lottery)))?.data ?? null)
@@ -2793,11 +2795,15 @@ export function solanaApp({
           : {};
         // A project stash's named NFT is handed out only while that stash lists it.
         if (given.Nft && stashes[given.Nft.stash].nfts.includes(given.Nft.nft)) await hand(given.Nft.nft);
+        // One of them gone: a pull makes holds of all its NFTs or of none, so each becomes a hold, and its release
+        // below closes the one that is gone and sends any other on to its winner.
+        const holds = [...handed.values()].some(x => x.gone);
+        if (holds) for (const [nft, x] of handed) holdsMade.set(nft, x);
         more.prize = {
           stash,
           stashes,
           nfts: inputs.nfts,
-          hold: [...lost.keys()],
+          hold: holds,
           collection: inputs.collection,
           poolMints: inputs.poolMints,
           items: inputs.items,
@@ -2832,7 +2838,8 @@ export function solanaApp({
               ) && (await dryRun(signer, tx)).ok
             );
           };
-          let most = owed;
+          // (Made holds, each NFT's release follows the pull in its transaction: a few places a pull then.)
+          let most = holds ? Math.min(owed, 4) : owed;
           while (most > 1 && !(await sized(most))) most = Math.max(1, Math.floor(most * 0.75));
           if (most < owed) [more.prize.most, partial] = [most, true];
           heap = true;
@@ -2873,11 +2880,12 @@ export function solanaApp({
         ...more,
       });
       out.push(pull);
-      // Each hold this pull makes of an NFT that is gone (a pull that stops short carries only some) closes on the
-      // proof: nothing is sent, and its rent comes back to the signer, who paid it.
-      for (const [nft, { kind, player, rentTo }] of lost)
+      // Each hold this pull makes (a pull that stops short carries only some) is released at once: one whose NFT is
+      // gone closes on the proof and nothing is sent, any other goes on to its winner, and the hold's rent comes back
+      // to the signer, who paid it.
+      for (const [nft, { kind, player, rentTo }] of holdsMade)
         if (pull.keys.some(x => x.pubkey === loot.pda.hold(nft, 0)))
-          out.push(closeOwed(nft, kind, { player, rentTo }, signer, g));
+          out.push(releaseOwed(nft, kind, { player, rentTo }, signer, g));
     }
     return { instructions: out, rolls, heap, partial };
   }
@@ -4300,7 +4308,7 @@ export function solanaApp({
         });
         const g = await projectNow();
         const closes = [...lost].map(([asset, { hasAuthority: _, ...kind }]) =>
-          closeOwed(asset, kind, { player: auction.high_bidder, rentTo: auction.high_bidder }, wallet.address, g),
+          releaseOwed(asset, kind, { player: auction.high_bidder, rentTo: auction.high_bidder }, wallet.address, g),
         );
         return send(
           await closesFirst(clears, [
@@ -5416,7 +5424,7 @@ export function solanaApp({
             nft: given.nft,
             programs,
           }),
-          ...closes.map(nft => closeOwed(nft, lost.get(nft).kind, lost.get(nft), me, g)),
+          ...closes.map(nft => releaseOwed(nft, lost.get(nft).kind, lost.get(nft), me, g)),
         ];
         // A prize that rolls: asked for in the claim's own transaction and settled by a key after (one prompt).
         return contest.prize?.Roll && !build ? (await sendRolling(claimed)).signature : send(claimed);
