@@ -1,7 +1,8 @@
 // The setup plan: every instruction that puts an economy live on loot, in order, built with the client and
 // packed into transactions that fit. Nothing here signs or talks to the chain. Pure.
 //
-// A step is { id, part, says, signers, creates: [{ what, bytes }], build(ctx) → instructions }. `ctx` names the
+// A step is { id, part, says, signers, creates: [{ what, bytes, fee? }], build(ctx) → instructions } (`fee`: lamports
+// the program that makes the account keeps in it, on top of its rent: Token Metadata's). `ctx` names the
 // addresses a step needs: { owner, authority, project, collection, tree, treasury, mints: { tokenKey: mint }, keys: {
 // name: address } } where `keys` are the fresh keys this setup makes ("new:collection", "new:tree", "new:mint/points"), each of
 // which signs the step that creates it. `placeholderContext` fills every address with a stand-in, so a plan can be
@@ -20,6 +21,7 @@ import {
   TOKEN_PROGRAM,
 } from '../chain/pda.js';
 import { createTableIx, extendTableIx } from '../chain/lookup.js';
+import { createFungibleMetadataIx, METADATA_BYTES, METADATA_FEE, METADATA_LIMITS } from '../chain/metadata.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import {
   computeUnitLimit,
@@ -732,18 +734,40 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
   const fresh = !live?.project;
 
   // Tokens the project mints: a classic mint with the owner as its authority, handed to the project right after.
+  // Each is named on chain in the same step (its Token Metadata record: the name, the ticker and the link wallets
+  // show), while the owner is still its mint authority: Token Metadata takes a record from nobody else, so a mint whose
+  // minting was handed on or turned off without one can never have one. The owner stays the record's update authority.
   for (const t of m.tokens.values()) {
     if (t.source !== 'game' || live?.mints?.[t.key] || (t.mint && !t.mint.startsWith('@'))) continue;
     const key = `new:mint/${t.key}`;
+    const named = `write its name on chain (“${t.name}”, ${t.symbol}, ${t.uri ? `with the link ${t.uri}` : 'no picture link'}: only your wallet can change it later, which these tools don’t do yet, and Token Metadata keeps ${Number(METADATA_FEE) / 1e9} SOL for it)`;
+    const record = { what: `the name of ${t.symbol} on chain`, bytes: METADATA_BYTES, fee: Number(METADATA_FEE) };
+    // The checker refuses a name, ticker or link too long for a record before any plan is made, except on a token
+    // that is live already, whose words are only labels. Such a token is made here only when a live economy is
+    // planned as if it were new (explain's cost of the whole setup, which is never sent): its record is left out.
+    const fits = ['name', 'symbol', 'uri'].every(f => utf8(String(t[f] ?? '')).length <= METADATA_LIMITS[f]);
+    const name = ctx =>
+      fits
+        ? [
+            createFungibleMetadataIx({
+              mint: ctx.keys[key],
+              authority: ctx.owner,
+              name: t.name,
+              symbol: t.symbol,
+              uri: t.uri ?? '',
+            }),
+          ]
+        : [];
     if (t.fixedSupply) {
       const supply = amount(t.supply, t);
       add({
         id: `token:${t.key}`,
         part: `token:${t.key}`,
-        says: `Make the token ${t.symbol} (${t.decimals} decimals) with a fixed supply of ${t.supply}, all of it to your wallet, then turn its minting off for good`,
+        says: `Make the token ${t.symbol} (${t.decimals} decimals) with a fixed supply of ${t.supply}, all of it to your wallet, ${named}, then turn its minting off for good`,
         signers: [owner, key],
         creates: [
           { what: `the mint of ${t.symbol}`, bytes: MINT_BYTES },
+          ...(fits ? [record] : []),
           { what: `your ${t.symbol} account`, bytes: 165 },
         ],
         build: ctx => [
@@ -755,6 +779,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
             owner: TOKEN_PROGRAM,
           }),
           initializeMint2Ix({ mint: ctx.keys[key], decimals: t.decimals, authority: ctx.owner }),
+          ...name(ctx),
           createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, ctx.keys[key]),
           mintToIx({
             mint: ctx.keys[key],
@@ -770,9 +795,9 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
     add({
       id: `token:${t.key}`,
       part: `token:${t.key}`,
-      says: `Make the token ${t.symbol} (${t.decimals} decimals), then hand its minting to the project`,
+      says: `Make the token ${t.symbol} (${t.decimals} decimals), ${named}, then hand its minting to the project`,
       signers: [owner, key],
-      creates: [{ what: `the mint of ${t.symbol}`, bytes: MINT_BYTES }],
+      creates: [{ what: `the mint of ${t.symbol}`, bytes: MINT_BYTES }, ...(fits ? [record] : [])],
       build: ctx => [
         createAccountIx({
           from: ctx.owner,
@@ -782,6 +807,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null }
           owner: TOKEN_PROGRAM,
         }),
         initializeMint2Ix({ mint: ctx.keys[key], decimals: t.decimals, authority: ctx.owner }),
+        ...name(ctx),
         setAuthorityIx({ account: ctx.keys[key], current: ctx.owner, newAuthority: ctx.project }),
       ],
     });

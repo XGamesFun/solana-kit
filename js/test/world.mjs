@@ -88,6 +88,7 @@ export function cannotRun() {
     'associated_token.so',
     'memo.so',
     'mpl_core.so',
+    'token_metadata.so',
     'vrf.so',
     'mainnet/queue.json',
     ...(localBuild ? [] : ['loot.so']),
@@ -211,6 +212,8 @@ export function world({ seed = 'world', platform = true, project = true, compres
       [MEMO_PROGRAM]: { bytes: pinned('memo.so'), loader: BPF_LOADER_2 },
       [loot.LOOT_PROGRAM]: lootProgram(),
       [loot.MPL_CORE_PROGRAM]: pinned('mpl_core.so'),
+      // Token Metadata: a setup names each token it makes there, and a game takes its NFTs.
+      [loot.TOKEN_METADATA_PROGRAM]: pinned('token_metadata.so'),
       [loot.VRF_PROGRAM]: pinned('vrf.so'),
       ...(compressed && {
         [loot.BUBBLEGUM_PROGRAM]: pinned('bubblegum.so'),

@@ -204,6 +204,18 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   if (economy.prompt) lines.push(`Asked for: “${economy.prompt}”`);
 
+  // A token the setup makes is named on chain as it is made (plan.mjs): what wallets will show, and that a picture
+  // needs its link before going live. One that is live already keeps what it has.
+  section(
+    'The tokens going live makes',
+    [...m.tokens.values()]
+      .filter(t => t.source === 'game' && !economy.live?.mints?.[t.key])
+      .map(
+        t =>
+          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later, and these tools don’t change a live token’s yet: get them right first.`,
+      ),
+  );
+
   const fee = num(sim.fees.playerSol);
   const actions = [];
   for (const it of sim.items) {
@@ -559,6 +571,8 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   lines.push('', 'What setting it up costs');
   lines.push(
     `- About ${num(s.totalSol)} SOL in all, in ${plural(s.transactions, 'transaction')} (${plural(s.approvals, 'wallet approval')}): rent ${num(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${num(s.programFeesSol)} SOL, network fees ${num(s.networkFeesSol)} SOL${
+      s.metadataFeesSol ? `, Token Metadata’s fees ${num(s.metadataFeesSol)} SOL (a token’s name on chain)` : ''
+    }${
       Object.keys(s.seeds).length
         ? `, seeds ${Object.entries(s.seeds)
             .map(([k, v]) => `${num(v)} ${k}`)

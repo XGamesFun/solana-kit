@@ -363,7 +363,7 @@
       "type": "object",
       "required": ["key", "source"],
       "additionalProperties": false,
-      "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (xgames.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep).",
+      "description": "A currency. `sol`: SOL (players pay in wrapped SOL). `existing`: any mint by address, launched anywhere, classic or Token-2022, pump.fun included (xgames.fun takes no share of its fees). `project` (`game` is its older spelling): a token made when the economy goes live: the project mints it as its rules say (points, tickets, shards), or, with `supply`, a fixed supply minted once to the owner (a community token you keep). A token made this way is named on chain as it is made (its `name`, `symbol` and `uri`), which is what wallets show. Only the owner's wallet can change that later, and a change to them in a spec that is already live changes nothing on chain yet.",
       "properties": {
         "key": {
           "$ref": "#/$defs/key"
@@ -401,11 +401,12 @@
           "description": "Where the token trades, recorded for the app and not read or enforced by the tools: loot doesn't launch or trade tokens. A token launched elsewhere is `existing`, by its mint. `games.fun` is the older spelling of `xgames.fun`."
         },
         "uri": {
-          "$ref": "#/$defs/link"
+          "$ref": "#/$defs/link",
+          "description": "`project` only: a link to a JSON file that names the token's picture (`{ \"name\", \"symbol\", \"image\": \"https://…\" }`), at most 200 bytes. Going live writes it on chain with the token's name and ticker; without it wallets show the name and ticker and no picture."
         },
         "image": {
           "$ref": "#/$defs/link",
-          "description": "A picture of it, recorded for the app: the tools don't read it, and the setup doesn't write it to the mint."
+          "description": "A picture of it, recorded for the app: the tools don't read it, and the setup doesn't write it on chain (what wallets show is the `image` the JSON file at `uri` names)."
         },
         "powers": {
           "type": "object",

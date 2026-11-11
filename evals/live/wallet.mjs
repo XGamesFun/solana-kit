@@ -11,6 +11,7 @@ import { readTable } from '../../js/chain/lookup.js';
 import { IDL, instructionOf } from '../../js/client/ix.js';
 import { LOOT_PROGRAM, MPL_CORE_PROGRAM, pda } from '../../js/client/pda.js';
 import {
+  METAPLEX_METADATA_PROGRAM,
   NATIVE_MINT,
   TOKEN_2022_PROGRAM,
   TOKEN_PROGRAM,
@@ -32,11 +33,29 @@ const PROGRAMS = new Set([
   TOKEN_2022_PROGRAM,
   ASSOCIATED_TOKEN_PROGRAM,
   MPL_CORE_PROGRAM,
+  METAPLEX_METADATA_PROGRAM,
   LOOT_PROGRAM,
   ED25519,
   MEMO,
   LOOKUP_TABLE,
 ]);
+/**
+ * The token standard a Token Metadata CreateV1 names (2 is Fungible), or null when its data does not read: after the
+ * two tags, three strings (a u32 length each), the royalty (u16), the creators (an option of a list of 34 bytes each)
+ * and two flags.
+ */
+function createdStandard(data) {
+  try {
+    let at = 2;
+    for (let i = 0; i < 3; i++) at += 4 + Number(readUintLE(data, at, 4));
+    at += 2;
+    if (data[at++] === 1) at += 4 + 34 * Number(readUintLE(data, at, 4));
+    at += 2;
+    return at < data.length ? data[at] : null;
+  } catch {
+    return null;
+  }
+}
 /** A loot instruction's name, by its tag (1 byte; 8 for the oracle's callbacks). */
 const lootIxName = data => instructionOf(data)?.name ?? null;
 /**
@@ -191,6 +210,21 @@ export function checkTransaction(message, { address, role, game = null, grants =
           findings.push(`Closes a token account and sends its rent to ${acct(1)}, not this wallet.`);
         summary.push('close token account');
       } else summary.push(`token instruction ${kind}`);
+      continue;
+    }
+    if (program === METAPLEX_METADATA_PROGRAM) {
+      // The setup names each token it makes (js/chain/metadata.js: CreateV1, with this wallet its mint authority, its
+      // payer and the record's update authority). Nothing else of Token Metadata's is the economy's to ask.
+      if (role !== 'owner' || ix.data[0] !== 42 || ix.data[1] !== 0)
+        findings.push(`An unexpected Token Metadata instruction (${ix.data[0]}, ${ix.data[1]}).`);
+      else if (acct(3) !== address || acct(4) !== address || acct(5) !== address)
+        findings.push(`Names the token ${acct(2)} on chain with an authority that is not this wallet.`);
+      // a fungible token's record only: no edition (the program's own address stands for none), the standard Fungible
+      else if (acct(1) !== METAPLEX_METADATA_PROGRAM || createdStandard(ix.data) !== 2)
+        findings.push(
+          `Makes a Token Metadata record of ${acct(2)} that is not a plain token’s (an NFT, or an edition).`,
+        );
+      else summary.push(`name the token ${acct(2)} on chain`);
       continue;
     }
     if (program === LOOT_PROGRAM) {

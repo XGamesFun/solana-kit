@@ -47,11 +47,19 @@ export function setupCost(plan, economy) {
   const m = model(economy);
   // An account that grows (a live stash taking more NFTs) pays rent for its new bytes only.
   const rentOf = c => (c.grows ? BigInt(c.bytes) * RENT_PER_BYTE : rent(c.bytes));
+  // `fee`: what the program that makes an account keeps in it on top of its rent (Token Metadata's, for a token's name
+  // on chain). It is not rent: it never comes back.
   const accounts = plan.transactions
     .flatMap(t => t.steps)
     .flatMap(s => s.creates ?? [])
-    .map(c => ({ ...c, lamports: rentOf(c).toString(), sol: sol(rentOf(c)) }));
+    .map(c => ({
+      ...c,
+      lamports: rentOf(c).toString(),
+      sol: sol(rentOf(c)),
+      ...(c.fee ? { feeSol: sol(BigInt(c.fee)) } : {}),
+    }));
   const rentLamports = accounts.reduce((n, a) => n + BigInt(a.lamports), 0n);
+  const metadataLamports = accounts.reduce((n, a) => n + BigInt(a.fee ?? 0), 0n);
   const charged = plan.transactions.flatMap(t => t.steps).filter(s => !NO_FEE_STEP.test(s.id));
   const feeLamports = BigInt(charged.length) * FEES.project;
   const networkLamports = plan.transactions.reduce((n, t) => n + BigInt(t.signers.length) * SIGNATURE_FEE, 0n);
@@ -76,7 +84,7 @@ export function setupCost(plan, economy) {
   for (const l of m.lotteries) if (steps.has(`rent:lottery:${l.key}`)) seedLamports += roundRentOf(l, m);
   for (const sc of m.schedules)
     if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet') putIn(sc.currency, sc.fund, `fund:${sc.key}`);
-  const total = rentLamports + feeLamports + networkLamports + seedLamports;
+  const total = rentLamports + metadataLamports + feeLamports + networkLamports + seedLamports;
   const notes = [];
   if (accounts.some(a => a.approx))
     notes.push('Accounts marked “about” are sized roughly (a Core collection or an external token account).');
@@ -96,6 +104,7 @@ export function setupCost(plan, economy) {
   return {
     accounts,
     rentSol: sol(rentLamports),
+    metadataFeesSol: sol(metadataLamports),
     programFeesSol: sol(feeLamports),
     networkFeesSol: sol(networkLamports),
     seeds,
@@ -483,6 +492,8 @@ export function explainCost(c) {
   ];
   lines.push(
     `  rent ${s.rentSol} SOL for ${s.accounts.length} accounts; program fees ${s.programFeesSol} SOL; network fees ${s.networkFeesSol} SOL${
+      s.metadataFeesSol ? `; Token Metadata’s fees ${s.metadataFeesSol} SOL (a token’s name on chain)` : ''
+    }${
       Object.keys(s.seeds).length
         ? `; seeds ${Object.entries(s.seeds)
             .map(([k, v]) => `${v} ${k}`)
@@ -490,7 +501,10 @@ export function explainCost(c) {
         : ''
     }.`,
   );
-  for (const a of s.accounts) lines.push(`  ${a.approx ? 'about ' : ''}${a.sol} SOL: ${a.what} (${a.bytes} bytes)`);
+  for (const a of s.accounts)
+    lines.push(
+      `  ${a.approx ? 'about ' : ''}${a.sol} SOL: ${a.what} (${a.bytes} bytes)${a.feeSol ? `, and ${a.feeSol} SOL Token Metadata keeps for it` : ''}`,
+    );
   lines.push('While it runs (for a player, quote the “in all” number: it is what leaves their wallet for good):');
   for (const r of c.actions) {
     const deposits = r.deposits.map(d => `${d.sol} SOL for ${d.what} (back: ${d.back})`).join('; ');
