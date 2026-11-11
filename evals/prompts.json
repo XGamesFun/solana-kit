@@ -171,7 +171,7 @@
       "id": "game-token",
       "expect": "build",
       "parts": ["tokens"],
-      "prompt": "I want a token for my game: players earn it by playing and spend it in the shop. Call it Ember, EMBR."
+      "prompt": "I want a token for my game: players earn it by playing and spend it in the shop. Call it Pebble, PEBL."
     },
     {
       "id": "bonding-curve",

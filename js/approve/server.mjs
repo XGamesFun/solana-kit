@@ -71,6 +71,8 @@ export function devnetChain(url = process.env.XSOLANA_RPC_URL || DEVNET) {
     signatureStatus: async signature =>
       (await rpc.call('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])).value[0],
     blockHeight: () => rpc.blockHeight(),
+    /** The chain's current epoch (a mint's transfer fee changes on one). */
+    epoch: async () => Number((await rpc.call('getEpochInfo')).epoch),
   };
 }
 
@@ -158,6 +160,17 @@ export async function createApproval({
    * read when a wallet connects): shown with the legal flags, so the owner ticks having read them before approving.
    */
   let mintPowers = [];
+  /**
+   * A name for those lines as they stand (null: none). The page hands it back with the owner's tick: a batch is given
+   * out only to a page that showed these very lines, so nothing read after the tick, or never shown, is skipped.
+   */
+  const readKey = () =>
+    mintPowers.length
+      ? createHash('sha256')
+          .update(JSON.stringify(mintPowers.map(t => t.says)))
+          .digest('hex')
+          .slice(0, 24)
+      : null;
 
   /**
    * The owner a setup for `wallet` is built for, and its project, once every mint the spec names is held against the
@@ -167,7 +180,10 @@ export async function createApproval({
    */
   async function trust(wallet) {
     try {
-      mintPowers = (await checkMints({ m: model(spec, { now: at }), chain })).powers;
+      const m = model(spec, { now: at });
+      // the project a mint the spec calls the project's must name: the live one, else this wallet's own to be
+      const project = live()?.project ?? pda.project(wallet, m.projectNumber);
+      mintPowers = (await checkMints({ m, chain, project })).powers;
     } catch (e) {
       if (!(e instanceof MintMismatch)) throw e;
       throw new ApproveError(
@@ -327,6 +343,7 @@ export async function createApproval({
       // owner ticks that they read them. With them, what the chain says a named token's mint can do that the spec
       // doesn't say.
       legal: [...legal, ...mintPowers.map(t => ({ code: 'W-MINT-POWERS', says: t.says }))],
+      ...(readKey() ? { read: readKey() } : {}),
       authority: model(spec).authority,
       steps,
       landed: [...done].map(id => ({ id, says: said.get(id)?.says ?? id, details: said.get(id)?.details ?? [] })),
@@ -367,10 +384,13 @@ export async function createApproval({
     stateFor(wallet) {
       return serial(() => stateFor(walletAddress(wallet)));
     },
-    /** The next batch for `wallet` to sign: [base64 wire], with what each does. */
-    prepare(wallet) {
+    /**
+     * The next batch for `wallet` to sign: [base64 wire], with what each does. `read`: the state's `read`, as the page
+     * showed it when the owner ticked the box (what the chain says of the tokens this economy names).
+     */
+    prepare(wallet, read = null) {
       if (busy) return Promise.reject(new ApproveError(409, 'A batch is being sent: wait for it.'));
-      return serial(() => prepareFor(walletAddress(wallet)));
+      return serial(() => prepareFor(walletAddress(wallet), read));
     },
     /** The wallet's answer: checked against what was prepared, then sent and confirmed one by one. */
     complete(wallet, id, signed) {
@@ -401,7 +421,7 @@ export async function createApproval({
     return { ...v, remaining: p.transactions.length, done: false };
   }
 
-  async function prepareFor(wallet) {
+  async function prepareFor(wallet, read = null) {
     // A second ask while a batch is out for signing (a double click) gets that same batch, not a new one that would
     // make the first signature fail.
     if (
@@ -413,6 +433,13 @@ export async function createApproval({
       return answer(prepared);
     await settlePending();
     const trusted = await trust(wallet);
+    // What the chain says a named token's mint can do, where the spec doesn't say it, is read with the wallet's own
+    // state: nothing is handed out to sign until the page has shown those very lines and the owner ticked after.
+    if (readKey() && read !== readKey())
+      throw new ApproveError(
+        409,
+        'What the chain says of this economy’s tokens was not on the page when the box was ticked: read the lines above, tick the box again, then approve.',
+      );
     const p = await build(trusted.owner);
     if (!p.transactions.length) throw new ApproveError(409, 'Everything has landed already.');
     await readLive(p);
@@ -891,7 +918,10 @@ export async function approve({
       }
       const body = req.method === 'POST' ? await readJson(req) : {};
       if (req.method === 'POST' && url.pathname === '/api/prepare')
-        return send(200, await session.prepare(String(body.wallet ?? '')));
+        return send(
+          200,
+          await session.prepare(String(body.wallet ?? ''), typeof body.read === 'string' ? body.read : null),
+        );
       if (req.method === 'POST' && url.pathname === '/api/complete') {
         const state = await session.complete(String(body.wallet ?? ''), body.id, body.transactions);
         if (state.done) {

@@ -17,15 +17,26 @@ The JavaScript alone: the program, its IDL and every account are 0.26.1's.
 - **Going live holds a named mint's powers against the chain.** A power the spec denies and the mint has (`"freeze":
 false` on a mint with a freeze authority, `"mintAuthority": "none"` on one somebody can mint, a transfer fee lower
   than the mint's) is refused before anything is sent: the checker's warnings were worked out from the spec. A power
-  the spec says nothing of is not refused: the approval page says it, in the block the owner ticks before approving,
-  and a line that appears after the box was ticked clears it.
+  the spec says nothing of is not refused: the approval page says it, in the block the owner ticks before approving.
+  So are a mint the spec calls the project's whose authority is not the project's yet, a mint paused now, and one
+  whose amounts wallets show scaled. **No batch is handed out until the page has shown those lines**: the wallet's
+  own state must be on the page, a line that appears after the box was ticked clears it, and the server refuses a
+  batch asked for without the lines it read (`read`, from the state).
+- **A transfer fee is read as it is now.** A mint holds the fee in force and the one to follow from an epoch on: with
+  the chain's epoch (the tool and the approval ask for it) a fee since lowered reads at its new rate; without it, the
+  higher of the two.
+- **A coin's own name is a label.** `xsolana_token` gives the name and ticker as the entry has them: on one line, cut
+  to a spec's lengths, in quotes, as the token's own words and never the tool's. It also says a mint paused now, and
+  amounts that wallets show scaled (`mintState`), and takes a `project` to read a mint the project is to mint.
 - **One place to choose a token** (the skill, "When they ask for a token"; the guide's `tokens`): points the project
   mints, a fixed supply kept and handed out, a coin that trades (outside loot: launched elsewhere, then named), or a
   coin that exists. The guide says what a coin launched on a market gives up: usually nobody can mint it, so the
   economy pays out only what its owner puts into its pools.
-- **A presale is flagged for the law** (`W-TOKEN-SALE`): a one-sided contest that splits a token the project makes
-  among its backers sells a share of a new token. Said once, like the other legal flags, and shown on the approval
-  page.
+- **A presale is flagged for the law** (`W-TOKEN-SALE`): a one-sided contest paid in SOL or a coin made elsewhere,
+  whose backers split another token by what each put in, sells a share of that token (the prize's own token is read:
+  a pool's is what the pool holds). Said once, like the other legal flags, and shown on the approval page.
+- **A prize split among a contest's winners from a pool** is warned of as it is: set aside whole when the winner is
+  named, the naming refused while the pool holds less. Before, it was said to go to whoever claimed first.
 - New example: `community-coin` (a fixed supply of 100 million: a presale with refunds, sealed team vesting, a pool
   that drips to stakers).
 - The checker's fixes for an existing token point at `xsolana token` instead of an explorer.

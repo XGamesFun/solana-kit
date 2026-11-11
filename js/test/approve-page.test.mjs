@@ -69,3 +69,69 @@ test('the approval page puts an economy live with a browser wallet', { skip }, a
     server.close();
   }
 });
+
+test(
+  'what the chain says of a named token is shown before anything can be approved: a tick given before it is cleared',
+  { skip },
+  async () => {
+    const w = world({ project: false, seed: 'page-powers' });
+    w.chain.warp(NOW);
+    const owner = freshKeypair();
+    w.chain.airdrop(owner.address, 100_000_000_000n);
+    const dir = mkdtempSync(path.join(tmpdir(), 'xsolana-page-'));
+    const file = path.join(dir, 'xsolana.json');
+    // a coin made elsewhere, which its maker can still mint: the spec says nothing of that, so no checker warning
+    const spec = {
+      version: 2,
+      network: 'devnet',
+      name: 'Coin shop',
+      currency: 'coin',
+      collection: false,
+      tokens: [{ key: 'coin', symbol: 'COIN', source: 'existing', mint: w.mint, decimals: 6, powers: {} }],
+      pools: [{ key: 'house', currency: 'coin' }],
+    };
+    writeFileSync(file, JSON.stringify(spec));
+    const chain = approvalChain(w);
+    const { server, link } = await approve({ file, open: false, chain, log: () => {} });
+    const browser = await launchBrowser();
+    try {
+      const context = await browser.newContext();
+      await attachWallet(context, { keypair: owner, rpc: null, role: 'owner' });
+      const page = await context.newPage();
+      await page.goto(link);
+      // ticked before a wallet is connected, on a page with nothing of the chain on it yet
+      await page.waitForFunction(() => !document.getElementById('legalbox').hidden);
+      assert.equal(await page.locator('#legal').innerText(), '');
+      await page.locator('#legalok').check();
+      await page.getByRole('button', { name: /connect a wallet/i }).click();
+      // the wallet's own state brings the line; the tick is cleared, and Approve waits for it again
+      await page.waitForFunction(() =>
+        /mint more of it whenever they want/.test(document.getElementById('legal').textContent),
+      );
+      assert.match(await page.locator('#legal').innerText(), /Read from the chain, and not in the spec/);
+      assert.equal(
+        await page.locator('#legalok').isChecked(),
+        false,
+        'a tick given before the line was shown does not count',
+      );
+      assert.equal(await page.locator('#approve').isDisabled(), true);
+      await page.locator('#legalok').check();
+      await page.waitForFunction(() => !document.getElementById('approve').disabled);
+      for (let i = 0; i < 5; i++) {
+        if (/is live/.test(await page.locator('#title').innerText())) break;
+        await page.getByRole('button', { name: /approve the next batch/i }).click();
+        await page.waitForFunction(
+          () =>
+            /is live/.test(document.getElementById('title').textContent) ||
+            !document.getElementById('approve').disabled,
+          null,
+          { timeout: 30_000 },
+        );
+      }
+      assert.match(await page.locator('#title').innerText(), /is live/);
+    } finally {
+      await browser.close();
+      server.close();
+    }
+  },
+);

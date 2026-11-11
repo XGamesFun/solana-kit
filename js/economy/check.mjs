@@ -5003,21 +5003,41 @@ export function check(
         `${label(c)} splits a prize of 0 among its winners: the program opens the contest but can never name its winner (PrizeNotCovered), so it runs past its result and is called off, every entry refunded.`,
         'Give the prize an amount above 0, or leave the prize out.',
       );
-    // A presale: one side, entries paid in one currency, and a token the project makes split among the backers by
-    // what each put in. People pay for a share of a new token: what the law on selling securities looks at first.
-    const sold = cp?.gives === 'tokens' ? m.tokens.get(c.prize.currency ?? m.currencyKey) : null;
-    if (c.prize?.split && c.sides === 1 && sold?.source === 'game' && sold.key !== tok?.key)
+    // A presale: one side, entries paid in money (SOL, or a coin made elsewhere), and another token split among the
+    // backers by what each put in: people pay for a share of a token, which is what the law on selling securities
+    // looks at first. The prize's own token is read (a pool's is what the pool holds), and entries paid in points
+    // the project mints are no sale.
+    const sold = cp?.gives === 'tokens' ? prizeToken(c.prize, m) : null;
+    if (
+      c.prize?.split &&
+      c.sides === 1 &&
+      sold &&
+      !sold.wsol &&
+      sold.source !== 'sol' &&
+      tok &&
+      tok.source !== 'game' &&
+      sold.key !== tok.key
+    )
       warn(
         'W-TOKEN-SALE',
         `${where}.prize`,
-        `${label(c)} sells ${sold.symbol ?? sold.key} for ${tok?.symbol ?? 'what backers pay'}: each backer pays in and takes a share of the tokens by what they put in. Selling a new token to raise money is what securities law looks at first, and many places limit who may buy.`,
+        `${label(c)} sells ${sold.symbol ?? sold.key} for ${tok.symbol ?? tok.key}: each backer pays in and takes a share of the tokens by what they put in. Selling a token to raise money is what securities law looks at first, and many places limit who may buy.`,
         'Fine on devnet. Before mainnet, ask counsel.',
       );
     // One NFT, the last units of an item, a pool's prize: the winning entries share it in the order they are claimed.
     const scarce =
       cp &&
       (cp.gives === 'nft' || (cp.gives === 'item' && Number(m.item.get(cp.item)?.supply ?? 0) > 0) || prizePool(cp));
-    if (scarce)
+    // A prize split by stake is set aside whole when the winner is named, or that decision is refused: no entry takes
+    // another's part, but the pool must hold all of it by then.
+    if (scarce && c.prize.split && prizePool(cp))
+      warn(
+        'W-CONTEST-PRIZE',
+        `${where}.prize`,
+        `${label(c)} splits ${prizeWords(cp, m)} among its winners: all of it is set aside when the winner is named, and naming one is refused while “${prizePool(cp)}” holds less (PrizeNotCovered), so the contest would run past its result and be called off.`,
+        'Keep the pool holding the whole prize until the winner is named: seed it with that much, and let nothing else pay out of it.',
+      );
+    else if (scarce)
       warn(
         'W-CONTEST-PRIZE',
         `${where}.prize`,

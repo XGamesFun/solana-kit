@@ -17,7 +17,8 @@
       "powers": {
         "mintAuthority": "someone else",
         "freeze": false,
-        "transferFeePercent": 1
+        "transferFeePercent": 1,
+        "feeChangeable": true
       }
     }
   ],

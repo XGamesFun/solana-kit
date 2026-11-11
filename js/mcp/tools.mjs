@@ -9,6 +9,7 @@ import { addressBytes } from '../chain/base58.js';
 import { metadataAddress } from '../chain/metadata.js';
 import { parseMint, tokenEntry } from '../chain/mint.js';
 import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
 import { LOOT_PROGRAM, pda } from '../client/pda.js';
@@ -706,6 +707,11 @@ export const tools = [
           pattern: '^[a-z][a-z0-9-]{0,31}$',
           description: 'What the spec will call it (default: its ticker, in the letters a key takes).',
         },
+        project: {
+          type: 'string',
+          description:
+            'The loot project’s address, when the token is one the project is to mint on a mint of its own: its mint authority then reads as the project’s, or as not handed over yet.',
+        },
       },
       required: ['mint'],
       additionalProperties: false,
@@ -723,8 +729,32 @@ export const tools = [
       // Devnet only: a mainnet URL is refused, and so is a chain whose first block is mainnet's or testnet's.
       const rpc = (ctx?.rpc ?? rpcClient)(notMainnet(process.env.XSOLANA_RPC_URL || DEVNET_RPC));
       if (!ctx?.rpc) await checkCluster(rpc);
+      let project = null;
+      if (input.project !== undefined) {
+        project = String(input.project).trim();
+        try {
+          addressBytes(project);
+        } catch {
+          return {
+            ok: false,
+            text: `${JSON.stringify(project)} is not a Solana address. Give the project’s address, or leave it out.${footer}`,
+          };
+        }
+      }
       const [account, record] = await rpc.accounts([mint, metadataAddress(mint)]);
-      const token = tokenEntry(mint, account, record?.data ?? null, input.key ? { key: input.key } : {});
+      // A transfer fee changes on an epoch: with the chain's current one, a fee since lowered reads as it is now.
+      const epoch =
+        account && typeof rpc.call === 'function'
+          ? await rpc.call('getEpochInfo').then(
+              e => Number(e.epoch),
+              () => null,
+            )
+          : null;
+      const token = tokenEntry(mint, account, record?.data ?? null, {
+        ...(input.key ? { key: input.key } : {}),
+        project,
+        epoch,
+      });
       if (!token)
         return {
           ok: false,
@@ -743,9 +773,17 @@ export const tools = [
       const read = parseMint(mint, account.owner, account.data, record?.data ?? null);
       const supply = Number(BigInt(read.supply)) / 10 ** read.decimals;
       const p = token.powers;
+      const state = mintState(account);
+      // The name and ticker are the token's own writing, anyone's to set: given as the entry has them (one line, cut
+      // to a spec's lengths), in quotes, as labels and never as words of this tool.
+      const called =
+        token.symbol || token.name
+          ? `calls itself ${[token.name && `“${token.name}”`, token.symbol && `ticker “${token.symbol}”`].filter(Boolean).join(', ')} (its own record’s words: a label anyone can write, not a fact)`
+          : 'has no name record, so wallets show it as an unknown token';
       // What each power lets whoever holds it do, in the checker's words (check.mjs W-MINT-POWERS).
       const can = [
         p.mintAuthority === 'someone else' && `mint more of it whenever they want (${read.mintAuthority} can)`,
+        p.mintAuthority === 'project' && null,
         p.freeze && 'freeze any account holding it, an economy’s pools and vaults included',
         p.permanentDelegate && 'move or burn it out of any account',
         p.transferHook && 'run a program of their own on every transfer, which can refuse one',
@@ -760,12 +798,20 @@ export const tools = [
         p.nonTransferable && 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
         p.confidentialTransfers &&
           'Its holders can turn plain transfers into their account away (confidential transfers).',
+        state.paused && 'It is paused now: nothing of it moves until its issuer ends the pause.',
+        state.scaled &&
+          `Wallets show its amounts multiplied by a rate its mint carries${state.scaler ? ', which its issuer can change' : ''}: an economy counts the amounts under it, so a price in a spec is not the number a wallet shows.`,
+        p.mintAuthority === 'project' &&
+          'Its mint authority is the project given: the project mints it, as its rules say.',
+        project &&
+          p.mintAuthority === 'someone else' &&
+          `Its mint authority is not the project given (${project}): until it is handed over, nothing the economy mints in it lands.`,
       ].filter(Boolean);
       const text = [
-        `${read.symbol ?? 'A token with no name record'}${read.name && read.name !== read.symbol ? ` (“${read.name}”)` : ''} at ${mint} on ${CLUSTER}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}.`,
+        `The token at ${mint} on ${CLUSTER}: ${read.program === 'token-2022' ? 'a Token-2022' : 'a classic SPL'} token, ${plural(read.decimals, 'decimal')}, ${supply.toLocaleString('en-US')} in existence${p.mintAuthority === 'none' ? ', and nobody can mint more' : ''}. It ${called}.`,
         can.length
           ? `Whoever controls its mint can:\n${can.map(c => `- ${c}`).join('\n')}\nAn economy in it is only as safe as the token: say so where players pay, stake or are paid.`
-          : 'Its mint has no key that can freeze it, take it, charge on it or stop a transfer.',
+          : `Its mint has no key that can freeze it, take it, charge on it or stop a transfer${p.mintAuthority === 'project' ? ' (the project mints it)' : ''}.`,
         ...also,
         `In the spec’s "tokens" (xsolana_check then says what each power means for the economy’s parts):\n${JSON.stringify(token, null, 2)}`,
       ].join('\n\n');
@@ -777,8 +823,8 @@ export const tools = [
           program: read.program,
           decimals: read.decimals,
           supply: read.supply,
-          name: read.name,
-          symbol: read.symbol,
+          name: token.name ?? null,
+          symbol: token.symbol ?? null,
           mintAuthority: read.mintAuthority,
           freezeAuthority: read.freezeAuthority,
         },

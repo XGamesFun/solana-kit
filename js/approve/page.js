@@ -108,17 +108,22 @@ export function approvalPage(token) {
     $('legal').hidden = !legal.length;
     $('legal').replaceChildren(...legal.map(f => Object.assign(document.createElement('li'), { textContent: f.says })));
     const unread = !$('legalok').checked;
+    // The state on the page is the connected wallet's own only once the server has read the chain for it: what it
+    // says of the tokens comes with that. Until then (the read is on its way, or failed) nothing can be approved.
+    const reading = Boolean(account) && !state.done && !state.refused && state.wallet !== account.address;
     // A live section the chain does not bear out: nothing can be approved.
-    $('approve').disabled = state.done || !account || busy || Boolean(state.refused) || unread;
+    $('approve').disabled = state.done || !account || busy || Boolean(state.refused) || unread || reading;
     $('status').textContent = state.done
       ? 'Done.'
       : state.refused
         ? 'Nothing can be approved: see above.'
         : !account
           ? 'Connect a wallet first.'
-          : unread
-            ? 'Read the notice above and tick that you have.'
-            : `${state.remaining} transaction${state.remaining === 1 ? '' : 's'} to go.`;
+          : reading
+            ? 'Reading the chain for your wallet…'
+            : unread
+              ? 'Read the notice above and tick that you have.'
+              : `${state.remaining} transaction${state.remaining === 1 ? '' : 's'} to go.`;
   }
 
   async function refresh() {
@@ -166,7 +171,10 @@ export function approvalPage(token) {
   }
 
   $('legalok').addEventListener('change', () => {
-    if (last) render(last);
+    if (!last) return;
+    // The wallet's own state never arrived (its read failed): asked again, so the box is ticked on what it shows.
+    if (account && !last.done && last.wallet !== account.address) refresh();
+    else render(last);
   });
 
   // One wallet is connected at once; with several in the browser, the person picks one from a list.
@@ -208,7 +216,8 @@ export function approvalPage(token) {
     const signer = account;
     const signingWallet = wallet;
     try {
-      const batch = await api('/api/prepare', { wallet: signer.address });
+      // `read`: the lines about its tokens this page showed when the box was ticked (the server gives no batch for others)
+      const batch = await api('/api/prepare', { wallet: signer.address, read: last?.read ?? null });
       const details = (batch.details ?? []).flat();
       log(
         `Asking your wallet to approve ${batch.transactions.length} transaction${batch.transactions.length === 1 ? '' : 's'} in the project ${batch.project}: ${batch.says.join(' | ')}${details.length ? `. ${details.join('. ')}` : ''}`,

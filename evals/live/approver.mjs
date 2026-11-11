@@ -93,6 +93,25 @@ export async function approveRun({ command, cwd, env, keypair, rpc, log, timeout
         )
         .catch(() => {});
       if (/is live/i.test(await page.locator('#title').innerText())) break;
+      // The page clears the tick when a line appears that was not there when it was given (what the chain says of a
+      // token, read once the wallet connects): read again, and ticked again, as a person would.
+      if (
+        !(await approveButton.isEnabled()) &&
+        (await page
+          .locator('#legalbox')
+          .isVisible()
+          .catch(() => false)) &&
+        !(await page
+          .locator('#legalok')
+          .isChecked()
+          .catch(() => true))
+      ) {
+        legal = [await page.locator('#terms').innerText(), await page.locator('#legal').innerText()]
+          .filter(Boolean)
+          .join('\n');
+        await page.locator('#legalok').check();
+        continue;
+      }
       if (!(await approveButton.isEnabled())) break;
       const errors = await page.locator('#log .bad').count();
       await approveButton.click();

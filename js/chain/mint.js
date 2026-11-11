@@ -107,10 +107,24 @@ function keyOf(symbol) {
     .replace(/[^a-z0-9-]/g, '')
     .replace(/^[^a-z]+/, '')
     .slice(0, 32);
-  return key || null;
+  // "sol" is SOL's own key in every spec: a coin that calls itself SOL is not it
+  return key === 'sol' ? 'sol-coin' : key || null;
 }
-/** The first `most` characters of a text (whole characters, not halves of one). */
-const clip = (text, most) => [...String(text)].slice(0, most).join('');
+/**
+ * A text cut to what a spec takes: at most `most` UTF-16 units (what its schema counts), never half a character, with
+ * no control characters (a name is a label on one line).
+ */
+function clip(text, most) {
+  let out = '';
+  for (const c of String(text)) {
+    const code = c.codePointAt(0);
+    // a control character or a line break is a space: a name is a label on one line
+    const plain = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 ? ' ' : c;
+    if (out.length + plain.length > most) break;
+    out += plain;
+  }
+  return out.replace(/ +/g, ' ').trim();
+}
 
 /**
  * A token made elsewhere as an economy spec names it: its `tokens` entry (`source: "existing"`), every field read from
@@ -118,20 +132,24 @@ const clip = (text, most) => [...String(text)].slice(0, most).join('');
  * a name record, and `powers` (token2022.js `powersOf`: what the mint's own keys can do). `account`: the mint's
  * ({ owner, data }); `record`: its Token Metadata record's data, when there is one. `key`: what the spec will call it
  * (default: its ticker in the letters a key takes, else "token"). `project`: the loot project, whose own tokens read
- * `mintAuthority: "project"`. Wrapped SOL is SOL (`{ key: "sol", source: "sol" }`). Null when `account` is no mint.
+ * `mintAuthority: "project"`; `epoch`: the chain's current epoch, for a transfer fee since changed (`powersOf`). The
+ * name and ticker are cut to what a spec takes, on one line. Wrapped SOL is SOL (`{ key: "sol", source: "sol" }`).
+ * Null when `account` is no mint.
  */
-export function tokenEntry(address, account, record = null, { key = null, project = null } = {}) {
+export function tokenEntry(address, account, record = null, { key = null, project = null, epoch = null } = {}) {
   const mint = account ? parseMint(address, account.owner, account.data, record) : null;
   if (!mint) return null;
   if (mint.native) return { key: key ?? 'sol', source: 'sol' };
+  const name = mint.name ? clip(mint.name, 32) : '',
+    symbol = mint.symbol ? clip(mint.symbol, 10) : '';
   return {
-    key: key ?? keyOf(mint.symbol) ?? 'token',
+    key: key ?? keyOf(symbol) ?? 'token',
     source: 'existing',
-    ...(mint.name ? { name: clip(mint.name, 32) } : {}),
-    ...(mint.symbol ? { symbol: clip(mint.symbol, 10) } : {}),
+    ...(name ? { name } : {}),
+    ...(symbol ? { symbol } : {}),
     decimals: mint.decimals,
     program: mint.program,
     mint: mint.mint,
-    powers: powersOf(account, { project }),
+    powers: powersOf(account, { project, epoch }),
   };
 }

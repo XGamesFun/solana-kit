@@ -26,8 +26,10 @@ const EXTENSION = {
   DefaultAccountState: 6,
   MemoTransfer: 8,
   NonTransferable: 9,
+  InterestBearingConfig: 10,
   PermanentDelegate: 12,
   TransferHook: 14,
+  ScaledUiAmount: 25,
   PausableConfig: 26,
 };
 const META_BYTES = 35;
@@ -119,12 +121,16 @@ export function mintPowers({ owner, data }) {
  * a plain mint nobody can mint more of reads `{ mintAuthority: 'none' }`. `project`: the loot project's address, when
  * known, whose own tokens read `mintAuthority: 'project'`; any other minter is `'someone else'`.
  *   freeze: a freeze authority; permanentDelegate; transferHook (a hook program, or an authority who can name one);
- *   transferFeePercent (the higher of the fee in force and the one scheduled) and feeChangeable (its authority is
- *   still there); closeAuthority; pausable; defaultState (the mint sets what new accounts start as) and
- *   defaultFrozen (they start frozen); nonTransferable; confidentialTransfers.
+ *   transferFeePercent and feeChangeable (its authority is still there); closeAuthority; pausable; defaultState (the
+ *   mint sets what new accounts start as) and defaultFrozen (they start frozen); nonTransferable;
+ *   confidentialTransfers.
+ * A mint holds two transfer fees: the one in force until an epoch, and the one from that epoch on. With `epoch` (the
+ * chain's current one) the fee read is the one that applies: the newer once its epoch has come, else the higher of
+ * the two (the fee today, or the one already set to follow). Without it, the higher of the two: never less than what
+ * a transfer pays, and a fee since lowered still reads at its old rate.
  * Returns null when the account is not a mint of either token program.
  */
-export function powersOf({ owner, data }, { project = null } = {}) {
+export function powersOf({ owner, data }, { project = null, epoch = null } = {}) {
   const classic = owner === TOKEN_PROGRAM;
   if (!classic && owner !== TOKEN_2022_PROGRAM) return null;
   const extended = !classic && data.length > TOKEN_ACCOUNT_BYTES && data[TOKEN_ACCOUNT_BYTES] === ACCOUNT_TYPE_MINT;
@@ -146,7 +152,10 @@ export function powersOf({ owner, data }, { project = null } = {}) {
   // come, each { epoch u64, most u64, basis points u16 }.
   const fee = extension(data, EXTENSION.TransferFeeConfig);
   if (fee && fee.length >= 108) {
-    const points = Math.max(Number(readUintLE(fee, 88, 2)), Number(readUintLE(fee, 106, 2)));
+    const older = Number(readUintLE(fee, 88, 2)),
+      newer = Number(readUintLE(fee, 106, 2));
+    const since = readUintLE(fee, 90, 8);
+    const points = epoch !== null && BigInt(epoch) >= since ? newer : Math.max(older, newer);
     if (points > 0) out.transferFeePercent = points / 100;
     if (held(fee, 0)) out.feeChangeable = true;
   }
@@ -160,6 +169,32 @@ export function powersOf({ owner, data }, { project = null } = {}) {
   }
   if (extension(data, EXTENSION.NonTransferable)) out.nonTransferable = true;
   if (extension(data, EXTENSION.ConfidentialTransferMint)) out.confidentialTransfers = true;
+  return out;
+}
+
+/**
+ * What a Token-2022 mint's state does today that its powers don't say: `paused` (a pause is on: nothing moves),
+ * `scaled` (ScaledUiAmount or InterestBearing: wallets show amounts multiplied by a rate, not the base units the
+ * program moves and an economy counts in) and `scaler` (somebody can still change that rate). All false for a classic
+ * mint, or one with none of them.
+ */
+export function mintState({ owner, data }) {
+  const out = { paused: false, scaled: false, scaler: false };
+  if (
+    owner !== TOKEN_2022_PROGRAM ||
+    data.length <= TOKEN_ACCOUNT_BYTES ||
+    data[TOKEN_ACCOUNT_BYTES] !== ACCOUNT_TYPE_MINT
+  )
+    return out;
+  const set = value => Boolean(value) && value.length >= 32 && encodeBase58(value.subarray(0, 32)) !== NO_ADDRESS;
+  const pause = extension(data, EXTENSION.PausableConfig);
+  out.paused = Boolean(pause) && pause.length > 32 && pause[32] !== 0;
+  for (const kind of [EXTENSION.ScaledUiAmount, EXTENSION.InterestBearingConfig]) {
+    const value = extension(data, kind);
+    if (!value) continue;
+    out.scaled = true;
+    if (set(value)) out.scaler = true;
+  }
   return out;
 }
 

@@ -6,7 +6,7 @@
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { parseMint } from '../chain/mint.js';
-import { powersOf } from '../chain/token2022.js';
+import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { BUBBLEGUM_PROGRAM, LOOT_PROGRAM, pda } from '../client/pda.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
@@ -128,9 +128,12 @@ const POWER_SAYS = {
   closeAuthority: 'close the mint and make it again with other powers',
   pausable: 'pause every transfer of it',
   defaultFrozen: 'have every new account of it start frozen',
-  defaultState: 'set what every new account of it starts as',
-  nonTransferable: 'never have it transferred (nothing can be paid, staked or given in it)',
-  confidentialTransfers: 'let its holders turn plain transfers away',
+  defaultState: 'switch every new account of it to start frozen',
+};
+/** What the mint itself does, whoever controls it: said as a sentence of its own. */
+const MINT_SAYS = {
+  nonTransferable: 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
+  confidentialTransfers: 'Its holders can turn plain transfers into their account away (confidential transfers).',
 };
 /** What a spec says of a power when it denies it, for the refusal. */
 const POWER_NAMES = {
@@ -153,12 +156,12 @@ const POWER_NAMES = {
  * is silent on is not refused (a spec written before the tools could read a mint names none): it is returned in words,
  * for the page to show before the owner approves. → the sentence, or null when the spec says all the chain has.
  */
-function powersAgainst(t, what, onChain, said = {}) {
+function powersAgainst(t, what, onChain, said = {}, { state = {}, project = null } = {}) {
   const fix = `Run \`xsolana token ${t.mint}\` and write its "powers" as the chain has them.`;
   for (const [power, name] of Object.entries(POWER_NAMES))
     if (said[power] === false && onChain[power])
       throw new MintMismatch(
-        `The spec says ${what} has ${name} ("${power}": false); on chain, whoever controls its mint ${t.mint} can ${POWER_SAYS[power]}. ${fix}`,
+        `The spec says ${what} has ${name} ("${power}": false); on chain, ${POWER_SAYS[power] ? `whoever controls its mint ${t.mint} can ${POWER_SAYS[power]}` : `its mint ${t.mint} says otherwise`}. ${fix}`,
       );
   if (said.mintAuthority === 'none' && onChain.mintAuthority !== 'none')
     throw new MintMismatch(
@@ -169,22 +172,39 @@ function powersAgainst(t, what, onChain, said = {}) {
     throw new MintMismatch(
       `The spec says ${what} keeps ${said.transferFeePercent}% of every transfer; on chain its mint ${t.mint} keeps ${fee}%, so pools, prizes and stakes receive less than the page shows. ${fix}`,
     );
+  // A default state only matters with someone who can freeze: with no freeze authority nobody can switch it.
+  const can = power => (power === 'defaultState' ? !onChain.defaultFrozen && onChain.freeze : true);
   const unsaid = [
     onChain.mintAuthority === 'someone else' &&
       said.mintAuthority === undefined &&
       'mint more of it whenever they want',
     ...Object.entries(POWER_SAYS).map(
-      ([power, says]) =>
-        onChain[power] &&
-        said[power] === undefined &&
-        // a mint whose accounts start frozen is said once, not twice
-        !(power === 'defaultState' && onChain.defaultFrozen) &&
-        says,
+      ([power, says]) => onChain[power] && said[power] === undefined && can(power) && says,
     ),
     fee > 0 && said.transferFeePercent === undefined && `keep ${fee}% of every transfer`,
   ].filter(Boolean);
-  return unsaid.length
-    ? `Read from the chain, and not in the spec: whoever controls the mint of ${what} (${t.mint}) can ${unsaid.join('; ')}. The checker’s warnings did not count it. An economy in it is only as safe as the token.`
+  const lines = [];
+  if (unsaid.length)
+    lines.push(
+      `whoever controls the mint of ${what} (${t.mint}) can ${unsaid.join('; ')}. The checker’s warnings did not count it`,
+    );
+  for (const [power, says] of Object.entries(MINT_SAYS))
+    if (onChain[power] && said[power] === undefined) lines.push(says.replace(/\.$/, ''));
+  // The spec says the project mints it: true only once the mint's authority is the project. Until then whatever the
+  // economy mints in it fails, and whoever holds the authority mints as they like.
+  if (['project', 'game'].includes(said.mintAuthority) && onChain.mintAuthority !== 'project')
+    lines.push(
+      onChain.mintAuthority === 'none'
+        ? `the spec says the project mints ${what}, and on chain nobody can mint it (its mint ${t.mint} has no authority, for good): everything this economy would mint in it will fail`
+        : `the spec says the project mints ${what}, and on chain its mint ${t.mint} is someone else’s to mint${project ? `: until its authority is handed to the project (${project}), what this economy mints in it fails, and its holder can mint more` : ', not the project’s yet'}`,
+    );
+  if (state.paused) lines.push(`${what} is paused now: nothing of it moves until its issuer ends the pause`);
+  if (state.scaled)
+    lines.push(
+      `wallets show amounts of ${what} multiplied by a rate its mint carries${state.scaler ? ', which its issuer can change' : ''}: the economy counts the amounts under it, so a price here is not the number a wallet shows`,
+    );
+  return lines.length
+    ? `Read from the chain, and not in the spec: ${lines.join('. ')}. An economy in it is only as safe as the token.`
     : null;
 }
 
@@ -195,11 +215,15 @@ function powersAgainst(t, what, onChain, said = {}) {
  * as they are, so one decimal off is ten times what the page says. A mint the setup makes is made with the spec's
  * decimals, and is not read. What the mint's own keys can do is read too (`powersAgainst`): a power the spec denies
  * and the mint has is refused, and one the spec is silent on is returned for the page to show. Throws MintMismatch.
- * → { powers: [{ key, mint, says }] }, one for each named token with a power its spec doesn't say.
+ * `project`: the project's address (the wallet's own, or the live one), which a mint the project mints must name as
+ * its authority. `chain.epoch`, when the chain has it, tells a transfer fee since lowered from one still in force.
+ * → { powers: [{ key, mint, says }] }, one for each named token with something its spec doesn't say.
  */
-export async function checkMints({ m, chain }) {
+export async function checkMints({ m, chain, project = null }) {
   const named = [...m.tokens.values()].filter(t => t.mint && !t.mint.startsWith('@'));
   const powers = [];
+  let epoch = null;
+  if (named.some(t => !t.wsol) && typeof chain.epoch === 'function') epoch = await chain.epoch().catch(() => null);
   for (const t of named) {
     const what = `the token ${t.symbol ?? t.key} (“${t.key}”)`;
     if (t.wsol) {
@@ -224,7 +248,16 @@ export async function checkMints({ m, chain }) {
       throw new MintMismatch(
         `The spec says ${what} is a ${t.program} token; its mint ${t.mint} is ${mint.program}. Write "program": "${mint.program}".`,
       );
-    const says = powersAgainst(t, what, powersOf(account) ?? {}, t.powers);
+    let onChain, state;
+    try {
+      onChain = powersOf(account, { project, epoch }) ?? {};
+      state = mintState(account);
+    } catch {
+      throw new MintMismatch(
+        `The mint ${t.mint} of ${what} does not read as a mint: its data is not what its token program writes.`,
+      );
+    }
+    const says = powersAgainst(t, what, onChain, t.powers, { state, project });
     if (says) powers.push({ key: t.key, mint: t.mint, says });
   }
   await checkTreasury({ m, chain });
