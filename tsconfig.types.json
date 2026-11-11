@@ -18,7 +18,8 @@
     "js/play/index.js",
     "js/results/index.js",
     "js/mcp/http.mjs",
-    "js/approve/keyfile.mjs"
+    "js/approve/keyfile.mjs",
+    "js/approve/wallet-adds.mjs"
   ],
   "include": ["js/chain/*.js"]
 }
