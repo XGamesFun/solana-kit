@@ -4,6 +4,25 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.0: loot at its official address (loot 0.28.0, on devnet since 2026-11-11, slot 521,074,836)
+
+The program now runs at the address it keeps, `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`. loot 0.28.0 is 0.27.0
+built for that address: no instruction, argument, account or record changed, and the tools do what 0.27.2's did.
+
+- **Every address follows the program's.** A project, its records, its vaults and its lookup table are derived from
+  the program's address, so nothing set up under the address before (`9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`)
+  exists under this one. An economy is set up again: `xsolana keygen`, then `xsolana approve`. A file's record of
+  what went live under the old address is not this program's; start from the spec without it.
+- **The client takes the program's address from its IDL** (`LOOT_PROGRAM`), so every builder and every derived
+  address follows with no other change. An app that wrote the old address out as text must take `LOOT_PROGRAM` from
+  the package instead.
+- **A voucher and a contest's verdict are signed over the program's address.** One signed for the program at the
+  old address is refused by this one. A results server must be on this release to sign for it.
+- 0.27.2 and earlier keep speaking to the program at the old address, which stays on devnet for now. Do not mix
+  the two: this release cannot read an economy made with an earlier one, nor the other way round.
+- `release.json` and the pinned program in `js/test/fixtures/pinned.txt` name the 0.28.0 build at the new address;
+  `SECURITY.md` and `docs/program.md` say where the program runs now.
+
 ## 0.27.2: going live is signed by a key file, and a wallet that adds its own fee can approve (loot 0.27.0, unchanged)
 
 The JavaScript alone: the program, its IDL and every account are 0.27.0's.
