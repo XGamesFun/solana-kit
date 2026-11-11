@@ -10,7 +10,7 @@ const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
 export const PARTS = {
   tokens: {
     def: 'token',
-    says: 'The currencies: SOL, any existing mint by address (classic or Token-2022, coins from a token launchpad or an AMM included), or a token the game makes when it goes live: one the game mints as its rules say (points, tickets, shards, an emission), or one with a fixed `supply` minted once to the owner with minting turned off for good (a community token you keep). loot does not put a token on a market: for trading, launch it on a token launchpad or an AMM, then name the mint.',
+    says: 'The currencies: SOL, any existing mint by address (classic or Token-2022, coins from a token launchpad or an AMM included), or a token the game makes when it goes live: one the game mints as its rules say (points, tickets, shards, an emission), or one with a fixed `supply` minted once to the owner with minting turned off for good (a community token you keep). A token the game makes is named on chain as it is made (`name`, `symbol`, and `uri`: a link to a JSON file naming its picture), which is what wallets show; only the owner can change that later. loot does not put a token on a market: for trading, launch it on a token launchpad or an AMM, then name the mint.',
     acts: 'nobody: a token is a fact',
   },
   currency: {

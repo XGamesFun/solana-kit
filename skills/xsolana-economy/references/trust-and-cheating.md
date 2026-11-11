@@ -66,7 +66,8 @@ These were attacked on devnet and refused by the program; there is nothing to bu
 - **One seat per NFT, ever.** In escrow, an NFT can't leave before its lock or be staked twice. Watched, an NFT sold
   while staked earns its old staker nothing more, and its new holder takes the seat over. Nobody harvests or unstakes
   someone else's seat.
-- **The project's keys.** A token the project mints has the project as its only minter and no freeze authority. Only
+- **The project's keys.** A token the project mints has the project as its only minter and no freeze authority. Its
+  name, ticker and picture link on chain are the owner's wallet's to change, and nobody else's. Only
   the authority mints or moves pool funds; only the owner changes mechanics or closes records. Money held for a
   record (a farm's stakes and rewards, a pot, an order, a bid) leaves only by that record's rules.
 - **Chance is the oracle's.** Nobody, the project included, steers a roll or a draw.

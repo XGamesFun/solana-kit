@@ -6,7 +6,7 @@ import { SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, TOKEN_PROGRAM } from '../chain/pda
 import { computeUnitLimit, meta } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { pinned, world } from './world.mjs';
+import { world } from './world.mjs';
 
 const TM = loot.TOKEN_METADATA_PROGRAM;
 const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
@@ -106,10 +106,9 @@ export function nftOf(w, maker, owner, collection) {
 /** The owner field of a classic token account. */
 export const ownerOf = (w, account) => encodeBase58(w.chain.get(account).data.subarray(32, 64));
 
-/** A world with Token Metadata loaded, a maker, and the maker's sized collection `club`. */
+/** A world (it has Token Metadata loaded), a maker, and the maker's sized collection `club`. */
 export function setup(seed) {
   const w = world({ seed });
-  w.chain.svm.addProgram(TM, pinned('token_metadata.so'));
   const maker = w.who();
   const club = newAddress(w.random);
   w.chain.send(maker, [

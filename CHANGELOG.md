@@ -4,6 +4,29 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.26.2: a token the setup makes is named on chain (loot 0.26.1, unchanged)
+
+The JavaScript alone: the program, its IDL and every account are 0.26.1's.
+
+- **A token the setup makes gets its name on chain.** Its Token Metadata record (the `name`, `symbol` and `uri` of its
+  `tokens` entry) is written in the token's own step, while the owner is still its mint authority, before minting is
+  handed to the project or turned off for good (a fixed supply). Wallets and explorers show the token by its name and
+  ticker, and by its picture when `uri` links a JSON file that names one; before, every such token showed as an unknown
+  one. The owner's wallet is the record's update authority: only it can change the three later. The record says a
+  fungible token whatever its decimals, 0 included (`js/chain/metadata.js`: `createFungibleMetadataIx`,
+  `metadataAddress`, `metadataUpdateAuthority`).
+- **A token already live keeps what it has.** Token Metadata takes a record only from a mint's own authority, so a
+  token whose minting was handed on or turned off without one can't be given one. Changing a live record through the
+  spec is not built yet.
+- **The cost says it**: the record's rent (607 bytes) and the 0.01 SOL Token Metadata keeps for each, apart from rent
+  (`metadataFeesSol`): about 0.014 SOL a token.
+- **Refused before anything is signed**: a name over 32 bytes, a ticker over 10 or a link over 200, counted in bytes
+  as the record counts them (`E-TOKEN`).
+- `xsolana explain` lists the tokens going live makes and says when one will show with no picture; the approval page's
+  step names the record, its fee and who can change it.
+- The tests' world loads Token Metadata as mainnet runs it, and the evals' test wallet signs the one instruction of
+  it a setup sends.
+
 ## 0.26.1: loot 0.26.1 (on devnet since 2026-11-10, slot 520,911,720)
 
 The program, 0.26.1: nine small fixes, no layout changed (0.26.0's accounts and this client's builders work unchanged).
