@@ -1,11 +1,15 @@
 # The loot program: how it behaves
 
-**Version 0.26.1**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet** since slot 520,911,720
-(2026-11-10; 0.26.0 ran from slot 520,815,761, and no layout changed between them, so its accounts carry over).
-Nothing runs on mainnet. **Not independently
-audited** (`SECURITY.md`). No accounts carry over from older versions: make fresh economies for this one.
+**Version 0.27.0**, program ID `9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, **on devnet**: 0.26.1 since slot
+520,911,720 (2026-11-10), until 0.27.0 replaces it. No stored record changed shape and no instruction's arguments or
+accounts changed between them, so every account made under 0.26 reads as before. Nothing runs on mainnet. **Not
+independently audited** (`SECURITY.md`). No accounts carry over from versions before 0.26: make fresh economies.
 
-This page describes 0.26.1, the build its IDL comes from. Its rule: **the program restricts a project only where it
+This page describes 0.27.0, the build its IDL comes from. What 0.27.0 adds: **a record whose NFT is proven gone from
+the project closes** ([An NFT gone from the project](#an-nft-gone-from-the-project), receipt `NftGone`), and **the
+weight that leaves a farm gives its share of the rounding back** to the project ([Farms](#farms), `Farm::free_share`).
+
+0.26's rule: **the program restricts a project only where it
 must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that
 only guarded a project against itself are out (token screens, time limits, caps on lists, values of 0), each bounded by
 what the chain allows ([Limits](#limits)). **Both sides of an exchange move in one instruction**: an auction's seller is

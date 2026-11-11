@@ -2,7 +2,7 @@
   "address": "9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ",
   "metadata": {
     "name": "loot",
-    "version": "0.26.1",
+    "version": "0.27.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"
@@ -8400,6 +8400,19 @@
       ]
     },
     {
+      "name": "NftGone",
+      "discriminator": [
+        254,
+        200,
+        63,
+        241,
+        105,
+        40,
+        174,
+        76
+      ]
+    },
+    {
       "name": "OddsRaised",
       "discriminator": [
         159,
@@ -11574,9 +11587,10 @@
             "name": "reward_remainder",
             "docs": [
               "The carry: rounding of a share over the total weight, times `PRECISION`. The next move before",
-              "the farm's end credits it to the seats there once it adds up to a share; a move that leaves no",
-              "weight, or any move once the farm is over, frees its whole tokens (`FarmSide::settle`), and so",
-              "does a walk that begins with no weight or where the weight reaches 0 (`Farm::walk`)."
+              "the farm's end credits it to the seats there once it adds up to a share. Weight that leaves",
+              "frees its share of the whole tokens (`Farm::free_share`); a move that leaves no weight, or any",
+              "move once the farm is over, frees all of them (`FarmSide::settle`), and so does a walk that",
+              "begins with no weight or where the weight reaches 0 (`Farm::walk`)."
             ],
             "type": "u128"
           },
@@ -13630,7 +13644,8 @@
       "name": "LotteryPulled",
       "docs": [
         "One part of a round's entry was settled: `amount`, the tokens it settled (0 for an NFT), to the",
-        "buyer, or for a recipient's part to the recipient."
+        "buyer, or for a recipient's part to the recipient. An NFT ticket proven gone settles its part",
+        "moving nothing, with `NftGone`."
       ],
       "type": {
         "kind": "struct",
@@ -13890,6 +13905,37 @@
                 "name": "Test"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "NftGone",
+      "docs": [
+        "A record let go of its NFT because the NFT is proven gone from the project (`piece::still_held`):",
+        "its collection's controller took it out of the project's hands or burned it. Nothing moved; the",
+        "record closed (a hold, a listing), finished without it (an order), or lost its row (a stash), and",
+        "its rent went where that record's close sends it. `record` is the hold, listing, order or stash;",
+        "`by` who sent it, which anyone may."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "record",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "by",
+            "type": "pubkey"
           }
         ]
       }
@@ -15176,8 +15222,8 @@
       "docs": [
         "A prize an order's settle did not give (`OrderSettled` lists it, an `OrderPartSettled` spans it): the one at",
         "`at` of the order's `won`. Its player, settling their own order, gave it up (tokens or a",
-        "collectible they can't receive, a stash's NFT put back), or a compressed one's collection can't",
-        "hold it (its serial voided)."
+        "collectible they can't receive, a stash's NFT put back), a compressed one's collection can't",
+        "hold it (its serial voided), or a stash's NFT is proven gone from the project (with `NftGone`)."
       ],
       "type": {
         "kind": "struct",
