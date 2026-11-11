@@ -786,3 +786,134 @@ for (const kind of KINDS)
       k.still(lot);
     },
   );
+
+// ---------------------------------------------------------------- stashes
+
+for (const kind of KINDS)
+  test(
+    `a ${kind.name} NFT gone from a lottery's own stash: the project's keys take its row out and nothing moves; anyone else is refused`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-unraffle');
+      const { w } = k;
+      const [owner, stranger] = [w.creator, w.who()].map(a => k.app(a));
+      const own = id => pda.lotteryStash(pda.lottery(w.project, id));
+      const rows = id => loot.decodeStash(w.chain.get(own(id)).data).nfts;
+      for (const [id, burned] of [
+        [1, false],
+        [2, true],
+      ]) {
+        // The owner puts two NFTs into the stash of a lottery still to be written, where nothing promises them.
+        const [lost, kept] = [k.mint(w.creator), k.mint(w.creator)];
+        for (const nft of [lost, kept]) {
+          k.send(w.creator, nft, piece =>
+            loot.stashIx({ signer: w.creator, project: w.project, lottery: id, asset: nft, ...piece }),
+          );
+          k.into(nft);
+        }
+        k.lose(lost, burned);
+
+        // A stranger is refused by the program, gone or not: a lottery's own stash is the project's keys' alone.
+        await assert.rejects(stranger.unraffle(id, lost), /NotAuthority/);
+        assert.deepEqual(rows(id).sort(), [lost, kept].sort(), 'nothing came off');
+        // closeGone leaves it too, and says where it is.
+        stranger.calls.prompts = 0;
+        assert.deepEqual(await stranger.closeGone(lost), {
+          signature: null,
+          closed: [],
+          unstashed: [],
+          waits: [{ kind: 'lottery-stash', address: own(id), lottery: id }],
+        });
+        assert.equal(stranger.calls.prompts, 0, 'nothing signed');
+
+        // The owner takes the row out on the proof: nothing is sent.
+        const tx = logged(k.landed, await owner.unraffle(id, lost));
+        assert.deepEqual(goneIn(tx), [`${own(id)} ${lost} ${w.creator}`]);
+        nothingMoved(tx, ['Held']);
+        assert.deepEqual(rows(id), [kept], 'its row is off the list');
+        k.still(lost);
+        // The one still there comes home as before.
+        const home = logged(k.landed, await owner.unraffle(id, kept));
+        k.into(kept, w.creator);
+        assert.equal(receiptsOf(home, 'Stashed')[0].to, w.creator);
+        assert.equal(k.owner(kept), w.creator);
+        assert.deepEqual(rows(id), []);
+      }
+    },
+  );
+
+for (const kind of KINDS)
+  test(
+    `closeGone takes a gone ${kind.name} NFT's row off each of the project's stashes, for anyone, beside the holds it closes`,
+    { skip: kind.skip },
+    async () => {
+      const k = kind.make('gone-stash');
+      const { w } = k;
+      const [player, stranger] = [w.player, w.who()].map(a => k.app(a));
+      const at = id => pda.stash(w.project, id);
+      const rows = id => loot.decodeStash(w.chain.get(at(id)).data).nfts;
+      const stashed = (id, nft) => {
+        k.send(w.authority, nft, piece =>
+          loot.stashIx({ signer: w.authority, project: w.project, id, asset: nft, ...piece }),
+        );
+        k.into(nft);
+      };
+      const [taken, burned, kept, other] = [0, 1, 2, 3].map(() => k.mint(w.authority));
+      stashed(1, taken);
+      stashed(1, kept);
+      stashed(2, burned);
+      stashed(2, other);
+
+      // One still there is nobody's to take off this way.
+      await assert.rejects(stranger.closeGone(kept), /Nothing shows that the project no longer holds/);
+      assert.equal(stranger.calls.prompts, 0);
+
+      for (const [id, nft, isBurned] of [
+        [1, taken, false],
+        [2, burned, true],
+      ]) {
+        k.lose(nft, isBurned);
+        const [rent, before] = [w.chain.get(at(id)).lamports, w.chain.get(stranger.wallet).lamports];
+        stranger.calls.prompts = 0;
+        const closed = await stranger.closeGone(nft);
+        assert.deepEqual(
+          [closed.closed, closed.unstashed, closed.waits],
+          [[], [{ address: at(id), id }], []],
+          'the row came off the stash that listed it',
+        );
+        assert.equal(stranger.calls.prompts, 1);
+        const tx = logged(k.landed, closed.signature);
+        assert.deepEqual(goneIn(tx), [`${at(id)} ${nft} ${stranger.wallet}`]);
+        nothingMoved(tx, ['Held']);
+        assert.deepEqual(rows(id), [id === 1 ? kept : other], 'only the NFT still there is listed');
+        k.still(nft);
+        // Free for a third wallet: the network fee only, and the stash keeps the rent its row no longer needs.
+        assert.equal(w.chain.get(stranger.wallet).lamports, before - 5_000n);
+        assert.equal(w.chain.get(at(id)).lamports, rent);
+        assert.deepEqual(await stranger.closeGone(nft), { signature: null, closed: [], unstashed: [], waits: [] });
+      }
+
+      // An NFT with a hold and a stash row of the same project: one call closes the hold and takes the row off.
+      const twice = k.mint(w.player);
+      const { freeAt } = await player.hold(twice, 3600);
+      k.into(twice);
+      k.lose(twice);
+      // Back in the authority's hands (its controller gave it to them), it is stashed; then taken again.
+      const again = k.regain(twice, w.authority);
+      stashed(3, again);
+      k.lose(again);
+      const both = await stranger.closeGone(again);
+      assert.deepEqual(
+        [both.closed, both.unstashed, both.waits],
+        [[{ kind: 'hold', address: pda.hold(again, freeAt) }], [{ address: at(3), id: 3 }], []],
+      );
+      const tx = logged(k.landed, both.signature);
+      assert.deepEqual(
+        goneIn(tx).sort(),
+        [pda.hold(again, freeAt), at(3)].map(record => `${record} ${again} ${stranger.wallet}`).sort(),
+      );
+      nothingMoved(tx, ['Held']);
+      assert.equal(w.chain.get(pda.hold(again, freeAt)), null);
+      assert.deepEqual(rows(3), []);
+    },
+  );

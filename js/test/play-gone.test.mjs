@@ -158,7 +158,11 @@ test(
     assert.equal(lamports(w, w.player), payer + rent, 'all of its rent to the player who paid it');
     assert.equal(lamports(w, stranger.wallet), sender - FEE, 'the sender pays the network fee only');
     assert.equal(coreOwner(w, nft), controller, 'nothing moved');
-    assert.deepEqual(await stranger.closeGone(nft), { signature: null, closed: [], waits: [] }, 'nothing left');
+    assert.deepEqual(
+      await stranger.closeGone(nft),
+      { signature: null, closed: [], unstashed: [], waits: [] },
+      'nothing left',
+    );
   },
 );
 
@@ -281,7 +285,7 @@ test(
     await assert.rejects(stranger.closeGone(there), /Nothing shows that the project no longer holds/);
     await buyer.buyListing(there, { listing: await buyer.listing(there) });
     assert.equal(coreOwner(w, there), buyer.wallet);
-    assert.deepEqual(await stranger.closeGone(there), { signature: null, closed: [], waits: [] });
+    assert.deepEqual(await stranger.closeGone(there), { signature: null, closed: [], unstashed: [], waits: [] });
   },
 );
 
@@ -302,6 +306,7 @@ test(
     assert.deepEqual(await stranger.closeGone(nft), {
       signature: null,
       closed: [],
+      unstashed: [],
       waits: [{ kind: 'listing', address: listing }],
     });
     await assert.rejects(renter.rentListing(nft, { listing: await renter.listing(nft) }), /nothing to buy or rent/);

@@ -98,7 +98,8 @@ export const logged = (landed, signature) => {
 
 /**
  * Each kind of NFT, on a world of its own (`make(seed)`): { w, landed, collection (what a rule names), rule, rpc,
- * mint(owner), lose(nft, burned) (its controller takes it out of whoever's hands it is in, or burns it), still(nft)
+ * mint(owner), lose(nft, burned) (its controller takes it out of whoever's hands it is in, or burns it), regain(nft,
+ * to) (its controller gives one it took to `to`), still(nft)
  * (fails unless the NFT is where its controller left it: nothing moved it since), holds(nft) (whether the project
  * holds it), owner(nft) (who holds it now, null once burned), into(nft, to) (a compressed NFT's leaf went to `to` on
  * chain: the indexer is told; nothing for the others), piece(nft, signer) (its kind as a builder takes it, and what goes
@@ -123,6 +124,7 @@ export const KINDS = [
           else takeBack(w, controller, collection, nft);
           lost.set(nft, burned ? null : controller);
         },
+        regain: (nft, to) => (takeBack(w, controller, collection, nft, to), nft),
         still: nft => assert.equal(coreOwner(w, nft), lost.get(nft), `${nft} is where its controller left it`),
         holds: nft => coreOwner(w, nft) === w.project,
         owner: nft => coreOwner(w, nft),
@@ -149,6 +151,15 @@ export const KINDS = [
         rpc: w.chain.rpc,
         mint: owner => tmNft(w, maker, owner, club),
         lose: (nft, burned = false) => lost.set(nft, takeTokenMetadata(w, nft, w.who(), { burned })),
+        regain(nft, to) {
+          const from = w.chain.get(lost.get(nft));
+          const [moved, emptied] = [Uint8Array.from(from.data), Uint8Array.from(from.data)];
+          moved.set(addressBytes(to), 32);
+          emptied.fill(0, 64, 72);
+          w.chain.put(loot.ata(to, nft), { ...from, data: moved });
+          w.chain.put(lost.get(nft), { ...from, data: emptied });
+          return nft;
+        },
         still(nft) {
           assert.equal(w.chain.tokens(loot.ata(w.project, nft)), 0n, 'the project holds none');
           if (lost.get(nft) === nft) assert.equal(supply(nft), 0n, 'burned: its mint holds none');
@@ -179,6 +190,7 @@ export const KINDS = [
         tree,
         mint: owner => tree.mint(owner),
         lose: (nft, burned = false) => (burned ? tree.burn(nft, controller) : tree.take(nft, controller)),
+        regain: (nft, to) => (tree.take(nft, controller, to), nft),
         // The indexer was told of nothing since: the tree's root on chain is still the one it mirrors.
         still: () => assert.deepEqual(onChainRoot(w, tree), tree.root(), 'no leaf moved since'),
         holds: nft => !tree.nfts.get(nft).burnt && tree.nfts.get(nft).owner === w.project,

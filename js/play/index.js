@@ -2294,6 +2294,30 @@ export function solanaApp({
   }
 
   /**
+   * The stashes of this project that list `asset`: a project's stash (`kind` 'stash') or a lottery's own
+   * ('lottery-stash'), each { kind, address, id } (`id`: the stash's, or the lottery's). A stash keeps its NFTs in
+   * rows of no fixed place, so no filter finds one NFT's row: this is one search of the project's stashes
+   * (`getProgramAccounts` by tag, project and payload), which returns every stash of the project whole, 36 bytes for
+   * each NFT a stash lists, and reads them here.
+   */
+  async function stashesOf(asset) {
+    const at = (offset, bytes) => ({ memcmp: { offset, bytes } });
+    const found = await client.programAccounts(loot.LOOT_PROGRAM, [
+      at(0, encodeBase58(Uint8Array.of(loot.TAGS.Table))),
+      at(1, project),
+      at(37, encodeBase58(Uint8Array.of(loot.PAYLOAD.Nft))),
+    ]);
+    const out = [];
+    for (const { pubkey, account } of found) {
+      const stash = loot.decodeStash(account.data);
+      if (!stash?.nfts.includes(asset)) continue;
+      const own = pubkey === loot.pda.stash(project, stash.id);
+      out.push({ kind: own ? 'stash' : 'lottery-stash', address: pubkey, id: stash.id });
+    }
+    return out;
+  }
+
+  /**
    * The records of this project an earlier owner of `asset` left behind (`recordsOf`), each that names a wallet other
    * than the player's: { kind, address, record, says }. Such a record is left when whoever controls the NFT's
    * collection moved it out of the project's hands without the program. Until it is closed, the program hands out
@@ -4581,27 +4605,47 @@ export function solanaApp({
 
     /**
      * Closes what this project still records of an NFT it no longer holds (`asset`: whoever controls its collection
-     * took it out of the project's hands or burned it): each hold of it (`release`) and its listing (`take_listing`),
-     * on the proof that it is gone. Anyone may, at any time, also while a hold runs and for a loan before it is due:
-     * nothing is sent or paid, and a loan's debt ends unpaid. The sender pays the transaction's fee only; each
-     * record's rent goes to whoever that record names (a hold's payer, a listing's maker), never to the sender. A
-     * listing whose rental still runs is left (`waits`): the program keeps a running rental, and the listing closes
-     * once it has run. Refused in words, with nothing sent, when the project still holds the NFT or nothing shows it
-     * gone. Returns { signature, closed: [{ kind, address }], waits: [{ kind, address }] }; `signature` is null when
-     * there was nothing to close.
+     * took it out of the project's hands or burned it): each hold of it (`release`), its listing (`take_listing`),
+     * and its row on each of the project's stashes that lists it (`stash`, out), on the proof that it is gone. Anyone
+     * may, at any time, also while a hold runs and for a loan before it is due: nothing is sent or paid, and a loan's
+     * debt ends unpaid. The sender pays the transaction's fee only; each record's rent goes to whoever that record
+     * names (a hold's payer, a listing's maker), never to the sender, and a stash keeps the rent its row no longer
+     * needs (it goes to the sender only when that is one of the project's keys). With its row off a stash, no roll
+     * draws the NFT and no prize names one that is not there to give.
+     * What is left is in `waits`: a listing whose rental still runs (the program keeps a running rental, and the
+     * listing closes once it has run), and a lottery's own stash that lists the NFT (`kind` 'lottery-stash', with its
+     * `lottery`, the lottery's id): only the project's keys take a row out of that one (`unraffle`), gone or not.
+     * Refused in words, with nothing sent, when the project still holds the NFT or nothing shows it gone.
+     * Besides one search of the NFT's holds, this makes one search of the project's stashes, which returns every
+     * stash of the project whole (36 bytes for each NFT a stash lists): a stash's rows have no fixed place to look in.
+     * Returns { signature, closed: [{ kind, address }], unstashed: [{ address, id }], waits: [{ kind, address }] }:
+     * `closed` the holds and the listing it closed, `unstashed` the project's stashes it took the row off;
+     * `signature` is null when there was nothing to close.
      */
     async closeGone(asset) {
-      const records = await recordsOf(asset);
-      if (!records.length) return { signature: null, closed: [], waits: [] };
+      const [records, stashes] = [await recordsOf(asset), await stashesOf(asset)];
+      if (!records.length && !stashes.length) return { signature: null, closed: [], unstashed: [], waits: [] };
       const proof = await goneProof(asset);
       if (!proof)
         throw new Error(
           `Nothing shows that the project no longer holds the NFT ${asset}: its records close this way only once it is proven gone (its collection took it back or burned it). Nothing was sent.`,
         );
       const { closes, closed, waits } = await closesOf(asset, records, proof);
-      const left = waits.map(({ kind, address }) => ({ kind, address }));
-      if (!closes.length) return { signature: null, closed, waits: left };
-      return { signature: await send(closes), closed, waits: left };
+      const listed = stashes.filter(x => x.kind === 'stash');
+      // The row comes off each of the project's stashes: free, nothing moves, and where it would go is not read.
+      const offs = listed.map(({ id }) =>
+        loot.stashIx({ signer: wallet.address, project, id, asset, out: wallet.address, ...proof.kind }),
+      );
+      const left = [
+        ...waits.map(({ kind, address }) => ({ kind, address })),
+        ...stashes
+          .filter(x => x.kind === 'lottery-stash')
+          .map(({ kind, address, id }) => ({ kind, address, lottery: id })),
+      ];
+      const unstashed = listed.map(({ address, id }) => ({ address, id }));
+      const instructions = [...(closes.length ? closes : offs.length ? proof.before : []), ...offs];
+      if (!instructions.length) return { signature: null, closed, unstashed, waits: left };
+      return { signature: await send(instructions), closed, unstashed, waits: left };
     },
 
     // ---------------------------------------------------------------- raffles
@@ -4652,9 +4696,20 @@ export function solanaApp({
       return send([loot.upsertIx({ owner: wallet.address, project, def: { Lottery: { id, args } }, lotteryState })]);
     },
 
-    /** The raffle's owner takes the NFT back out of lottery `id`'s own stash once nothing promises it (the lottery ended, or no place names it). */
+    /**
+     * The raffle's owner takes the NFT back out of lottery `id`'s own stash once nothing promises it (the lottery
+     * ended, or no place names it). When the project no longer holds the NFT (its collection took it back or burned
+     * it), only its row comes off the stash, on that proof: nothing is sent, and the owner gets no NFT back. Only the
+     * project's owner or authority may, gone or not: a lottery's own stash is theirs alone (`NotAuthority` for anyone
+     * else; `closeGone` leaves it and says so). Returns the signature.
+     */
     async unraffle(id, nft) {
-      const { before, hasAuthority: _, ...piece } = await nftOf(nft, wallet.address, { to: wallet.address });
+      const {
+        before,
+        hasAuthority: _,
+        gone: _g,
+        ...piece
+      } = await leaving(nft, wallet.address, { to: wallet.address });
       const lotteryState = await readMaybe('Lottery', loot.pda.lottery(project, id));
       return send([
         ...before,
