@@ -406,6 +406,12 @@ export function decodeStash(data) {
  * collection (or null), flags, nonce, root (hex: the tree's root it holds for), payer }. Routes read it only while the
  * tree's root is still `root`; after that anyone may close it (`closeLeafIx`).
  */
+/**
+ * Where a Proven record's payer is: after the tag, eight 32-byte fields, the asset data hash's flag (and its 32 bytes
+ * when it has one), the flags and the nonce. Without an asset data hash, then with one.
+ */
+export const PROVEN_PAYER_AT = Object.freeze([1 + 32 * 8 + 1 + 1 + 8, 1 + 32 * 8 + 33 + 1 + 8]);
+
 export function decodeProven(data) {
   // Its shortest: the tag, five addresses, the root, data hash and creator hash, no asset data hash, the flags and
   // nonce, and its payer.
