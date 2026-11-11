@@ -4,6 +4,13 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.5: `walletAdded` is exported (loot 0.28.0, unchanged)
+
+The JavaScript alone. `@xgamesfun/solana/wallet-adds` exports `walletAdded(ours, theirs, wallet)`, the rule the approval
+page uses to take a transaction a wallet signed when the wallet only added its own checks (Phantom's Lighthouse
+instructions, a compute budget it set): a server that holds a hand-in to the exact bytes it prepared can take exactly
+what the page takes. With its type declarations.
+
 ## 0.28.4: claims() behind the play host's relay (loot 0.28.0, unchanged)
 
 The JavaScript alone.
