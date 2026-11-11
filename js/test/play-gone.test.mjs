@@ -8,88 +8,26 @@
 // hand, as only its own program could.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addressBytes } from '../chain/base58.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { solanaApp } from '../play/index.js';
 import { cnftTree } from './cnft-chain.mjs';
-import { burn, coreOwner, seizingAsset, seizingCollection, takeBack } from './gone-chain.mjs';
+import { burn, coreOwner, takeBack } from './gone-chain.mjs';
+import {
+  appOf,
+  FEE,
+  fixture,
+  lamports,
+  logged,
+  names,
+  receipt,
+  skip,
+  skipCompressed,
+  takeTokenMetadata,
+} from './gone-kinds.mjs';
 import { nftOf as tmNft, setup as tmSetup } from './tm-chain.mjs';
-import { boxArgs, cannotRun, cannotRunCompressed, drop, PRICE, world } from './world.mjs';
+import { boxArgs, drop, PRICE } from './world.mjs';
 
-const skip = cannotRun() ?? false;
-const skipCompressed = cannotRunCompressed() ?? false;
 const { pda } = loot;
-const FEE = 5_000n;
-const lamports = (w, address) => BigInt(w.chain.get(address)?.lamports ?? 0);
-const names = tx => tx.receipts.map(r => r.name);
-const receipt = (tx, name) => tx.receipts.find(r => r.name === name)?.data;
-
-/** A wire transaction with a signature of its own in its first slot (the local chain checks none), so each one this
- * wallet sends is found again by its signature. */
-let signatures = 0;
-function signed(wire) {
-  const out = Uint8Array.from(wire);
-  out.fill(0, 1, 65);
-  out.set(new Uint8Array(new BigUint64Array([BigInt(++signatures)]).buffer), 1);
-  return out;
-}
-
-/** The play module for `address` on world `w`, with `wallet` its address and `calls.prompts` what its wallet signed;
- * `rpc`: one that answers an indexer's calls too, for a compressed NFT's tree. */
-function appOf(w, address, { rpc = w.chain.rpc } = {}) {
-  const calls = { prompts: 0 };
-  const app = solanaApp({
-    spec: {
-      version: 2,
-      currency: 'coin',
-      tokens: [{ key: 'coin', source: 'existing', mint: w.mint, decimals: 6 }],
-      live: { project: w.project, collection: w.collection },
-    },
-    rpc,
-    wallet: { address, signTransaction: async wire => (calls.prompts++, signed(wire)) },
-    now: () => w.chain.now(),
-  });
-  return Object.assign(app, { calls, wallet: address });
-}
-
-/** A world with a collection its `controller` can take NFTs back out of, which the project does not control. */
-function fixture(seed, options = {}) {
-  const w = world({ seed, ...options });
-  const controller = w.who();
-  const collection = seizingCollection(w, controller, { compressed: options.compressed });
-  const mint = owner => seizingAsset(w, controller, collection, owner);
-  return { w, controller, collection, mint, landed: w.watch() };
-}
-
-/** A Token Metadata NFT the project holds leaves its token account, as only its own program could move it: into an
- * account of `to`'s (returned), or, burned, out of existence (its mint, holding none, returned). */
-function takeTokenMetadata(w, mint, to, { burned = false } = {}) {
-  const held = loot.ata(w.project, mint);
-  const account = w.chain.get(held);
-  const emptied = Uint8Array.from(account.data);
-  emptied.fill(0, 64, 72);
-  w.chain.put(held, { ...account, data: emptied });
-  if (burned) {
-    const m = w.chain.get(mint);
-    const supply = Uint8Array.from(m.data);
-    supply.fill(0, 36, 44);
-    w.chain.put(mint, { ...m, data: supply });
-    return mint;
-  }
-  const theirs = loot.ata(to, mint);
-  const moved = Uint8Array.from(account.data);
-  moved.set(addressBytes(to), 32);
-  w.chain.put(theirs, { ...account, data: moved });
-  return theirs;
-}
-
-/** What `signature` left in the log, as the chain recorded it. */
-const logged = (landed, signature) => {
-  const tx = landed.find(r => r.id === signature);
-  assert.ok(tx, `no landed transaction ${signature}`);
-  return tx;
-};
 
 /** The hold closed on the proof: its account gone, an `NftGone` for it by `by`, and no receipt saying the NFT moved. */
 function closedGone(w, tx, record, asset, by) {

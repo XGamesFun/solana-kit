@@ -2473,8 +2473,9 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  *   { Pot: [run] }   the entry's places in the run, their part of what the round pays from, paid into the buyer's account;
  *   { Prize: [run] } their prize: tokens into the buyer's account, or each place's prize (`prize`: { stash, the lottery's
  *                    own stash decoded, for NFTs not taken out yet (`stashNfts`); stashes, a project stash's id to its
- *                    decoded stash; nfts, an NFT's kind by its asset; hold, NFTs made holds; most, the most places a
- *                    pull carries; and what `prizeMetas` takes: collection, poolMints, items, projectMint }), a roll's
+ *                    decoded stash; nfts, an NFT's kind by its asset; hold, NFTs made holds (true for all, or a list
+ *                    of assets); most, the most places a pull carries; and what `prizeMetas` takes: collection,
+ *                    poolMints, items, projectMint }), a roll's
  *                    order at `prizeRollNonce(nonce + place)` (ask it in the same transaction: `pullRolls`);
  *   { Common: [i] }  a part owed in common: share `i`, what the places leave (`i` = the shares' count: to the pot, or
  *                    to `rest` for a round paid from its own money; never owed when that burns), a pool's prize back after a
@@ -2491,7 +2492,10 @@ const treasuryAccounts = (treasury, mint, programs) => walletAccounts(treasury, 
  * `prizeRollNonce(nonce + place)`, so a later pull with another nonce can land on an order an earlier pull made and fail
  * ("already in use"). js/play names `prizeNonce(round, entry)` for every pull of an entry, whoever sends it.
  * An NFT ticket proven gone from the project (`ticket`, as `piece` takes it) goes nowhere: its part settles and
- * nothing moves (`LotteryPulled` with amount 0 beside `NftGone`).
+ * nothing moves (`LotteryPulled` with amount 0 beside `NftGone`). That is read only where the ticket's price sends it
+ * on (burned, given, stashed). A ticket going back to its buyer (a cancelled round, a lottery that returns its tickets)
+ * and a place's NFT are only handed out: one that is gone is passed as its hold (`hold`, `prize.hold`), and that hold
+ * then closes on the proof (`releaseIx`, in the same transaction when it fits).
  */
 export function pullIx({
   payer,
@@ -2575,7 +2579,7 @@ export function pullIx({
       : 0;
     if (own) rest.push(meta(pda.lotteryStash(r.lottery), false, true));
     const handed = asset =>
-      prize.hold
+      holds(prize.hold, asset)
         ? [meta(pda.hold(asset, 0), false, true)]
         : (() => {
             const p = piece({ project, asset, wallet: e.buyer, ...(prize.nfts?.[asset] ?? {}), ...ONLY_MOVES });
