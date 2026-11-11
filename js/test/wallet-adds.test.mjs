@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { freshKeypair, verifySignature } from '../approve/ed25519.mjs';
 import { createApproval } from '../approve/server.mjs';
 import { walletAdded } from '../approve/wallet-adds.mjs';
-import { encodeBase58 } from '../chain/base58.js';
+import { decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { COMPUTE_BUDGET_PROGRAM, LIGHTHOUSE_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit, computeUnitPrice, requestHeapFrame, transferLamports } from '../chain/programs.js';
@@ -66,7 +66,7 @@ describe('what a wallet may add to a transaction', () => {
     assert.match(r.why, pattern);
   };
 
-  test('its own checks, wherever it puts them, and a compute budget the transaction does not set', () => {
+  test('instructions of the Lighthouse program, wherever it puts them, and a heap size', () => {
     const stranger = address();
     for (const [what, instructions] of Object.entries({
       'a check after': [...prepared, check()],
@@ -83,23 +83,19 @@ describe('what a wallet may add to a transaction', () => {
     })) {
       const r = judged(instructions);
       assert.equal(r.ok, true, `${what}: ${r.why}`);
-      assert.match(r.added.join(', '), /^\d checks? of its own \(the Lighthouse program’s\)$/, what);
+      assert.match(r.added.join(', '), /^\d instructions? of the Lighthouse program \(a wallet’s own checks\)$/, what);
     }
     assert.deepEqual(judged([...prepared, check(), check(), check()]).added, [
-      '3 checks of its own (the Lighthouse program’s)',
+      '3 instructions of the Lighthouse program (a wallet’s own checks)',
     ]);
     assert.deepEqual(judged([requestHeapFrame(64 * 1024), ...prepared, check()]).added, [
       'a heap size',
-      '1 check of its own (the Lighthouse program’s)',
+      '1 instruction of the Lighthouse program (a wallet’s own checks)',
     ]);
-    // A transaction that sets no price of its own may be given one (this package's own setups always set one).
-    const bare = message(prepared.slice(2));
-    const priced = walletAdded(
-      bare,
-      message([computeUnitLimit(200_000), computeUnitPrice(5000n), ...prepared.slice(2)]),
-      wallet,
-    );
-    assert.deepEqual(priced.added, ['a compute unit limit', 'a compute unit price (a priority fee of its own)']);
+    // The Lighthouse program is one address, to the last letter.
+    const near = encodeBase58(decodeBase58(LIGHTHOUSE_PROGRAM).map((x, i) => (i === 31 ? x ^ 1 : x)));
+    assert.notEqual(near, LIGHTHOUSE_PROGRAM);
+    refused([...prepared, { ...check(), programId: near }], new RegExp(`added an instruction of the program ${near}`));
   });
 
   test('never another program’s instruction: a payment out of the wallet above all', () => {
@@ -174,6 +170,42 @@ describe('what a wallet may add to a transaction', () => {
     );
   });
 
+  test('never a fee of its own: no unit limit or price, on a transaction that sets one or on one that does not', () => {
+    // A transaction that sets no price of its own is not given one either: its fee is the one it was shown with.
+    const bare = message(prepared.slice(2));
+    const priced = extra => walletAdded(bare, message([...extra, ...prepared.slice(2)]), wallet);
+    assert.match(
+      priced([computeUnitPrice(18_446_744_073_709_551_615n)]).why,
+      /added a compute unit price.*the fee of a transaction prepared here is the one it was shown with/,
+    );
+    assert.match(
+      priced([computeUnitLimit(200_000)]).why,
+      /added a compute unit limit: the fee of a transaction prepared here/,
+    );
+    assert.equal(priced([requestHeapFrame(64 * 1024), check()]).ok, true);
+    // A compute budget instruction names no account: one that does is something else.
+    const heap = requestHeapFrame(64 * 1024);
+    refused(
+      [{ ...heap, keys: [{ pubkey: mint, isSigner: false, isWritable: false }] }, ...prepared],
+      /a compute budget instruction that names accounts/,
+    );
+  });
+
+  test('never the upgradeable loader: with it named, a program’s own account could be written', () => {
+    const LOADER = 'BPFLoaderUpgradeab1e11111111111111111111111';
+    refused(
+      [...prepared, check({ reads: [LOADER] })],
+      /named the upgradeable loader, which the prepared transaction does not/,
+    );
+    refused([...prepared, check({ writes: [LOADER] })], /named the upgradeable loader/);
+    // (a prepared transaction that names it itself may have a check added)
+    const upgrade = [
+      ...prepared,
+      { programId: program, keys: [{ pubkey: LOADER, isSigner: false, isWritable: false }], data: Uint8Array.of(2) },
+    ];
+    assert.equal(walletAdded(message(upgrade), message([...upgrade, check()]), wallet).ok, true);
+  });
+
   test('never a second limit or price: the network refuses a transaction that sets one twice', () => {
     refused(
       [computeUnitPrice(50_000n), ...prepared],
@@ -227,7 +259,15 @@ describe('what a wallet may add to a transaction', () => {
     // Not a transaction at all, or cut short.
     assert.match(walletAdded(ours, new Uint8Array(3), wallet).why, /not a transaction/);
     assert.match(walletAdded(ours, message([...prepared, check()]).slice(0, -3), wallet).why, /not a transaction/);
-    assert.equal(walletAdded(new Uint8Array(3), message([...prepared, check()]), wallet).ok, false);
+    // A prepared message this can't lay out (never this package's own) is one a wallet may not change.
+    assert.match(
+      walletAdded(new Uint8Array(3), message([...prepared, check()]), wallet).why,
+      /changed a transaction that can only be sent as it was prepared/,
+    );
+    assert.match(
+      walletAdded(message(prepared, { version: 0, lookupTables: [] }), message([...prepared, check()]), wallet).why,
+      /can only be sent as it was prepared/,
+    );
   });
 
   test('an account named twice, or a header that does not add up, is not compared at all', () => {
@@ -244,7 +284,16 @@ describe('what a wallet may add to a transaction', () => {
       bent.set(header, 0);
       const r = walletAdded(ours, bent, wallet);
       assert.equal(r.ok, false, header.join());
+      assert.match(r.why, /returned a transaction whose header does not add up/, header.join());
     }
+    // An instruction that names an account past the end of the list (the check's one account, by its number).
+    const reading = message([...prepared, check({ reads: [address()] })]);
+    const past = reading.slice();
+    const lastIndex = readMessage(reading).keys.length - 1;
+    // (the check is the last instruction: its bytes end … program, 1 account, that account's number, 2 data bytes)
+    assert.equal(past[past.length - 4], lastIndex);
+    past[past.length - 4] = 200;
+    assert.match(walletAdded(ours, past, wallet).why, /names an account it does not list/);
     // The same address twice in the list of accounts (the second in place of the last account).
     const twice = added.slice();
     const first = 4; // header (3) and the count of accounts (1)
@@ -278,6 +327,8 @@ describe('the approval, with a wallet that adds its own checks', () => {
     const wallet = {
       address: key.address,
       changed: 0,
+      /** Its signature of a message as it was prepared (what a wallet that changed nothing would give). */
+      signPrepared: message => key.sign(message),
       signAll: wires =>
         wires.map(b64 => {
           let { message, signatures, signers } = readTransaction(fromBase64(b64));
@@ -362,7 +413,7 @@ describe('the approval, with a wallet that adds its own checks', () => {
       assert.equal(state.walletAdded.length, wallet.changed);
       assert.match(
         state.walletAdded[0],
-        /^Transaction \d+ of this batch: your wallet added 1 check of its own \(the Lighthouse program’s\)\.$/,
+        /^Transaction \d+ of its batch: your wallet added 1 instruction of the Lighthouse program \(a wallet’s own checks\)\.$/,
       );
 
       // A change to the live economy: one transaction, the wallet its one signer.
@@ -376,6 +427,61 @@ describe('the approval, with a wallet that adds its own checks', () => {
       await change.complete(wallet.address, batch.id, wallet.signAll(batch.transactions));
       assert.equal(wallet.changed, before + 1);
       assert.ok(saved().live.published.pools.some(p => p.key === 'bonus'));
+    },
+  );
+
+  test(
+    'a changed transaction is sent only under the wallet’s own signature of it',
+    { skip: skip ?? false },
+    async () => {
+      const wallet = addingWallet();
+      const key = freshKeypair();
+      for (const [what, forge] of Object.entries({
+        'no signature': () => new Uint8Array(64),
+        'another key’s signature of it': message => key.sign(message),
+        // (the wallet did sign something: the transaction as it was prepared, not the one that came back)
+        'the wallet’s signature of the prepared transaction': (_message, prepared) => wallet.signPrepared(prepared),
+      })) {
+        const { sent, session, saved } = setup(example('coin-flip-arena'), wallet);
+        const s = await session();
+        const batch = await s.prepare(wallet.address);
+        const signed = wallet.signAll(batch.transactions).map((b64, i) => {
+          const t = readTransaction(fromBase64(b64));
+          const was = readTransaction(fromBase64(batch.transactions[i]));
+          if (t.signers.length !== 1) return b64;
+          return toBase64(wireTransaction(t.message, [forge(t.message, was.message)]));
+        });
+        await assert.rejects(s.complete(wallet.address, batch.id, signed), e => {
+          assert.equal(e.status, 400, what);
+          assert.match(e.message, /The wallet’s signature is missing or does not match your wallet/, what);
+          return true;
+        });
+        assert.equal(sent.length, 0, what);
+        assert.equal(saved().live, undefined, what);
+      }
+    },
+  );
+
+  test(
+    'what the wallet added is said of a transaction that landed, never of one that did not',
+    { skip: skip ?? false },
+    async () => {
+      // Its check on the third transaction it changes fails on chain (the stand-in program refuses words that are
+      // not text): the two before it landed, and only those are spoken of.
+      let n = 0;
+      const wallet = addingWallet(instructions => [
+        ...instructions,
+        check({ data: ++n === 3 ? [0xff, 0xfe] : [...Buffer.from('ok')] }),
+      ]);
+      const { session, saved } = setup(example('coin-flip-arena'), wallet);
+      const s = await session();
+      const batch = await s.prepare(wallet.address);
+      await assert.rejects(s.complete(wallet.address, batch.id, wallet.signAll(batch.transactions)));
+      assert.ok(n >= 3, `the wallet changed ${n} transactions of the batch`);
+      const state = s.state();
+      assert.equal(state.walletAdded.length, 2);
+      assert.equal(saved().live.partial, true);
+      assert.equal(state.signatures.length, 3, 'the first, and the two changed ones before the one that failed');
     },
   );
 

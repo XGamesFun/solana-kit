@@ -54,9 +54,11 @@ already has, and never print a key or send one off the machine. Going live is si
 a key file `xsolana keygen` makes for the project; or, when they ask for it, in their browser wallet on a page served
 on 127.0.0.1 (`--browser`). The page sends a transaction as it prepared and showed it, or as the wallet signed it when
 the wallet added only its own to a transaction it alone signs: instructions of the Lighthouse program (a wallet's own
-checks, which Phantom adds) or a compute budget the transaction does not set. Everything prepared must be in it
-untouched, in order, with no account of it made writable or a signer that was not, and nothing of any other program
-may ride with it (`js/approve/wallet-adds.mjs`); anything else is refused and nothing is sent. The key file is read
+checks, which Phantom adds), or a heap size. Everything prepared must be in it untouched, in order, with no account of
+it made writable or a signer that was not; nothing of any other program may ride with it, and no fee of the wallet's
+own (`js/approve/wallet-adds.mjs`). Anything else is refused and nothing is sent. What an instruction of the
+Lighthouse program does is that program's to say: this package takes it as the wallet's own, as the wallet's user
+already does. The key file is read
 only through the tools: `xsolana approve --keypair`, and
 `readKeyFile` in a script for what the authority signs later. `approve --keypair` first prints everything it would
 send and sends nothing; it sends only when run again with the code of that printout. An agent is told to do that only

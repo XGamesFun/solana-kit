@@ -62,8 +62,16 @@ export function approvalPage(token) {
   let last = null;
   // The legal lines the box was last shown with.
   let legalShown = new Set();
+  // How many of the lines about what the wallet added have been said on this page.
+  let addedSaid = 0;
   function render(state) {
     last = state;
+    // What the wallet added to transactions that landed (its own checks): they were sent as it signed them. Said
+    // whenever a state arrives, so one that landed in a batch that then stopped is said too.
+    const addedLines = state.walletAdded ?? [];
+    for (const line of addedLines.slice(addedSaid))
+      log(`${line} It was sent as your wallet signed it: everything listed here is in it, untouched.`);
+    addedSaid = Math.max(addedSaid, addedLines.length);
     // A token's name the spec changes and the chain can't take (`unwritten`): said whether or not anything else was
     // sent. With nothing else to send, the page never calls that a landing.
     const unwritten = state.unwritten ?? [];
@@ -241,11 +249,7 @@ export function approvalPage(token) {
       const outputs = await sign.signTransaction(...inputs);
       const signed = outputs.map(o => toBase64(o.signedTransaction));
       $('status').textContent = 'Sending and confirming…';
-      const before = last?.walletAdded?.length ?? 0;
       const state = await api('/api/complete', { wallet: signer.address, id: batch.id, transactions: signed });
-      // What the wallet added to what it signed (its own checks, a compute budget): sent as it signed them.
-      for (const line of (state.walletAdded ?? []).slice(before))
-        log(`${line} It was sent as your wallet signed it: everything listed above is in it, untouched.`);
       log(`Landed: ${state.signatures.slice(-batch.transactions.length).join(', ')}`, 'ok');
       busy = false;
       render(state);

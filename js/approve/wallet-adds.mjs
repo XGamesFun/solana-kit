@@ -18,8 +18,10 @@
 // - Every account a prepared instruction names (its program too) is a signer or writable in the wallet's message
 //   exactly as it was in the prepared one. Whether an account can be written is the message's word, not one
 //   instruction's: an added instruction that asks to write an account of ours would make it writable for ours too.
-// - Every other instruction is the Lighthouse program's, or a Compute Budget instruction of a kind the prepared
-//   transaction does not set itself (the network refuses a transaction that sets its unit limit or price twice).
+// - Every other instruction is the Lighthouse program's, or a Compute Budget instruction that asks for a heap size
+//   or a limit on loaded data the prepared transaction does not set. Never a unit limit or a unit price: the fee of a
+//   prepared transaction is the one it was shown with.
+// - Nothing added names the loader of upgradeable programs, which would let a program's own account be written.
 import { equalBytes } from '../chain/bytes.js';
 import { COMPUTE_BUDGET_PROGRAM, LIGHTHOUSE_PROGRAM } from '../chain/pda.js';
 import { readMessage } from '../chain/tx.js';
@@ -31,6 +33,11 @@ const BUDGET_ASKS = {
   3: 'a compute unit price (a priority fee of its own)',
   4: 'a limit on the account data loaded',
 };
+
+/** The kinds that set a transaction's fee: its unit limit and its unit price. */
+const FEE_KINDS = new Set([2, 3]);
+/** The loader of upgradeable programs: named anywhere in a transaction, it lets a program's own account be written. */
+const UPGRADEABLE_LOADER = 'BPFLoaderUpgradeab1e11111111111111111111111';
 
 /** A refusal of a wallet's message: `why`, in words that go after "it …". */
 class Refused extends Error {}
@@ -130,29 +137,41 @@ export function walletAdded(ours, theirs, wallet) {
         );
     }
 
-    // What it added is a wallet's own: Lighthouse's checks, or a compute budget the transaction did not set.
-    const budget = list =>
-      list.filter(ix => ix.program === COMPUTE_BUDGET_PROGRAM).map(ix => (ix.data.length ? ix.data[0] : -1));
-    const set = new Set(budget(a.instructions));
+    // The network lets a program's own account be written only in a transaction that names the upgradeable loader:
+    // without it, an account that is called as a program is read-only whatever the message says. So the loader, named
+    // by anything added, would change what a prepared instruction can write. It is never the wallet's to add.
+    if (b.flags.has(UPGRADEABLE_LOADER) && !a.flags.has(UPGRADEABLE_LOADER))
+      throw new Refused('named the upgradeable loader, which the prepared transaction does not');
+
+    // What it added is a wallet's own: instructions of the Lighthouse program, or a heap size or a limit on loaded
+    // data the transaction did not set. Never a unit limit or a unit price: a prepared transaction's fee is its own
+    // (this package's setups set both), and a wallet's price on top of it is not taken.
+    const set = new Set(
+      a.instructions.filter(ix => ix.program === COMPUTE_BUDGET_PROGRAM).map(ix => (ix.data.length ? ix.data[0] : -1)),
+    );
     const words = [];
-    let checks = 0;
+    let own = 0;
     for (const ix of added) {
       if (ix.program === LIGHTHOUSE_PROGRAM) {
-        checks++;
+        own++;
         continue;
       }
       if (ix.program !== COMPUTE_BUDGET_PROGRAM) throw new Refused(`added an instruction of the program ${ix.program}`);
       const kind = ix.data.length ? ix.data[0] : -1;
       const what = BUDGET_ASKS[kind];
       if (!what) throw new Refused('added a compute budget instruction of a kind not known here');
+      if (ix.accounts.length)
+        throw new Refused('added a compute budget instruction that names accounts, which none does');
       if (set.has(kind))
         throw new Refused(
           `added ${what.replace(/^a /, 'a second ')}: the transaction sets its own, and the network refuses one that sets it twice`,
         );
+      if (FEE_KINDS.has(kind))
+        throw new Refused(`added ${what}: the fee of a transaction prepared here is the one it was shown with`);
       set.add(kind);
       words.push(what);
     }
-    if (checks) words.push(`${checks} check${checks === 1 ? '' : 's'} of its own (the Lighthouse program’s)`);
+    if (own) words.push(`${own} instruction${own === 1 ? '' : 's'} of the Lighthouse program (a wallet’s own checks)`);
     return { ok: true, added: words };
   } catch (e) {
     if (!(e instanceof Refused)) throw e;

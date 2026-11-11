@@ -604,7 +604,6 @@ export async function createApproval({
     if (batch.generation !== generation)
       throw new ApproveError(409, 'Something landed after that batch was built: ask for the next one.');
     const { wires, added } = checkSigned(batch.wires, signed, wallet);
-    walletAdds.push(...added);
     busy = true;
     try {
       for (const [i, wire] of wires.entries()) {
@@ -661,6 +660,8 @@ export async function createApproval({
           }
         }
         signatures.push(signature);
+        // (what the wallet added to it is said once it has landed, never of one that did not)
+        if (added[i]) walletAdds.push(added[i]);
         await landed(sent, batch.ctx, signature, { more: i < wires.length - 1 });
       }
     } finally {
@@ -939,13 +940,13 @@ const sameText = (a, b) => {
  * The wallet's signed copies, as they are sent: { wires, added }. Each is the exact prepared message with the wallet's
  * valid signature, or, from a wallet that adds to what it signs, the wallet's own message with its signature, taken
  * only when everything prepared is in it untouched and what it added is a wallet's own (`walletAdded`,
- * js/approve/wallet-adds.mjs: its compute budget, its Lighthouse checks). `added`: what was added, in words, for each
- * transaction that had something added. Anything else is refused, and nothing is sent.
+ * js/approve/wallet-adds.mjs: instructions of the Lighthouse program, a heap size). `added`: for each transaction, what
+ * was added to it in words, or null. Anything else is refused, and nothing is sent.
  */
 function checkSigned(prepared, signed, wallet) {
   if (!Array.isArray(signed) || signed.length !== prepared.length)
     throw new ApproveError(400, 'The wallet’s answer does not match the request.');
-  const added = [];
+  const added = prepared.map(() => null);
   const wires = prepared.map((wire, i) => {
     let mine;
     let theirs;
@@ -960,13 +961,13 @@ function checkSigned(prepared, signed, wallet) {
       if (!taken.ok)
         throw new ApproveError(
           400,
-          `The wallet changed the transaction before signing it (it ${taken.why}), so nothing was sent. A wallet may add its own checks (the Lighthouse program’s) or a compute budget to a transaction it alone signs; everything that was prepared and shown here must be in it untouched, and nothing else may be. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
+          `The wallet changed the transaction before signing it (it ${taken.why}), so nothing was sent. A wallet may add its own checks (instructions of the Lighthouse program) to a transaction it alone signs; everything that was prepared and shown here must be in it untouched, and nothing else may be. (A setup that has not started can be signed by a key file instead: xsolana approve --keypair. One that has started is finished by the key that started it.)`,
         );
       // The wallet's own message, with the wallet's own signature: it is the transaction's one signer.
       const signature = theirs.signatures[0];
       if (theirs.signers[0] !== wallet || !verifySignature(wallet, theirs.message, signature))
         throw new ApproveError(400, 'The wallet’s signature is missing or does not match your wallet.');
-      added.push(`Transaction ${i + 1} of this batch: your wallet added ${taken.added.join(', ')}.`);
+      added[i] = `Transaction ${i + 1} of its batch: your wallet added ${taken.added.join(', ')}.`;
       return wireTransaction(theirs.message, [signature]);
     }
     const slot = mine.signers.indexOf(wallet);
