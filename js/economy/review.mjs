@@ -24,6 +24,7 @@ import {
   toSeconds,
 } from './model.mjs';
 import { TRUST_LEVELS, TRUST_WORDS } from './trust.mjs';
+import { walkThrough } from './walk.mjs';
 
 /** Severities, most serious first. */
 export const SEVERITIES = Object.freeze(['high', 'medium', 'low', 'info']);
@@ -710,6 +711,12 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ['W-LOTTERY-WEIGHT', 'R-LOTTERY-WEIGHT', 'info'],
     ['W-ZERO', 'R-ZERO', 'low'],
     ['W-ANSWER', 'R-ANSWER', 'low'],
+    ['W-REFUND-NOT-PAID', 'R-REFUND-NOT-PAID', 'medium'],
+    ['W-SWAP-BACK-OPEN', 'R-SWAP-BACK-OPEN', 'medium'],
+    ['W-FREE-IS-PAID', 'R-FREE-IS-PAID', 'medium'],
+    ['W-MINSOLD-VS-SCENARIO', 'R-MINSOLD-VS-SCENARIO', 'medium'],
+    ['W-AFTER-THE-END', 'R-AFTER-THE-END', 'low'],
+    ['W-TWO-PROMPTS', 'R-TWO-PROMPTS', 'low'],
   ])
     for (const w of warned(code)) find(id, severity, routeOf(w.where), w.message, w.fix);
 
@@ -718,7 +725,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ok: !findings.some(f => f.severity === 'high'),
     routes,
     findings,
-    tradeoffs: tradeoffs(routes, findings),
+    tradeoffs: [tradeoffs(routes, findings), walkThrough(m, { now }).join('\n')].filter(Boolean).join('\n\n'),
   };
 }
 

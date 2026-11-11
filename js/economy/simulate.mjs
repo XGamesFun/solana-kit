@@ -52,7 +52,7 @@ import {
 } from './model.mjs';
 
 const DAY = 86_400;
-const DEFAULT_PER_DAY = 100;
+export const DEFAULT_PER_DAY = 100;
 /** How many wallets the simulation's crowd is, next to one: what a person with many wallets could take from a grant. */
 const MANY_WALLETS = 100;
 /** Bids a day on an auction the scenario doesn't name (`auction:<key>`); a grant it doesn't name is claimed by nobody. */

@@ -11,9 +11,9 @@ signed by a key file on the owner's own machine, once they have read what will b
 **devnet**, where nothing is real money, and on **mainnet**, where everything is: an economy is on devnet unless its
 file says `"network": "mainnet"`.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.7 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.28.7 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.28.7 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.8 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.28.8 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.28.8 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -56,22 +56,24 @@ or `npx -y @xgamesfun/solana@0.28.7 tool <name> '<json>'` for any tool (always w
 7. **Take addresses from the tools, never from memory**: the program, its accounts, the IDL. Every answer names them.
 8. **Public data only in a spec**: names, prices, percents, public addresses. Leave out `id`, `index`, `shopBox`,
    and `live`: they are written when it goes live.
-9. **Compose before you say no.** Most ideas are several parts working together, not one part. Before calling
-   anything a limit, break the idea into its pieces (what players pay, what they get, what is random, what the chain
-   can't see, what is held and for how long, who is paid) and find the part for each (`references/sentence-to-spec.md`).
-   What the chain can't see (a match, a score, something done offline) is vouched for by a signer: a results server's voucher, a
-   decider's key, a list. The signer is not the end of the story: the program checks its signature and limits, never
-   what happened, so a signed result is worth what that server checks (it decides the result, replays it, or only
-   bounds what the page reports: rule 12). Build the combination and say which part does which piece. When the tools' words and the
-   checker disagree (a field the schema takes that a sentence somewhere calls impossible), the checker and
-   `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`.
-   A piece is a limit only when no part or combination does it. Then:
-   - say in one line what is missing and why;
-   - offer the nearest versions (`xsolana_examples` with the words of that piece returns them), best first, each with
-     what it gives up and its "in all" cost; recommend one, and build it;
-   - if they push back, offer the next version or a change that brings back what they miss (a price, a bundle, a
-     second step). Don't withdraw a draft that checks, and don't send them elsewhere while a version on loot is on the
-     table.
+9. **Challenge before you build.** For every request, name the simplest version that delivers most of it. Say what
+   it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act
+   later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it.
+   Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_explain` ends with each route's
+   states (before it opens, while it runs, cancelled or failed, won, after it ends, a change of mind) as a player, the
+   owner and a cheater see them, and what can change only before a first sale or claim; the checker's warnings name
+   the traps a game already fell into. Read both before you answer.
+   Composing parts is still how you find the versions. Most ideas are several parts working together: break the idea
+   into its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for
+   how long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a
+   match, a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a
+   list. The program checks the signer's signature and limits, never what happened, so a signed result is worth what
+   that server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the
+   tools' words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the
+   checker and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when
+   no part or combination does it: say in one line what is missing and why, and offer the nearest versions
+   (`xsolana_examples` with the words of that piece returns them), best first, each with what it gives up and its "in
+   all" cost.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
     (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the
@@ -141,7 +143,7 @@ or `npx -y @xgamesfun/solana@0.28.7 tool <name> '<json>'` for any tool (always w
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
    - **A new economy gets a key file**, unless the project has one:
-     `npx -y @xgamesfun/solana@0.28.7 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     `npx -y @xgamesfun/solana@0.28.8 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
      Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
      looking for one.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
@@ -156,7 +158,7 @@ or `npx -y @xgamesfun/solana@0.28.7 tool <name> '<json>'` for any tool (always w
      devnet SOL for an economy on devnet, real SOL for one on mainnet), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
      collection they already have needs the key's address as its update authority. If they would rather not move
      those, offer the browser wallet.
-   - **Show it**: `npx -y @xgamesfun/solana@0.28.7 approve xsolana.json --keypair <key file>` prints every step with
+   - **Show it**: `npx -y @xgamesfun/solana@0.28.8 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it

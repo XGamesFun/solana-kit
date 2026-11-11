@@ -62,6 +62,7 @@ import {
 } from './model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
 import { boxArgs, boxOrderBytes, placeholderContext, recipeArgs, setupSteps, stepAloneBytes } from './plan.mjs';
+import { challenge } from './challenge.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
@@ -5822,6 +5823,10 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       );
     }
   }
+
+  // ---- traps the program takes as written: a ticket token bought with another token, a way back left open, a free
+  // grant worth a paid one, a least sale the scenario never reaches, two wallet prompts a buy, a token after its end
+  if (!refusals.length) challenge(m, warn, now);
 
   // ---- pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
   // but pays out faster drains, and then skips or fails what it owes.
