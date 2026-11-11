@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
-import { checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
+import { alreadyProcessed, checkCluster, notMainnet, rpcClient } from '../chain/rpc.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
 import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
@@ -244,9 +244,16 @@ export async function createApproval({
       return trusted;
     } catch (e) {
       if (!(e instanceof LiveMismatch)) throw e;
-      throw new ApproveError(
-        409,
-        `${e.message} Nothing was sent. If another key owns this project, sign with that key (its key file, or \`approve --browser\` when a browser wallet owns it): the file is right as it is, and a new key can change nothing. Otherwise ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.`,
+      // Another key's project: the owner with the wrong key, or a file that came with someone else's live section
+      // (the two look the same from here). Anything else: the file is not what the chain says.
+      throw Object.assign(
+        new ApproveError(
+          409,
+          e.notOwner
+            ? `${e.message} Nothing was sent. If the project is yours, sign with the key that owns it (its key file, or \`approve --browser\` when a browser wallet owns it): ${path.basename(file)} needs no change, and a new key can change nothing. If it is not yours (the file came from someone else with their live section in it), that section is theirs: only then is it removed, to set up a project of your own.`
+            : `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. (Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.)`,
+        ),
+        { notOwner: Boolean(e.notOwner) },
       );
     }
   }
@@ -479,7 +486,12 @@ export async function createApproval({
     } catch (e) {
       if (!(e instanceof ApproveError)) throw e;
       const v = view(p0, namesOf(model(spec, { now: at }), { now: at, owner: wallet }), { refused: e.message });
-      return { ...v, remaining: p0.ok ? p0.transactions.length : 0, done: false };
+      return {
+        ...v,
+        ...(e.notOwner ? { notOwner: true } : {}),
+        remaining: p0.ok ? p0.transactions.length : 0,
+        done: false,
+      };
     }
     if (!p0.ok || !p0.transactions.length)
       return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
@@ -604,9 +616,23 @@ export async function createApproval({
         try {
           await chain.send(wire);
         } catch (e) {
-          // The node answered and refused it: it was never taken, so it can never land.
-          if (e.code !== undefined || !chain.signatureStatus) await forget(signature);
-          throw e;
+          // A refusal alone does not say it was never taken: when the answer to a first send is lost, the same
+          // transaction sent again is refused as already processed, and it has landed. So the chain is asked before
+          // the signature is forgotten. Only one the chain has not seen and the node refused for another reason can
+          // never land; one whose fate can't be read is kept, and looked up before anything is sent again.
+          let status = null;
+          let read = Boolean(chain.signatureStatus);
+          if (read)
+            try {
+              status = await chain.signatureStatus(signature);
+            } catch {
+              read = false;
+            }
+          const taken = landedStatus(status) || (!status?.err && (Boolean(status) || alreadyProcessed(e)));
+          if (!taken) {
+            if (!chain.signatureStatus || status?.err || (read && e.code !== undefined)) await forget(signature);
+            throw e;
+          }
         }
         try {
           await chain.confirm(signature, { lastValidBlockHeight: batch.lastValidBlockHeight });
@@ -640,6 +666,8 @@ export async function createApproval({
       project: b.ctx.project,
       transactions: b.wires.map(toBase64),
       says: b.batch.map(t => t.steps.map(s => s.says).join('; ')),
+      // each transaction's steps, by id and in words: what a signer that showed the steps first holds them against
+      steps: b.batch.map(t => t.steps.map(s => ({ id: s.id, says: s.says }))),
       details: b.details,
     };
   }

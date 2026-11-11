@@ -48,23 +48,26 @@ function signWire(key, b64) {
   return toBase64(wireTransaction(t.message, signatures));
 }
 
+/** A time as the steps' lines write one ("2026-11-11T08:34:11Z"). */
+const WRITTEN_TIME = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g;
+
 /**
- * The code that stands for one printout: the spec, the key, the project, every step still to send with what it pays
- * and trusts, and every line the person is to read first. Anything of that changing (an edit to the file, a step
- * landing, the chain saying something new of a token) gives another code, so a yes is never carried over to something
- * that was not shown. The addresses of the accounts the setup makes new are left out: they are new each time, and say
- * nothing a person can check.
+ * The code that stands for one printout: the whole file (the spec, and its live section with every address it gives
+ * the steps: the project, the mints, the collection), the key, every step still to send with what it pays and trusts,
+ * and every line the person is to read first. Anything of that changing (an edit to the file, a step landing, the
+ * chain saying something new of a token) gives another code, so a yes is never carried over to something that was
+ * not shown. Two things in the lines are left out, because they are new at each run and say nothing a person can
+ * check: the addresses of the accounts the setup makes new, and a time counted from "publish" (the file's own words
+ * for it, "publish+30d", are in the code).
  */
 export function approvalCode(state, spec) {
-  const { live: _, ...bare } = spec;
-  let text = JSON.stringify([
+  let shown = JSON.stringify([
     'xsolana approve',
     state.cluster,
     state.program,
     state.wallet,
     state.project,
     state.mode,
-    bare,
     state.steps.map(s => [s.id, s.says, s.signer, s.details ?? []]),
     state.warnings,
     state.legal.map(f => f.says),
@@ -72,8 +75,10 @@ export function approvalCode(state, spec) {
     state.read ?? null,
   ]);
   // (a new account's address is made anew for each printout: it is named by what it is)
-  for (const f of state.fresh ?? []) text = text.replaceAll(f.address, `<new ${f.name}>`);
-  return createHash('sha256').update(text).digest('hex').slice(0, 8);
+  for (const f of state.fresh ?? []) shown = shown.replaceAll(f.address, `<new ${f.name}>`);
+  shown = shown.replace(WRITTEN_TIME, '<a time>');
+  // The file as it is, live section and all: what the steps are built from, whether or not a line names it.
+  return createHash('sha256').update(JSON.stringify(spec)).update('\n').update(shown).digest('hex').slice(0, 8);
 }
 
 /** A new account of the setup in words: "mint/gold" is the mint of the token “gold”. */
@@ -151,9 +156,10 @@ export async function approveWithKey({
   out = line => console.log(line),
   now,
   keyReader = readKeyFile,
+  approval = createApproval,
 }) {
   const key = await keyReader(keyFile);
-  const session = await createApproval({ file: path.resolve(file), chain, ...(now ? { now } : {}) });
+  const session = await approval({ file: path.resolve(file), chain, ...(now ? { now } : {}) });
   // How many transactions this run saw land (its own, and any an earlier run sent that it found landed).
   const landed = () => session.state().signatures.length;
   const live = () => !session.spec.live?.partial && Boolean(session.spec.live);
@@ -162,9 +168,9 @@ export async function approveWithKey({
     if (state.refused) {
       out(`Nothing can be sent: ${state.refused}`);
       // (a key that is not the project's: said plainly, so nobody makes a new key or cuts the file to get past it)
-      if (session.spec.live?.project)
+      if (state.notOwner)
         out(
-          `This key file’s address is ${key.address}. A live project is signed only by the key that owns it; ${state.file} is not to be changed to get past this.`,
+          `This key file’s address is ${key.address}: it is not the project’s key. If the project is yours, find the key it went live with: don’t make a new one, and don’t change ${state.file} to get past this.`,
         );
       return { ok: false, sent: 0, done: false, code: null };
     }
@@ -226,10 +232,18 @@ export async function approveWithKey({
       return { ok: false, sent: 0, done: false, code };
     }
 
-    // Only what was shown is sent: a step that was not on the printout, or a line about a token the chain did not
-    // say then, stops it for another read.
-    const shown = new Set(state.steps.map(s => s.id));
+    // Only what was shown is sent. Each batch is held against the printout before the key signs it: every step it
+    // carries was on the printout, in the same words. After each batch, a step that was not on the printout, or a
+    // line about a token the chain did not say then, stops it for another read.
+    const shown = new Map(state.steps.map(s => [s.id, s.says]));
     const readShown = state.read ?? null;
+    const changed = () => {
+      const sent = landed();
+      out(
+        `${sent ? `Stopped after ${count(sent, 'transaction')}` : 'Nothing was sent'}: what is left to send is not what was shown above. Run the command again to read what is left, and go on from there.`,
+      );
+      return { ok: false, sent, done: false, code };
+    };
     for (let turn = 0; state.remaining && turn < 500; turn++) {
       let batch;
       try {
@@ -239,6 +253,7 @@ export async function approveWithKey({
           e.message += ' With key files: run this command again with that address’s key file (--keypair).';
         throw e;
       }
+      if (!batch.steps?.length || batch.steps.flat().some(step => shown.get(step.id) !== step.says)) return changed();
       for (const says of batch.says) out(`Sending: ${says}`);
       await session.complete(
         key.address,
@@ -247,12 +262,8 @@ export async function approveWithKey({
       );
       state = await session.stateFor(key.address);
       if (state.refused) throw new Error(state.refused);
-      if (state.steps.some(s => !shown.has(s.id)) || (state.remaining && (state.read ?? null) !== readShown)) {
-        out(
-          `Stopped after ${count(landed(), 'transaction')}: what is left to send is not what was shown above. Nothing more was sent. Run the command again to read what is left, and go on from there.`,
-        );
-        return { ok: false, sent: landed(), done: false, code };
-      }
+      if (state.steps.some(s => !shown.has(s.id)) || (state.remaining && (state.read ?? null) !== readShown))
+        return changed();
     }
     for (const line of state.unwritten ?? []) out(line);
     const sent = landed();
@@ -264,8 +275,16 @@ export async function approveWithKey({
     return { ok: live(), sent, done: live(), code };
   } catch (e) {
     const sent = landed();
+    // A transaction that was sent and is not known to have landed is still looked for: it is not "nothing sent".
+    const unknown = session.spec.live?.pending?.length ?? 0;
+    const so = [
+      sent ? `Stopped after ${count(sent, 'transaction')} landed` : unknown ? 'Stopped' : 'Nothing was sent',
+      unknown
+        ? ` (${count(unknown, 'more was', 'more were')} sent and ${unknown === 1 ? 'is' : 'are'} not known to have landed yet)`
+        : '',
+    ].join('');
     out(
-      `${sent ? `Stopped after ${count(sent, 'transaction')}` : 'Nothing was sent'}: ${e.message}${sent ? ` What landed is recorded in ${path.basename(file)}: run the command again to go on from where it stopped.` : ''}`,
+      `${so}: ${e.message}${sent || unknown ? ` What is known is recorded in ${path.basename(file)}: run the command again to go on from where it stopped; a transaction still looked for is found first, so nothing is sent twice.` : ''}`,
     );
     return { ok: false, sent, done: false, code: null };
   } finally {

@@ -2,6 +2,7 @@
 // (devnet: about 100 requests per 10 s per IP, 40 for any one method), so 429s are retried with backoff, and so are a
 // gateway's passing failures (502, 503, 504).
 import { fromBase64, toBase64 } from './bytes.js';
+import { transactionId } from './tx.js';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -71,6 +72,9 @@ export function programError(err, logs) {
   if (said) return code && code !== said ? `${said} (${code})` : said;
   return last ?? (typeof err === 'string' ? err : JSON.stringify(err));
 }
+
+/** Whether a send was refused because the cluster has this very transaction already (it was sent before). */
+export const alreadyProcessed = error => /already been processed|AlreadyProcessed/i.test(String(error?.message ?? ''));
 
 /** Whether a send's refusal is the dry run not knowing the transaction's blockhash. */
 const blockhashNotFound = error =>
@@ -222,10 +226,17 @@ export function rpcClient(url, { fetchImpl = globalThis.fetch, sleepImpl = sleep
       };
     },
     async send(wire) {
-      return call('sendTransaction', [
-        toBase64(wire),
-        { encoding: 'base64', preflightCommitment: 'confirmed', maxRetries: 3 },
-      ]);
+      try {
+        return await call('sendTransaction', [
+          toBase64(wire),
+          { encoding: 'base64', preflightCommitment: 'confirmed', maxRetries: 3 },
+        ]);
+      } catch (e) {
+        // A transaction the cluster has taken already is refused as already processed: that is what a second send
+        // gets when the answer to the first was lost on its way back. It was sent; its signature is its first.
+        if (alreadyProcessed(e)) return transactionId(wire);
+        throw e;
+      }
     },
     signatureStatus,
     /** Wait until a sent transaction is confirmed; throws with the program's reason when it failed. */

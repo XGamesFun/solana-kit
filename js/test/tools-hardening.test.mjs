@@ -198,9 +198,13 @@ describe('xsolana approve holds the file’s live section against the chain', ()
       const shown = await session.stateFor(victim.address);
       assert.match(
         shown.refused,
-        new RegExp(`belongs to the wallet ${attacker.address}, not to the connected wallet ${victim.address}`),
+        new RegExp(`belongs to ${attacker.address}, not to ${victim.address}, the address signing now`),
       );
-      await assert.rejects(session.prepare(victim.address), /belongs to the wallet/);
+      assert.match(
+        shown.refused,
+        /If it is not yours \(the file came from someone else with their live section in it\)/,
+      );
+      await assert.rejects(session.prepare(victim.address), /belongs to .*, not to .*, the address signing now/);
       assert.equal(w.chain.tokens(pool), before, 'the attacker’s pool got nothing');
     },
   );

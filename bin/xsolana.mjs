@@ -78,12 +78,16 @@ function parseArgs(rest) {
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (!a.startsWith('--') || a === '--') {
+    // (a bare -- is the shell's own end of flags, not a file's name)
+    if (a === '--') continue;
+    if (!a.startsWith('--')) {
       positional.push(a);
       continue;
     }
     const eq = a.indexOf('=');
     const name = eq > 0 ? a.slice(0, eq) : a;
+    if (VALUED.has(name) && flags.has(name)) throw new UsageError(`${name} is given twice: give it once.`);
+    if (eq > 0 && !VALUED.has(name)) throw new UsageError(`${name} takes no value: write it alone, or leave it out.`);
     flags.add(name);
     if (eq > 0) values.set(name, a.slice(eq + 1));
     else if (VALUED.has(name)) {
@@ -172,6 +176,10 @@ async function main(argv) {
       if (!positional[0])
         throw new UsageError(
           'xsolana keygen <file>: say where the key file goes, outside any repository (for example ~/.config/xsolana/my-game.json).',
+        );
+      if (positional.length > 1)
+        throw new UsageError(
+          'xsolana keygen <file> makes one key file: give one path (in quotes when it has a space).',
         );
       const { makeKeyFile } = await import('../js/approve/keyfile.mjs');
       const { PACKAGE_VERSION } = await import('../js/mcp/tools.mjs');

@@ -53,8 +53,11 @@ export async function checkLive({ live, m, wallet, chain }) {
         `The file names the project ${made.project}, which is not project number ${m.projectNumber} of its owner ${state.owner}.`,
       );
     if (state.owner !== wallet && state.authority !== wallet)
-      throw new LiveMismatch(
-        `The file names the project ${made.project}, which belongs to the wallet ${state.owner}, not to the connected wallet ${wallet}. Your own project number ${m.projectNumber} is at ${own}.`,
+      throw Object.assign(
+        new LiveMismatch(
+          `The file names the project ${made.project}, which belongs to ${state.owner}, not to ${wallet}, the address signing now. (That address’s own project number ${m.projectNumber} would be at ${own}.)`,
+        ),
+        { notOwner: true },
       );
     if (made.treasury && made.treasury !== state.treasury)
       throw new LiveMismatch(`The file says the treasury is ${made.treasury}; on chain it is ${state.treasury}.`);

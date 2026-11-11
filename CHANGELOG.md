@@ -24,11 +24,15 @@ it costs: the key is a plain file, so anything on the machine that can read it c
   prints everything the page shows before its Approve button: the key's address and balance, the project, each new
   account the setup makes, the notice and the legal flags, the warnings, what landed already, and every step with what
   it pays and trusts. It ends with a code and sends nothing. Run again with `--yes <code>`, it sends: the code stands
-  for exactly that printout (the spec, the key, the project, every step with what it pays and trusts, and every line
-  to read), so an edit to the file, a step landing or the chain saying something new of a token gives another code and
-  the old one is refused. It never stops to ask a question, in a terminal or out of one. A key that holds less than
-  a new setup takes sends nothing. A key that does not own a live project is refused, and told not to make a new key
-  or cut the file to get past it. A key file other users
+  for exactly that printout and the whole file it was made from (the spec, and its live section with every address it
+  gives the steps; the key; every step with what it pays and trusts; every line to read), so an edit to the file, a
+  step landing or the chain saying something new of a token gives another code and the old one is refused. Two things
+  are left out of it, being new at each run: the address of an account the setup makes new, and a time counted from
+  "publish". Before the key signs a batch, every step in it is held against the printout, word for word, and a step
+  that was not shown stops it. It never stops to ask a question, in a terminal or out of one. A key that holds less
+  than a new setup takes sends nothing. A key that does not own a live project is refused, and told not to make a new
+  key or change the file to get past it. A transaction sent and not known to have landed is said so, never called
+  "nothing sent". A key file other users
   of the machine can read, one inside a repository, or one that is not a whole key is refused, in words that quote
   none of it. While sending, a step that was not on the printout stops it for another read.
 - **`xsolana approve [file] --browser`** is the page, as before. **Plain `xsolana approve [file]` opens nothing now**:
@@ -72,10 +76,17 @@ the rest did not, and the setup stopped there.
 - **A send refused for a blockhash the node has not seen yet is sent again** (`js/chain/rpc.js`): a load-balanced RPC
   answers a send from a node a moment behind the one that gave the blockhash. One that is truly gone is refused the
   same way each time, and the last refusal is the answer.
+- **A transaction the cluster took, whose answer was lost, is not sent again** (0.26 and 0.27 could): when a send's
+  answer never came back, the client's own second try was refused as already processed, the approval took that for
+  "never taken" and forgot the transaction, and the next run made its steps again. A setup's seeds could be paid in
+  twice, and a step that makes an account could never finish ("already in use"). Now `rpc.send` answers such a
+  refusal with the transaction's own signature, and the approval asks the chain about a transaction before it forgets
+  it: only one the chain has not seen and the node refused for another reason is dropped.
 - **A sponsored step leads with a unit limit and a unit price of 0** (`js/play`): the player's wallet signs it before
   the sponsor does, with no signature on it yet, so such a wallet added its price and the sponsor's server, which pays
-  none by default, refused it; the step then went as the player's own, with a second prompt. Where the two
-  instructions do not fit, the step goes without them, as before.
+  none by default, refused it; the step then went as the player's own, with a second prompt. A step keeps the kind
+  of transaction it had: where the two instructions do not fit a legacy transaction, it goes without them, as
+  before.
 
 ### The evals
 

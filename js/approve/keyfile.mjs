@@ -6,7 +6,7 @@
 // way to sign, not its bytes.
 import { execFile } from 'node:child_process';
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
-import { chmod, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { encodeBase58 } from '../chain/base58.js';
@@ -59,13 +59,20 @@ async function gitFolderAbove(dir) {
   }
 }
 
+/** The environment git is asked in: the caller's, without its own git settings (GIT_DIR and the like), which would answer for another repository. */
+const gitEnv = () => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))),
+  LC_ALL: 'C',
+  LANGUAGE: 'C',
+});
+
 /** git run in `root`: { code, stderr }, `code` 0 when it succeeded, its exit code otherwise, 'ENOENT' with no git. */
 const git = (root, args, run = execFile) =>
   new Promise(resolve => {
     const done = (error, _stdout, stderr) =>
       resolve({ code: error ? (error.code ?? 1) : 0, stderr: String(stderr ?? '') });
     try {
-      run('git', ['-C', root, ...args], { timeout: 10_000, env: { ...process.env, LC_ALL: 'C', LANGUAGE: 'C' } }, done);
+      run('git', ['-C', root, ...args], { timeout: 10_000, env: gitEnv() }, done);
     } catch (e) {
       done(e);
     }
@@ -73,7 +80,9 @@ const git = (root, args, run = execFile) =>
 
 /**
  * What git says of `file` in the folder `root`, which holds a `.git`: 'ignored' (never committed), 'kept' (it would
- * be), 'none' (that `.git` is no repository: an empty folder of that name), or 'unknown' (git could not be asked).
+ * be), 'none' (that `.git` is no repository: an empty folder of that name), or 'unknown' (git could not be asked, or
+ * the `.git` is a file, a worktree's or a submodule's pointer, that git can't follow: a repository whose own folder
+ * is away for now).
  */
 async function gitSays(root, file, run) {
   const asked = await git(root, ['check-ignore', '-q', '--', file], run);
@@ -81,7 +90,12 @@ async function gitSays(root, file, run) {
   if (asked.code === 1) return 'kept';
   if (asked.code === 'ENOENT') return 'unknown';
   const repository = await git(root, ['rev-parse', '--git-dir'], run);
-  return repository.code !== 0 && /not a git repository/i.test(repository.stderr) ? 'none' : 'unknown';
+  if (repository.code === 0 || !/not a git repository/i.test(repository.stderr)) return 'unknown';
+  const pointer = await lstat(path.join(root, '.git')).then(
+    i => !i.isDirectory(),
+    () => false,
+  );
+  return pointer ? 'unknown' : 'none';
 }
 
 /** The nearest folder at or above `dir` that exists. */

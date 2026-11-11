@@ -806,16 +806,19 @@ export function solanaApp({
     // It leads with a compute unit limit (all a transaction can have) and a unit price of 0, the price a sponsor
     // pays unless its server says more: a wallet that adds its own priority fee only where a transaction sets none
     // (Phantom does, to one with no signature on it yet) is then handed one it signs as it stands, and the sponsor's
-    // server, which refuses a price it did not agree to, takes it. Where the two do not fit, it goes without them, as
-    // it did before.
+    // server, which refuses a price it did not agree to, takes it. A step keeps the kind of transaction it had: one
+    // that fits a legacy transaction stays one (without the two where they would not fit), and only a step that
+    // needed the project's lookup tables before goes as v0.
     const compile = (back = 0n) => {
       const list = [
         sponsorTopUp(sponsor.address, me, sponsorMax),
         ...instructions,
         ...(back > 0n ? [sponsorGiveBack(sponsor.address, me, back)] : []),
       ];
-      const fitting = instructions => compileFitting({ payer: sponsor.address, blockhash, instructions, tables });
-      return fitting(withComputeBudget(list, { units: SPONSORED_UNITS, microLamports: 0n })) ?? fitting(list);
+      const led = withComputeBudget(list, { units: SPONSORED_UNITS, microLamports: 0n });
+      const legacy = instructions => compileFitting({ payer: sponsor.address, blockhash, instructions });
+      const loaded = instructions => compileFitting({ payer: sponsor.address, blockhash, instructions, tables });
+      return legacy(led) ?? legacy(list) ?? loaded(led) ?? loaded(list);
     };
     const tried = compile();
     if (!tried) return null;

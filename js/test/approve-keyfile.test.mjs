@@ -18,6 +18,7 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { freshKeypair, verifySignature } from '../approve/ed25519.mjs';
+import { toBase64 } from '../chain/bytes.js';
 import { transferLamports } from '../chain/programs.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, makeKeyFile, readKeyFile } from '../approve/keyfile.mjs';
@@ -147,6 +148,26 @@ describe('a key file', () => {
       const open = path.join(repo, 'open');
       mkdirSync(path.join(open, '.git'), { recursive: true });
       await assert.rejects(makeKeyFile(path.join(open, 'owner.json')), /inside the git repository/);
+      // git is asked about the folder the key is in, whatever repository the caller's own environment names.
+      const elsewhere = folder();
+      execFileSync('git', ['init', '-q', elsewhere]);
+      writeFileSync(path.join(elsewhere, '.gitignore'), '*\n');
+      const env = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE };
+      process.env.GIT_DIR = path.join(elsewhere, '.git');
+      process.env.GIT_WORK_TREE = elsewhere;
+      try {
+        await assert.rejects(makeKeyFile(path.join(repo, 'env.json')), /inside the git repository/);
+      } finally {
+        for (const [name, value] of Object.entries(env))
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+      }
+      // A .git that is a file pointing at a repository that is not there (a worktree whose own repository is away)
+      // is not "no repository": nobody can say what it ignores.
+      const away = path.join(folder(), 'worktree');
+      mkdirSync(away);
+      writeFileSync(path.join(away, '.git'), `gitdir: ${path.join(away, 'gone', '.git', 'worktrees', 'w')}\n`);
+      await assert.rejects(makeKeyFile(path.join(away, 'owner.json')), /inside the git repository/);
     },
   );
 
@@ -277,6 +298,14 @@ describe('xsolana approve --keypair', () => {
       assert.equal(live.done, true);
       assert.ok(live.sent > 1);
       assert.equal(live.sent, sends());
+      // What it sent is what it showed: the same steps, in the same words and order, in as many transactions.
+      const sending = live.text
+        .split('\n')
+        .filter(l => l.startsWith('Sending: '))
+        .map(l => l.slice('Sending: '.length));
+      assert.equal(sending.join('; '), state.steps.map(s => s.says).join('; '));
+      assert.equal(sending.length, state.remaining);
+      assert.equal(live.sent, state.remaining);
       assert.match(live.text, /Live on devnet: \d+ transactions landed/);
       const file2 = saved();
       assert.ok(file2.live?.project && !file2.live.partial, 'live, and not partial');
@@ -346,7 +375,11 @@ describe('xsolana approve --keypair', () => {
       assert.equal(cut.ok, false);
       assert.equal(cut.done, false);
       assert.equal(cut.sent, 1);
-      assert.match(cut.text, /Stopped after 1 transaction: .*blockhash not found.*run the command again to go on/s);
+      assert.match(
+        cut.text,
+        /Stopped after 1 transaction landed: .*blockhash not found.*run the command again to go on from where it stopped/s,
+      );
+      assert.doesNotMatch(cut.text, /not known to have landed/);
       assert.equal(saved().live.partial, true);
       fails.on = false;
       // What was shown before is not what is left: the old code sends nothing.
@@ -419,12 +452,25 @@ describe('xsolana approve --keypair', () => {
     assert.equal(sends(), before);
     assert.match(refused.text, /^Nothing can be sent: /);
     // It is told whose key this is, and not to make a key or cut the file to get past it.
-    assert.ok(refused.text.includes(`This key file’s address is ${stranger.address}.`));
-    assert.match(
-      refused.text,
-      /A live project is signed only by the key that owns it; xsolana\.json is not to be changed/,
+    assert.ok(refused.text.includes(`This key file’s address is ${stranger.address}: it is not the project’s key.`));
+    assert.match(refused.text, /If the project is yours, sign with the key that owns it/);
+    assert.match(refused.text, /xsolana\.json needs no change, and a new key can change nothing/);
+    assert.match(refused.text, /don’t make a new one, and don’t change xsolana\.json to get past this/);
+    assert.doesNotMatch(refused.text, /restore the file/);
+
+    // The owner's own key refused for a mistake in the file is told to correct the file, and nothing about keys.
+    writeFileSync(
+      file,
+      JSON.stringify(
+        { ...live, tokens: live.tokens.map(t => (t.decimals === 6 ? { ...t, decimals: 9 } : t)) },
+        null,
+        2,
+      ),
     );
-    assert.match(refused.text, /If another key owns this project, sign with that key/);
+    const mistaken = await run({ yes: true });
+    assert.equal(mistaken.ok, false);
+    assert.equal(sends(), before);
+    assert.doesNotMatch(mistaken.text, /not the project’s key|new key/);
     assert.equal(
       saved().live.published.pools.some(p => p.key === 'bonus'),
       false,
@@ -448,32 +494,276 @@ describe('xsolana approve --keypair', () => {
     },
   );
 
-  test('the code changes with the key, the spec and each line shown', () => {
+  test('the code changes with the key, the file and each line shown, and with nothing else', () => {
     const state = {
       cluster: 'devnet',
       program: 'P',
       wallet: 'W',
       project: 'J',
-      mode: 'new',
-      steps: [{ id: 'project', says: 'Open the project', signer: 'owner' }],
+      mode: 'change',
+      steps: [
+        { id: 'grant:daily', says: 'Open the grant', signer: 'owner', details: ['closes 2026-12-11T08:34:11Z'] },
+        { id: 'pool:bonus', says: 'Open the pool', signer: 'owner', details: [] },
+      ],
       warnings: ['a warning'],
-      legal: [{ code: 'L', says: 'a flag' }],
-      unwritten: [],
+      legal: [
+        { code: 'L', says: 'a flag' },
+        { code: 'M', says: 'another flag' },
+      ],
+      unwritten: ['a name the chain can’t take'],
+      read: 'r0',
+      fresh: [{ name: 'mint/gold', address: 'FreshMintAddress1111111111111111111111111111' }],
     };
-    const spec = { name: 'x', pools: [], live: { partial: true } };
+    const spec = { name: 'x', pools: [], live: { project: 'J', mints: { gold: 'M1' }, partial: true } };
     const code = approvalCode(state, spec);
-    assert.equal(approvalCode(state, { ...spec, live: { project: 'J' } }), code, 'the live section is not the spec');
-    for (const other of [
-      approvalCode({ ...state, wallet: 'V' }, spec),
-      approvalCode({ ...state, project: 'K' }, spec),
-      approvalCode({ ...state, warnings: [] }, spec),
-      approvalCode({ ...state, legal: [] }, spec),
-      approvalCode({ ...state, steps: [] }, spec),
-      approvalCode({ ...state, steps: [{ ...state.steps[0], details: ['Pays: 5% to someone else'] }] }, spec),
-      approvalCode({ ...state, read: 'r1' }, spec),
-      approvalCode(state, { ...spec, name: 'y' }),
-    ])
-      assert.notEqual(other, code);
+    const step = (i, change) => ({ ...state, steps: state.steps.map((s, n) => (n === i ? { ...s, ...change } : s)) });
+    const others = {
+      'the key': approvalCode({ ...state, wallet: 'V' }, spec),
+      'the project': approvalCode({ ...state, project: 'K' }, spec),
+      'the cluster': approvalCode({ ...state, cluster: 'testnet' }, spec),
+      'the program': approvalCode({ ...state, program: 'Q' }, spec),
+      'new or a change': approvalCode({ ...state, mode: 'new' }, spec),
+      'a warning': approvalCode({ ...state, warnings: ['another warning'] }, spec),
+      'a legal line’s words': approvalCode({ ...state, legal: [state.legal[0], { code: 'M', says: 'a third' }] }, spec),
+      'a name that can’t be written': approvalCode({ ...state, unwritten: [] }, spec),
+      'what the chain says of the tokens': approvalCode({ ...state, read: 'r1' }, spec),
+      'a step fewer': approvalCode({ ...state, steps: [state.steps[0]] }, spec),
+      'a step’s words': approvalCode(step(1, { says: 'Open another pool' }), spec),
+      'who signs a step': approvalCode(step(1, { signer: 'authority' }), spec),
+      'what a step pays': approvalCode(step(1, { details: ['Pays: 5% to someone else'] }), spec),
+      'the steps’ order': approvalCode({ ...state, steps: [...state.steps].reverse() }, spec),
+      'the spec': approvalCode(state, { ...spec, name: 'y' }),
+      // the addresses the file's live section gives the steps, whether or not a line names them
+      'a mint in the live section': approvalCode(state, { ...spec, live: { ...spec.live, mints: { gold: 'M2' } } }),
+      'the live section’s project': approvalCode(state, { ...spec, live: { ...spec.live, project: 'K' } }),
+      'what has landed': approvalCode(state, { ...spec, live: { ...spec.live, landed: ['pool:bonus'] } }),
+    };
+    for (const [what, other] of Object.entries(others)) assert.notEqual(other, code, what);
+    assert.equal(new Set(Object.values(others)).size, Object.keys(others).length, 'each its own code');
+    // What is new at each run, and says nothing a person can check, is not in it: the address of an account the
+    // setup makes new, and a time counted from the run's own clock.
+    const again = {
+      ...step(0, { details: ['closes 2026-12-11T08:35:41Z'] }),
+      fresh: [{ name: 'mint/gold', address: 'AnotherFreshMint111111111111111111111111111' }],
+    };
+    assert.equal(approvalCode(again, spec), code);
+    const named = a => step(1, { details: [`minted from ${a}`] });
+    assert.equal(
+      approvalCode({ ...named('AnotherFreshMint111111111111111111111111111'), fresh: again.fresh }, spec),
+      approvalCode(named('FreshMintAddress1111111111111111111111111111'), spec),
+    );
+    assert.notEqual(
+      approvalCode(named('SomeOtherAddress1111111111111111111111111111'), spec),
+      approvalCode(named('FreshMintAddress1111111111111111111111111111'), spec),
+    );
+  });
+
+  test('a time counted from “publish” is not a new code a second later', { skip: skip ?? false }, async () => {
+    const fair = example('shelter-fair');
+    const spec = {
+      ...fair,
+      grants: fair.grants.map((g, i) => (i ? g : { ...g, limits: { ...g.limits, until: 'publish+30d' } })),
+    };
+    const { run, saved } = await setup(spec);
+    const shown = await run();
+    assert.match(shown.code ?? '', /^[0-9a-f]{8}$/, shown.text);
+    // Ninety seconds on, the lines that count from now say other times, and the code is the same: it sends.
+    const later = await run({ now: () => NOW + 90 });
+    assert.notEqual(
+      later.text.replace(/--yes \w+$/, ''),
+      shown.text.replace(/--yes \w+$/, ''),
+      'a time in the lines moved',
+    );
+    assert.equal(later.code, shown.code);
+    assert.equal((await run({ now: () => NOW + 90, yes: shown.code })).done, true);
+    assert.ok(saved().live.project);
+  });
+
+  test(
+    'the code covers the file’s live section: an address swapped in it after the show sends nothing',
+    { skip: skip ?? false },
+    async () => {
+      const { run, saved, sends, file } = await setup(example('coin-flip-arena'));
+      assert.equal((await run({ yes: true })).done, true);
+      const live = saved();
+      const changed = { ...live, pools: [...live.pools, { key: 'bonus', currency: 'arena' }] };
+      writeFileSync(file, JSON.stringify(changed, null, 2));
+      const shown = await run();
+      assert.match(shown.code ?? '', /^[0-9a-f]{8}$/, shown.text);
+      const before = sends();
+      // Only the live section's mint is edited: no line of the printout names it.
+      const other = (await makeKeyFile(path.join(folder(), 'other.json'))).address;
+      writeFileSync(
+        file,
+        JSON.stringify(
+          { ...changed, live: { ...changed.live, mints: { ...changed.live.mints, arena: other } } },
+          null,
+          2,
+        ),
+      );
+      const swapped = await run({ yes: shown.code });
+      assert.equal(swapped.ok, false);
+      assert.equal(sends(), before, 'nothing was sent under the old code');
+      // The file as it was shown still sends under its code.
+      writeFileSync(file, JSON.stringify(changed, null, 2));
+      assert.equal((await run({ yes: shown.code })).done, true);
+      assert.equal(sends(), before + 1);
+    },
+  );
+
+  test('a send the cluster took, whose answer was lost, is not sent again', { skip: skip ?? false }, async () => {
+    // The node takes each transaction, and the answer to one is lost: the client's own second try is refused as
+    // already processed (`refused`), or no answer comes at all (`silent`). Either way it landed, and is sent once.
+    for (const lost of ['refused', 'silent']) {
+      const w = world({ project: false, seed: `lost-${lost}` });
+      w.chain.warp(NOW);
+      const file = path.join(folder(), 'xsolana.json');
+      writeFileSync(file, JSON.stringify(example('coin-flip-arena'), null, 2));
+      const keyFile = path.join(folder(), 'owner.json');
+      const { address } = await makeKeyFile(keyFile);
+      w.chain.airdrop(address, 100_000_000_000n);
+      let sends = 0;
+      const chain = approvalChain(w, {
+        send: async wire => {
+          const signature = w.chain.sendWire(wire);
+          if (++sends !== 2) return signature;
+          throw lost === 'refused'
+            ? Object.assign(new Error('Transaction simulation failed: This transaction has already been processed'), {
+                code: -32002,
+              })
+            : new Error('RPC sendTransaction did not answer: fetch failed');
+        },
+      });
+      const lines = [];
+      const r = await approveWithKey({ file, keyFile, chain, now: () => NOW, yes: true, out: l => lines.push(l) });
+      assert.equal(r.done, true, `${lost}: ${lines.join('\n')}`);
+      assert.equal(r.sent, sends, lost);
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      assert.equal(saved.live.transactions.length, sends, lost);
+      assert.equal(saved.live.pending, undefined, lost);
+      // (the pool's seed went in once)
+      const again = await approveWithKey({ file, keyFile, chain, now: () => NOW, yes: true, out: () => {} });
+      assert.equal(again.sent, 0, lost);
+    }
+  });
+
+  test('a send whose fate is not known is not called “nothing sent”', { skip: skip ?? false }, async () => {
+    const { w, address, file, keyFile } = await setup(example('coin-flip-arena'));
+    let sends = 0;
+    // The first send gets no answer, and the chain has not seen it (yet).
+    const chain = approvalChain(w, {
+      send: async () => {
+        sends++;
+        throw new Error('RPC sendTransaction did not answer: fetch failed');
+      },
+    });
+    const lines = [];
+    const r = await approveWithKey({ file, keyFile, chain, now: () => NOW, yes: true, out: l => lines.push(l) });
+    assert.equal(r.ok, false);
+    assert.equal(sends, 1);
+    const last = lines.at(-1);
+    assert.match(
+      last,
+      /^Stopped \(1 more was sent and is not known to have landed yet\): RPC sendTransaction did not answer/,
+    );
+    assert.match(last, /a transaction still looked for is found first, so nothing is sent twice/);
+    assert.doesNotMatch(last, /Nothing was sent/);
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).live.pending.length, 1);
+    assert.ok(address);
+  });
+
+  test('a step that was not on the printout is never signed, in the first batch or a later one', async () => {
+    const keyFile = path.join(folder(), 'owner.json');
+    const { address } = await makeKeyFile(keyFile);
+    const other = freshKeypair().address;
+    const wire = toBase64(
+      wireTransaction(
+        compileMessage({ payer: address, blockhash: other, instructions: [transferLamports(address, other, 1n)] }),
+      ),
+    );
+    const step = id => ({ id, says: `Step ${id}`, signer: 'owner', details: [], done: false });
+    const view = ids => ({
+      name: 'x',
+      file: 'xsolana.json',
+      mode: 'new',
+      program: 'P',
+      cluster: 'devnet',
+      setupSol: null,
+      warnings: [],
+      legal: [],
+      unwritten: [],
+      authority: 'owner',
+      steps: ids.map(step),
+      landed: [],
+      signatures: [],
+      project: 'J',
+      wallet: address,
+      fresh: [],
+      remaining: ids.length,
+      done: false,
+    });
+    // An approval that shows steps a and b, then hands out `prepared`, and after each batch says `left` is left.
+    const fake = ({ prepared, left }) => {
+      const signed = [];
+      let turn = 0;
+      const approval = async () => ({
+        spec: { name: 'x' },
+        state: () => ({ signatures: signed.map((_, i) => `sig${i}`) }),
+        stateFor: async () => view(turn ? left : ['a', 'b']),
+        prepare: async () => ({
+          id: 'batch',
+          transactions: [wire],
+          says: prepared.map(id => `Step ${id}`),
+          steps: [prepared.map(id => ({ id, says: `Step ${id}` }))],
+        }),
+        complete: async (_wallet, _id, wires) => {
+          signed.push(...wires);
+          turn++;
+        },
+        close() {},
+      });
+      return { approval, signed };
+    };
+    const go = async f => {
+      const lines = [];
+      const chain = { account: async () => ({ lamports: 1_000_000_000 }) };
+      const r = await approveWithKey({
+        file: 'xsolana.json',
+        keyFile,
+        chain,
+        yes: true,
+        out: l => lines.push(l),
+        approval: f.approval,
+      });
+      return { ...r, text: lines.join('\n') };
+    };
+    // A first batch that carries a step the printout did not have: nothing is signed.
+    const first = fake({ prepared: ['a', 'c'], left: [] });
+    const one = await go(first);
+    assert.equal(one.ok, false);
+    assert.equal(first.signed.length, 0);
+    assert.match(one.text, /Nothing was sent: what is left to send is not what was shown above/);
+    // The same step under other words is not the step that was shown.
+    const reworded = fake({ prepared: ['a'], left: [] });
+    reworded.approval = (inner => async () => {
+      const s = await inner();
+      return {
+        ...s,
+        prepare: async () => ({ ...(await s.prepare()), steps: [[{ id: 'a', says: 'Step a, and more' }]] }),
+      };
+    })(reworded.approval);
+    assert.equal((await go(reworded)).ok, false);
+    assert.equal(reworded.signed.length, 0);
+    // What is left after a batch names a step that was not shown: it stops there.
+    const later = fake({ prepared: ['a'], left: ['c'] });
+    const two = await go(later);
+    assert.equal(two.ok, false);
+    assert.equal(later.signed.length, 1, 'the batch that was shown was signed, and no other');
+    assert.match(two.text, /Stopped after 1 transaction: what is left to send is not what was shown above/);
+    // Shown steps, batch by batch, go through.
+    const fine = fake({ prepared: ['a'], left: [] });
+    await go(fine);
+    assert.equal(fine.signed.length, 1);
   });
 });
 
@@ -504,6 +794,12 @@ describe('the command line', () => {
     assert.match(xsolana(['approve', '--keypair']).stderr, /--keypair needs a value/);
     assert.match(xsolana(['keygen']).stderr, /say where the key file goes/);
     assert.match(xsolana(['keygen', '--force', 'k.json']).stderr, /takes no --force flag/);
+    assert.match(xsolana(['keygen', 'a.json', 'b.json']).stderr, /makes one key file: give one path/);
+    assert.match(xsolana(['approve', '--browser=false']).stderr, /--browser takes no value/);
+    assert.match(xsolana(['approve', '--keypair', 'a.json', '--keypair', 'b.json']).stderr, /--keypair is given twice/);
+    assert.match(xsolana(['approve', '--keypair=a.json', '--keypair=b.json']).stderr, /--keypair is given twice/);
+    // (a bare -- is not a file's name: with no way to sign named, the two ways are said)
+    assert.match(xsolana(['approve', '--']).stderr, /say how going live is signed/);
   });
 
   test('keygen prints the address and what the key is, never the key', () => {

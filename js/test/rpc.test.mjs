@@ -95,3 +95,37 @@ test('a send refused for a blockhash the node has not seen yet is sent again; on
   await assert.rejects(gone.call('simulateTransaction', ['x']), /Blockhash not found/);
   assert.equal(calls, 1);
 });
+
+test('a send the cluster has already taken is a send: its signature is the transaction’s own', async () => {
+  // (the answer to a first send was lost on its way back; the second is refused as already processed)
+  const { compileMessage, wireTransaction, transactionId } = await import('../chain/tx.js');
+  const { transferLamports } = await import('../chain/programs.js');
+  const payer = '11111111111111111111111111111112';
+  const wire = wireTransaction(
+    compileMessage({ payer, blockhash: payer, instructions: [transferLamports(payer, payer, 1n)] }),
+    [new Uint8Array(64).fill(7)],
+  );
+  const taken = {
+    jsonrpc: '2.0',
+    id: 1,
+    error: {
+      code: -32002,
+      message: 'Transaction simulation failed: This transaction has already been processed',
+      data: { err: 'AlreadyProcessed', logs: [] },
+    },
+  };
+  let calls = 0;
+  const rpc = rpcClient('http://rpc', {
+    fetchImpl: async () => (calls++, answer(200, taken)),
+    sleepImpl: async () => {},
+  });
+  assert.equal(await rpc.send(wire), transactionId(wire));
+  assert.equal(calls, 1);
+  // Any other refusal is still a refusal.
+  const refused = {
+    ...taken,
+    error: { code: -32002, message: 'Transaction simulation failed: custom program error: 0x1' },
+  };
+  const other = rpcClient('http://rpc', { fetchImpl: async () => answer(200, refused), sleepImpl: async () => {} });
+  await assert.rejects(other.send(wire), /custom program error/);
+});
