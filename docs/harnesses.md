@@ -4,15 +4,15 @@ xsolana reaches an agent as two pieces: the **MCP server** (`xsolana_*` tools, f
 **xsolana-economy skill** (when to use loot, the loop, what to tell the person). The `plugin/` folder carries both, in
 each harness's own format, from one source.
 
-|                           | Claude Code                                                                                               | Codex                                                                                     |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Manifest                  | `plugin/.claude-plugin/plugin.json`                                                                       | `plugin/plugin.json` (the portable format, `agent-plugins.org` schema 1.0.0)              |
-| MCP server                | `plugin/.mcp.json`                                                                                        | `plugin/mcp.json` (`"type": "stdio"`)                                                     |
-| Skill                     | `plugin/skills/xsolana-economy/`                                                                          | the same folder                                                                           |
-| Marketplace               | `.claude-plugin/marketplace.json`                                                                         | `.agents/plugins/marketplace.json`                                                        |
-| Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                       | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
-| Without the plugin        | `npx -y @xgamesfun/solana@0.28.9 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
-| Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                 | `AGENTS.md`                                                                               |
+|                           | Claude Code                                                                                                | Codex                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Manifest                  | `plugin/.claude-plugin/plugin.json`                                                                        | `plugin/plugin.json` (the portable format, `agent-plugins.org` schema 1.0.0)              |
+| MCP server                | `plugin/.mcp.json`                                                                                         | `plugin/mcp.json` (`"type": "stdio"`)                                                     |
+| Skill                     | `plugin/skills/xsolana-economy/`                                                                           | the same folder                                                                           |
+| Marketplace               | `.claude-plugin/marketplace.json`                                                                          | `.agents/plugins/marketplace.json`                                                        |
+| Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                        | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
+| Without the plugin        | `npx -y @xgamesfun/solana@0.28.10 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
+| Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                  | `AGENTS.md`                                                                               |
 
 The marketplace is named `xgamesfun` in both marketplace files, so the plugin is `xsolana@xgamesfun` whichever
 repository serves it. Both MCP configs start the server with `npx -y --package=@xgamesfun/solana@<version> xsolana mcp`,

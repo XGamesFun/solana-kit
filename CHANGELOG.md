@@ -4,6 +4,21 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.10: four errors an audit of the tools found (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **The worked example in `sentence-to-spec.md` checks.** Its monthly draw named no pot (`E-LOTTERY-PAYS`), yet the
+  page said "ready", and its Perch was switched off, so the box could never give it. The example now has `"pot": 0` and
+  a Perch that is on, and the page quotes the figures the tools give for it. A test reads the example from the page and
+  checks it.
+- **An NFT spent on a lottery ticket is handed back if the round is cancelled.** Two pages said it was never refunded.
+- **`W-VALUE`'s cancelled round covers every lottery.** Before, it fired only with a least sale, but a round the oracle
+  hasn't answered 7 days after its ask is cancelled too, and its refund is the ticket token.
+- **`explain` puts every legal flag under the law.** Its section took three codes by hand, so `W-CHANCE-ITEMS` (paid
+  random collectibles a player can resell) landed under "Know before going live". It now reads the flags from
+  `legal.mjs`, the list the approval page shows.
+
 ## 0.28.9: three analyses in place of six rules (loot 0.28.0, unchanged)
 
 The tools alone. The six warnings of 0.28.8 named one situation each. They are now what three general analyses of a
@@ -26,7 +41,7 @@ trust levels. The 0.28.8 codes are gone.
 
 ## 0.28.8: the tools challenge a request before building it (loot 0.28.0, unchanged)
 
-The tools alone, from a game that went live with these traps (Bubble Day).
+The tools alone, from a game that went live with these traps.
 
 - **Six warnings** in the checker, each also a finding of the review:
   - `W-REFUND-NOT-PAID` (medium): a lottery with a least sale whose ticket token players buy with another token. A
@@ -54,8 +69,8 @@ The tools alone, from a game that went live with these traps (Bubble Day).
 The JavaScript alone. `buyTickets(key, count, { listing, make: { recipe, times, listing } })` crafts the recipe first
 in the purchase's own transaction, so a player short of what a ticket costs (an entry a recipe makes) approves once for
 both; if either fails, neither happens. `craft(..., { build: true })` hands back its instructions unsent for that; a
-recipe that rolls is refused there (its roll is settled after its own transaction). Asked for by Bubble Day, whose
-player took the first of two prompts for the whole purchase.
+recipe that rolls is refused there (its roll is settled after its own transaction). Asked for by a game whose player
+took the first of two prompts for the whole purchase.
 
 ## 0.28.6: going live on mainnet is said, and typed, as mainnet (loot 0.28.0, unchanged)
 

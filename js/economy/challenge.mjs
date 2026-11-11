@@ -92,13 +92,14 @@ export function challenge(m, warn, now) {
   for (const [t, { paid, free, back, tickets, spent }] of rows) {
     const T = sym(t);
     const first = paid[0];
-    // Cancelled: a round short of its least sale refunds what reached it, the ticket token.
+    // Cancelled: a round short of its least sale, or one the oracle never answers (7 days after its ask), refunds what
+    // reached it, the ticket token.
     for (const l of tickets) {
-      if (!(num(l.minSold) > 0) || !first) continue;
+      if (!first) continue;
       warn(
         'W-VALUE',
-        `economy.lotteries.${l.key}.minSold`,
-        `Following ${T} into ${named(l)}, cancelled: players buy ${T} with ${words(paid.map(s => `${named(s.recipe)} (${priced(s.pays)} for ${s.makes})`))}, and a round short of its ${l.minSold} tickets refunds ${T}, not the ${priced(first.pays)} paid for it, which stays where ${named(first.recipe)} sent it.`,
+        `economy.lotteries.${l.key}`,
+        `Following ${T} into ${named(l)}, cancelled: players buy ${T} with ${words(paid.map(s => `${named(s.recipe)} (${priced(s.pays)} for ${s.makes})`))}, and a cancelled round (${num(l.minSold) > 0 ? `one short of its ${l.minSold} tickets, or ` : ''}one the oracle hasn't answered 7 days after its ask) refunds ${T}, not the ${priced(first.pays)} paid for it, which stays where ${named(first.recipe)} sent it.`,
         `Price the tickets in ${sym(first.pays[0].token)} itself ("currency": "${first.pays[0].token}", "price": ${first.pays[0].amount / first.makes}, "rest": "burn" if they should burn), so a refund pays back what was paid; or keep a recipe that turns ${T} back switched off ("active": false) and switch it on after a cancelled round.`,
       );
     }

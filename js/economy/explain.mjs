@@ -1,6 +1,7 @@
 // The economy in plain words, from the checker, the simulation, the cost and the play-time steps: what players do
 // and what it costs them, how the pools fill and drain, what runs by itself, what the authority must sign, what
 // going live costs, and what the owner must know. Deterministic. Pure.
+import { LEGAL } from './legal.mjs';
 import { walkThrough } from './walk.mjs';
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
@@ -606,7 +607,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   );
   for (const n of sim.notes) lines.push(`- ${n}`);
 
-  const flagged = verdict.warnings.filter(w => ['W-CHANCE-PRIZE', 'W-REVENUE-SHARE', 'W-TOKEN-SALE'].includes(w.code));
+  const flagged = verdict.warnings.filter(w => Object.hasOwn(LEGAL, w.code));
   const others = verdict.warnings.filter(w => !flagged.includes(w));
   if (flagged.length) section('Flagged for the law, once it is real money', [...new Set(flagged.map(w => w.message))]);
   section(

@@ -3,6 +3,7 @@
 // with the game's token (100 BUBL burned into a pool for an entry), one free entry for everyone, a recipe that turns an
 // entry back into BUBL, two draws that draw once and need 100 tickets each, played by two people.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
@@ -88,18 +89,17 @@ test('three analyses, three codes: the situation each found is in its message', 
 });
 
 test('follow the value, cancelled: a refund in the ticket token, not what was paid for it', () => {
-  assert.deepEqual(found(spec(), 'W-VALUE', 'cancelled'), [
-    'economy.lotteries.draw.minSold',
-    'economy.lotteries.draw2.minSold',
-  ]);
+  assert.deepEqual(found(spec(), 'W-VALUE', 'cancelled'), ['economy.lotteries.draw', 'economy.lotteries.draw2']);
   // Tickets priced in BUBL itself: a refund pays BUBL back.
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
   assert.deepEqual(found(own, 'W-VALUE', 'cancelled'), []);
-  // No least sale: no round is cancelled short.
+  // No least sale: a round the oracle never answers is still cancelled, and refunded in the ticket token.
   const none = spec();
   for (const l of none.lotteries) delete l.minSold;
-  assert.deepEqual(found(none, 'W-VALUE', 'cancelled'), []);
+  const [w] = check(none, { now: NOW }).warnings.filter(x => x.code === 'W-VALUE' && x.message.includes('cancelled:'));
+  assert.match(w.message, /one the oracle hasn't answered 7 days after its ask/);
+  assert.doesNotMatch(w.message, /short of/);
 });
 
 test('follow the value, undone: a way back from the ticket token, open at all times', () => {
@@ -221,4 +221,32 @@ test('explain and the review end with each route, state by state, as a player, t
   assert.match(draw, /“100 BUBL for an Entry” turns it back once the project switches it on/);
   assert.match(walk, /“100 BUBL for an Entry”: a recipe\n {2}- Before it opens: It is switched off/);
   assert.match(review(s, { now: NOW }).tradeoffs, /Each route, state by state/);
+});
+
+test('the worked example of sentence-to-spec.md checks, and explain puts every legal flag under the law', () => {
+  const md = readFileSync(
+    new URL('../../skills/xsolana-economy/references/sentence-to-spec.md', import.meta.url),
+    'utf8',
+  );
+  const from = md.indexOf('```json', md.indexOf('## Worked example')) + '```json'.length;
+  const fishing = JSON.parse(md.slice(from, md.indexOf('```', from)));
+  const r = check(fishing, { now: NOW });
+  assert.ok(r.ok, r.refusals.map(x => x.code).join());
+  assert.deepEqual(r.warnings.map(w => w.code).sort(), ['W-CHANCE-PRIZE', 'W-FEE']);
+  // A paid box of random collectibles a player can resell: W-CHANCE-ITEMS, a legal flag, goes in the law's section.
+  const gacha = structuredClone(fishing);
+  gacha.items[0].kind = 'collectible';
+  delete gacha.lotteries;
+  gacha.boxes[0].split = [{ to: 'pool:pond', percent: 55 }];
+  gacha.boxes[0].outcomes = [
+    { gives: 'item', item: 'perch', chance: 50 },
+    { gives: 'nothing', chance: 50 },
+  ];
+  const text = explainEconomy(gacha, { now: NOW }).text;
+  const law = text.slice(text.indexOf('Flagged for the law'), text.indexOf('Know before going live'));
+  assert.ok(
+    check(gacha, { now: NOW }).warnings.some(w => w.code === 'W-CHANCE-ITEMS'),
+    'the gacha is flagged W-CHANCE-ITEMS',
+  );
+  assert.match(law, /resell/i);
 });
