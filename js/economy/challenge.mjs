@@ -535,7 +535,17 @@ export function challenge(m, warn, now, economy) {
         ? `${named(f)}: ${+((held / (held + others)) * 100).toFixed(1)}% of its rewards against the ${others} the scenario has others stake`
         : `${named(f)}: most of its rewards, unless others stake far more (the scenario names no stake)`;
     });
-    if (pct < 10) continue;
+    if (pct < 10) {
+      if (!said)
+        warn(
+          'W-ASSUMPTION',
+          `economy.tokens.${key}`,
+          `Unknown: who holds ${sym(key)} besides the owner (a treasury, the team, early buyers, an exchange), where holding more takes more (${words([...shared, ...chances].map(named))}). The largest of them takes the largest share.`,
+          'Ask, then write it in "scenario.holders" ({"supply", "owner", "largest"}) and check again.',
+          { severity: 'low', ask: `Who holds the most ${sym(key)} besides the owner, and will they stake or play?` },
+        );
+      continue;
+    }
     warn(
       'W-ASSUMPTION',
       `economy.tokens.${key}.supply`,
@@ -543,7 +553,7 @@ export function challenge(m, warn, now, economy) {
       `Say whether ${who === 'the largest holder' ? 'the largest holder' : 'the owner'} takes part; if not, keep those ${sym(key)} out (seed them into a pool, a vesting schedule, or burn them), or rate the farm per seat instead of shared by stake.`,
       {
         severity: pct > 50 ? 'high' : 'medium',
-        ask: `Will ${who === 'the largest holder' ? 'the largest holder' : 'the owner'}'s ${+held.toFixed(6)} ${sym(key)} (${+pct.toFixed(1)}% of the supply) be staked or played?`,
+        ask: `Will ${who === 'the largest holder' ? 'the largest holder' : 'the owner'}'s ${+held.toFixed(6)} ${sym(key)} (${+pct.toFixed(1)}% of the supply) be staked or played${said ? '' : ', and who else holds a large share (a treasury, the team, early buyers)'}?`,
       },
     );
   }
@@ -558,7 +568,7 @@ export function challenge(m, warn, now, economy) {
       'Ask, then declare it: "serverLimit": { "per": "person" | "wallet" | "all", "amount", "every", "total" }.',
       {
         severity: 'low',
-        ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all?`,
+        ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all? And how does it set each claim's amount (a multiplier, a streak, a rank, a code)? Anything it converts goes in "offchain".`,
       },
     );
 
@@ -586,6 +596,40 @@ export function challenge(m, warn, now, economy) {
         ask: 'Does your server or page turn anything players hold or win into an advantage (a boost, a better reward, a ranking that pays)? For each thing your server runs, what does it compute itself, and what does it only record from the page?',
       },
     );
+
+  // A grant's funds (the SOL that pays each claim's rent) against the claims its audience makes: sized per claim, they
+  // run out at a count of players.
+  for (const g of m.grants.filter(g => on(g) && num(g.fund) > 0)) {
+    sim ??= simulateOrNull(economy, now);
+    const each = num(sim?.grants?.find(x => x.key === g.key)?.fundsPerClaimSol);
+    if (!each) continue;
+    const covers = Math.floor(num(g.fund) / each);
+    const l = g.limits ?? {};
+    const per =
+      l.perPerson ??
+      l.perWallet ??
+      (l.perWalletEach
+        ? l.perWalletEach.count *
+          Math.ceil((num(m.scenario.days) || 30) / Math.max(toSeconds(l.perWalletEach.every ?? '1d') / 86_400, 1 / 24))
+        : null);
+    const players = num(m.scenario.players);
+    if (!players)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.fund`,
+        `Unknown: ${named(g)}'s funds (${g.fund} SOL) pay about ${covers} claims (${each} SOL each), and the scenario names no players, so when they run out is a guess. After that each claimer pays their own rent.`,
+        'Ask, then size "fund" for the audience: players × claims each × the rent a claim costs.',
+        { severity: 'low', ask: `How many players will claim ${named(g)}, and how many times each?` },
+      );
+    else if (per && covers < players * per)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.fund`,
+        `${named(g)}'s funds (${g.fund} SOL) pay about ${covers} claims, and the scenario's ${players} players at ${per} each make ${players * per}: the funds run out after about ${Math.floor(covers / per)} players, and the rest pay their own rent (about ${each} SOL a claim).`,
+        `Fund it for the audience: about ${+(players * per * each).toFixed(6)} SOL, or tell players a claim may cost them its rent.`,
+        { severity: 'medium' },
+      );
+  }
 
   // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
   // only a person or a server sends; what freezes at the first sale.

@@ -4,6 +4,27 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.16: the last eval round's lessons (loot 0.28.0, unchanged)
+
+The tools alone. In the round on 0.28.15 against 0.28.10, three fresh exams scored 20.5 against 17.5 caught early, and
+Bubble Day 10 and 12 with none missed. Its lessons, all general:
+
+- **Every way a ranked payout ends.** A lottery with several places: fewer tickets than places (an unwon place's share
+  goes where the round's leftover goes). A contest: a tie or a result nobody can call (one side named, or called off),
+  and nobody on the side named (the program refuses it, `NoWinner`, and the contest is called off).
+- **A grant's funds against its audience.** The SOL that pays each claim's rent, sized per claim, runs out after a
+  count of players. With the scenario's players, the check says when; without them, it asks how many will claim.
+- **Who holds the supply, asked.** Where holding more takes more, the check asks who holds the most besides the owner
+  (a treasury, the team, early buyers), even when the owner's own share is small.
+- **How a server sets each amount, asked.** A multiplier, a streak, a rank or a code: anything it converts goes in
+  `"offchain"`.
+- **A returning player's day.** "Tell the person" adds up the approvals of doing each thing once, and says what folds
+  them (`claimAll`, `make`).
+- **The skill:**
+  - put a "Tell the person" line in plainer words for a non-technical person, but keep every number;
+  - when a server limit, a cap or a route changes, say the figures again;
+  - run `xsolana_design` again whenever a route is added or changed. `xsolana_check`'s pointer says so too.
+
 ## 0.28.15: what a grant's server really pays (loot 0.28.0, unchanged)
 
 The tools alone. Most limits that matter in a game live on its server. A grant may now declare what its voucher server

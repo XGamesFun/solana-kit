@@ -207,6 +207,14 @@ export function flows(m, { now }) {
           then: `the next ask ${ORACLE_TIMEOUT_DAYS} days after the first cancels it: every ticket refunded`,
         },
         { ending: 'The draw asked late', then: 'it is drawn then; nothing is lost, the winners just wait' },
+        ...((l.places ?? []).length > 1 || (l.places ?? []).some(p => num(p.times) > 1)
+          ? [
+              {
+                ending: 'Fewer tickets than places',
+                then: `places with no winner pay nothing: their share goes where the round's leftover goes (${l.rest ?? (Number.isInteger(l.pot) ? 'the pot' : 'its rest')})`,
+              },
+            ]
+          : []),
       ],
       fixed: {
         when: 'the first ticket',
@@ -602,6 +610,14 @@ export function flows(m, { now }) {
           then: 'refused: it is called off and every entry claims its money back',
         },
         { ending: 'A result before entries close', then: 'refused (only a call-off is taken before then)' },
+        {
+          ending: 'A tie, or a result nobody can call',
+          then: `the program names one side or none: ${deciders ? 'the decider key' : 'the authority'} picks a side or calls it off, and a call-off pays every entry back`,
+        },
+        {
+          ending: 'Nobody on the winning side',
+          then: 'naming a side nobody backed is refused (NoWinner): it is called off, now or at its deadline, and every entry is paid back',
+        },
       ],
       fixed: { when: 'it opens', says: 'Every term is fixed when it opens and never edited.' },
       states: [

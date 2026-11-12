@@ -411,7 +411,7 @@ export const tools = [
         w => w.code === 'W-ASSUMPTION' && /^economy\.lotteries\.[^.]+\.minSold$/.test(w.where),
       );
       const designHint = draws.length
-        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (its description lists the kinds for a draw, a sale, a reward, staking and a contest).${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
+        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (its description lists the kinds for a draw, a sale, a reward, staking and a contest). Added or changed a route since you last ran it? Run it again.${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
         : '';
       const tell = told.length
         ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`

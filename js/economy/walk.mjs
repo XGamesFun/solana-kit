@@ -438,6 +438,24 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
     out.push(
       `Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N), and the wins to collect afterwards go in as few approvals as the wallet allows (claimAll).`,
     );
+  // A returning player's day, doing each thing once: every approval added up, and what folds them.
+  const day = [];
+  for (const g of m.grants.filter(
+    g => g.active !== false && g.limits?.perWalletEach && toSeconds(g.limits.perWalletEach.every ?? '1d') <= 86_400,
+  ))
+    day.push({ what: `claim ${named(g)}`, n: 1 });
+  for (const r of fl.routes.filter(r => r.price.length && ['box', 'item', 'lottery', 'contest'].includes(r.kind)))
+    day.push({
+      what: `${r.kind === 'lottery' ? 'buy tickets of' : r.kind === 'contest' ? 'enter' : 'buy or open'} ${named(r)}`,
+      n: r.kind === 'lottery' ? Math.max(1, journeyOf(r, fl).prompts - 1) : 1,
+    });
+  for (const f of m.farms) day.push({ what: `harvest ${named(f)}`, n: 1 });
+  if (fl.routes.some(r => r.kind === 'lottery' || r.kind === 'contest' || (r.kind === 'box' && r.roll)))
+    day.push({ what: 'collect wins', n: 1 });
+  if (day.length > 1)
+    out.push(
+      `A returning player's day, doing each thing once: ${day.map(d => `${d.what} (${d.n})`).join(', ')}: about ${day.reduce((n, d) => n + d.n, 0)} wallet approvals. Fold what you can: claimAll collects every win in as few as the wallet allows, and a craft rides in a ticket purchase (make).`,
+    );
   return out;
 }
 
