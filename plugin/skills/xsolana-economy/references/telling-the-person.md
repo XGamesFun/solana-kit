@@ -1,7 +1,7 @@
 # Telling the person what they get
 
 The person reads your words, not the spec. After every change, run `xsolana_explain` on the spec as saved and turn it
-into a few short lines, in this order. Describe what is in the spec, not what you meant to put there: when your words
+into short lines, in this order, every number kept. Describe what is in the spec, not what you meant to put there: when your words
 and the spec differ (a limit, an amount, a key not set yet), change one of them before you answer. Use the tools' numbers; round them sensibly; name currencies by symbol.
 
 1. **What each play costs and is worth.** Lead with the tools' "in all" number: "A cast costs about 0.0234 SOL in
@@ -28,25 +28,20 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    and how often, and what happens if nobody does. If a payout rewards a result the game reports (a clear, a win,
    a score): "Checking that a player really did it is up to you, on your own server: a game runs in the player's
    browser, and the program trusts the authority's signature."
-6. **Flags for the law, once.** `W-CHANCE-PRIZE`: "Players pay for a chance at money. That is gambling in many places once
-   it is real money; this one is on devnet, which is not." (On mainnet: "this one is on mainnet, so it is.") `W-CHANCE-ITEMS`: "Players pay for random items they can resell: some
-   places treat that as gambling, and many require the odds to be shown." `W-REVENUE-SHARE`: "Stakers are paid from
-   what players spend; regulators look at that when they decide whether a token is a security." `W-TOKEN-SALE`:
-   "People pay for a share of a new token; selling a token to raise money is what securities law looks at first."
-   Say each once, the
-   first time the checker raises it; then leave them, saying them again only when the person asks or a flag of a new
-   kind appears, and keep them out of pages and apps unless asked. What `xsolana approve` prints before anything is
-   sent shows them, with the program's status (not independently audited, as is, at their own risk, theirs to make
-   legal where they offer it): the person reads it before their yes. The page for a browser wallet keeps Approve off
-   until the owner ticks that they read it.
+6. **Flags for the law.** `W-CHANCE-PRIZE` (paid chance at money), `W-CHANCE-ITEMS` (paid random items a player can
+   resell), `W-REVENUE-SHARE` (stakers paid from sales), `W-TOKEN-SALE` (a presale) and `W-AUCTION-SHILL`:
+   `xsolana_check` prints each under "The law". Say it as written, once, the first time the checker raises it, and
+   again before mainnet; otherwise only when the person asks, and keep them out of pages and apps unless asked. What
+   `xsolana approve` prints before anything is sent shows them, with the program's status (not independently audited,
+   as is, at their own risk, theirs to make legal where they offer it): the person reads it before their yes. The
+   page for a browser wallet keeps Approve off until the owner ticks that they read it.
 7. **For an auction**, say how it ends, in their words: "The highest bid when the 48 hours are up wins. Each bid must
    be at least 0.5 SOL and 5% over the last; a bid in the last 10 minutes gives everyone 10 more. Whoever is outbid
    has their SOL back at once, in the same transaction. With no bid, the lot goes back (an item's unit is never
    made). Anyone can end it once it is over: the winner, or anyone, from the page. Nobody has to hurry: whenever it is ended,
-   the lot goes to the highest bidder." Then the shill warning (`W-AUCTION-SHILL`): "Anyone can bid, you included, and the
-   program can't tell a friend bidding the price up from a real buyer: a reserve is the honest way to set a floor."
+   the lot goes to the highest bidder." Then the shill warning, as "The law" puts it (`W-AUCTION-SHILL`).
    For a collectible they already hold: "It stays with the project until someone wins it or the auction ends."
-8. **Anything else the checker warned about**, in a sentence each (a mint that can freeze accounts, a free box bots
+8. **Anything else the checker warned about**, once each, in your own words with every number kept (a mint that can freeze accounts, a free box bots
    can drain, a grant with no limits or no funds).
 9. **What a cheater gets**, from `xsolana_review`, before the owner approves: for each route paid on a server's
    voucher, which level it uses (the server decides, replays or only bounds the result), what one cheater gets there
@@ -144,7 +139,8 @@ Don'ts:
   the moment the roll is made until it is settled. Say the odds in plain numbers, which stats raise them, and what a
   loss means (burned, or given to whom). Nobody can back out of a roll once it is made; the player or the project's keys ask the oracle
   for it, and the player, a key they named or the project's keys settle it.
-- **NFT custody** (a farm, a mission): Escrow is the default: the NFT moves to the project while it is staked.
+- **NFT custody** (a farm, a mission, a listing, a rental, a loan): when use changes hands for a while, say who holds
+  the NFT at each stage and who can move it. Escrow is the default: the NFT moves to the project while it is staked.
   Freeze keeps it in the player's wallet, locked, with the project the only key that unlocks it; a soulbound
   collectible needs Freeze. Watch holds nothing: say plainly that a staked NFT can be sold, that its seller then
   collects nothing more, and that its buyer can take the seat over. Only frozen or watched NFTs can be in two farms

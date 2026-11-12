@@ -22,11 +22,11 @@ A result is worth paying only as far as the server that signs the voucher can te
   can ban. A script that plays at human speed still gets through: this limits what a cheater earns, it does not stop
   one.
 
-| Level   | What it costs to build                                                                | CPU and latency                                           | What a cheater gets                                                          | Fits                                                                                  |
-| ------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| decides | the most: the game's rules run on the server (or in a room that runs the match)       | every move waits on the server                            | what a bot that plays well earns; nothing forged                             | turn games, card and board games, matches in a room, anything with hidden information |
-| replays | a deterministic game (fixed step, seeded randomness the server keeps) and a replayer  | a replay per run, after the fact; short runs or in pieces | what a bot that plays well earns; with the seed up front, the best run found | puzzles, runners, arcade games with short runs                                        |
-| bounds  | the least: a run id, the server's clock, checkpoints in order, daily caps, a ban list | almost none                                               | every reward a script claims at human speed, up to the limits                | anything the browser simulates; prizes that are cosmetic, small or capped             |
+| Level | What it costs to build | CPU and latency | What a cheater gets | Fits |
+|---|---|---|---|---|
+| decides | the most: the game's rules run on the server (or in a room that runs the match) | every move waits on the server | what a bot that plays well earns; nothing forged | turn games, card and board games, matches in a room, anything with hidden information |
+| replays | a deterministic game (fixed step, seeded randomness the server keeps) and a replayer | a replay per run, after the fact; short runs or in pieces | what a bot that plays well earns; with the seed up front, the best run found | puzzles, runners, arcade games with short runs |
+| bounds | the least: a run id, the server's clock, checkpoints in order, daily caps, a ban list | almost none | every reward a script claims at human speed, up to the limits | anything the browser simulates; prizes that are cosmetic, small or capped |
 
 Even a result the server decided is worth what a good bot can earn. Pay a bounded or replayed result only what you would
 accept losing to a patient script (small amounts, capped a day), and keep entry fees and prize pools for results the
