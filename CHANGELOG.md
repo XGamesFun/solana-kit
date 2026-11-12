@@ -4,6 +4,29 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.13: xsolana_design covers sales, rewards, staking and contests (loot 0.28.0, unchanged)
+
+The tools alone. `xsolana_design` covered one family of routes, a draw and how it is paid. Its search now runs over
+five families. Each family has its own choices, requirement tests and measure of how it plays, and the search,
+ranking, conflict report, "Say" sentences and hand-off are shared. A requirement names its route (the key of a lottery,
+item, grant, farm or contest), and the family follows from that. Several routes are designed in one call, each on the
+best design of the routes before it.
+
+- **A draw.** As in 0.28.12.
+- **A sale of an item.** Bridges: the shop's price, or a fixed-price listing in each currency; first come, first
+  served, or an allowlist the person builds (a stand-in fills it, and the design says so under "Needs from you").
+  Requirements: `pay-in`, `fixed-price`, `instant`, `fair-scarce`, `one-approval`.
+- **A reward (a grant).** Bridges: open, a list, a voucher server that bounds or that decides; caps a wallet, a person
+  (named by the server) or a day. Requirements: `per-person`, `no-server`, `bot-proof`, `bounded`,
+  `first-reward-no-sol`.
+- **Staking (a farm).** Bridges: a fixed rate a unit or a shared rate, minted, or a funded vault; no end, an end or a
+  halving; a lock or none. Requirements: `emission-cap`, `predictable`, `no-lock`, `whale-fair`.
+- **A contest.** Bridges: the authority or a decider key names the result; any stake or equal stakes. Requirements:
+  `no-owner-trust`, `equal-stakes`, `refund-if-no-result`.
+
+SOL is declared when a want names it. A route no family covers (an auction, a schedule, a hold) is said, so the agent
+drafts it by hand. `xsolana_check` points to the tool for any of the five families' findings.
+
 ## 0.28.12: xsolana_design, from what a person wants to the specs that do it (loot 0.28.0, unchanged)
 
 The tools alone. A new MCP tool, `xsolana_design`, for a draw (a lottery or a raffle) and how it is paid.
