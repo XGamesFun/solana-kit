@@ -715,7 +715,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ['W-ASSUMPTION', 'R-ASSUMPTION', 'medium'],
     ['W-STEPS', 'R-STEPS', 'low'],
   ])
-    for (const w of warned(code)) find(id, severity, routeOf(w.where), w.message, w.fix);
+    for (const w of warned(code)) find(id, w.severity ?? severity, routeOf(w.where), w.message, w.fix);
 
   findings.sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity));
   return {

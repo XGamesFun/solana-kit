@@ -83,13 +83,19 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
     give a minted farm an end. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
     `references/trust-and-cheating.md` says why.
 
-11. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
-    draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
-    win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
-    gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
-    grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
-    nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
-    the owner to fund: whoever signs pays.
+11. **Say who finishes each step, and let the person choose.** Every step after a player's ask (settle a roll, draw a
+    lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a win, end
+    an auction, run a schedule, take a rental's NFT home) is sent by someone, and waits until it is. The walk-through
+    (`xsolana_explain`, "Each route, state by state") names who may send each, who pays, and what happens if nobody
+    does. Two ways to finish them, and the trade between them:
+    - **A button on the page** for whoever gains from it (`app.claims()` lists them, `app.claim(c)` sends one): no
+      server and no key to keep, and the player pays its fee, but it waits for a visitor.
+    - **A key on a server** that sends them on time (the owner's authority, or a key of the project's with only the
+      powers it needs): nothing waits, but the server holds a key whoever breaks in can use, and the owner funds its
+      fees. Keep it small and capped, and say what it can do.
+      Put both to the person when timing matters (a reveal at a set hour, refunds after a cancel) and build what they
+      choose. A grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay
+      its fees.
 
 12. **Review before going live, and let the person choose the trade-off.** Run `xsolana_review` before the owner
     approves. Fix every high finding, or have the person accept it in plain words. Declare `"trust"` honestly on every

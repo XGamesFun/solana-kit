@@ -1,206 +1,222 @@
-// Three analyses of a spec, each a warning code, the situation it found in the message: the program takes all of it as
-// written, and the person decides.
+// The analyses that challenge a spec, computed over its model (flows.mjs), each a warning code with the situation in
+// its message and a severity that follows how likely the state is: the program takes all of it as written, and the
+// person decides.
 //
-// - W-VALUE, follow the value: for every token a player puts into a route, what they hold in each end state (bought,
-//   cancelled, undone, given free, after the end). Value that comes back as something else, converts back after the
-//   outcome, appears from nothing, or keeps being made after its last use.
-// - W-STEPS, one intent, one step: a purchase whose price is a token the player must craft first takes two
-//   transactions, two wallet prompts.
-// - W-ASSUMPTION, check every assumption: a number that depends on how many take part (a lottery's least sale, a pool's
-//   life) against the scenario, and what can change only before a first sale.
+// - W-VALUE, follow the value: what a player holds in each end state of each route against what they put in (a refund
+//   in another asset than the one paid), value that converts back at any time, appears from nothing, grows around a
+//   loop of recipes, or keeps being made after its last use.
+// - W-STEPS, one intent, one step: an intent that takes more transactions (wallet prompts) than it needs.
+// - W-ASSUMPTION, check every assumption: a number that depends on how many take part (a lottery's least sale, a
+//   contest's least pot) against the scenario. A number the scenario doesn't state is unknown: the finding is the
+//   question to ask the person, never an estimate from a default.
 //
-// Who makes each later step happen, and where each rule is kept (chain, server or page), are the walk-through's
-// (walk.mjs) and the review's trust levels (review.mjs).
-import { prizeLine, prizeToken, toSeconds, toTime } from './model.mjs';
-import { DEFAULT_PER_DAY } from './simulate.mjs';
+// Who sends each later step and what happens if nobody does, and where each rule is kept (chain, server or page), are
+// in the walk-through (walk.mjs, from the same model) and the review's trust levels.
+import { at, flows, named, num, words } from './flows.mjs';
+import { toTime } from './model.mjs';
 
-const DAY = 86_400;
-const num = x => Number(x ?? 0);
-const at = seconds =>
-  new Date(seconds * 1000)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/:\d\d\.\d+Z$/, ' UTC');
-const named = part => `“${part?.name ?? part?.key}”`;
-const words = list => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
-
-/** The token a token line pays in or gives, by key; null for an item, an NFT or a roll. */
-function lineToken(line, m) {
-  const prize = prizeLine(line);
-  if (prize?.gives !== 'tokens') return null;
-  return prizeToken(prize, m)?.key ?? prize.currency ?? m.currencyKey;
-}
-
-/** What a recipe takes in tokens: [{ token, amount }]. */
-const paysIn = (r, m) =>
-  (r.in ?? []).filter(l => l.takes === 'pay').map(l => ({ token: l.currency ?? m.currencyKey, amount: num(l.amount) }));
-
-/** What a recipe gives in tokens: [{ token, amount }]. */
-const givesOut = (r, m) =>
-  (r.out ?? []).map(l => ({ token: lineToken(l, m), amount: num(l.amount) })).filter(x => x.token);
-
-/** The token a lottery's tickets are paid in, or null for a free ticket or one paid with an NFT. */
-const ticketOf = (l, m) =>
-  l.ticketNft || !(num(l.price) > 0) ? null : (l.ticketCurrency ?? l.currency ?? m.currencyKey);
+/** A cancel's severity, by how likely it is: the scenario says it is (or says nothing), says it isn't, or only the oracle's timeout. */
+const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: 'low' };
 
 /**
- * Every token a player can hold but the project's money (its currency, SOL): how a player gets it (`paid`, recipes
- * that take another token for it; `free`, grants), what turns it back into another token (`back`), and what takes it
- * (`tickets`, lotteries; `spent`, any other route).
+ * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
+ * in seconds. Returns the model, for the caller to show.
  */
-function ledger(m) {
-  const money = t => t === m.currencyKey || m.tokens.get(t)?.source === 'sol';
-  const rows = new Map();
-  for (const t of m.tokens.keys()) {
-    if (money(t)) continue;
-    const paid = m.recipes
-      .map(r => ({
-        recipe: r,
-        pays: paysIn(r, m).filter(p => p.token !== t),
-        makes: givesOut(r, m).find(g => g.token === t)?.amount ?? 0,
-      }))
-      .filter(s => s.makes > 0 && s.pays.length);
-    const free = m.grants.filter(g => lineToken(prizeLine(g.prize ?? g.gives), m) === t);
-    const back = m.recipes
-      .map(r => ({
-        recipe: r,
-        takes: paysIn(r, m).find(p => p.token === t)?.amount ?? 0,
-        gives: givesOut(r, m).filter(g => g.token !== t),
-      }))
-      .filter(b => b.takes > 0 && b.gives.length);
-    const tickets = m.lotteries.filter(l => ticketOf(l, m) === t);
-    const spent =
-      m.recipes.some(r => r.active !== false && paysIn(r, m).some(p => p.token === t)) ||
-      m.allBoxes.some(b => b.currency === t) ||
-      m.auctions.some(a => a.currency === t) ||
-      m.contests.some(c => c.currency === t) ||
-      m.payments.some(p => p.currency === t) ||
-      m.farms.some(f => f.stakes === t);
-    rows.set(t, { paid, free, back, tickets, spent });
-  }
-  return rows;
-}
-
-/** Runs the three analyses. `warn(code, where, message, fix)` as check() calls it; `now` in seconds. */
 export function challenge(m, warn, now) {
-  const sym = key => m.tokens.get(key)?.symbol ?? key;
-  const on = r => r.active !== false;
-  const priced = list => words(list.map(p => `${+p.amount.toFixed(9)} ${sym(p.token)}`));
-  const rows = ledger(m);
+  const fl = flows(m, { now });
+  const { assets, routes } = fl;
+  const sym = key => (key === 'nft' ? 'the NFT' : (assets.get(key)?.symbol ?? key));
+  const on = x => x?.active !== false;
+  const priced = list => words(list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`));
+  const alwaysOpen = r => on(r) && r.closes === undefined && r.opens === undefined;
 
-  // ---- W-VALUE: follow the value of each token through its end states.
-  for (const [t, { paid, free, back, tickets, spent }] of rows) {
-    const T = sym(t);
-    const first = paid[0];
-    // Cancelled: a round short of its least sale, or one the oracle never answers (7 days after its ask), refunds what
-    // reached it, the ticket token.
-    for (const l of tickets) {
-      if (!first) continue;
+  // ---- W-VALUE
+  // Cancelled: what comes back against what was paid for it.
+  for (const route of routes) {
+    const c = route.cancel;
+    if (!c) continue;
+    for (const back of c.refund) {
+      const a = assets.get(back.asset);
+      const origin = a?.origins.find(o => on(o.recipe)) ?? a?.origins[0];
+      if (!a || a.money || !origin) continue;
+      const ways = a.backs.filter(b => b.gives.some(g => origin.pays.some(p => p.asset === g.asset)));
+      const p = c.participation;
+      const why =
+        c.likely === 'likely'
+          ? `likely: the scenario sells about ${p.expected} a round (${p.how}), short of ${c.minSold}`
+          : c.likely === 'unknown'
+            ? `how likely is unknown: ${p?.how ?? 'the scenario says nothing'}, against a least sale of ${c.minSold}`
+            : c.likely === 'unlikely'
+              ? `the scenario sells about ${p.expected} a round (${p.how}), enough for its ${c.minSold}`
+              : 'rare: only a draw the oracle never answers';
       warn(
         'W-VALUE',
-        `economy.lotteries.${l.key}`,
-        `Following ${T} into ${named(l)}, cancelled: players buy ${T} with ${words(paid.map(s => `${named(s.recipe)} (${priced(s.pays)} for ${s.makes})`))}, and a cancelled round (${num(l.minSold) > 0 ? `one short of its ${l.minSold} tickets, or ` : ''}one the oracle hasn't answered 7 days after its ask) refunds ${T}, not the ${priced(first.pays)} paid for it, which stays where ${named(first.recipe)} sent it.`,
-        `Price the tickets in ${sym(first.pays[0].token)} itself ("currency": "${first.pays[0].token}", "price": ${first.pays[0].amount / first.makes}, "rest": "burn" if they should burn), so a refund pays back what was paid; or keep a recipe that turns ${T} back switched off ("active": false) and switch it on after a cancelled round.`,
+        route.where,
+        `Following ${a.symbol} into ${named(route)}, cancelled: players buy ${a.symbol} with ${words(a.origins.map(o => `${named(o.recipe)} (${priced(o.pays)} for ${o.makes})`))}, and a cancelled round (${c.causes.join(', or ')}) refunds ${a.symbol}, not the ${priced(origin.pays)} paid for it, which ${origin.pays.every(x => x.to === 'burn') ? 'was burned' : `stays where ${named(origin.recipe)} sent it (${words([...new Set(origin.pays.map(x => x.to))])})`}. ${ways.length ? `${words(ways.map(w => named(w.recipe)))} turns ${a.symbol} back${ways.some(w => on(w.recipe)) ? '' : ' once the project switches it on'}.` : `Nothing turns ${a.symbol} back.`} Each refund waits until someone pulls it (anyone may; the page's claims() lists a player's). How likely a cancel is: ${why}.`,
+        `Price the route in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', "rest": "burn" if the tickets should burn' : ''}), so a refund pays back what was paid; or keep a recipe that turns ${a.symbol} back switched off ("active": false), switched on after a cancel.`,
+        { severity: BY_LIKELY[c.likely] },
       );
     }
-    // Undone: a way back to what bought it, open at all times, while the token is a ticket.
-    const boughtWith = new Set(paid.flatMap(s => s.pays.map(p => p.token)));
-    if (tickets.length)
-      for (const b of back) {
+  }
+
+  for (const [, a] of assets) {
+    if (a.money) continue;
+    const chance = a.uses.filter(r => r.roll && r.price.some(p => p.asset === a.key));
+    const boughtWith = new Set(a.origins.flatMap(o => o.pays.map(p => p.asset)));
+    // Undone: a way back to what bought it, open at all times, while it pays for something with an outcome.
+    if (chance.length)
+      for (const b of a.backs) {
         const r = b.recipe;
-        if (!on(r) || r.closes !== undefined || r.opens !== undefined) continue;
-        if (!b.gives.some(g => boughtWith.has(g.token))) continue;
+        if (!alwaysOpen(r) || !b.gives.some(g => boughtWith.has(g.asset))) continue;
         warn(
           'W-VALUE',
           `economy.recipes.${r.key}`,
-          `Following ${T}, undone: ${named(r)} turns it back into ${priced(b.gives)} for ${b.takes} at any time (no "opens", "closes" or switch), so a ticket of ${words(tickets.map(named))} can be unbought before its draw${free.length ? `, and each ${T} given free becomes ${priced(b.gives)}` : ''}. A way back is for a cancelled round.`,
-          'Make it "active": false and switch it on only after a cancelled round (an edit by the project), or give it "opens" and "closes" around the time it is for.',
+          `Following ${a.symbol}, undone: ${named(r)} turns it back into ${priced(b.gives)} for ${b.takes} at any time (no "opens", "closes" or switch), so what it pays for (${words(chance.map(named))}) can be unbought before its outcome${a.free.length ? `, and each ${a.symbol} given free becomes ${priced(b.gives)}` : ''}. A way back is for a cancel.`,
+          'Make it "active": false and switch it on only after a cancel (an edit by the project), or give it "opens" and "closes" around the time it is for.',
+          { severity: a.free.length ? 'high' : 'medium' },
         );
       }
-    // From nothing: given free, sold for a price, and turned back into another token.
-    if (first && back.length)
-      for (const g of free) {
-        const b = back.find(x => on(x.recipe)) ?? back[0];
-        const amount = num(prizeLine(g.prize ?? g.gives).amount);
-        const worth = b.gives.map(x => ({ token: x.token, amount: (x.amount * amount) / b.takes }));
+    // From nothing: given free, sold for a price, and turned back into another asset.
+    const origin = a.origins[0];
+    if (origin && a.backs.length)
+      for (const g of a.free) {
+        const b = a.backs.find(x => on(x.recipe)) ?? a.backs[0];
+        const amount = num((g.prize ?? g.gives)?.amount);
+        const worth = b.gives.map(x => ({ asset: x.asset, amount: (x.amount * amount) / b.takes }));
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
-          `Following ${T}, from nothing: ${named(g)} gives ${amount} for free, ${named(first.recipe)} sells it for ${priced(first.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.`,
-          'Give the free one a token of its own that turns into nothing, keep every way back switched off, or set the grant’s "limits" to what you would pay out.',
+          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.`,
+          'Give the free one an asset of its own that turns into nothing, keep every way back switched off, or set the grant’s "limits" to what you would pay out.',
+          { severity: on(b.recipe) ? 'high' : 'medium' },
         );
       }
-    // After the end: still made once the last draw it was good for is done, and nothing else takes it.
-    if (tickets.length && !spent && tickets.every(l => !toSeconds(l.every) && l.firstDraw)) {
-      const last = Math.max(...tickets.map(l => toTime(l.firstDraw, now)));
-      const lastLot = tickets.find(l => toTime(l.firstDraw, now) === last);
-      const after = `Following ${T}, after the end: it has no use after the last draw (${named(lastLot)}, ${at(last)})`;
-      for (const g of free.filter(on))
+    // After the end: still made once the last route it was good for has ended, and nothing else takes it.
+    const live = a.uses.filter(on);
+    const ends = live.map(r => r.ends ?? null);
+    if (live.length && ends.every(e => e !== null)) {
+      const last = Math.max(...ends);
+      const lastUse = live.find(r => r.ends === last);
+      const after = `Following ${a.symbol}, after the end: it has no use after ${named(lastUse)} (${at(last)})`;
+      for (const g of a.free.filter(on))
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
           `${after}, and ${named(g)} keeps giving it for as long as it is switched on.`,
-          `Switch it off after the draw ("active": false, an edit by the project), make the lottery repeat ("every"), or give ${T} a use after it.`,
+          `Switch it off after ${named(lastUse)} ("active": false, an edit by the project), make that route repeat, or give ${a.symbol} a use after it.`,
+          { severity: 'low' },
         );
-      for (const { recipe: r } of paid.filter(s => on(s.recipe))) {
+      for (const { recipe: r } of a.origins.filter(o => on(o.recipe))) {
         if (r.closes !== undefined && toTime(r.closes, now) <= last) continue;
         warn(
           'W-VALUE',
           `economy.recipes.${r.key}`,
           `${after}, and ${named(r)} keeps selling it${r.closes === undefined ? ' with no "closes"' : ` until ${at(toTime(r.closes, now))}`}.`,
-          `Give it "closes" at the draw (${at(last)}) or before, or switch it off after the draw.`,
+          `Give it "closes" at ${at(last)} or before, or switch it off after it.`,
+          { severity: 'low' },
         );
       }
     }
   }
 
-  // ---- W-STEPS: one intent, one step. A price in a token the player crafts first is two transactions.
-  for (const [t, { paid }] of rows) {
-    const craft = paid.find(s => on(s.recipe) && !(s.recipe.out ?? []).some(o => o.gives === 'roll'));
-    if (!craft) continue;
-    const r = craft.recipe;
-    const steps = `a craft of ${named(r)}, then the purchase: two transactions, two wallet prompts`;
-    for (const l of m.lotteries.filter(x => ticketOf(x, m) === t)) {
-      const per = num(l.price) / craft.makes;
-      warn(
-        'W-STEPS',
-        `economy.lotteries.${l.key}`,
-        `Buying tickets of ${named(l)} takes ${steps}, since they cost ${sym(t)}.`,
-        `Send both in one: the play client's buyTickets("${l.key}", count, { listing, make: { recipe: "${r.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval (kit 0.28.7 and later).`,
-      );
+  // A loop of recipes that ends with more than it started: each recipe of one token in and tokens out is an exchange at
+  // a rate; a cycle whose rates multiply above 1 makes value from nothing, as fast as a player repeats it.
+  const rates = m.recipes.flatMap(r => {
+    const pays = (r.in ?? []).filter(l => l.takes === 'pay');
+    if (pays.length !== 1 || (r.in ?? []).length !== 1 || !on(r)) return [];
+    const from = pays[0].currency ?? m.currencyKey;
+    return routes
+      .find(x => x.kind === 'recipe' && x.key === r.key)
+      .gives.filter(g => g.asset !== from)
+      .map(g => ({ recipe: r, from, to: g.asset, rate: g.amount / num(pays[0].amount) }));
+  });
+  const seen = new Set();
+  const walkLoop = (start, at, path, rate) => {
+    for (const e of rates.filter(x => x.from === at)) {
+      if (path.includes(e)) continue;
+      const next = [...path, e];
+      if (e.to === start) {
+        const key = next
+          .map(x => x.recipe.key)
+          .sort()
+          .join('|');
+        if (rate * e.rate > 1 + 1e-9 && !seen.has(key)) {
+          seen.add(key);
+          warn(
+            'W-VALUE',
+            `economy.recipes.${next[0].recipe.key}`,
+            `Following ${sym(start)}, around a loop: ${next.map(x => `${named(x.recipe)} turns ${sym(x.from)} into ${sym(x.to)} at ${+x.rate.toFixed(9)} each`).join(', then ')}: one turn gives back ${+(rate * e.rate).toFixed(9)} for each 1 put in, as often as a player repeats it.`,
+            'Make the rates meet at 1 or less around the loop, or switch one of the recipes off.',
+            { severity: 'high' },
+          );
+        }
+      } else if (next.length < 4) walkLoop(start, e.to, next, rate * e.rate);
     }
-    for (const b of m.allBoxes.filter(x => x.currency === t && num(x.price) > 0))
-      warn(
-        'W-STEPS',
-        `economy.${b.shopOf ? `items.${b.shopOf}` : `boxes.${b.key}`}`,
-        `Buying ${named(b.shopOf ? m.item.get(b.shopOf) : b)} takes ${steps}, since it costs ${sym(t)}.`,
-        `Price it in what ${named(r)} takes (${priced(craft.pays)} for each ${craft.makes} ${sym(t)}), unless holding ${sym(t)} is the point.`,
-      );
-  }
+  };
+  for (const key of new Set(rates.map(x => x.from))) walkLoop(key, key, [], 1);
 
-  // ---- W-ASSUMPTION: a lottery's least sale against what the scenario sells in a round. (A pool's life against the
-  // scenario's rates is in check.mjs, from the simulation.)
-  for (const l of m.lotteries) {
-    if (!(num(l.minSold) > 0)) continue;
-    const every = toSeconds(l.every);
-    const untilDraw = l.firstDraw ? toTime(l.firstDraw, now) - now : 0;
-    const roundDays = every ? every / DAY : untilDraw > 0 ? untilDraw / DAY : 0;
-    if (!(roundDays > 0)) continue;
-    const said = m.scenario.perDay?.[`lottery:${l.key}`];
-    const perDay = num(said ?? DEFAULT_PER_DAY);
-    let sold = perDay * roundDays;
-    const players = num(m.scenario.players);
-    const each = num(l.perWallet);
-    const capped = players > 0 && each > 0 && players * each < sold;
-    if (capped) sold = players * each;
-    sold = Math.floor(sold);
-    if (sold >= num(l.minSold)) continue;
-    const round = every ? 'a round' : `its one round, until its draw at ${at(toTime(l.firstDraw, now))}`;
+  // ---- W-STEPS: an intent whose price the player must craft first takes two transactions, two wallet prompts.
+  for (const route of routes) {
+    const craft = route.states.flatMap(s => s.steps).find(s => s.craft)?.craft;
+    if (!craft || route.kind === 'recipe') continue;
+    const asset = route.price[0]?.asset;
+    const origin = assets.get(asset)?.origins.find(o => o.recipe === craft);
+    const per = num(route.price[0]?.amount) / num(origin?.makes || 1);
+    const rolls = (craft.out ?? []).some(o => o.gives === 'roll');
     warn(
-      'W-ASSUMPTION',
-      `economy.lotteries.${l.key}.minSold`,
-      `${named(l)} is cancelled unless ${l.minSold} tickets sell in ${round}, and the scenario sells about ${sold}${capped ? ` (${players} players, at most ${each} each)` : said === undefined ? ` (it names no tickets for it: ${DEFAULT_PER_DAY} a day assumed)` : ` (${perDay} a day)`}. A cancelled round refunds every ticket and draws nothing. Its least sale can change only before the round's first ticket: the round keeps the terms it opened with.`,
-      'Lower "minSold" to what you expect to sell (or leave it out), or set the scenario ("scenario.perDay", "scenario.players") to what you really expect and check again.',
+      'W-STEPS',
+      route.kind === 'lottery' ? route.where : route.where,
+      `Buying from ${named(route)} takes a craft of ${named(craft)}, then the purchase: two transactions, two wallet prompts, since it costs ${sym(asset)}.`,
+      route.kind === 'lottery' && !rolls
+        ? `Send both in one: the play client's buyTickets("${route.key}", count, { listing, make: { recipe: "${craft.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval (kit 0.28.7 and later).`
+        : `Price it in what ${named(craft)} takes (${priced(origin?.pays ?? [])} for each ${origin?.makes} ${sym(asset)}), unless holding ${sym(asset)} is the point.`,
+      { severity: 'low' },
     );
   }
+
+  // ---- W-ASSUMPTION: a number that depends on how many take part, against the scenario; unknown when it says nothing.
+  for (const route of routes) {
+    const c = route.cancel;
+    if (!c?.minSold || !c.participation) continue;
+    const p = c.participation;
+    const round = route.repeats
+      ? 'a round'
+      : route.ends
+        ? `its one round, until its draw at ${at(route.ends)}`
+        : 'its one round';
+    if (p.expected === null)
+      warn(
+        'W-ASSUMPTION',
+        `${route.where}.minSold`,
+        `Unknown: ${named(route)} is cancelled unless ${c.minSold} tickets sell in ${round}, and ${p.how}, so whether it ever draws is a guess. Ask the person how many players they expect and how many tickets each buys before building on it. Its least sale can change only before the round's first ticket.`,
+        `Ask, then write it in the scenario ("scenario.players", and "perWallet" or "scenario.perDay": {"lottery:${route.key}": n}) and check again; or leave "minSold" out.`,
+        {
+          severity: 'medium',
+          ask: `How many players will ${named(route)} have, and how many tickets will each buy before its draw? It needs ${c.minSold}.`,
+        },
+      );
+    else if (p.expected < c.minSold)
+      warn(
+        'W-ASSUMPTION',
+        `${route.where}.minSold`,
+        `${named(route)} is cancelled unless ${c.minSold} tickets sell in ${round}, and the scenario sells about ${p.expected} (${p.how}). A cancelled round refunds every ticket and draws nothing. Its least sale can change only before the round's first ticket: the round keeps the terms it opened with.`,
+        'Lower "minSold" to what you expect to sell (or leave it out), or set the scenario to what you really expect and check again.',
+        { severity: 'high' },
+      );
+  }
+  for (const ct of m.contests) {
+    if (!num(ct.minPot)) continue;
+    if (m.scenario.perDay?.[`contest:${ct.key}`] !== undefined || num(m.scenario.players)) continue;
+    warn(
+      'W-ASSUMPTION',
+      `economy.contests.${ct.key}.minPot`,
+      `Unknown: ${named(ct)} is off unless its sides hold ${ct.minPot} when entries close, and the scenario names no entries for it (“contest:${ct.key}”) and no players, so whether it ever pays out is a guess. Ask the person how many will enter and with how much. It is fixed when the contest opens.`,
+      `Ask, then write it in the scenario ("scenario.perDay": {"contest:${ct.key}": n}) and check again.`,
+      {
+        severity: 'medium',
+        ask: `How many will enter ${named(ct)}, and with how much? It needs ${ct.minPot} in its sides.`,
+      },
+    );
+  }
+  return fl;
 }

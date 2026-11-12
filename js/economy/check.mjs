@@ -698,7 +698,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
-  const warn = (code, where, message, fix) => warnings.push({ code, where, message, ...(fix ? { fix } : {}) });
+  /** A warning; `extra` { severity, ask }: how likely its state is, and the question to put to the person. */
+  const warn = (code, where, message, fix, extra) =>
+    warnings.push({ code, where, message, ...(fix ? { fix } : {}), ...(extra ?? {}) });
   const result = () => ({ ok: refusals.length === 0, refusals, warnings });
 
   for (const where of findSecrets(economy))
@@ -5848,6 +5850,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         `economy.pools.${p.key}`,
         `At the scenario’s rates “${p.key}” pays out ${+p.outPerDay.toFixed(6)} ${sym} a day (${takersText}) and takes in ${+p.inPerDay.toFixed(6)}: its seed of ${p.seed} ${sym} is gone on day ${p.lastsDays} of ${days}. After that what it owes is skipped or fails until money comes in.`,
         `Seed it with ${need !== null ? `at least ${need} ${sym} (${days} days at that rate)` : 'more'}, fill it with a share of a sale (a split to "pool:${p.key}") or a schedule, or pay less from it.`,
+        { severity: 'medium' },
       );
     }
     for (const row of sim?.farms ?? []) farmRounding(m.farm.get(row.key), row, warn, m);
@@ -5940,6 +5943,11 @@ function rateRoom(f, warn, m) {
 export function describe({ refusals, warnings }) {
   return [
     ...refusals.map(r => `✗ ${r.code} ${r.message}\n    Fix: ${r.fix}`),
-    ...warnings.map(w => `! ${w.code} ${w.message}${w.fix ? `\n    ${w.fix}` : ''}`),
+    ...warnings.map(
+      w => `! ${w.code}${w.severity ? ` (${w.severity})` : ''} ${w.message}${w.fix ? `\n    ${w.fix}` : ''}`,
+    ),
+    ...(warnings.some(w => w.ask)
+      ? ['', 'Ask the person before building on it:', ...warnings.filter(w => w.ask).map(w => `? ${w.ask}`)]
+      : []),
   ].join('\n');
 }

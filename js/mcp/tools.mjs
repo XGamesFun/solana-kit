@@ -27,6 +27,7 @@ import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
+import { endStates } from '../economy/walk.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -392,6 +393,12 @@ export const tools = [
       const { economy, from } = await load(input, ctx);
       const verdict = check(economy, { now: nowOf(ctx) });
       const head = verdict.refusals.length || verdict.warnings.length ? describe(verdict) : 'No problems found.';
+      // What a player is left with when a route goes wrong, in front of the agent at the moment it decides.
+      const now = nowOf(ctx);
+      const ends = verdict.ok ? endStates(model(economy, { now }), { now }) : [];
+      const states = ends.length
+        ? `\n\nWhen it goes wrong or a player changes their mind (tell the person before building on it):\n${ends.map(l => `- ${l}`).join('\n')}`
+        : '';
       const tail = verdict.ok
         ? `\nReady (${plural(verdict.warnings.length, 'warning')}). Next: xsolana_simulate and xsolana_explain, and tell the person what it means in plain words; before going live, xsolana_review.`
         : `\n${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`;
@@ -400,7 +407,7 @@ export const tools = [
         from,
         refusals: verdict.refusals,
         warnings: verdict.warnings,
-        text: `${head}${tail}${footer()}`,
+        text: `${head}${states}${tail}${footer()}`,
       };
     },
   },

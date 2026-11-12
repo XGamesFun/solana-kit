@@ -83,8 +83,8 @@ test('three analyses, three codes: the situation each found is in its message', 
   );
   assert.deepEqual([...codes].sort(), ['W-ASSUMPTION', 'W-STEPS', 'W-VALUE']);
   const r = review(spec(), { now: NOW });
-  assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'medium'));
-  assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'medium'));
+  assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'high'));
+  assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'high'));
   assert.ok(r.findings.some(f => f.id === 'R-STEPS' && f.severity === 'low'));
 });
 
@@ -98,7 +98,8 @@ test('follow the value, cancelled: a refund in the ticket token, not what was pa
   const none = spec();
   for (const l of none.lotteries) delete l.minSold;
   const [w] = check(none, { now: NOW }).warnings.filter(x => x.code === 'W-VALUE' && x.message.includes('cancelled:'));
-  assert.match(w.message, /one the oracle hasn't answered 7 days after its ask/);
+  assert.match(w.message, /a draw the oracle hasn't answered 7 days after it was asked/);
+  assert.equal(w.severity, 'low', 'only the oracle’s timeout: rare');
   assert.doesNotMatch(w.message, /short of/);
 });
 
@@ -217,7 +218,7 @@ test('explain and the review end with each route, state by state, as a player, t
   ])
     assert.match(draw, new RegExp(`- ${state}: `), state);
   for (const who of ['Player:', 'Owner:', 'Cheater:']) assert.ok(draw.includes(who), who);
-  assert.match(draw, /refunded in ENTRY/);
+  assert.match(draw, /refunds every ticket in ENTRY/);
   assert.match(draw, /“100 BUBL for an Entry” turns it back once the project switches it on/);
   assert.match(walk, /“100 BUBL for an Entry”: a recipe\n {2}- Before it opens: It is switched off/);
   assert.match(review(s, { now: NOW }).tradeoffs, /Each route, state by state/);

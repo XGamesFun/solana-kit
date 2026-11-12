@@ -1,69 +1,90 @@
-// The walk-through at the end of `xsolana explain` and the review: each route of the spec, state by state (before it
-// opens, while it runs, cancelled or failed, won, after it ends, a change of mind), as a player, the owner and a
-// cheater see it, and what can change only before its first sale or claim. Words the program's rules back
-// (PROGRAM.md), filled with the spec's own names, prices and dates, so an agent has the trade-offs in front of it at
-// the moment it decides.
-import { boxRolls, ORACLE_FEE, prizeLine, prizeToken, prizeWords, toSeconds, toTime } from './model.mjs';
+// The walk-through at the end of `xsolana explain` and the review, and the end states `xsolana_check` shows: each route
+// of the spec, state by state (before it opens, while it runs, cancelled or failed, won, after it ends, a change of
+// mind), as a player, the owner and a cheater see it, and what can change only before its first sale or claim. The
+// routes the model holds (flows.mjs) are written from its steps (who sends each, who pays, what moves, what happens if
+// nobody does); the others in words that follow the program's rules (PROGRAM.md).
+import { at, flows, named, num, words } from './flows.mjs';
+import { toTime } from './model.mjs';
 
-const num = x => Number(x ?? 0);
-const at = seconds =>
-  new Date(seconds * 1000)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/:\d\d\.\d+Z$/, ' UTC');
-const named = part => `“${part?.name ?? part?.key}”`;
-const words = list => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
-const span = seconds =>
-  seconds % 86_400 === 0
-    ? `${seconds / 86_400} d`
-    : seconds % 3600 === 0
-      ? `${seconds / 3600} h`
-      : seconds % 60 === 0
-        ? `${seconds / 60} min`
-        : `${seconds} s`;
+const STATE = {
+  open: 'Before it opens',
+  run: 'While it runs',
+  cancel: 'Cancelled or failed',
+  win: 'Won',
+  after: 'After it ends',
+  undo: 'A change of mind',
+};
+const WHO = {
+  player: 'Player',
+  winner: 'Player',
+  keys: 'Owner',
+  server: 'The results server',
+  anyone: 'Anyone',
+  oracle: 'The oracle',
+};
 
-/** What a draw or a roll pays the oracle, in SOL. */
-const oracleSol = Number(ORACLE_FEE) / 1e9;
+/** One state's steps in words: each actor once, their steps in order, what happens if nobody sends one. */
+function stepWords(steps) {
+  if (steps.length === 1 && /^[A-Z“]/.test(steps[0].says)) return steps[0].says;
+  const parts = [];
+  for (const s of steps) {
+    const text = `${s.says}${s.ifNobody ? ` (if nobody does: ${s.ifNobody})` : ''}`;
+    const last = parts.at(-1);
+    if (last && last.who === s.by) last.texts.push(text);
+    else parts.push({ who: s.by, texts: [text] });
+  }
+  return parts.map(p => `${WHO[p.who] ?? p.who}: ${p.texts.join('; then ')}.`).join(' ');
+}
+
+/** The end states of the routes the model holds, in short: what a cancel, a change of mind and the end leave a player. */
+export function endStates(m, { now, fl = flows(m, { now }) }) {
+  // A cancel where a route can be cancelled or its roll can wait; a change of mind where something turns it back.
+  const shown = (r, state) =>
+    state === 'cancel'
+      ? Boolean(r.cancel) || (r.roll && r.kind !== 'recipe')
+      : Boolean(extraWords(r, state, fl)) || r.backs?.length > 0;
+  return fl.routes
+    .filter(r => r.price.length)
+    .flatMap(r =>
+      ['cancel', 'undo']
+        .map(state => [state, r.states.find(x => x.state === state)])
+        .filter(([state, st]) => st && shown(r, state))
+        .map(
+          ([state, st]) =>
+            `${named(r)}, ${STATE[state].toLowerCase()}: ${stepWords(st.steps)}${extraWords(r, state, fl)}`,
+        ),
+    );
+}
+
+/** What the model adds to a state beyond its steps: what a refund is worth against what was paid, the way back. */
+function extraWords(r, state, fl) {
+  const sym = key => fl.assets.get(key)?.symbol ?? key;
+  const on = x => x?.active !== false;
+  const backs = asset => {
+    const b = fl.assets.get(asset)?.backs ?? [];
+    if (!b.length) return '';
+    return b.some(x => on(x.recipe))
+      ? ` ${words(b.filter(x => on(x.recipe)).map(x => named(x.recipe)))} turns it back (open now).`
+      : ` ${words(b.map(x => named(x.recipe)))} turns it back once the project switches it on.`;
+  };
+  if (state === 'cancel' && r.cancel) {
+    const asset = r.cancel.refund[0]?.asset;
+    const a = fl.assets.get(asset);
+    if (a && !a.money && a.origins.length)
+      return ` What was paid for the ${a.symbol} does not come back with it:${backs(asset) || ` nothing turns ${a.symbol} back.`}`;
+  }
+  if (state === 'undo' && r.kind === 'lottery') {
+    const asset = r.price[0]?.asset;
+    const text = backs(asset);
+    return text ? ` For ${sym(asset)} not yet spent on tickets:${text}` : '';
+  }
+  return '';
+}
 
 /** The walk-through, as lines: a title, then for each route its name and one line a state. [] for a spec with no route. */
-export function walkThrough(m, { now }) {
+export function walkThrough(m, { now, fl = flows(m, { now }) }) {
   const sym = key => m.tokens.get(key)?.symbol ?? key;
   const on = x => x.active !== false;
-  const lineToken = l => {
-    const p = prizeLine(l);
-    return p?.gives === 'tokens' ? (prizeToken(p, m)?.key ?? p.currency ?? m.currencyKey) : null;
-  };
-  const inWords = r =>
-    words(
-      (r.in ?? []).map(l =>
-        l.takes === 'pay'
-          ? `${num(l.amount)} ${sym(l.currency ?? m.currencyKey)}`
-          : l.item
-            ? `${l.count ?? 1} ${named(m.item.get(l.item) ?? { key: l.item })} (${l.takes === 'burn' ? 'burned' : l.takes === 'use' || l.takes === 'renew' ? 'used, kept' : l.takes === 'staked' ? 'staked, kept' : l.takes})`
-            : l.takes === 'show'
-              ? 'an NFT of a collection, shown and kept'
-              : l.takes === 'trade'
-                ? 'an NFT of a collection, traded in'
-                : l.takes,
-      ),
-    ) || 'nothing';
-  const outWords = r => words((r.out ?? []).map(o => prizeWords(o, m))) || 'nothing';
-  /** Recipes that make token `t` from something else, and recipes that turn it back into another token. */
-  const makers = t => m.recipes.filter(r => (r.out ?? []).some(o => lineToken(o) === t) && (r.in ?? []).length);
-  const backs = t =>
-    m.recipes.filter(
-      r =>
-        (r.in ?? []).some(l => l.takes === 'pay' && (l.currency ?? m.currencyKey) === t) &&
-        (r.out ?? []).some(o => lineToken(o) && lineToken(o) !== t),
-    );
-  const backWords = (t, how) => {
-    const b = backs(t);
-    if (!b.length) return '';
-    const open = b.filter(on);
-    return open.length
-      ? ` ${words(open.map(named))} ${how} (open now).`
-      : ` ${words(b.map(named))} ${how} once the project switches it on.`;
-  };
   const windowWords = (x, what, none) =>
     !on(x)
       ? `It is switched off ("active": false): ${none} until the project switches it on.`
@@ -76,151 +97,41 @@ export function walkThrough(m, { now }) {
   const route = (title, rows) =>
     routes.push(title, ...rows.filter(([, text]) => text).map(([s, text]) => `  - ${s}: ${text}`));
 
-  for (const l of m.lotteries) {
-    const t = l.ticketNft ? null : (l.ticketCurrency ?? l.currency ?? m.currencyKey);
-    const price = num(l.price);
-    const every = toSeconds(l.every);
-    const draw = l.firstDraw ? at(toTime(l.firstDraw, now)) : null;
-    const made = t ? makers(t) : [];
-    const closesBefore = num(toSeconds(l.closesBefore));
-    const ticket = l.ticketNft
-      ? 'an NFT that passes its rule'
-      : price > 0
-        ? `${price} ${sym(t)}`
-        : 'nothing but the player fee';
-    route(
-      `${named(l)}: a lottery, ${every ? `drawn every ${span(every)}` : `drawn once${draw ? `, at ${draw}` : ''}`}`,
-      [
-        [
-          'Before it opens',
-          `It sells from the moment it is live; its first ticket opens the round.${l.gate ? ' Only wallets its gate admits buy.' : ''}`,
-        ],
-        [
-          'While it runs',
-          `Player: pays ${ticket} a ticket${made.length ? ` (${sym(t)} comes from ${words(made.map(named))}: a craft before the purchase)` : ''}${perWalletWords(l)}, and holds an entry in the round, not a token: it can't be sold or taken back. Sales close ${closesBefore ? `${span(closesBefore)} before` : 'at'} the draw. Owner: nothing to send; an edit reaches the next round, never the one running. Cheater: many wallets buy many tickets; nobody sees or picks the result, drawn from the oracle's answer after sales close.`,
-        ],
-        [
-          'Cancelled or failed',
-          `${num(l.minSold) > 0 ? `A round short of ${l.minSold} tickets is cancelled when its draw is asked, with no draw. ` : ''}A draw the oracle hasn't answered 7 days after it was asked is cancelled at the next ask. Player: every ticket is refunded${t && price > 0 ? ` in ${sym(t)}` : ''}${l.ticketNft ? ' (the NFT back)' : ''}, the player fee not; anyone may pull a refund to its buyer.${made.length ? ` What was paid for the ${sym(t)} does not come back with it:${backWordsOr(backWords(t, 'turns it back'), ` nothing turns ${sym(t)} back.`)}` : ''} Owner: nothing to send; a round nobody asks to draw waits, with no deadline. Cheater: nothing to gain: a refund goes to the entry's own buyer.`,
-        ],
-        [
-          'Won',
-          `Once it is due anyone asks for the draw, paying the oracle ${oracleSol} SOL, and anyone pulls each winner's part to the winner: ${words((l.places ?? []).map((p, i) => `place ${i + 1} ${p.prize ? prizeWords(p.prize, m) : `${num(p.percent)}% of the pot`}`)) || 'the pot'}. An item is given while it has stock${(l.places ?? []).some(p => prizeLine(p.prize)?.gives === 'item' && m.item.get(prizeLine(p.prize).item)?.kind !== 'collectible') ? '; a normal item is an off-chain prize, yours to deliver from its receipt' : ''}.`,
-        ],
-        [
-          'After it ends',
-          every
-            ? 'The next round sells at once, on the lottery’s terms as they are then.'
-            : `It sells no more tickets.${t && price > 0 && t !== m.currencyKey ? ` ${sym(t)} left in wallets does only what something else takes it for.` : ''} The owner may close it once its round is paid out, for its rent back.`,
-        ],
-        [
-          'A change of mind',
-          `No way out: a ticket stays in the round until its draw or a cancel.${t && made.length ? backWords(t, `turns ${sym(t)} not yet spent on tickets back`) : ''}`,
-        ],
-        [
-          'Only before the first ticket',
-          `The round copies the lottery's terms (price, places, least sale, draw date) at its first ticket: an edit after it reaches only the next round${every ? '' : ', and a lottery that draws once has none'}.`,
-        ],
-      ],
-    );
+  // ---- the routes the model holds, from their steps
+  const OPEN = {
+    box: ['sells', 'nothing is sold'],
+    item: ['sells', 'nothing is sold'],
+    recipe: ['crafts', 'nothing is crafted'],
+    grant: ['takes claims', 'no claim is taken'],
+  };
+  for (const r of fl.routes) {
+    const rows = [];
+    const open = r.states.find(s => s.state === 'open');
+    rows.push([STATE.open, open ? stepWords(open.steps) : windowWords(r.part, ...OPEN[r.kind])]);
+    for (const st of r.states.filter(s => s.state !== 'open')) {
+      let text = stepWords(st.steps) + extraWords(r, st.state, fl);
+      if (st.state === 'run') {
+        const cheat = st.cheater
+          ? [st.cheater]
+          : [
+              r.kind === 'lottery'
+                ? 'many wallets buy many tickets'
+                : r.kind === 'recipe'
+                  ? 'crafts as often as they hold what it takes'
+                  : '',
+              r.roll && r.kind !== 'recipe' ? 'nobody sees or picks the result, drawn from the oracle’s answer' : '',
+              r.limited ? 'bots can buy limited stock first' : '',
+            ].filter(Boolean);
+        text += `${perWalletWords(r)}${cheat.length ? ` Cheater: ${cheat.join('; ')}.` : ' Cheater: nothing to take: it sells at its price.'}`;
+      }
+      if (st.state === 'cancel' && r.cancel) text += ' Cheater: nothing to gain: a refund goes only to its own buyer.';
+      rows.push([STATE[st.state], text]);
+    }
+    if (r.fixed) rows.push([`Only before ${r.fixed.when}`, r.fixed.says]);
+    route(`${named(r)}: ${r.title}`, rows);
   }
 
-  for (const b of m.allBoxes) {
-    const item = b.shopOf ? m.item.get(b.shopOf) : null;
-    const source = item ?? b;
-    const rolls = boxRolls(b, m);
-    const cur = sym(b.currency ?? m.currencyKey);
-    const price = num(b.price);
-    const what = item ? `${named(item)} from the shop` : named(b);
-    route(`${what}: ${item ? 'an item for sale' : rolls ? 'a box, rolled by the oracle' : 'a box'}`, [
-      ['Before it opens', windowWords(source, 'sells', 'nothing is sold')],
-      [
-        'While it runs',
-        `Player: pays ${price > 0 ? `${price} ${cur}` : 'nothing but the player fee'}${perWalletWords(source)}; ${rolls ? `the oracle rolls what they get (paid ${oracleSol} SOL), which lands with its answer` : 'gets what it gives at once'}. Owner: nothing to send${rolls ? '; an edit of its entries or odds refunds every paid roll still waiting, at once; a price change reaches the next purchase' : ''}. Cheater: ${rolls ? "can't see or pick a roll" : 'nothing to take: it sells at its price'}${item?.supply || (!item && rolls) ? '; bots can buy limited stock first' : ''}.`,
-      ],
-      [
-        'Cancelled or failed',
-        rolls
-          ? "A roll the oracle hasn't answered is asked again once it is stale, by its player or your keys; nothing times it out. A prize out of stock is never set aside for a roll."
-          : 'A purchase that can’t give what it sells fails whole: nothing is taken.',
-      ],
-      [
-        'After it ends',
-        source.closes !== undefined
-          ? `Nothing sells after ${at(toTime(source.closes, now))}.`
-          : 'It sells until its stock runs out or the project switches it off.',
-      ],
-      ['A change of mind', 'No refund once paid.'],
-      [
-        'Only before the first sale',
-        item?.kind === 'collectible' ? 'The item’s collection can’t change once a unit is out.' : '',
-      ],
-    ]);
-  }
-
-  for (const r of m.recipes) {
-    const takes = (r.in ?? []).filter(l => l.takes === 'pay').map(l => l.currency ?? m.currencyKey);
-    const back = takes.length
-      ? m.recipes.filter(
-          x =>
-            x !== r &&
-            (x.out ?? []).some(o => takes.includes(lineToken(o))) &&
-            (x.in ?? []).some(
-              l => l.takes === 'pay' && (r.out ?? []).some(o => lineToken(o) === (l.currency ?? m.currencyKey)),
-            ),
-        )
-      : [];
-    route(`${named(r)}: a recipe`, [
-      ['Before it opens', windowWords(r, 'crafts', 'nothing is crafted')],
-      [
-        'While it runs',
-        `Player: gives ${inWords(r)}, gets ${outWords(r)}, in one transaction, all or nothing${perWalletWords(r)}. Owner: nothing to send; an edit reaches the next craft. Cheater: crafts as often as they hold what it takes.`,
-      ],
-      ['Cancelled or failed', 'A craft that can’t give every line fails whole: nothing is taken.'],
-      [
-        'After it ends',
-        r.closes !== undefined
-          ? `Nothing crafts after ${at(toTime(r.closes, now))}.`
-          : 'It crafts until the project switches it off.',
-      ],
-      [
-        'A change of mind',
-        back.length
-          ? `${words(back.map(named))} turns it back${back.some(on) ? '' : ' once the project switches it on'}.`
-          : 'No undo: what it took is spent.',
-      ],
-    ]);
-  }
-
-  for (const g of m.grants) {
-    const prize = prizeWords(g.prize ?? g.gives, m);
-    const how = g.vouchers?.length
-      ? 'a voucher from the project’s results server'
-      : g.list
-        ? 'a place on its list'
-        : 'nothing but its limits';
-    const limits = Object.entries(g.limits ?? {})
-      .map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-      .join(', ');
-    route(`${named(g)}: a grant`, [
-      [
-        'Before it opens',
-        on(g)
-          ? 'Claims work from the moment it is live.'
-          : 'It is switched off ("active": false): no claim until the project switches it on.',
-      ],
-      [
-        'While it runs',
-        `Player: claims ${prize}, proving it with ${how}; only their own wallet signs the claim. Owner: ${g.vouchers?.length ? 'the results server must be up to sign vouchers (no server, no claims), and ' : ''}its funds pay each claim's rent: keep them topped up. Cheater: ${g.vouchers?.length ? `gets whatever the server signs (${g.trust ?? 'what it checks'}): a signed result is worth what the server checks; ` : g.list ? '' : 'every wallet may claim; '}its limits are the ceiling (${limits || 'none'}).`,
-      ],
-      [
-        'Cancelled or failed',
-        'A claim whose prize can’t be given (a pool run dry, an item out of stock) is refused and keeps its round: it can be claimed later.',
-      ],
-      ['After it ends', 'It gives until its limits are reached or the project switches it off: it has no end date.'],
-    ]);
-  }
-
+  // ---- the other routes, in words
   for (const a of m.auctions) {
     route(`${named(a)}: an auction`, [
       [
@@ -309,5 +220,3 @@ export function walkThrough(m, { now }) {
     ...routes,
   ];
 }
-
-const backWordsOr = (text, otherwise) => text || otherwise;
