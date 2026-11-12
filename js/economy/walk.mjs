@@ -231,6 +231,11 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
       : []),
     'Each route, state by state (as a player, the owner and a cheater see it)',
     'The owner’s pause stops every purchase, ticket, entry, stake and bid coming in; nothing owed waits on it: claims, refunds, unstakes, draws and payouts go on.',
+    ...(routes.some(r => r.includes('Only before'))
+      ? [
+          'Each “Only before …” is a setting that freezes then: tell the person as each is agreed, not only in a last checklist; when a new fact reopens a settled choice, say what changed and why.',
+        ]
+      : []),
     ...routes,
   ];
 }
@@ -319,9 +324,20 @@ export function journeyOf(r, fl) {
  * gets for their money (a fixed price or a chance), how a farm pays over time, a whole loop's approvals, what a cancel
  * refunds, every cap in one unit (an amount per identity per window), and who names a result.
  */
-export function tells(m, { now, fl = flows(m, { now }) }) {
+export function tells(m, opts) {
+  return tellLines(m, opts).map(t => t.line);
+}
+
+/**
+ * The same lines, each with whether it goes to the person as written (`asWritten`: a trust fact, such as what a
+ * script or a leaked key can take, where other words could claim more or less than is true) or in the agent's own
+ * words, every number kept.
+ */
+export function tellLines(m, { now, fl = flows(m, { now }) }) {
   const sym = key => fl.assets.get(key)?.symbol ?? key;
   const out = [];
+  // (a trust fact: passed on as written)
+  const trust = [];
   // A first-time player, from the link to the first reward: what they need before anything works.
   if (fl.routes.length)
     out.push(
@@ -391,7 +407,7 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
           `${named(r)} gives away a paid ${sym(g.asset)}: ${named(sold.recipe)} sells ${sold.makes} for ${amount(sold.pays)}, and a free one is accepted wherever a bought one is.`,
         );
       if (signed && ['bounds', undefined].includes(r.part.trust))
-        out.push(
+        trust.push(
           `${named(r)} takes the page's word within its caps: a script claiming at a steady, human pace gets the most its caps allow. A server check that only clamps to a bound costs that script nothing; one that refuses costs it the attempt.`,
         );
       // What the chain still allows when only its caps stand (the voucher key leaked, or the server loosened): a day and
@@ -406,7 +422,7 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
           ? `${r.part.serverLimit ? ` Its server signs at most ${serverRate(r.part).says}: that is what it really pays.` : ' Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly.'} If its voucher key leaks, the chain still allows ${day ? `${+day.toFixed(9)} ${sym(g.asset)} a day` : 'whatever its caps allow'}${l.total && g ? ` and ${+(l.total * g.amount).toFixed(9)} in all` : ''}${drains}.`
           : '';
       if (caps.length)
-        out.push(
+        (server ? trust : out).push(
           `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}${server}`,
         );
     }
@@ -456,7 +472,7 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
     out.push(
       `A returning player's day, doing each thing once: ${day.map(d => `${d.what} (${d.n})`).join(', ')}: about ${day.reduce((n, d) => n + d.n, 0)} wallet approvals. Fold what you can: claimAll collects every win in as few as the wallet allows, and a craft rides in a ticket purchase (make).`,
     );
-  return out;
+  return [...out.map(line => ({ line, asWritten: false })), ...trust.map(line => ({ line, asWritten: true }))];
 }
 
 /**

@@ -411,7 +411,7 @@ test('loops across routes, the biggest payout, every way a round ends', async ()
   const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
   assert.match(
     text,
-    /“draw”, every way it ends: Nothing sold: .* Nobody asks for the draw: .* The oracle never answers: /,
+    /> Every way “draw” ends: nothing sold: .* nobody asks for the draw: .* the oracle never answers: /,
   );
 });
 

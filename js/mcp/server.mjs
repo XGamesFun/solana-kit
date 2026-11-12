@@ -2,12 +2,12 @@
 // opencode, Cline). It has no dependencies, so `npx -y --package=@xgamesfun/solana@<version> xsolana mcp` starts in the
 // time an agent allows for it on a first install: MCP over stdio is newline-delimited JSON-RPC 2.0, and arguments are checked against each tool's
 // input schema with the economy's own validator (js/economy/validate.mjs), here and on the terminal path
-// (`xsolana tool`), with the same words. Answers go out as text and as structuredContent.
+// (`xsolana tool`), with the same words. Answers go out as text, and their data (without the text) as structuredContent.
 //
 // stdout is the protocol: everything else goes to stderr.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validate } from '../economy/validate.mjs';
+import { fieldsAt, schemaAt, validate } from '../economy/validate.mjs';
 import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
 import { PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
 import { withCluster } from './with-cluster.mjs';
@@ -15,25 +15,29 @@ import { withCluster } from './with-cluster.mjs';
 /** Where loot runs, for every agent that connects. */
 const WHERE = `loot ${VERSION} runs on devnet (program ${CLUSTERS.devnet.program}) and on mainnet (program ${CLUSTERS.mainnet.program}). An economy is on devnet, where nothing is real money, unless its file says "network": "mainnet", where everything is. Build and try an economy on devnet first. loot has not been independently audited.`;
 
-/** How to meet a request: the simplest version first, its trade said, before building what was asked. */
-const CHALLENGE =
-  'Challenge before you build. For every request, name the simplest version that delivers most of it. Say what it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it. Challenge economy, flow and irreversible choices; don’t challenge taste. Composing parts is still how you find the versions. Check before you describe: name no mechanism that moves value until xsolana_check has seen a draft with it; then pass on its “Tell the person” lines as written and ask its “Ask the person” questions. xsolana_explain ends with each route’s states as a player, the owner and a cheater see them.';
+/** What loot is, and the one thing never to do instead of it. */
+const ABOUT =
+  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking, crafting, contests, schedules, holder perks, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers, since unaudited code holding people’s money is the risk loot removes.';
 
-export const INSTRUCTIONS = [
-  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking farms, crafting, contests, schedules, perks for holders of any NFT, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers.',
-  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec; xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets); xsolana_save; xsolana_publish when they say to put it live. Going live is signed by a key file on their own machine (xsolana keygen makes one; never ask for, read or print a key) with xsolana approve --keypair, which prints everything it would send and sends nothing until it is run again with the code it printed: do that only after they have read the printout and said yes. That key owns the project for good: a change to an economy that is already live is signed by the key that owns it, never by a new one. A browser wallet’s signing page (approve --browser) only if they ask for one, and they run it themselves.',
-  CHALLENGE,
-  WHERE,
-].join(' ');
+/** The order of the tools that work on a spec, and when to stop for the person: the same on both servers. */
+const ORDER =
+  'Order: xsolana_guide is a short index, so fetch the part you need from it; xsolana_examples with the person’s own words; write the spec. Challenge before you build: name the simplest version, what it gives up and what the asked-for one costs, and recommend one. xsolana_check after every change, and on one draft before you describe how value moves. xsolana_design when the person’s wants pull against each other: the choice is theirs, so put it and end your turn. Quote xsolana_simulate, xsolana_cost and xsolana_explain for every number. xsolana_review before going live. xsolana_token reads a coin made elsewhere; xsolana_client gives an app the program and its calls; xsolana_status reads what is live.';
+
+/** Going live from the local server: the tool that says how, and the one rule it keeps. */
+const LIVE =
+  'xsolana_save once it checks; xsolana_publish when the person says to put it live. Going live is signed by a key file on their machine, only after they have read what approve prints and said yes; never ask for, read or print a key.';
+
+export const INSTRUCTIONS = [ABOUT, ORDER, LIVE, WHERE].join(' ');
 
 /**
  * What a hosted server (js/mcp/http.mjs) tells the agent: the same work, with the spec passed whole in every call,
  * and going live on the person's own computer, since a hosted server can neither write their files nor sign there.
+ * It has no xsolana_publish, so the key-file rule is said here in full.
  */
 export const REMOTE_INSTRUCTIONS = [
-  INSTRUCTIONS.split(' Start with')[0],
-  CHALLENGE,
-  'Start with xsolana_guide, then xsolana_examples with the person’s own words; write the spec and pass it whole as "spec" to every tool (this hosted server reads no files); xsolana_check after every change; xsolana_simulate and xsolana_explain before telling them what it does; xsolana_review before going live (fix its high findings, say honestly what each voucher server checks, and tell the person what a cheater gets).',
+  ABOUT,
+  ORDER,
+  'This hosted server reads no files: write the spec and pass it whole as "spec" to every tool.',
   `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address devnet SOL), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner for good (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
   WHERE,
 ].join(' ');
@@ -54,10 +58,18 @@ function listed(t, remote) {
  */
 export const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
-/** Every way `input` does not fit a tool's input schema, in words; [] when it fits. */
+/**
+ * Every way `input` does not fit a tool's input schema, in words; [] when it fits. A field the tool doesn't take comes
+ * with the fields that place does take.
+ */
 export function inputProblems(schema, input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return ['arguments must be an object'];
-  return validate(input, schema, schema, 'arguments').map(e => `${e.path} ${e.message}`);
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return [`arguments must be an object (this tool takes ${fieldsAt(schema, schema).join(', ') || 'none'})`];
+  return validate(input, schema, schema, 'arguments').map(e => {
+    const at = e.message === 'is not a field this place takes' ? schemaAt(e.path, schema) : null;
+    const takes = at && !at.whole ? fieldsAt(at.node, schema) : null;
+    return `${e.path} ${e.message}${takes ? ` (it takes ${takes.length ? takes.join(', ') : 'none'})` : ''}`;
+  });
 }
 
 /** Runs one tool by name: the same checks and answer on the server and in the terminal. */
@@ -142,11 +154,12 @@ export async function handle(message, ctx = {}) {
       const input = params?.arguments ?? {};
       const result = await runTool(params?.name, input, ctx.remote ? ctx : { ...ctx, cwd: ctx.cwd ?? process.cwd() });
       // A tool that failed says so (isError), and keeps whatever it found (a save's refusals, say) as structuredContent.
+      // structuredContent is the data alone: the words are in content, once.
       const { text, isError, ...data } = jsonable(result);
       return reply({
         ...(isError ? { isError: true } : {}),
         content: [{ type: 'text', text }],
-        structuredContent: { text, ...data },
+        ...(Object.keys(data).length ? { structuredContent: data } : {}),
       });
     }
     default:

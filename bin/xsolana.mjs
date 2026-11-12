@@ -4,7 +4,7 @@
 //
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
 //   xsolana mcp --http [--port n] [--host h]   serve the hosted tools over HTTP at /mcp (127.0.0.1:8787 by default)
-//   xsolana guide [part] [--json]        what an economy can be made of, and what loot cannot do
+//   xsolana guide [part] [--json]        the guide's index; with a part or a topic (writing, cheating, asks, cannot), that one
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
 //   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
@@ -23,7 +23,7 @@ import { readFile } from 'node:fs/promises';
 
 const USAGE = `xsolana: the tools for loot, one shared Solana program for game and community economies.
 
-  xsolana guide [part]            what an economy can be made of
+  xsolana guide [part]            what an economy can be made of: an index, then one part or topic
   xsolana examples [words…]       where to start
   xsolana check [file]            refusals and warnings (default xsolana.json)
   xsolana simulate [file]         the quick simulation

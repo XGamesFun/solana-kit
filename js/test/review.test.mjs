@@ -214,7 +214,11 @@ test('explain says what each voucher server checks', () => {
 test('xsolana_review answers the review; the command exits 1 on a high finding', async () => {
   const r = await runTool('xsolana_review', { spec: spec('review-bounds') }, { now: NOW });
   assert.equal(r.ok, false);
-  assert.ok(Array.isArray(r.routes) && Array.isArray(r.findings) && typeof r.tradeoffs === 'string');
+  assert.ok(Array.isArray(r.routes) && Array.isArray(r.findings));
+  // The trade-offs are said once, in the text.
+  assert.ok(!('tradeoffs' in r));
+  assert.match(r.text, /Trade-offs to show the person/);
+  assert.match(r.text, /Before you call it ready:\n- List what your replies promised the person/);
   assert.match(r.text, /high finding/);
   const fine = await runTool('xsolana_review', { spec: spec('review-decides') }, { now: NOW });
   assert.equal(fine.ok, true);

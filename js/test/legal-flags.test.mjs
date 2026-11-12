@@ -35,7 +35,7 @@ test('xsolana_publish leads its answer with the legal flags, to say once if they
   const r = await runTool('xsolana_publish', { example: 'coin-flip-arena' }, { now: NOW });
   assert.equal(r.ok, true);
   const lines = r.text.split('\n');
-  assert.match(lines[0], /^If you haven't told the person these yet, say each once/);
+  assert.match(lines[0], /^Say each to the person as written: once if you haven't yet/);
   assert.equal(lines[1], `- ${LEGAL['W-REVENUE-SHARE']}`);
   assert.equal(lines[2], `- ${LEGAL['W-CHANCE-PRIZE']}`);
   // with no flags, the answer starts with what going live does
@@ -70,4 +70,14 @@ test('the approval state carries the legal flags apart from the other warnings',
     (await createApproval({ file, chain, now: () => NOW })).state().legal.map(f => f.code),
     ['W-TOKEN-SALE'],
   );
+});
+
+test('xsolana_check says the law and trust facts as written, once, and the rest in the agent’s own words', async () => {
+  const r = await runTool('xsolana_check', { example: 'coin-flip-arena' }, { now: NOW });
+  assert.match(r.text, /The law, as written: say each once, the first time it appears here, and again before mainnet/);
+  assert.ok(r.text.includes(`> ${LEGAL['W-CHANCE-PRIZE']}`));
+  assert.match(r.text, /Tell the person, in your own words .*keeping every number and dropping none:/);
+  assert.match(r.text, /Each warning reaches the person once, with its fix and your pick/);
+  // every way a round ends is said once
+  assert.equal(r.text.match(/every way .*Weekly draw.* ends|Weekly draw”, every way it ends/gi)?.length, 1);
 });
