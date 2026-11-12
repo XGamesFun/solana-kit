@@ -11,9 +11,9 @@ signed by a key file on the owner's own machine, once they have read what will b
 **devnet**, where nothing is real money, and on **mainnet**, where everything is: an economy is on devnet unless its
 file says `"network": "mainnet"`.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.15 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.28.15 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.28.15 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.16 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.28.16 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.28.16 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -100,7 +100,11 @@ or `npx -y @xgamesfun/solana@0.28.15 tool <name> '<json>'` for any tool (always 
    - Say outright when a real-money sale is a fixed price and not random.
    - When use changes hands for a while (a stake, a listing, a rental, a loan), say who holds the NFT at each stage
      and who can move it.
-   - Pass on `xsolana_check`'s "Tell the person" lines in your answer, as written: they are final, not notes.
+   - Pass on `xsolana_check`'s "Tell the person" lines in your answer, as written: they are final, not notes. For a
+     person who isn't technical, put a line in plainer words, but keep every number in it (a key-leak ceiling, a cap, a
+     count of approvals) and never drop one.
+   - When a server limit, a cap or a route changes, say the new figures again: what it really pays and what the chain
+     allows if its key leaks. Run `xsolana_design` again whenever you add or change a route, not only at the start.
    - Check every limit you write against what you told the person (a cap of a day is not a cap of a week; a grant's
      caps count claims, each up to its amount).
    - When the person says "our server runs X", ask what it computes itself and what it only records from the page:
@@ -201,7 +205,7 @@ or `npx -y @xgamesfun/solana@0.28.15 tool <name> '<json>'` for any tool (always 
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
    - **A new economy gets a key file**, unless the project has one:
-     `npx -y @xgamesfun/solana@0.28.15 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     `npx -y @xgamesfun/solana@0.28.16 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
      Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
      looking for one.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
@@ -216,7 +220,7 @@ or `npx -y @xgamesfun/solana@0.28.15 tool <name> '<json>'` for any tool (always 
      devnet SOL for an economy on devnet, real SOL for one on mainnet), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
      collection they already have needs the key's address as its update authority. If they would rather not move
      those, offer the browser wallet.
-   - **Show it**: `npx -y @xgamesfun/solana@0.28.15 approve xsolana.json --keypair <key file>` prints every step with
+   - **Show it**: `npx -y @xgamesfun/solana@0.28.16 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it

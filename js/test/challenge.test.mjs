@@ -539,3 +539,28 @@ test('a server conversion with no rate is asked about; a server’s total bounds
   const loop = ws.find(w => w.message.includes('around a loop:'));
   if (loop) assert.match(loop.message, /its rate not given: one for one/);
 });
+
+test('round 5: a fund against its audience, a contest’s every ending, who else holds the supply, a returning day', async () => {
+  // Free entry's funds pay a few claims; 20000 players claim one each.
+  const s = spec();
+  s.grants[1].fund = 0.01;
+  s.scenario.players = 20000;
+  assert.ok(
+    check(s, { now: NOW }).warnings.some(
+      w => w.where === 'economy.grants.free-entry.fund' && /run out after about/.test(w.message),
+    ),
+  );
+  delete s.scenario.players;
+  assert.ok(check(s, { now: NOW }).warnings.some(w => w.where === 'economy.grants.free-entry.fund' && w.ask));
+  // A contest: a tie, and a side nobody backed.
+  const duel = JSON.parse(readFileSync(new URL('../../examples/duel-arena.json', import.meta.url), 'utf8'));
+  const text = explainEconomy(duel, { now: NOW }).text;
+  assert.match(text, /A tie, or a result nobody can call: /);
+  assert.match(text, /Nobody on the winning side: naming a side nobody backed is refused \(NoWinner\)/);
+  // A returning player's day.
+  const { runTool } = await import('../mcp/server.mjs');
+  assert.match(
+    (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text,
+    /> A returning player's day, doing each thing once: buy tickets of “draw” \(2\), buy tickets of “draw2” \(2\), collect wins \(1\): about 5 wallet approvals/,
+  );
+});
