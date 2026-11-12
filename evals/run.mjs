@@ -236,7 +236,7 @@ const md = [
   '| --- | --- | --- | --- | --- | --- | --- |',
   ...results.map(
     r =>
-      `| ${r.harness} | ${r.id} | ${r.expect} | ${r.pass ? 'yes' : 'no'} | ${r.failed.join(', ')} | ${[...new Set(r.tools)].join(' ')} | ${r.spec ? (r.spec.ok ? 'checks' : r.spec.refusals.join(' ')) : '-'} |`,
+      `| ${r.harness} | ${r.id} | ${r.expect}${r.offered ? ' (offered)' : ''} | ${r.pass ? 'yes' : 'no'} | ${r.failed.join(', ')} | ${[...new Set(r.tools)].join(' ')} | ${r.spec ? (r.spec.ok ? 'checks' : r.spec.refusals.join(' ')) : '-'} |`,
   ),
 ];
 writeFileSync(path.join(runDir, 'summary.md'), `${md.join('\n')}\n`);

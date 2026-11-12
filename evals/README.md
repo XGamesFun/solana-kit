@@ -7,7 +7,7 @@ There are three kinds:
 
 | Kind              | What it does                                                                                                                                                                                                                                                                                                                                                                              | Files                                          |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Single turn       | Each prompt goes to a fresh, non-interactive Claude Code or Codex session in an empty folder. A scorer reads what it did and saved.                                                                                                                                                                                                                                                       | `run.mjs`, `score.mjs`, `prompts.json`         |
+| Single turn       | Each prompt goes to a fresh, non-interactive Claude Code or Codex session in an empty folder. A scorer reads what it did and saved; where a prompt says `"offer": true`, a run that stops to put the choice to the person passes too.                                                                                                                                                     | `run.mjs`, `score.mjs`, `prompts.json`         |
 | Composition judge | Claude reads each single-turn run against loot's parts and rates each piece of the idea: built, composed, approximated, offered, declined (rightly or wrongly) or dropped. It also lists what was undersold or overclaimed.                                                                                                                                                               | `judge.mjs`, `composition-prompts.json`        |
 | Live              | A whole conversation on devnet: a simulated person, a go-live the person asks to sign in their browser wallet, approved by a test wallet on the real approval page (going live with a key file, the tools' usual way, is covered by `js/test/approve-keyfile.test.mjs`, not here), the page the agent builds, and a player robot that uses it. Graded for security findings and mistakes. | `live/` (see [live/README.md](live/README.md)) |
 
@@ -61,7 +61,12 @@ overclaim.
   doesn't, the change was fitted to the test.
 - **No fix may name a test's scenario or product.** A change is a general method or a correct fact about loot.
 - **Fix facts before adding instructions.** A stale "cannot" or a stale rating is the usual cause of underselling.
-- **Keep the skill short.** A new instruction replaces or shortens something; it doesn't stack on top.
+- **Keep the skill short.** A new instruction replaces or shortens something; it doesn't stack on top. `SKILL.md` stays
+  under 15,000 characters and `xsolana_guide {}` under 6,000 (`js/test/doc-lint.test.mjs` holds both). A lesson about
+  one kind of case goes in the tool output that fires at that decision, or a reference, not in the skill.
+- **Score what the skill asks for.** The skill says to challenge before building, so a prompt whose result is decided
+  off the chain (a server, an app, a judge: its trust level is the person's choice) carries `"offer": true`, and a run
+  that stops to ask passes. Mark a prompt by that rule, never by how a run went.
 - **Overclaiming counts as much as underselling.** The fix for "says can't" must not become "says yes to everything",
   and every "can't" should come with the composition that gets closest.
 - **Read the conversations, not only the grades.** The simulated person is easier to please than a real one.

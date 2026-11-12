@@ -1,11 +1,12 @@
 {
-  "about": "Single-turn prompts taken from rated lists of real Solana economies (historic projects, staking setups, and examples/ideas.json), in a person's words; `source` names the economy. `split` is dev (iterate on these), holdout (run at baseline and at the end only, never used to tune the skill or tools) or holdout2 (a second holdout, written from ordinary asks rather than the rated lists, for what changes after the first holdout was used). `judge` is for the judge only, never shown to the agent: `asks` are the core pieces of the idea, `compose` one known way loot carries it (other valid ways count as well), `truly` what loot really cannot do. Run with: node evals/run.mjs --prompts evals/composition-prompts.json, then node evals/judge.mjs <run dir>.",
+  "about": "Single-turn prompts taken from rated lists of real Solana economies (historic projects, staking setups, and examples/ideas.json), in a person's words; `source` names the economy. `split` is dev (iterate on these), holdout (run at baseline and at the end only, never used to tune the skill or tools) or holdout2 (a second holdout, written from ordinary asks rather than the rated lists, for what changes after the first holdout was used). `judge` is for the judge only, never shown to the agent: `asks` are the core pieces of the idea, `compose` one known way loot carries it (other valid ways count as well), `truly` what loot really cannot do. Run with: node evals/run.mjs --prompts evals/composition-prompts.json, then node evals/judge.mjs <run dir>. `offer`: true where the result is decided off the chain (an app, a server, a judge), whose trust level is the person's to choose: a run that stops to put that choice to them passes the single-turn scorer too.",
   "prompts": [
     {
       "id": "walk-to-earn",
       "split": "dev",
       "source": "historic Walken",
       "expect": "build",
+      "offer": true,
       "prompt": "I'm making a walk-to-earn app. Our phone app counts steps: every 1,000 steps earns a Gem. Players spend Gems to upgrade their Cat NFT's speed and stamina, and cats race each other, with the entry fees going to the top finishers in our STRIDE token. Can you set up the onchain side?",
       "judge": {
         "asks": [
@@ -23,6 +24,7 @@
       "split": "dev",
       "source": "historic JailbreakMe",
       "expect": "build",
+      "offer": true,
       "prompt": "Pay-per-message AI challenge: each message to our AI costs SOL, 70% of it goes into a prize pot, and whoever gets the AI to break its one rule takes the pot. The message price should go up as more people try.",
       "judge": {
         "asks": ["pay per message", "70% into a pot", "the winner takes the pot", "the price rises with attempts"],
@@ -35,6 +37,7 @@
       "split": "dev",
       "source": "historic Moonwalk",
       "expect": "build",
+      "offer": true,
       "prompt": "A fitness challenge: everyone deposits 0.05 SOL to join, then has to walk 5,000 steps a day for 30 days. Everyone who makes every single day gets their deposit back plus an equal share of the deposits from people who failed. Our app tracks the steps.",
       "judge": {
         "asks": ["deposit to join", "finishers get their deposit back", "plus a share of the failed deposits"],
@@ -145,6 +148,7 @@
       "split": "dev",
       "source": "historic DarleyGo",
       "expect": "build",
+      "offer": true,
       "prompt": "Horse racing game: a mare's owner can breed her with any stallion by paying a stud fee that goes to whoever owns that stallion, and gets a random foal. Each horse can only breed a few times. Race winners get 250, 150 and 100 of our token for 1st, 2nd and 3rd, and our server runs the races.",
       "judge": {
         "asks": [
@@ -265,6 +269,7 @@
       "split": "dev",
       "source": "historic SolSlay",
       "expect": "build",
+      "offer": true,
       "flags": ["chance"],
       "prompt": "A jackpot that draws every 90 seconds: people buy in with SOL, one winner takes the pot minus a 5% fee. Separately, boss fights cost energy that players buy, and after each boss the top 10 damage dealers get paid by rank from a prize pool. Our server tracks damage.",
       "judge": {
@@ -350,6 +355,7 @@
       "split": "holdout",
       "source": "historic Gibwork",
       "expect": "build",
+      "offer": true,
       "prompt": "Bounty board: a poster funds a bounty upfront, the money sits in escrow, and it's paid to the worker once the poster approves the work. If nobody delivers by the deadline, the poster gets it back. We take a 10% fee.",
       "judge": {
         "asks": ["funded upfront into escrow", "paid to the worker on approval", "refund on deadline", "10% fee"],
@@ -362,6 +368,7 @@
       "split": "holdout",
       "source": "historic Sorare",
       "expect": "build",
+      "offer": true,
       "flags": ["chance"],
       "prompt": "Fantasy sports with athlete card NFTs: holders enter lineups for daily contests, lineups are scored on real games, and the top 10 each day win SOL by rank from the entry fees. Only people holding at least one card can enter.",
       "judge": {
@@ -483,6 +490,7 @@
       "split": "holdout",
       "source": "historic Boba Guys",
       "expect": "build",
+      "offer": true,
       "prompt": "Café loyalty: a QR code at the register gives a point per visit, enough points unlock secret-menu tiers, and the first 10,000 members get a welcome collectible.",
       "judge": {
         "asks": ["a point per visit by QR", "tiers unlock a secret menu", "first 10,000 get a welcome collectible"],
@@ -495,6 +503,7 @@
       "split": "holdout2",
       "source": "a common game pattern",
       "expect": "build",
+      "offer": true,
       "prompt": "Daily login rewards for my game: day 1 gives 10 coins, rising to 70 coins on day 7, and the streak resets if a player misses a day. Our server knows when they log in.",
       "judge": {
         "asks": ["daily claim", "amount rises with the streak", "resets on a missed day"],
@@ -507,6 +516,7 @@
       "split": "holdout2",
       "source": "a common game pattern",
       "expect": "build",
+      "offer": true,
       "prompt": "A season pass with a free track and a premium track. Premium costs 0.02 SOL. Each level a player reaches (our server knows levels) unlocks a reward on the free track, and premium holders also get a better reward at the same level.",
       "judge": {
         "asks": ["premium pass for 0.02 SOL", "free-track rewards per level", "extra premium rewards per level"],
@@ -519,6 +529,7 @@
       "split": "holdout2",
       "source": "a common daily-puzzle pattern",
       "expect": "build",
+      "offer": true,
       "flags": ["chance"],
       "prompt": "A daily puzzle: players pay 0.005 SOL to enter, everyone who solves it splits the pot, and I keep 5%. Our server checks the answers.",
       "judge": {
@@ -610,6 +621,7 @@
       "split": "holdout2",
       "source": "esports",
       "expect": "build",
+      "offer": true,
       "flags": ["chance"],
       "prompt": "An 8-player tournament: each player buys in for 0.05 SOL, the winner gets 70% of the pot, the runner-up 20%, and the house keeps 10%. Our server reports the results.",
       "judge": {

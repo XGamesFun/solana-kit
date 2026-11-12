@@ -1,5 +1,5 @@
 {
-  "about": "One-sentence requests a person might give a fresh Claude Code or Codex session. expect: build (loot covers it: a checked xsolana.json, no contract code), partial (loot covers the core; the session should say what it can't do), refuse (a defining piece is missing: the session says so and writes no contract). parts: what a good spec uses. flags: warnings a good answer passes on.",
+  "about": "One-sentence requests a person might give a fresh Claude Code or Codex session. expect: build (loot covers it: a checked xsolana.json, no contract code), partial (loot covers the core; the session should say what it can't do), refuse (a defining piece is missing: the session says so and writes no contract). parts: what a good spec uses. flags: warnings a good answer passes on. offer: the skill's challenge says to put a choice to the person first (a result decided off the chain, whose trust level is theirs), so a run that stops to ask passes too.",
   "prompts": [
     {
       "id": "coin-flip",
@@ -55,12 +55,14 @@
     {
       "id": "quest-rewards",
       "expect": "build",
+      "offer": true,
       "parts": ["grants"],
       "prompt": "Players who finish a quest in my game should get a reward NFT, one per person, signed off by my server."
     },
     {
       "id": "airdrop-list",
       "expect": "build",
+      "offer": true,
       "parts": ["grants"],
       "prompt": "Airdrop 50 of our points token to these early supporters, once each, no matter what wallet they use later."
     },
@@ -80,6 +82,7 @@
     {
       "id": "prediction-pool",
       "expect": "build",
+      "offer": true,
       "parts": ["contests"],
       "flags": ["chance"],
       "prompt": "Make a pool where fans bet on which team wins the final, with a 5% rake for the house."
@@ -87,6 +90,7 @@
     {
       "id": "card-packs-prize",
       "expect": "build",
+      "offer": true,
       "parts": ["boxes", "pools"],
       "flags": ["chance"],
       "prompt": "Sell card packs for 1 USDC; 20% of every pack funds a monthly tournament prize pool."
@@ -106,6 +110,7 @@
     {
       "id": "hold-missions",
       "expect": "build",
+      "offer": true,
       "parts": ["holds", "decisions"],
       "prompt": "Players send their ships on 6-hour missions; my server decides whether they come back with loot or get destroyed."
     },
