@@ -159,7 +159,7 @@ test('one intent, one step: a price the player crafts first points to make, one 
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
   assert.deepEqual(found(own, 'W-STEPS'), []);
-  // A box priced in the crafted token: the same two steps.
+  // A box priced in the crafted token, which rolls: craft, buy, settle.
   const box = spec();
   box.boxes = [
     {
@@ -167,7 +167,10 @@ test('one intent, one step: a price the player crafts first points to make, one 
       name: 'Chest',
       price: 2,
       currency: 'entry',
-      outcomes: [{ gives: 'item', item: 'winner', weight: 1 }],
+      outcomes: [
+        { gives: 'item', item: 'winner', weight: 1 },
+        { gives: 'nothing', weight: 9 },
+      ],
     },
   ];
   assert.ok(found(box, 'W-STEPS').includes('economy.boxes.chest'));
@@ -353,4 +356,57 @@ test('where each rule is kept: a contest’s decider, what it gains, and when th
   );
   assert.equal(decided.severity, 'low');
   assert.match(decided.message, /decider keys' signed verdict/);
+});
+
+test('the largest holder takes part: the owner’s fixed supply staked in a farm shared by stake', () => {
+  const coin = JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
+  const w = check(coin, { now: NOW }).warnings.find(x => x.message.startsWith('The largest holder takes part'));
+  assert.ok(w, 'the owner’s holding is followed into the farm');
+  assert.match(w.message, /60% of its supply/);
+  assert.equal(w.severity, 'high');
+  assert.ok(w.ask);
+});
+
+test('loops across routes, the biggest payout, every way a round ends', async () => {
+  const s = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  s.collection = { name: 'Land' };
+  s.items = [
+    { key: 'deed', name: 'Deed', kind: 'collectible', uri: 'https://example.com/deed.json', price: 10, perWallet: 5 },
+  ];
+  s.farms.push({
+    key: 'land',
+    name: 'The land',
+    stakes: 'collectibles',
+    item: 'deed',
+    rewards: 'gem',
+    custody: 'escrow',
+    rate: { perDay: 1, minted: true },
+    runs: '30d',
+    tiers: [{ lock: 0, multiplier: 1 }],
+  });
+  s.grants = [
+    {
+      key: 'spin',
+      name: 'Daily spin',
+      prize: { gives: 'tokens', amount: 5, from: 'mint', currency: 'gem' },
+      limits: { perWalletEach: { count: 1, every: '1d' } },
+    },
+  ];
+  const ws = check(s, { now: NOW }).warnings;
+  const loop = ws.find(w => w.message.includes('around a loop:'));
+  assert.match(
+    loop.message,
+    /buying “Deed” .* then staking in “The land” for 30 days .* One turn gives back 3 for each 1 put in/,
+  );
+  assert.match(loop.message, /5 a wallet bounds how often, not the edge/);
+  assert.match(
+    ws.find(w => w.message.includes('a day: the free')).message,
+    /“Daily spin” pays a player about 5 GEM a day/,
+  );
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
+  assert.match(
+    text,
+    /“draw”, every way it ends: Nothing sold: .* Nobody asks for the draw: .* The oracle never answers: /,
+  );
 });

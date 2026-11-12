@@ -45,6 +45,7 @@ import {
   prizeWords,
   releaseSeconds,
   releaseWords,
+  farmCeiling,
   farmEndWords,
   stashNfts,
   stopsSales,
@@ -4736,7 +4737,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         warn(
           'W-FARM-RATE',
           `${where}.rate.halveEvery`,
-          `${label(f)}’s rate halves every ${f.rate.halveEvery} from when it opens, for every seat.`,
+          `${label(f)}’s rate halves every ${f.rate.halveEvery} from when it opens, for every seat: each unit staked at x1 earns ${farmCeiling(f).says}.`,
         );
     }
     const names = growths.flatMap(g => [g.attribute ?? 'xp', ...((g.levels ?? []).length ? [g.level ?? 'level'] : [])]);
@@ -5528,8 +5529,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   // what earns it (or is staked for more of itself), whoever stakes most (a bot never sleeps) compounds it.
   for (const f of m.farms) {
     const t = m.tokens.get(f.rewardsToken);
-    if (!f.rate?.minted || !(Number(f.rate.perDay ?? 0) > 0) || !t?.gameMints || f.runs || f.upkeepAttribute) continue;
-    if ((f.tiers ?? []).some(x => x.earnsFor)) continue;
+    // (a farm whose seats' earning ends, by its run, its tiers' terms, an upkeep or a halving rate, has a ceiling: farmCeiling)
+    if (!f.rate?.minted || !(Number(f.rate.perDay ?? 0) > 0) || !t?.gameMints || f.upkeepAttribute) continue;
+    if (farmCeiling(f)?.total !== null) continue;
     const buys = [
       ...m.allBoxes.filter(b => (b.currency ?? m.currencyKey) === t.key && Number(b.price ?? 0) > 0).map(b => label(b)),
       ...m.recipes

@@ -12,6 +12,7 @@ import { check } from './check.mjs';
 import { gateWords, ruleWords } from './explain.mjs';
 import {
   boxRolls,
+  farmCeiling,
   destination,
   listOf,
   model,
@@ -107,7 +108,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
   const farmOf = id => (id.startsWith('farm:') ? m.farm.get(id.slice(5)) : null);
   const mints = f => Boolean(f?.rate?.minted) && Number(f.rate.perDay ?? 0) > 0;
   /** A farm that pays for good: no end, no term on every tier, no upkeep, no halving. */
-  const endless = f => !f.runs && !(f.tiers ?? []).every(t => t.earnsFor) && !f.upkeepAttribute && !f.rate?.halveEvery;
+  const endless = f => !f.upkeepAttribute && farmCeiling(f)?.total === null;
 
   /**
    * What one staked unit (a collectible `item`, or one whole token) earns at its best tier and boosts: { perDay, life }

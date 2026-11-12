@@ -59,37 +59,49 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
 9. **Challenge before you build.** For every request, name the simplest version that delivers most of it. Say what
    it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act
    later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it.
-   Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_explain` ends with each route's
-   states (before it opens, while it runs, cancelled or failed, won, after it ends, a change of mind) as a player, the
-   owner and a cheater see them, and what can change only before a first sale or claim; the checker's warnings name
-   the traps a game already fell into. Read both before you answer.
+   Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_check` gives the analyses
+   (`W-VALUE`, follow the value; `W-STEPS`, a player's whole loop; `W-ASSUMPTION`, every number that rests on who takes
+   part, with the questions to ask; `W-ENFORCED`, who decides and what that key can do) and what each route leaves a
+   player when it goes wrong; `xsolana_explain` ends with each route state by state, every way a round ends, every date
+   in order, and each player action's prompts and SOL. Read both before you answer.
+
+   Composing parts is how you find the versions. Most ideas are several parts working together: break the idea into
+   its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for how
+   long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a match,
+   a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a list.
+   The program checks the signer's signature and limits, never what happened, so a signed result is worth what that
+   server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the tools'
+   words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the checker
+   and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when no part
+   or combination does it: say in one line what is missing and why, and offer the nearest versions (`xsolana_examples`
+   with the words of that piece returns them), best first, each with what it gives up and its "in all" cost.
+
    How to put it:
    - Lead with one pick, its sub-choices made too, even when a tool lists several fixes; the others follow in a line.
+     A finding reaches the person with its fix and your pick, never as the symptom alone.
+   - Run your own ideas through the tools before you offer them: a burn, a free token that can be spent, a new route
+     is a spec change like any other (`xsolana_check`), and an alternative is offered only once it checks.
    - Turn each finding into a question to the person when it rests on what they know (how many players, who counts
      as one buyer, who delivers a prize, who is around when a step is due): `xsolana_check` lists the questions.
    - Before you build an ask that removes a way out (a burn, a token that can't move, a payment taken before the
      outcome), name the simpler version that keeps it.
-   - When a new fact reopens a settled choice, say what changed and why.
-   - Check an alternative with the tools before you offer it, and never promise a report, a follow-up or a channel
-     you don't have.
-     Composing parts is still how you find the versions. Most ideas are several parts working together: break the idea
-     into its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for
-     how long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a
-     match, a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a
-     list. The program checks the signer's signature and limits, never what happened, so a signed result is worth what
-     that server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the
-     tools' words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the
-     checker and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when
-     no part or combination does it: say in one line what is missing and why, and offer the nearest versions
-     (`xsolana_examples` with the words of that piece returns them), best first, each with what it gives up and its "in
-     all" cost.
+   - Say what freezes as each setting is agreed (`Only before …` in the walk-through), not only in the last checklist;
+     when a new fact reopens a settled choice, say what changed and why.
+   - State every cap in one unit, every time: an amount per identity per window ("1 a wallet a day", "2,000 a person
+     in all").
+   - Say outright when a real-money sale is a fixed price and not random.
+   - When use changes hands for a while (a stake, a listing, a rental, a loan), say who holds the NFT at each stage
+     and who can move it.
+   - Never promise a report, a follow-up or a channel you don't have.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
     (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the
     server naming an X account, never a wallet), keep token rewards for results small, and have a server decide or
     replay a result worth paying rather than take the page's word (`@xgamesfun/solana/results`: `collectiblesOf`,
     `verifyProof`, `makeCodes`). Keep entry fees and prize pools for results the server decides and for chance, and
-    give a minted farm an end. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
+    give a minted farm an end. Price each measure against bots by what a failed attempt costs a script, not only by
+    the daily ceiling. A short secret (a code, a PIN) is never stored as a plain hash, which a small space reverses:
+    hash it with a key, or keep it in the server's secret store. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
     `references/trust-and-cheating.md` says why.
 
 11. **Say who finishes each step, and let the person choose.** Every step after a player's ask (settle a roll, draw a

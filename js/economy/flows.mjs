@@ -185,6 +185,29 @@ export function flows(m, { now }) {
         minSold,
         refund: l.ticketNft ? [{ asset: 'nft', amount: 1 }] : price,
       },
+      endings: [
+        {
+          ending: 'Nothing sold',
+          then: every ? 'its date moves on to the next round; nothing to pay' : 'it ends with nothing to pay',
+        },
+        ...(minSold
+          ? [
+              {
+                ending: `Fewer than ${minSold} tickets`,
+                then: 'cancelled when its draw is asked: every ticket refunded, pulled by anyone',
+              },
+            ]
+          : []),
+        {
+          ending: 'Nobody asks for the draw',
+          then: 'the round waits with every ticket and its money in it, refunds too, with no deadline',
+        },
+        {
+          ending: 'The oracle never answers',
+          then: `the next ask ${ORACLE_TIMEOUT_DAYS} days after the first cancels it: every ticket refunded`,
+        },
+        { ending: 'The draw asked late', then: 'it is drawn then; nothing is lost, the winners just wait' },
+      ],
       fixed: {
         when: 'the first ticket',
         says: `The round copies the lottery's terms (price, places, least sale, draw date) at its first ticket: an edit after it reaches only the next round${every ? '' : ', and a lottery that draws once has none'}.`,
@@ -560,6 +583,26 @@ export function flows(m, { now }) {
         participation: people,
         refund: c.stakeNft ? [{ asset: 'nft', amount: 1 }] : [{ asset: cur, amount: num(c.stake) || 1 }],
       },
+      endings: [
+        { ending: 'No entries', then: 'nothing to pay; the project closes it' },
+        ...(minPot
+          ? [
+              {
+                ending: `Less than ${minPot} in its sides when entries close`,
+                then: 'it is off: every entry claims its money back',
+              },
+            ]
+          : []),
+        {
+          ending: `No result by its deadline${c.resultDue ? ` (${c.resultDue} after it opens)` : ''}`,
+          then: `${deciders ? 'the decider key lost or its server down' : 'the authority away'} included: anyone calls it off and every entry claims its money back`,
+        },
+        {
+          ending: 'A result after its deadline',
+          then: 'refused: it is called off and every entry claims its money back',
+        },
+        { ending: 'A result before entries close', then: 'refused (only a call-off is taken before then)' },
+      ],
       fixed: { when: 'it opens', says: 'Every term is fixed when it opens and never edited.' },
       states: [
         {

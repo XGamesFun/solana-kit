@@ -4,7 +4,7 @@
 // routes the model holds (flows.mjs) are written from its steps (who sends each, who pays, what moves, what happens if
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
-import { FEES, toTime } from './model.mjs';
+import { FEES, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -52,6 +52,11 @@ export function endStates(m, { now, fl = flows(m, { now }) }) {
         .map(
           ([state, st]) =>
             `${named(r)}, ${STATE[state].toLowerCase()}: ${stepWords(st.steps)}${extraWords(r, state, fl)}`,
+        )
+        .concat(
+          r.endings
+            ? [`${named(r)}, every way it ends: ${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`]
+            : [],
         ),
     );
 }
@@ -140,6 +145,7 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
         'Who sends what',
         `${later.map(x => `${x.short[0].toUpperCase()}${x.short.slice(1)}: ${WHO[x.by] === 'Owner' ? 'the project' : (WHO[x.by] ?? x.by).toLowerCase()}${x.pays === 'sender' ? ', paying its fee' : ''}, ${x.per}; if nobody does, ${x.ifNobody}`).join('. ')}.`,
       ]);
+    if (r.endings) rows.push(['Every way it ends', `${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`]);
     if (r.fixed) rows.push([`Only before ${r.fixed.when}`, r.fixed.says]);
     route(`${named(r)}: ${r.title}`, rows);
   }
@@ -212,8 +218,12 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
 
   if (!routes.length) return [];
   const actions = actionWords(fl);
+  const times = timeline(m, fl, now);
   return [
     ...(actions.length ? ['Each player action: its wallet prompts and SOL', ...actions.map(x => `- ${x}`), ''] : []),
+    ...(times.length
+      ? ['Every date, in order (from going live now)', ...times.map(x => `- ${x.when}: ${x.what}`), '']
+      : []),
     'Each route, state by state (as a player, the owner and a cheater see it)',
     'The owner’s pause stops every purchase, ticket, entry, stake and bid coming in; nothing owed waits on it: claims, refunds, unstakes, draws and payouts go on.',
     ...routes,
@@ -233,6 +243,67 @@ export function actionWords(fl) {
       const price = r.price
         .map(p => `${+num(p.amount).toFixed(9)} ${fl.assets.get(p.asset)?.symbol ?? p.asset}`)
         .join(' and ');
-      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens.`;
+      const loop = journeyOf(r, fl);
+      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens. A whole loop: ${loop.steps.join(', then ')} (${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}).`;
     });
+}
+
+/** Every dated moment of the spec, in order: [{ at, when, what }] (a contest's, counted from when it opens, last). */
+export function timeline(m, fl, now) {
+  const rows = [];
+  const add = (seconds, what) => seconds && rows.push({ at: seconds, when: at(seconds), what });
+  for (const r of fl.routes) {
+    add(r.opens, `${named(r)} opens`);
+    add(r.closes, `${named(r)} closes`);
+    if (r.ends) add(r.ends, r.kind === 'lottery' ? `${named(r)} draws` : `${named(r)} ends`);
+  }
+  for (const f of m.farms) if (f.runs) add(now + toSeconds(f.runs), `${named(f)} takes no more stake`);
+  rows.sort((a, b) => a.at - b.at);
+  for (const c of m.contests)
+    rows.push({
+      at: Infinity,
+      when: `${c.entriesClose ?? '?'} and ${c.resultDue ?? '?'} after it opens`,
+      what: `${named(c)}: entries close, then the result is due`,
+    });
+  return rows;
+}
+
+/**
+ * A player's whole loop through route `r`: getting what it costs, buying, and collecting what it gives: { steps, prompts,
+ * bundles }. Each step is one wallet prompt; `bundles` are the ways the tools can fold steps together.
+ */
+export function journeyOf(r, fl) {
+  const asset = r.price[0]?.asset;
+  const a = fl.assets.get(asset);
+  const steps = [];
+  const bundles = [];
+  if (a && !a.money) {
+    const craft = a.origins.find(o => o.recipe.active !== false);
+    if (craft) steps.push(`craft ${a.symbol} with ${named(craft.recipe)}`);
+    else if (a.free.length) steps.push(`claim ${a.symbol} from ${named(a.free[0])}`);
+    if (craft && r.kind === 'lottery' && !(craft.recipe.out ?? []).some(o => o.gives === 'roll')) {
+      const per = num(r.price[0].amount) / num(craft.makes || 1);
+      bundles.push(
+        `the play client's buyTickets("${r.key}", count, { listing, make: { recipe: "${craft.recipe.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval (kit 0.28.7 and later)`,
+      );
+    }
+  }
+  steps.push(
+    r.kind === 'lottery'
+      ? 'buy tickets'
+      : r.kind === 'contest'
+        ? 'enter a side'
+        : r.kind === 'recipe'
+          ? 'craft'
+          : 'buy',
+  );
+  if (r.kind === 'box' && r.roll) {
+    steps.push('settle the roll once the oracle answers');
+    bundles.push(
+      'a key of the project’s may settle rolls for players (rule 11), so the player signs only the purchase',
+    );
+  }
+  if (r.kind === 'lottery') steps.push('pull a win (a winner)');
+  if (r.kind === 'contest') steps.push('claim a win (a winner)');
+  return { steps, prompts: steps.length, bundles };
 }

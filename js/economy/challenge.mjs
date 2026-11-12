@@ -14,9 +14,11 @@
 //
 // Who sends each later step and what happens if nobody does is in the walk-through (walk.mjs, from the same model); a
 // voucher's trust in the review's trust levels.
-import { at, flows, lineToken, named, num, words } from './flows.mjs';
+import { at, flows, lineToken, named, num, ticketOf, words } from './flows.mjs';
 import { prizeLine, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
+import { exchanges, payouts } from './exchanges.mjs';
+import { journeyOf } from './walk.mjs';
 
 /** A cancel's severity, by how likely it is: the scenario says it is (or says nothing), says it isn't, or only the oracle's timeout. */
 const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: 'low' };
@@ -27,6 +29,8 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  */
 export function challenge(m, warn, now, economy) {
   const fl = flows(m, { now });
+  /** The quick simulation at the spec's scenario, run once when an analysis needs it. */
+  let sim = null;
   const { assets, routes } = fl;
   const sym = key => (key === 'nft' ? 'the NFT' : (assets.get(key)?.symbol ?? key));
   const on = x => x?.active !== false;
@@ -124,57 +128,69 @@ export function challenge(m, warn, now, economy) {
     }
   }
 
-  // A loop of recipes that ends with more than it started: each recipe of one token in and tokens out is an exchange at
-  // a rate; a cycle whose rates multiply above 1 makes value from nothing, as fast as a player repeats it.
-  const rates = m.recipes.flatMap(r => {
-    const pays = (r.in ?? []).filter(l => l.takes === 'pay');
-    if (pays.length !== 1 || (r.in ?? []).length !== 1 || !on(r)) return [];
-    const from = pays[0].currency ?? m.currencyKey;
-    return routes
-      .find(x => x.kind === 'recipe' && x.key === r.key)
-      .gives.filter(g => g.asset !== from)
-      .map(g => ({ recipe: r, from, to: g.asset, rate: g.amount / num(pays[0].amount) }));
-  });
+  // Loops across routes: every route as an exchange from what it takes to what it gives (exchanges.mjs), and every
+  // cycle that comes back with more than it started, caps or not: a boost bought with its farm's rewards, a prize that
+  // buys more chances at itself, recipes whose rates multiply above 1.
+  sim ??= simulateOrNull(economy, now);
+  const edges = exchanges(m, fl, sim, now);
+  const label = key => (key.startsWith('item:') ? named(m.item.get(key.slice(5)) ?? { key: key.slice(5) }) : sym(key));
   const seen = new Set();
-  const walkLoop = (start, at, path, rate) => {
-    for (const e of rates.filter(x => x.from === at)) {
-      if (path.includes(e)) continue;
+  const walkLoop = (start, here, path, rate) => {
+    for (const e of edges.filter(x => x.from === here && x.rate > 0)) {
+      if (path.includes(e) || path.some(x => x.from === e.to && e.to !== start)) continue;
       const next = [...path, e];
       if (e.to === start) {
         const key = next
-          .map(x => x.recipe.key)
+          .map(x => x.route)
           .sort()
           .join('|');
-        if (rate * e.rate > 1 + 1e-9 && !seen.has(key)) {
+        const gain = rate * e.rate;
+        if (gain > 1 + 1e-9 && !seen.has(key)) {
           seen.add(key);
+          const caps = [...new Set(next.map(x => x.cap).filter(Boolean))];
           warn(
             'W-VALUE',
-            `economy.recipes.${next[0].recipe.key}`,
-            `Following ${sym(start)}, around a loop: ${next.map(x => `${named(x.recipe)} turns ${sym(x.from)} into ${sym(x.to)} at ${+x.rate.toFixed(9)} each`).join(', then ')}: one turn gives back ${+(rate * e.rate).toFixed(9)} for each 1 put in, as often as a player repeats it.`,
-            'Make the rates meet at 1 or less around the loop, or switch one of the recipes off.',
-            { severity: 'high' },
+            next[0].where,
+            `Following ${label(start)}, around a loop: ${next.map(x => `${x.says} (${label(x.from)} into ${label(x.to)} at ${+x.rate.toPrecision(4)} for 1)`).join(', then ')}. One turn gives back ${+gain.toPrecision(4)} for each 1 put in, as often as a player repeats it${caps.length ? `; ${words(caps)} bound${caps.length === 1 ? 's' : ''} how often, not the edge` : ', and nothing caps it'}.`,
+            'Make the rates meet at 1 or less around the loop: cheaper rewards, a dearer step, or an output that can’t buy back in (another token, an item the farm doesn’t take).',
+            { severity: caps.length ? 'medium' : 'high' },
           );
         }
       } else if (next.length < 4) walkLoop(start, e.to, next, rate * e.rate);
     }
   };
-  for (const key of new Set(rates.map(x => x.from))) walkLoop(key, key, [], 1);
+  for (const key of new Set(edges.map(x => x.from))) walkLoop(key, key, [], 1);
 
-  // ---- W-STEPS: an intent whose price the player must craft first takes two transactions, two wallet prompts.
-  for (const route of routes) {
-    const craft = route.states.flatMap(s => s.steps).find(s => s.craft)?.craft;
-    if (!craft || route.kind === 'recipe') continue;
-    const asset = route.price[0]?.asset;
-    const origin = assets.get(asset)?.origins.find(o => o.recipe === craft);
-    const per = num(route.price[0]?.amount) / num(origin?.makes || 1);
-    const rolls = (craft.out ?? []).some(o => o.gives === 'roll');
+  // What each feature pays a player a day, in the project's currency: a free one that pays the most is the economy's
+  // biggest payout, whatever it was meant to be.
+  const pays = payouts(m, fl, sim);
+  const top = pays[0];
+  if (top?.free && pays.some(x => !x.free) && top.perDay > 0)
+    warn(
+      'W-VALUE',
+      top.where,
+      `Following ${sym(m.currencyKey)} a day: the free ${named({ name: top.name })} pays a player about ${+top.perDay.toPrecision(4)} ${sym(m.currencyKey)} a day (${top.how}), the most of any feature: ${pays
+        .slice(1)
+        .filter(x => x.perDay > 0)
+        .slice(0, 3)
+        .map(x => `${named({ name: x.name })} ${+x.perDay.toPrecision(4)} (${x.how})`)
+        .join(', ')}. A free feature that pays most is what every extra identity is made for.`,
+      'Make it pay less than the paid features, cap it per identity per day, or gate it on something that costs.',
+      { severity: 'medium' },
+    );
+
+  // ---- W-STEPS: a player's whole loop through a route (getting its price, buying, collecting), one wallet prompt a
+  // step: past two, say each step and what folds them together.
+  for (const route of routes.filter(r => r.price.length && r.kind !== 'recipe' && r.kind !== 'item')) {
+    const j = journeyOf(route, fl);
+    if (j.prompts <= 2) continue;
     warn(
       'W-STEPS',
-      route.kind === 'lottery' ? route.where : route.where,
-      `Buying from ${named(route)} takes a craft of ${named(craft)}, then the purchase: two transactions, two wallet prompts, since it costs ${sym(asset)}.`,
-      route.kind === 'lottery' && !rolls
-        ? `Send both in one: the play client's buyTickets("${route.key}", count, { listing, make: { recipe: "${craft.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval (kit 0.28.7 and later).`
-        : `Price it in what ${named(craft)} takes (${priced(origin?.pays ?? [])} for each ${origin?.makes} ${sym(asset)}), unless holding ${sym(asset)} is the point.`,
+      route.where,
+      `A player's loop through ${named(route)} takes ${j.prompts} wallet prompts: ${j.steps.join(', then ')}.`,
+      j.bundles.length
+        ? `Fold them: ${j.bundles.join('; ')}.`
+        : 'Price it in what the player already holds, or give it without a step the player must sign.',
       { severity: 'low' },
     );
   }
@@ -233,7 +249,6 @@ export function challenge(m, warn, now, economy) {
       m.farms.some(f => f.rewards === key)
     );
   };
-  let sim = null;
   for (const [key, t] of m.tokens) {
     if (!['game', 'project'].includes(t.source) || !valued(key)) continue;
     const grants = m.grants.filter(
@@ -387,6 +402,42 @@ export function challenge(m, warn, now, economy) {
       {
         severity: 'medium',
         ask: `When can someone first learn the outcome of ${named(route)}? Entries must close before that.`,
+      },
+    );
+  }
+
+  // The largest holder as a participant: a token of fixed supply sits in the owner's wallet after setup, all but what
+  // its pools are seeded with; where holding more takes more (a farm shared by stake, a lottery, a contest), the owner
+  // taking part takes that share.
+  for (const [key, t] of m.tokens) {
+    const supply = num(t.supply);
+    if (!supply || !['game', 'project'].includes(t.source)) continue;
+    const seeded =
+      m.pools.filter(p => p.currency === key).reduce((n, p) => n + num(p.seed), 0) +
+      m.farms.filter(f => f.rewards === key).reduce((n, f) => n + num(f.seed), 0);
+    const owner = supply - seeded;
+    if (!(owner > 0)) continue;
+    const shared = m.farms.filter(f => f.stakes === key && (!f.rate || f.rate.shared));
+    const chances = [
+      ...m.lotteries.filter(l => ticketOf(l, m) === key),
+      ...m.contests.filter(c => (c.currency ?? m.currencyKey) === key),
+    ];
+    if (!shared.length && !chances.length) continue;
+    const pct = (owner / supply) * 100;
+    const shares = shared.map(f => {
+      const others = num(m.scenario.staked?.[f.key]);
+      return others
+        ? `${named(f)}: ${+((owner / (owner + others)) * 100).toFixed(1)}% of its rewards against the ${others} the scenario has others stake`
+        : `${named(f)}: most of its rewards, unless others stake far more (the scenario names no stake)`;
+    });
+    warn(
+      'W-ASSUMPTION',
+      `economy.tokens.${key}.supply`,
+      `The largest holder takes part: after setup the owner's wallet holds ${+owner.toFixed(6)} ${sym(key)}, ${+pct.toFixed(1)}% of its supply of ${supply}. Staked or spent where holding more takes more, it takes ${words([...shares, ...chances.map(x => `${named(x)}: as many tickets or as much of a side as it likes`)])}.`,
+      `Say whether the owner (and any other large holder) takes part; if not, keep those ${sym(key)} out (seed them into a pool, a vesting schedule, or burn them), or rate the farm per seat instead of shared by stake.`,
+      {
+        severity: pct > 50 ? 'high' : 'medium',
+        ask: `Will the owner's ${+owner.toFixed(6)} ${sym(key)} (${+pct.toFixed(1)}% of the supply) be staked or played?`,
       },
     );
   }
