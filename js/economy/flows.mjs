@@ -88,7 +88,7 @@ function participation(m, kind, key, days, perWallet) {
  *
  * `routes`: [{ kind, key, name, where, part, price, active, opens, closes, ends, repeats, perWallet, gate, roll,
  * cancel, fixed, states }], `states` a list of { state, steps } in the order a player meets them; a step is { by,
- * pays, says, moves, ifNobody } (`by`: player, anyone, keys, server, oracle, winner; `moves`: [{ asset, amount, from,
+ * pays, says, moves, ifNobody, short, note, cost } (`by`: player, anyone, keys, server, oracle, winner; `moves`: [{ asset, amount, from,
  * to }]). `cancel`: { causes, likely, refund, participation } for a route that can be cancelled.
  */
 export function flows(m, { now }) {
@@ -269,7 +269,8 @@ export function flows(m, { now }) {
             moves: route.cancel.refund.map(p => ({ ...p, from: `round:${l.key}`, to: 'player' })),
             ifNobody: 'a refund nobody pulls waits, with no deadline; a round nobody asks to draw waits too',
             per: 'each buyer',
-            short: 'a refund pulled to its buyer',
+            short: 'each ticket’s price pulled back to its buyer',
+            note: 'the player fee paid with it is not refunded',
           },
         ],
       },
@@ -280,6 +281,7 @@ export function flows(m, { now }) {
             by: 'anyone',
             pays: 'sender',
             says: `asks for the draw once it is due, paying the oracle ${ORACLE_SOL} SOL`,
+            cost: `the oracle's ${ORACLE_SOL} SOL`,
             ifNobody:
               'the round waits undrawn: a player or the project must ask (the page’s button, or the next buyer)',
             per: 'once a round',
@@ -642,7 +644,8 @@ export function flows(m, { now }) {
               says: `claims each entry's money back for it (anyone may)`,
               ifNobody: 'an entry nobody claims waits, with no deadline',
               per: 'each entry',
-              short: 'each entry’s refund claimed',
+              short: 'each entry’s money claimed back for it',
+              note: 'the player fee paid with it is not refunded',
             },
           ],
         },
@@ -655,7 +658,7 @@ export function flows(m, { now }) {
               says: deciders
                 ? 'sends a decider’s signed verdict naming the side, once entries close (anyone may send it)'
                 : 'names the side once entries close, with the authority key',
-              ifNobody: 'no result by its deadline: it is called off and everyone takes their money back',
+              ifNobody: 'no result by its deadline: it is called off, and each entry’s money is claimed back as above',
               per: 'once',
               short: 'the result',
               ...(deciders ? { manual: 'decide' } : { manual: 'decide-authority' }),

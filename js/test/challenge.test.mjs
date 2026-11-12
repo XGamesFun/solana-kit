@@ -571,3 +571,25 @@ test('round 5: a fund against its audience, a contest’s every ending, who else
     /> A returning player's day, doing each thing once: buy tickets of “draw” \(2\), buy tickets of “draw2” \(2\), collect wins \(1\): about 5 wallet approvals/,
   );
 });
+
+test('every cap against the pace the game allows: a lifetime cap an honest player reaches in hours, a day’s, a total', () => {
+  const s = spec();
+  Object.assign(s.grants[0], {
+    serverLimit: { per: 'person', amount: 12000, every: '4m' },
+    limits: { perPerson: 60, perDay: 500, total: 100000 },
+  });
+  const ws = check(s, { now: NOW }).warnings.filter(w => w.where.startsWith('economy.grants.pops.limits.'));
+  const mine = ws.find(w => w.where.endsWith('.perPerson'));
+  assert.equal(mine.severity, 'medium');
+  assert.match(mine.message, /reaches the cap in about 4 hours/);
+  assert.match(mine.ask, /claim 60 times in all.*done in about 4 hours\. Is 60 meant for good, or for a day\?/);
+  // Two players, each done after 60: 120 claims, under the day's 500.
+  assert.ok(!ws.some(w => w.where.endsWith('.perDay')));
+  s.grants[0].limits.perDay = 100;
+  const day = check(s, { now: NOW }).warnings.find(w => w.where === 'economy.grants.pops.limits.perDay');
+  assert.match(day.message, /about 120 a day, so the day's cap is used up about 3.3 hours into each day/);
+  // A pace the spec doesn't state is not guessed.
+  const none = spec();
+  none.grants[0].limits = { perPerson: 60 };
+  assert.ok(!check(none, { now: NOW }).warnings.some(w => w.where === 'economy.grants.pops.limits.perPerson'));
+});
