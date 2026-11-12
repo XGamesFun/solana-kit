@@ -138,7 +138,12 @@ or `npx -y @xgamesfun/solana@0.28.11 tool <name> '<json>'` for any tool (always 
 2. **Start from the nearest example**: `xsolana_examples {"query": "<the person's own words>"}`, then
    `xsolana_examples {"name": "<example>"}` for a whole spec to copy. The rated economies say how each real economy
    fits (great, some, a-lot, cannot) and what carries it.
-3. **Write the spec** from their sentence: `references/sentence-to-spec.md` maps their words to parts. Keep their
+3. **When no single part does it, or their wants pull against each other, design it**: write each want as a
+   requirement and run `xsolana_design` (pay in any of many currencies, a burn that a cancel must still refund, a free
+   entry that must not be money, one approval, one draw). It builds and checks every known way to do it and says what
+   each keeps and gives up; when nothing keeps everything, it says what has to give. Read the requirements back to the
+   person, put the choice to them with your pick, and build the one they choose.
+   **Write the spec** from their sentence: `references/sentence-to-spec.md` maps their words to parts. Keep their
    sentence in `prompt`. Add a `scenario` with the counts they expect (how many opens a day).
 4. **Check it**: `xsolana_check {"spec": …}`. Fix every refusal; every warning is something to tell the person, in a
    sentence of its own.

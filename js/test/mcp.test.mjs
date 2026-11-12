@@ -35,6 +35,7 @@ describe('the xsolana MCP server', () => {
         'xsolana_check',
         'xsolana_client',
         'xsolana_cost',
+        'xsolana_design',
         'xsolana_examples',
         'xsolana_explain',
         'xsolana_guide',

@@ -28,6 +28,7 @@ import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tells } from '../economy/walk.mjs';
+import { design, describeDesign, REQUIREMENTS } from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -105,6 +106,7 @@ export const DEFAULT_FILE = 'xsolana.json';
  */
 export const REMOTE_TOOLS = new Set([
   'xsolana_guide',
+  'xsolana_design',
   'xsolana_examples',
   'xsolana_check',
   'xsolana_simulate',
@@ -515,6 +517,50 @@ export const tools = [
         findings: r.findings,
         tradeoffs: r.tradeoffs,
         text: `${describeReview(r, economy.name)}${tail}${footer()}`,
+      };
+    },
+  },
+  {
+    name: 'xsolana_design',
+    annotations: READ,
+    description:
+      'From what the person wants to the specs that do it, when no single part does it all or their wants pull against each other (pay in any of many currencies; burn what is paid but refund it on a cancel; a free entry that is not money). Write each want as a requirement (kinds: "pay-in" {route, currencies: [{token, amount}]}, "burn" {route}, "refund-as-paid" {route}, "free-entry" {route, grant, perPerson, spendable}, "one-approval" {route}, "one-draw" {route}), and pass the spec as it stands with the draw (a lottery whose key is the route) and its tokens, prize and grants. It builds every combination of known bridges (an entry token each currency buys, crafted in the purchase; the payment held until the draw and burned then; a way back the owner switches on after a cancel; a free draw of its own), checks each, tests every requirement on it, and answers the designs best first, with what each keeps (✓), keeps in part (~) and gives up (✗); when none keeps them all, what has to give and the best design for each choice. Read the requirements back to the person, put the choice to them with your pick, then build the one they choose (its spec is in `designs`) and run xsolana_check on it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...SOURCE,
+        requirements: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            required: ['kind'],
+            properties: { kind: { enum: Object.keys(REQUIREMENTS) } },
+          },
+          description: 'What the person wants, each a requirement the tools can test.',
+        },
+        top: { type: 'integer', minimum: 1, maximum: 10, description: 'How many designs to answer (3 by default).' },
+      },
+      required: ['requirements'],
+      additionalProperties: false,
+    },
+    async handler(input, ctx) {
+      const { economy, from } = await load(input, ctx);
+      const top = input.top ?? 3;
+      const r = design(economy, input.requirements, { now: nowOf(ctx) });
+      if (!r.candidates.length)
+        return {
+          isError: true,
+          text: `No design checks: give the spec its draw (a lottery whose key is the route), the tokens each requirement names and the prize, then try again.${footer()}`,
+        };
+      return {
+        ok: true,
+        from,
+        allKept: r.allKept,
+        designs: r.candidates
+          .slice(0, top)
+          .map(c => ({ bridges: c.bridges, says: c.says, results: c.results, findings: c.findings, spec: c.spec })),
+        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it.${footer()}`,
       };
     },
   },
