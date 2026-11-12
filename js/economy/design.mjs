@@ -1122,7 +1122,10 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
         `- Give up ${gave.map(q => `“${q.says.replace(/\.$/, '')}”${q.kept === 'partly' ? ' in part' : ''} (${q.why})`).join(' and ')}: ${c.best.says.join('; ')}.\n  Say: ${sayIt(c.best)}`,
       );
     }
-    lines.push('', 'The designs, best first:');
+    lines.push(
+      '',
+      'The designs, best first (what the person asked for, then what plays best, then the cleanest, then the most secure):',
+    );
   }
   result.candidates.slice(0, top).forEach((c, i) => {
     lines.push(`${i + 1}. ${c.says.join('; ')}.`, `   Say: ${sayIt(c)}`);

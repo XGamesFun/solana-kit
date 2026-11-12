@@ -21,13 +21,13 @@ import { changedParts, renamesNote } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { describeReview, review } from '../economy/review.mjs';
-import { CANNOT, catalog, guideText, PARTS } from '../economy/guide.mjs';
+import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
-import { endStates, tells } from '../economy/walk.mjs';
+import { endStates, tellLines } from '../economy/walk.mjs';
 import { design, describeDesign, REQUIREMENTS } from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -263,7 +263,7 @@ function flagsToTell(economy, now) {
   const flags = legalFlags(check(economy, { now }));
   return flags.length
     ? [
-        "If you haven't told the person these yet, say each once, in a plain sentence (what `approve` prints before anything is sent shows them too; after that, only when they ask):",
+        `Say each to the person as written: once if you haven't yet${realMoney() ? ', and again now, since this economy is on mainnet' : ''} (what \`approve\` prints before anything is sent shows them too; after that, only when they ask):`,
         ...flags.map(f => `- ${f.says}`),
         '',
       ]
@@ -300,21 +300,35 @@ export const tools = [
     name: 'xsolana_guide',
     annotations: READ,
     description:
-      'Read this first whenever someone wants a web3 economy, game economy, token economy, NFT mechanic or onchain reward system: a shop, loot boxes or packs, gacha, a lottery or raffle, an auction (highest bid wins, the outbid refunded at once), staking or a farm, crafting or merging, seasons and emissions, a prediction pool or contest, quests and airdrops, holder-gated drops, using NFTs of any other collection in a game. loot is ONE shared Solana program (on devnet, and on mainnet when the spec says "network": "mainnet"; not independently audited): the economy is a JSON spec, not a new smart contract, so never write Anchor/Rust for what it covers. Returns every part an economy can have (fields from the schema, who acts at play time, fees), how to write a spec, and what loot cannot do (with the nearest alternative). Pass `part` for one part with its nested shapes.',
+      'Read this first whenever someone wants a web3 economy, game economy, token economy, NFT mechanic or onchain reward system: a shop, loot boxes or packs, gacha, a lottery or raffle, an auction (highest bid wins, the outbid refunded at once), staking or a farm, crafting or merging, seasons and emissions, a prediction pool or contest, quests and airdrops, holder-gated drops, using NFTs of any other collection in a game. loot is ONE shared Solana program (on devnet, and on mainnet when the spec says "network": "mainnet"; not independently audited): the economy is a JSON spec, not a new smart contract, so never write Anchor/Rust for what it covers. With no `part`, returns a short index: the loop, and every part and topic with when to fetch it. Then fetch the one you need: `part` gives that part’s fields from the schema, who acts at play time and its nested shapes; a topic (writing, cheating, asks, cannot) gives how to write a spec, designing against bots, asks that look impossible, or what loot cannot do with the nearest versions.',
     inputSchema: {
       type: 'object',
       properties: {
-        part: { type: 'string', enum: Object.keys(PARTS), description: 'One part, with its nested shapes.' },
+        part: {
+          type: 'string',
+          enum: [...Object.keys(PARTS), ...Object.keys(TOPICS)],
+          description: 'One part, with its fields and nested shapes, or one topic (writing, cheating, asks, cannot).',
+        },
       },
       additionalProperties: false,
     },
     async handler({ part } = NO_OPTIONS) {
-      return {
-        text: guideText(part) + footer(),
-        parts: catalog(part),
-        ...(part ? {} : { cannot: CANNOT }),
-        ...PROGRAM_INFO,
-      };
+      if (!part)
+        return {
+          text: guideIndex() + footer(),
+          parts: Object.entries(PARTS).map(([name, p]) => ({ part: name, when: p.when })),
+          topics: Object.entries(TOPICS).map(([name, t]) => ({ topic: name, when: t.when })),
+          ...PROGRAM_INFO,
+        };
+      if (Object.hasOwn(TOPICS, part))
+        return {
+          text: guideText(part) + footer(),
+          topic: part,
+          ...(part === 'cannot' ? { cannot: CANNOT } : {}),
+          ...(part === 'asks' ? { asks: HOW.map(({ what, how }) => ({ what, how })) } : {}),
+          ...PROGRAM_INFO,
+        };
+      return { text: guideText(part) + footer(), parts: catalog(part), ...PROGRAM_INFO };
     },
   },
   {
@@ -389,7 +403,7 @@ export const tools = [
     name: 'xsolana_check',
     annotations: READ,
     description:
-      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so tell the person each warning in plain words. Run it after every change. Give the spec inline (`spec`), a file, or an example.',
+      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so each warning goes to the person. Run it after every change, and check before you describe: before telling the person how value moves (a burn, a free token, a swap, a refund, a payment held or not), check one draft with that mechanism once and read what it says (one draft, not every variant). Quote every count of approvals from it. Give the spec inline (`spec`), a file, or an example.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -397,8 +411,13 @@ export const tools = [
       const head = verdict.refusals.length || verdict.warnings.length ? describe(verdict) : 'No problems found.';
       // What a player is left with when a route goes wrong, in front of the agent at the moment it decides.
       const now = nowOf(ctx);
-      const ends = verdict.ok ? endStates(model(economy, { now }), { now }) : [];
-      const told = verdict.ok ? tells(model(economy, { now }), { now }) : [];
+      const told = verdict.ok ? tellLines(model(economy, { now }), { now }) : [];
+      // (every way a round ends is said once, in the lines to tell)
+      const ends = verdict.ok
+        ? endStates(model(economy, { now }), { now }).filter(
+            l => !(/, every way it ends: /.test(l) && told.some(t => t.line.startsWith('Every way '))),
+          )
+        : [];
       // A draw with a value or step finding: the design tool weighs every known way to build it against the person's wants.
       const draws = verdict.warnings.filter(
         w =>
@@ -413,8 +432,25 @@ export const tools = [
       const designHint = draws.length
         ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (its description lists the kinds for a draw, a sale, a reward, staking and a contest). Added or changed a route since you last ran it? Run it again.${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
         : '';
-      const tell = told.length
-        ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`
+      // The person hears legal and trust facts as written (other words could claim more or less than is true), and
+      // everything else in the agent's own words, every number kept.
+      const legal = legalFlags(verdict);
+      const asWritten = told.filter(t => t.asWritten);
+      const own = told.filter(t => !t.asWritten);
+      const tell = [
+        legal.length
+          ? `\n\nThe law, as written: say each once, the first time it appears here, and again before mainnet (not in pages or apps unless the person asks):\n${legal.map(f => `> ${f.says}`).join('\n')}`
+          : '',
+        asWritten.length
+          ? `\n\nTell the person, as written (what a script or a leaked key can take):\n${asWritten.map(t => `> ${t.line}`).join('\n')}`
+          : '',
+        own.length
+          ? `\n\nTell the person, in your own words (plainer for a person who isn't technical), keeping every number and dropping none:\n${own.map(t => `> ${t.line}`).join('\n')}`
+          : '',
+      ].join('');
+      // How a finding reaches the person, at the moment the agent writes it.
+      const findings = verdict.warnings.length
+        ? '\n\nEach warning reaches the person once, with its fix and your pick: of several fixes, the one that keeps every goal they stated (a burn, a free entry, one approval), the others in a line with what each gives up. An idea of your own (a burn, a free token, a new route) is offered only once a draft with it checks.'
         : '';
       const states = ends.length
         ? `\n\nWhen it goes wrong or a player changes their mind (tell the person before building on it):\n${ends.map(l => `- ${l}`).join('\n')}`
@@ -427,7 +463,7 @@ export const tools = [
         from,
         refusals: verdict.refusals,
         warnings: verdict.warnings,
-        text: `${head}${tell}${states}${designHint}${tail}${footer()}`,
+        text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
     },
   },
@@ -514,7 +550,7 @@ export const tools = [
     name: 'xsolana_review',
     annotations: READ,
     description:
-      'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Give the spec inline (`spec`), a file, or an example. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }], tradeoffs (markdown) }.',
+      'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Give the spec inline (`spec`), a file, or an example. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -523,14 +559,21 @@ export const tools = [
       const highs = r.findings.filter(f => f.severity === 'high').length;
       const tail = highs
         ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'} (or have the person accept ${highs === 1 ? 'it' : 'them'} in plain words) before going live, then review again.`
-        : '\nNo high finding. Tell the person, in plain words, which level each signed route uses and what a cheater gets (the trade-offs above).';
+        : '\nNo high finding. Tell the person which level each signed route uses and what a cheater gets (the trade-offs above), as written: they choose the trade-off.';
+      // What to settle with the person before calling it ready, at the moment the agent does.
+      const ready = [
+        'Before you call it ready:',
+        '- List what your replies promised the person (a price, a cap, a count of approvals, a page that shows the odds or a refund button) and check each against the spec and the page; say any that is not there.',
+        '- Check every limit against what you told them (a cap a day is not a cap a week; a grant’s caps count claims, each up to its amount), and say each cap in one unit: an amount per identity per window.',
+        '- When a server limit, a cap or a route changed since you last said them, say the new figures again: what it really pays, and what the chain allows if its key leaks.',
+        '- “Our server runs it”: ask what the server computes itself and what it only records from the page; only what it computes is checked.',
+      ].join('\n');
       return {
         ok: r.ok,
         from,
         routes: r.routes,
         findings: r.findings,
-        tradeoffs: r.tradeoffs,
-        text: `${describeReview(r, economy.name)}${tail}${footer()}`,
+        text: `${describeReview(r, economy.name)}${tail}\n\n${ready}${footer()}`,
       };
     },
   },
@@ -575,7 +618,7 @@ export const tools = [
         designs: r.candidates
           .slice(0, top)
           .map(c => ({ bridges: c.bridges, says: c.says, results: c.results, findings: c.findings, spec: c.spec })),
-        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it.${footer()}`,
+        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. Added or changed a route? Run this again.${footer()}`,
       };
     },
   },

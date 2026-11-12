@@ -67,7 +67,8 @@ import { challenge } from './challenge.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
-import { validate } from './validate.mjs';
+import { PARTS } from './guide.mjs';
+import { fieldsAt, schemaAt, shapeOf, validate } from './validate.mjs';
 
 /** The most a u64 holds. */
 const U64_MAX = 2n ** 64n - 1n;
@@ -695,6 +696,21 @@ export function dateWords(seconds) {
  * (`ASSUMED_TRIES`).
  * Returns { ok, refusals: [{ code, where, message, fix }], warnings: [{ code, where, message, fix? }] }.
  */
+/**
+ * The fix of a schema refusal: the shape the schema expects where it failed (or, for a field it doesn't take, the
+ * fields that place does take), and the guide's part that has every field of it.
+ */
+function schemaFix(path) {
+  const at = schemaAt(path);
+  const shown = s => (s.length > 400 ? `${s.slice(0, 400)}…` : s);
+  const place = ['economy', ...at.steps.slice(0, at.reached)].join('.').replace(/\.(\d+)(?=\.|$)/g, '[$1]');
+  const expected = at.whole
+    ? `It takes ${shown(shapeOf(at.node))}.`
+    : `${place} takes ${shown(fieldsAt(at.node).join(', ')) || 'no fields'}.`;
+  const part = at.steps[0] && Object.hasOwn(PARTS, at.steps[0]) ? at.steps[0] : null;
+  return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and {"part": …} gives one with its fields.'}`;
+}
+
 export function check(economy, { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {}) {
   const refusals = [];
   const warnings = [];
@@ -802,12 +818,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       !aboutShare(e.path) &&
       !(paysUnsaid.has(e.path) && e.message.startsWith('needs exactly one of'))
     )
-      refuse(
-        'E-SCHEMA',
-        e.path,
-        `${e.path} ${e.message}.`,
-        'Fix that field (xsolana_guide lists what each part takes).',
-      );
+      refuse('E-SCHEMA', e.path, `${e.path} ${e.message}.`, schemaFix(e.path));
   if (refusals.length) return result();
 
   const m = model(economy, { now });
@@ -5677,14 +5688,14 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       'W-CHANCE-ITEMS',
       'economy',
       `Players pay for a random collectible they can resell (a loot box or gacha). Some places treat paid loot boxes of tradeable items as gambling, and many require the odds to be shown. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
-      'Tell the person in plain words: paid random items that can be resold may count as gambling in some places; show the odds on the page, and get a lawyer before real money.',
+      'Tell the person, as xsolana_check’s “The law” line puts it, once now and again before mainnet; show the odds on the page, and get a lawyer before real money.',
     );
   if (chance)
     warn(
       'W-CHANCE-PRIZE',
       'economy',
       `Players pay for a chance at money (a box that pays a prize, a lottery). That is gambling in many places once it is real money, and paid packs with a cash buyback are drawing lawsuits. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
-      'Tell the person this in plain words before they go live: paying for a chance at money is gambling in many places, so before real money they need a lawyer and an age and region gate.',
+      'Tell the person, as xsolana_check’s “The law” line puts it, once now and again before mainnet: before real money they need a lawyer and an age and region gate.',
     );
 
   for (const key of Object.keys(m.scenario.perDay ?? {})) {

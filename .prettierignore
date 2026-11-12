@@ -11,3 +11,5 @@ js/test/fixtures/
 plugin/skills/
 .claude/skills/
 .agents/skills/
+# the skill: its tables stay compact (Prettier would pad every cell to the widest, most of a reference's size)
+skills/

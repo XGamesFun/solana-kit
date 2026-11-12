@@ -59,7 +59,10 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 - `js/client/idl/` is generated: a new program build comes with a new IDL (`node scripts/sync-idl.mjs`, given the
   build in `XSOLANA_PROGRAM_DIR`), a new `loot.so` row in `js/test/fixtures/pinned.txt` and a new `release.json`
   (`node scripts/release-manifest.mjs`).
-- After editing `skills/`, run `npm run sync-skills`.
+- After editing `skills/`, run `npm run sync-skills`. Prettier leaves `skills/` out, so its tables stay compact (one
+  space a side, `|---|`). `SKILL.md` stays under 15,000 characters and `xsolana_guide {}` under 6,000
+  (`js/test/doc-lint.test.mjs`): a lesson about one kind of case goes in the tool output that fires at that decision,
+  or a reference, not in the skill.
 - No text names one eval's scenario or a real product as the answer: write the general rule.
 - Comments and messages say what something is and does, in plain words.
 

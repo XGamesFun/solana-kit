@@ -101,6 +101,13 @@ test('follow the value, cancelled: a refund in the ticket token, not what was pa
   assert.match(w.message, /a draw the oracle hasn't answered 7 days after it was asked/);
   assert.equal(w.severity, 'low', 'only the oracle’s timeout: rare');
   assert.doesNotMatch(w.message, /short of/);
+  assert.equal(w.ask, undefined);
+  // Burned for an entry: nothing can give it back, so even a rare cancel is the person's to decide when they ask.
+  const burn = structuredClone(none);
+  burn.recipes[0].in[0].to = 'burn';
+  const [b] = check(burn, { now: NOW }).warnings.filter(x => x.code === 'W-VALUE' && x.message.includes('cancelled:'));
+  assert.equal(b.severity, 'medium');
+  assert.match(b.ask, /burned, and a cancelled round .* can only refund ENTRY/);
 });
 
 test('follow the value, undone: a way back from the ticket token, open at all times', () => {
@@ -411,7 +418,7 @@ test('loops across routes, the biggest payout, every way a round ends', async ()
   const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
   assert.match(
     text,
-    /“draw”, every way it ends: Nothing sold: .* Nobody asks for the draw: .* The oracle never answers: /,
+    /> Every way “draw” ends: nothing sold: .* nobody asks for the draw: .* the oracle never answers: /,
   );
 });
 

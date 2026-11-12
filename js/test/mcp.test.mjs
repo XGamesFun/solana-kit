@@ -56,9 +56,18 @@ describe('the xsolana MCP server', () => {
   });
 
   test('guide, examples, check, simulate, explain, cost and publish answer on an example', async () => {
+    // The first call is a short index; each part and topic is fetched on its own.
     const guide = await client.callTool({ name: 'xsolana_guide', arguments: {} });
-    assert.match(text(guide), /What no part of loot does/);
+    assert.match(text(guide), /Parts, and when to fetch each:\n- tokens: /);
     assert.equal(guide.structuredContent.program, 'xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet');
+    assert.ok(guide.structuredContent.parts.some(p => p.part === 'farms' && p.when));
+    assert.ok(!('text' in guide.structuredContent), 'structuredContent is the data, not the words again');
+    const cannot = await client.callTool({ name: 'xsolana_guide', arguments: { part: 'cannot' } });
+    assert.match(text(cannot), /What no part of loot does/);
+    assert.ok(cannot.structuredContent.cannot.length);
+    const farms = await client.callTool({ name: 'xsolana_guide', arguments: { part: 'farms' } });
+    assert.match(text(farms), /The part “farms”/);
+    assert.equal(farms.structuredContent.parts[0].part, 'farms');
     const ex = await client.callTool({ name: 'xsolana_examples', arguments: { query: 'coin flip with staking' } });
     assert.ok(ex.structuredContent.examples.some(e => e.name === 'coin-flip-arena'));
     for (const name of ['xsolana_check', 'xsolana_simulate', 'xsolana_explain', 'xsolana_cost', 'xsolana_publish']) {

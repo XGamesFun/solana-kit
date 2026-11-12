@@ -120,3 +120,99 @@ export function validate(value, schema = SCHEMA, root = schema, path = 'economy'
   }
   return errors;
 }
+
+/** A schema node with its local $ref followed: { node, name (the $defs name it came by, if any) }. */
+function follow(node, root) {
+  let name = null;
+  while (node?.$ref) {
+    name = node.$ref.split('/').pop();
+    node = resolve(root, node.$ref);
+  }
+  return { node, name };
+}
+
+/** The place one step below `node` (a field's name, or a list's index), or null when the schema has none. */
+function child(node, step, root) {
+  const { node: n } = follow(node, root);
+  if (!n) return null;
+  for (const branch of n.anyOf ?? n.oneOf ?? []) {
+    const found = child(branch, step, root);
+    if (found) return found;
+  }
+  if (/^\d+$/.test(step) && n.items) return n.items;
+  if (n.properties && Object.hasOwn(n.properties, step)) return n.properties[step];
+  if (n.additionalProperties && typeof n.additionalProperties === 'object') return n.additionalProperties;
+  return null;
+}
+
+/** The fields a place takes, read through its forms: [name, …]. */
+export function fieldsAt(node, root = SCHEMA) {
+  const { node: n } = follow(node, root);
+  if (!n) return [];
+  const own = Object.keys(n.properties ?? {});
+  const forms = (n.anyOf ?? n.oneOf ?? []).flatMap(b => fieldsAt(b, root));
+  return [...new Set([...own, ...forms])];
+}
+
+/**
+ * Where a validator path ("economy.boxes[0].price", "arguments.nope") leads in the schema: { node (the deepest place it
+ * reaches), whole (whether it reached the end), steps (the path's steps after its first), reached (how many of them it
+ * followed) }. A field the schema doesn't
+ * have stops it at the place that holds it.
+ */
+export function schemaAt(path, schema = SCHEMA, root = schema) {
+  const steps = String(path)
+    .replace(/\[(\d+)\]/g, '.$1')
+    .split('.')
+    .slice(1);
+  let node = schema;
+  let reached = 0;
+  for (const step of steps) {
+    const next = child(node, step, root);
+    if (!next) break;
+    node = next;
+    reached++;
+  }
+  return { node, whole: reached === steps.length, steps, reached };
+}
+
+/** A schema node's shape in a line: `{ key, price?, … }`, `a list of box`, `"a" | "b"`, `a number 0..100`. */
+export function shapeOf(node, root = SCHEMA, depth = 0) {
+  const { node: n, name } = follow(node, root);
+  if (!n) return 'anything';
+  if (name && depth > 0) return name;
+  if (n.const !== undefined) return JSON.stringify(n.const);
+  if (n.enum) return n.enum.map(v => JSON.stringify(v)).join(' | ');
+  if (n.anyOf ?? n.oneOf) {
+    const forms = (n.anyOf ?? n.oneOf).map(b => shapeOf(b, root, depth + 1));
+    return [...new Set(forms)].join(' | ');
+  }
+  const type = Array.isArray(n.type) ? n.type.join(' | ') : n.type;
+  if (type === 'array') {
+    const most = n.maxItems ? ` (at most ${n.maxItems})` : '';
+    // (a list at the top shows what each of its entries takes)
+    if (depth === 0) return `a list${most}, each ${shapeOf(n.items, root, 0)}`;
+    return `a list of ${shapeOf(n.items, root, depth + 1)}${most}`;
+  }
+  if (n.properties) {
+    if (depth > 1) return name ?? 'an object';
+    const required = new Set(n.required ?? []);
+    return `{ ${Object.keys(n.properties)
+      .map(k => (required.has(k) ? k : `${k}?`))
+      .join(', ')} }`;
+  }
+  if (type === 'integer' || type === 'number') {
+    const range =
+      n.minimum !== undefined && n.maximum !== undefined
+        ? ` from ${n.minimum} to ${n.maximum}`
+        : n.minimum !== undefined
+          ? ` of at least ${n.minimum}`
+          : n.maximum !== undefined
+            ? ` of at most ${n.maximum}`
+            : '';
+    return `${type === 'integer' ? 'a whole number' : 'a number'}${range}`;
+  }
+  if (type === 'string')
+    return n.pattern ? `a string (${n.description ?? `matching ${n.pattern}`})`.slice(0, 160) : 'a string';
+  return type ? article(type) : 'an object';
+}

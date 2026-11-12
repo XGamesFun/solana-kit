@@ -9,100 +9,119 @@ const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
 /** Each part: what it is for, who acts at play time and its fee, and the nested shapes worth showing. */
 export const PARTS = {
   tokens: {
+    when: 'any currency: SOL, a coin that exists (by mint), points or tickets the project mints, a fixed-supply community token',
     def: 'token',
     says: 'The currencies: SOL, any existing mint by address (classic or Token-2022, coins from a token launchpad or an AMM included), or a token the game makes when it goes live: one the game mints as its rules say (points, tickets, shards, an emission), or one with a fixed `supply` minted once to the owner with minting turned off for good (a community token you keep). A token the game makes is named on chain as it is made (`name`, `symbol`, and `uri`: a link to a JSON file naming its picture), which is what wallets show; only the owner’s wallet can change that later, by changing them in the spec and approving again. loot does not put a token on a market: for trading, launch it on a token launchpad or an AMM, then name the mint. `xsolana token <mint>` (xsolana_token) reads any existing mint into its entry, with its decimals, program and `powers` (what its own keys can do), so none of it is typed by hand.',
     acts: 'nobody: a token is a fact',
   },
   currency: {
+    when: 'naming the game’s own currency: what the shop is priced in and the treasury holds',
     says: 'The key of the token that is the game’s own currency: what the shop is priced in and what the treasury holds. Fixed once live.',
   },
   collection: {
+    when: 'the project’s own collectibles, and other collections it uses',
     def: 'collection',
     says: 'The Metaplex Core collection the project’s collectibles are minted into, made at setup; `false` makes none (a project of tokens only). `collections` adds Core collections your wallet already controls (as many as the project’s setup transaction carries, about 25 in all): an NFT of any of them is the project’s own, and an item can be minted into one with its `collection` (once you add the project as an update delegate of it). `projectNumber` numbers the project among your wallet’s (its address is ["project", owner, number]), so one wallet can run several economies.',
   },
   items: {
+    when: 'anything sold, dropped or made: a shop, a collectible, a soulbound badge, a rising or falling price, a limited drop',
     def: 'item',
     nested: ['rule'],
     says: 'What the game sells, drops or makes: collectibles (minted to the player, with attributes), and normal items (kept by the project’s backend). A price puts an item in the shop, sold in one step (`buy`: no order, nothing to settle). `{serial}` in its `uri` is each unit’s serial, so each can have its own art.',
     acts: `the player buys (${sol(FEES.player)} SOL player fee), and gets it in the same transaction (a normal item: the project’s backend delivers it from the receipt)`,
   },
   pools: {
+    when: 'a vault that pays prizes or rewards: a prize pool, a reserve, a house bankroll',
     def: 'pool',
     says: 'Vaults the game’s parts pay from (a prize pool, a buyback reserve), which no player can take from. The authority can also move what a pool holds (`move_tokens`, a payout decision), so players trust it with what is in them; a lottery’s pot and what a farm owes its stakers are vaults it can’t touch (a farm’s rewards land in a vault of the farm’s own). `seed` is what the owner puts in at the start.',
     acts: 'nobody directly: other parts fill and drain them',
   },
   stashes: {
+    when: 'NFTs the project holds, given away as prizes',
     def: 'stash',
     says: 'NFTs the game holds to give away as prizes, of any collection and any kind (Core with or without the game’s authority, Token Metadata legacy and pNFT, compressed): a partner’s NFTs, a treasury’s rare pieces, one artwork to raffle. Your wallet puts in each NFT it lists when the economy goes live (it must hold them then; a compressed one goes in after, with `loot.proveLeafIx` and `loot.stashIx`). A prize { "gives": "nft", "stash": key, "nft": address } gives that one NFT at once (once: the first winner takes it); a box outcome { "gives": "stash", "stash": key } gives one of them at random, taken out at the roll, so two winners never get the same one; a draw that lands on an empty stash isn’t made, and gives back that draw’s worth. Several stashes with weights are rarity tiers. Give each route its own stash when a shop and a raffle must not empty it for each other.',
     acts: `the owner or the authority puts an NFT in or takes one out (${sol(FEES.project)} SOL); anyone settles a roll that won one`,
   },
   boxes: {
+    when: 'a random roll: a loot box, gacha, a pack of cards, a coin flip, an enchant or a risky forge on an NFT',
     def: 'box',
     nested: ['outcome', 'odds', 'gate', 'rule', 'effect', 'rise', 'fall', 'split', 'perWalletEach'],
     says: 'A paid (or free) roll on chain with MagicBlock’s verifiable randomness, optionally on an NFT (`rollsOn`: an enchant, a mission’s result, a risky forge), whose outcomes then move its numbers (`shifts`) and send it back, burn it or give it away (`then`; a box that can burn or give it away holds it until the roll settles): each outcome gives an item, a fixed prize from a pool, tokens minted (`tokens`), an NFT of a stash (picked at random, or a named one: `nft`), a roll of another box (`roll`), several of these together (`bundle`: { "gives": "bundle", "prizes": [...] }, a pack; it gives all it names or isn’t given, so it names a pool once, a stash’s random NFT beside nothing else of that stash, and two of an item need two left), or nothing. A box of one outcome with nothing random and no NFT it rolls on is bought in one step (`buy`): the price split and what it gives handed over at once, with no order and no oracle. A box takes an NFT as its price through `rollsOn` (which NFTs) and `then` (where the one paid goes: burned, given, or into a stash, a trade-in that becomes another player’s prize). A box is also the prize any route gives: a grant (`gives: { "roll": box }`), a lottery’s place (`{ "percent", "roll" }`), a contest’s winners (`roll`), an auction’s lot (`{ "roll": box }`), a mission’s tier and a recipe roll it for a winner, who gets whatever it gives; such a box is left `active: false`. How long a box can be is what one answer of the oracle’s holds (measured: 128 outcomes that give nothing, 29 of token amounts, 18 each of its own item; 41 slots; 72 odds rules; 16 token prizes or 18 collectibles in one outcome; 340 texts in a gate; fewer where its outcomes name pools or stashes, each search for one’s address counted: sixteen stashes fit 9 draws an open where finding them takes 36 tries): a longer weighted list goes in a table or a stash, drawn by one outcome. A roll is on its written odds whatever is in stock, and `whenOut` says what a draw on an outcome that is out does: "stopSales" (the default) stops selling while one couldn’t be covered, a paid miss gives that draw’s worth back at the settle (with no draw made a paid open fails and is refunded), and a free roll goes back to waiting and is asked again until it hits; "drawLeft" draws among what is left; "giveNothing" keeps selling and a miss gives nothing, paid or free. Odds rules (`odds`) add any percent (99,900 makes an outcome a thousand times likelier; a weight stops at the largest, 4,294,967,295) and count on every route, read when a roll is first asked. A sale in one step sells only while its pools hold every fixed prize. A prize won is set aside for its winner at once. An edit of a box’s roll fails only a purchase still waiting (for its refund); any other roll waiting rolls on the box as edited. A gate (a collectible shown, a few wallets, or a list of any size: `{ "list": [address, …] }`, an allowlist whose proof each player passes) and odds can read what a player shows; `opens`/`closes` time a drop; `perWallet`/`perWalletEach` limit each wallet (one ticket per wallet). A split share "chosen" lets the buyer name a referrer; "chosen:<item>" the holder of a collectible they name (plot rent).',
     acts: `the player opens (${sol(FEES.player)} SOL + ${sol(ORACLE_FEE)} SOL to the oracle); its player, a key they named or the project’s keys settle. Chance that pays money is flagged`,
   },
   payments: {
+    when: 'a payment for something given off chain (an attempt, an entry fee, a tip), split up to four ways',
     def: 'payment',
     nested: ['split'],
     says: 'A player pays for something given off chain (an attempt, an entry, a tip), split up to four ways at once. With `any`, the player chooses the amount, at least `amount` (tips, donations). Its split may name one `"chosen"` share, a wallet the payer names each time they pay (a referrer: `app.pay(key, { chosenRecipient })`), their own too (so a chosen share is at most a rebate the payer controls: price it so); not `"chosen:<item>"`.',
     acts: `the player pays (${sol(FEES.player)} SOL)`,
   },
   recipes: {
+    when: 'crafting, merging, upgrades, salvage, breeding, exchanges, a daily claim',
     def: 'recipe',
     nested: ['input', 'output'],
     says: 'Collectibles and tokens in, collectibles and tokens out, all or nothing: merges, upgrades, salvage, breeding, exchanges, repairs, a daily claim. Any number of lines; one craft carries what is measured (60 payments in one coin, 26 in different coins, 59 outputs from a pool, 108 raises or needs), and past that a recipe is written but never crafts. Several rolls a craft are taken, each its own order; past 15 the receipts outrun a transaction’s log. `raises` buy a level or a stat on a collectible kept (+1 level for 100 DUST, up to 10), or with `fromNow` move a time (a day of fuel, a day off a lock); a `staked` line takes a collectible only while it is staked in the farm it names (`farm`; a set bound into a badge, its raises moving that farm’s `lockAttribute`), a `show` line takes any NFT of a collection, the project’s or not (its stats live in the project’s Sheet of it), so players can train an NFT the project didn’t make, and a `trade` line takes one and keeps it: burned, given on, or into a stash (`then`), a trade-in. Each `out` line is a prize (the same prize line every route takes: an item, tokens minted or from a pool, a share of a pool, an NFT of a stash, a roll of a box), given in the craft; `{ "gives": "roll", "box": key, "on": place }` rolls on a collectible it keeps (a risky upgrade).',
     acts: `the player crafts (${sol(FEES.player)} SOL)`,
   },
   schedules: {
+    when: 'anything on a timer: an emission, a burn, vesting, a payout that repeats',
     def: 'schedule',
     says: 'On a timer: mint a game token into a pool, burn from a pool, move between pools, or pay a wallet, an account, a collectible’s holder, a lottery’s pot ("lottery:<key>") or a farm’s rewards ("farm:<key>"). `start` sets the first run (a cliff), `maxRuns` the last (a vesting of 12 monthly runs), `halveEvery` halves it every N runs; halving with `maxRuns` caps the total for good (an emission with a fixed most). A run missed is missed: one sent late pays once, for the latest run due, and the runs before it lapse; only a sealed schedule’s fixed amount pays every run due. `sealed` (with `fund`): it pays a wallet, the treasury or a burn from a vault of its own that nobody, the owner included, can change, stop or take back; its last run pays what is left. Any number of runs and any end is taken (the checker says a far last run’s date in words); a sealed vault is only as safe as its token (a permanent delegate, a fee its issuer can raise, a freeze), and a payee nobody signs for (a program’s address) is warned of: a multisig vault is fine, an address of the loot program never gets paid.',
     acts: 'the project’s keys, or who it pays, run it when it is due (a sealed one needs nobody else)',
   },
   lotteries: {
+    when: 'a raffle or a lottery: tickets in rounds, a draw, its places, a jackpot, a no-loss lottery',
     def: 'lottery',
     nested: ['gate', 'rule', 'split'],
     says: 'Tickets sold in rounds, a draw on a timer by the oracle, up to 64 runs of places (a place with `times` is a run of places alike: { "percent": 1, "times": 100 } is a hundred). It names where its places are paid from, exactly one of two, never a default: `"pot": 0` (a number 0 to 15) keeps a pot of its own from round to round (nothing but its winners’ payouts takes from it): each place takes its percent of what the pot holds when the draw is asked, with the round’s ticket money, so `seed`, a sponsor, a share of other sales ("lottery:<key>"), yield and what earlier rounds’ places left all count, and the next round always starts with what the round before left; or `"rest": "<destination>"` pays each round from its own ticket money alone, which nothing from outside can change (no seed, no gifts, no carry-over), and sends what its places leave there ("treasury", "burn", "wallet:<address>", "holder:<collectible>", "account:<token account>", a pool, a farm or another lottery; never "chosen"; a pool, farm or lottery named here counts the leftover only once someone pulls it). `split` sends part of ticket money elsewhere first (a charity, a referrer the buyer names with "chosen", the treasury). Leave out `every` for a raffle that draws once and ends. `perWallet` caps each wallet’s tickets in a round. A place can win a prize instead of (or as well as) its percent: `{ "percent": 0, "prize": { "gives": "nft", "stash": key, "nft": address } }` raffles one NFT, which its winner pulls after the draw (if that NFT is gone from its stash, a stranger’s pull is refused: the winner or a project key passes it over); a lottery that draws once with `nfts` (put in its own stash at go-live) and places { "prize": { "gives": "raffled" }, "times": n } raffles many, each winner drawing one at random; `{ "gives": "roll", "box": key }` makes it a random prize. `ticketNft` ({ "rule", "then" }) makes a ticket cost one NFT instead of tokens: held until the draw, then burned, given on or stashed (back to its buyer if the draw is cancelled; no price, no split). The draw’s ask fixes the round’s money and opens the next round at once; then anyone pulls each part (a refund, a place, a share) in any order, and the last pull closes the round. The owner puts SOL in the lottery at go-live for its rounds’ records and every ticket’s entry (`roundRent`, on by default and sized from `expect`: rounds at once and purchases a round; back at each close), so buyers pay no program rent; 0 turns it off, and then a round’s first buyer fronts its record and each buyer pays their entry’s bytes. `noLoss: true` is a no-loss lottery: every ticket (tokens or an NFT) goes back to its buyer once the round is drawn, and the winners take only the pot, what is paid into it (`seed`, a sponsor, a share of other sales to "lottery:<key>"), or with `rest` only its places’ prizes; no split, no cut, no `ticketCurrency`. `closesBefore` closes sales that long before each draw (less than `every`), and `timeWeighted: true` (no-loss lotteries only) weighs each purchase by its tickets times the seconds from it to the close of sales, so a ticket held longer has a better chance and a late buyer can’t take most of the pot for the fees alone; a buyer is shown what their purchase weighs before they buy. A place of tokens from a pool reads the pool once, when the draw is asked: `whenShort` says what each gets when it holds less than they win ("inOrder", the default: whole prizes, first place first; "inProportion": each the same share; "nothing"); prizes of 1,000, 500 and 500 from a pool holding 1,700 give 1,000, 500 and 0, or 850, 425 and 425, or nothing. Every place paid from one pool says the same. A raffle takes at most 256 places from its own stash, and an NFT ticket’s rule at most 170 "one of" texts.',
     acts: `players buy tickets (${sol(FEES.player)} SOL); anyone draws and pays (free). Flagged as chance`,
   },
   farms: {
+    when: 'staking tokens or NFTs for rewards: lock tiers, boosts, an emission’s end',
     def: 'farm',
     nested: ['tier', 'rule', 'effect', 'growth'],
     says: 'Staking: players stake a token or NFTs of any kind (the game’s, or any collection its gate names: Core, Token Metadata legacy and pNFT, compressed) and share what lands in the farm’s own rewards vault by weight (`rewards` names its token; fund it with `seed`, a share "farm:<key>" or a schedule that pays it; what lands is released to the seats over the farm’s longest lock, a day at least, so a stake earns only while it stays and nobody takes what was funded before them at once), or earn a fixed `rate` a day each (minted, or from the vault while it lasts, as most NFT staking pays; `shared` makes it the whole farm’s a day, shared by weight, and `halveEvery` halves it), with lock tiers (above x0, up to x100) and up to 32 boosts from what a collectible says (each, and all together, up to +100,000%). `growth` writes points (and a level, from `levels`) on a staked collectible for each day in, at its tier and boosts, with nobody’s signature: on the NFT when the game has authority over it, in its Sheet otherwise; a boost per level, a gate, box odds, a recipe’s need or a grant then read that level. A boost counts a level from when it is written, by a seat’s refresh, so a farm whose boost reads what its own growth writes should have its page or a keeper refresh seats (anyone may, for free). A tier’s `prize` (a prize line, as everywhere; give it a `lock`, or one NFT can come and go and take it each time) makes it a mission: a collectible that stays its lock (topped up, not forfeited) leaves with it, given as it leaves: tokens (minted or from a pool, grown by its boosts), an item, an NFT of a stash, or a chest (`{ "gives": "roll", "box": key }`, settled after the oracle). A tier’s `roll` of a box with `rollsOn` is a roll on the NFT leaving it (success, a stat lost, the NFT lost). A collectible can also boost a token seat. `growth` takes up to 32 (+1 "level" and +2 "affection" a day; without `levels` the points are the level; up to 128 levels each), `gate` up to 32 rules an NFT must all pass, and `runs` ends a farm that long after it goes live (a mission open for a week): it takes no stake at its end or after it, nor one whose lock would run past it, and in a farm that shares what lands, what is not released by the end stays in its vault, as does what a seat forfeits after it, so fund it at least its release span before the end. A tier’s `earnsFor` is a term: a seat earns and grows that long after its lock started, and what it earned by then is exact however late it is next touched: nobody has to act at its end. A farm with a term or an upkeep that pays keeps a record of those times: each new one costs whoever writes it 44 bytes of rent (about 0.00022 SOL), not refunded on leaving, 238,312 at most (when it is full, a stake at a new end time waits until older seats are touched), and a farm idle past very many of them is walked in parts first (`app.walkFarm`, anyone’s, free). A farm that mints pays nothing while the project is not the rewards mint’s authority, and what it would have paid then is not owed later. A `rate` of 0 pays nothing: a mission that only grows or gives prizes. Escrow is the default (the game holds the NFT); Freeze locks it in the wallet, with release dependent on Core handling later issuer metadata changes; Watch leaves it free, earning only while its staker holds it, so one NFT can sit in a farm and its missions at once. Soulbound collectibles require Freeze. A farm of collectibles can keep two times on the NFT, as numbers recipes and rolls move: `lockAttribute` (its lock, written as the time it ends: a recipe that raises it by "-1d" `fromNow` for a price is a way out early, a roll that adds "1d" is jail) and `upkeepAttribute` (fuel: it earns and grows only until that time; a recipe sells it "+1d" `fromNow`, up to `upTo` ahead, and it runs out by itself). A recipe reaches a collectible staked in escrow on its seat. Never edited once open: a new mission is a new farm, added to the spec and published.',
     acts: `the player stakes, unstakes and harvests (${sol(FEES.player)} SOL each); pause and suspend do not stop an unstake; external custody controls still apply`,
   },
   contests: {
+    when: 'a prediction pool, a bet on an outcome or a presale: back a side, the winners share the pot',
     def: 'contest',
     nested: ['split', 'gate', 'rule'],
     says: 'Players back a side; the side that wins shares the pot by stake, after the rake, as the pot stands when the side is named: each winner’s part is written then, whatever order they claim in, and anything sent to the pot after it goes to nobody (burned at the close). The authority names it, or a `deciders` key (a results server) signs it, so the authority’s key never sits on a server. One side and a `minPot` is an all-or-nothing crowdfund (short of it, everyone takes their money back); a wallet gate and a `stake` is a 1v1 wager. A contest whose result is overdue is off and pays everyone back. `prize` gives every winning entry a prize too, when it is claimed (a collectible, tokens, an NFT, a roll of a box); one scarce prize goes to the entry claimed first. `stakeNft` (a rule) makes each entry stake one NFT of any kind, compressed ones too, instead of tokens: the NFTs are the pot, each winner takes its own back and picks its share of the losers’ (`losersEach` caps it: 1 for “winner takes one”; 0 sends every loser’s NFT to the opener), and the opener gets what the winners leave. Whoever names the winner can also enter; the pot is paid only by each entry’s claim. A prize to each winning entry with no stake and no gate pays one person with many wallets once a wallet.',
     acts: `the authority opens and decides (${sol(FEES.project)} SOL each); players enter (${sol(FEES.player)} SOL). Flagged as betting`,
   },
   auctions: {
+    when: 'an English auction: the highest bid wins, the outbid are refunded at once',
     def: 'auction',
     nested: ['split', 'rule'],
     says: 'An English auction, opened when the economy goes live: the highest bid when the time runs out wins one new unit of an item, any Core NFT the owner holds (give its `collection` when it isn’t the game’s), or a roll of one of the game’s boxes (`{ "roll": box }`, a mystery lot; its price goes to the treasury). Bids in any token, SOL included; each reaches the reserve and tops the last by the least raise; the bid it tops goes back to its bidder at once. A late bid moves the end (`extendBy`, 10 minutes by default; keep it a minute or more, and the least raise `minRaise` 1% or more, or two wallets topping each other in the last seconds keep every other bid out). With no bid the lot goes home; an auction nobody ends waits, and still sells to its high bidder whenever someone ends it. An end pays the seller and gives the lot in one step; an NFT lot that can’t move yet makes the end wait, its winning bid in the project’s vault, until it can or the project’s keys call the sale off (a lot its collection took back or burned sends the bid back). Any time is taken: the checker says a far end’s date in words. `bidNfts` (a rule) makes a bid a bundle of up to three Core or Token Metadata NFTs instead of tokens (never compressed ones: a bid hands the one it tops back at once, and a compressed NFT’s tree can be changed under it): the most NFTs wins, and the reserve counts NFTs.',
     acts: `players bid (${sol(FEES.player)} SOL each); anyone ends it once it is over (free)`,
   },
   holds: {
+    when: 'a player hands a collectible over for a time: a mission, a raid, a timed lock',
     def: 'hold',
     says: 'A player hands a collectible to the project for a time they choose (`for`), or until a set time (`until`: a raid at 18:00); until it is up the authority says where it goes, after it anyone sends it home. A hold’s address names its end, so a late award never lands on a later hold of the NFT.',
     acts: `the player hands it in (${sol(FEES.player)} SOL); the authority releases it (${sol(FEES.project)} SOL)`,
   },
   grants: {
+    when: 'a reward someone earned: a quest, an airdrop, a server’s voucher, a promo code, an allowlist, capped rewards',
     def: 'grant',
     nested: ['gate', 'rule', 'perWalletEach'],
     says: 'Rewards handed out to whoever earned them: a `prize` given in the claim itself (a collectible, tokens minted or from a pool, one NFT of a stash), or a roll of a box (`{ "gives": "roll", "box": key }`: a quest chest, a daily spin, the grant’s funds paying its order). A claim of a prize it can’t give is refused, and keeps its round. Only the winning wallet claims: it signs every claim, whatever proves it won (a voucher, a list, an open grant); anyone may pay its fees, nobody claims for it. A voucher key (a results server: the results server, or one you run) signs who earned it, or one of `keys` (one per promo code: the page signs with the code’s key, and `perKey: 1` pays each code once), or the wallet is on a list. With none of them it is open: any wallet claims within its limits (with a gate, each collectible shown claims once too). The program keeps every claim within its limits per wallet (in all and per window), per person, per key, per day and in total. A grant of a fixed amount of tokens paid by a voucher or a list pays each claim the amount the voucher (or the list’s leaf) names, up to the grant’s own: one grant for rewards by rank or share (1st 500, 2nd 300, …), with the grant’s amount as the most any claim takes; 0 or none named pays the grant’s amount.',
     acts: `anyone sends a claim and pays the ${sol(FEES.player)} SOL player fee; the grant’s funds pay its rent, and the sender what they can’t`,
   },
   decisions: {
+    when: 'what only the game knows (who won, who cleared a level) and what the authority then does',
     def: 'decision',
     says: 'The authority’s rules in words: what only the game knows (who cleared the level, who won) and what the program then does (a payout, a burn, a mint, a collectible made, rewritten or burned, a held collectible released, a roll).',
     acts: `the authority signs each one (${sol(FEES.project)} SOL)`,
   },
   keys: {
+    when: 'who the authority is: the owner, or a server’s key',
     says: '`authority`: "owner" (the owner’s wallet is both keys) or another wallet’s public address (a server’s). Never a private key.',
   },
   scenario: {
+    when: 'the counts the quick simulation assumes: opens a day, players, days, what is staked',
     def: 'scenario',
     says: 'What the quick simulation assumes: how many of each thing a day ("box:flip": 1000), days, how much is staked in each farm.',
   },
@@ -427,8 +446,60 @@ export function catalog(only) {
     });
 }
 
-/** The guide in words: every part (or one, with its nested shapes), the conventions and what loot cannot do. */
+/** The guide's sections that are not parts, each fetched by name like a part: { name: { when, title, lines() } }. */
+export const TOPICS = {
+  writing: {
+    when: 'before the first spec: the file, amounts, shares, times, keys, splits, the treasury, prizes, rules and gates',
+    title: 'Writing it:',
+    lines: () => CONVENTIONS.map(c => `- ${c}`),
+  },
+  cheating: {
+    when: 'before any reward, prize or entry fee: wallets are not people, the page can’t be trusted, bots play well',
+    title: 'Designing against farming and cheating (no code removes these; a design makes them small):',
+    lines: () => SAFETY.map(x => `- ${x}`),
+  },
+  asks: {
+    when: 'when an ask looks impossible: the one field or short combination that does it',
+    title: 'Asks that look impossible but are one field or a short combination:',
+    lines: () => HOW.map(h => `- ${h.what}: ${h.how}.`),
+  },
+  cannot: {
+    when: 'before saying loot can’t: what no part does, and the nearest versions to offer instead',
+    title:
+      'What no part of loot does (before saying so, try combining the parts: most ideas are several parts together). Say what is missing, then offer the nearest versions, best first, and build the one the person picks; never end on "it can’t":',
+    lines: () => CANNOT.map(c => `- ${c.what} (${c.why}). Nearest: ${c.nearest.join('; or ')}.`),
+  },
+};
+
+/** What each call costs at play time, in a line. */
+const feesLine = () =>
+  `Fees: ${sol(FEES.player)} SOL once when a player signs for something of their own (a grant's claim too), never again for what follows from it; ${sol(FEES.project)} SOL each time the owner or the authority calls loot, setting up included; ${sol(ORACLE_FEE)} SOL to MagicBlock’s oracle per random roll.`;
+
+/**
+ * The guide's first page: the loop in a few lines, then every part and topic with when to fetch it. Small on purpose
+ * (a test keeps it under 6,000 characters): an agent fetches the part it needs, not all of them.
+ */
+export function guideIndex() {
+  return [
+    `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, on devnet unless it says "network": "mainnet" (real money). Nobody writes a contract: the spec is checked, simulated, and put live on the owner’s own machine, signed by the project’s key file once they have said yes.`,
+    '',
+    'The loop: xsolana_examples {"query": "<the person’s own words>"} for the nearest example; fetch the parts it needs (below); write the spec; xsolana_check after every change; xsolana_design when the person’s wants pull against each other; xsolana_simulate, xsolana_cost and xsolana_explain for the numbers and the words; xsolana_review before going live; xsolana_save; xsolana_publish when the person says to put it live.',
+    '',
+    'In short: amounts are whole units of their currency (0.1 is 0.1 SOL); shares are percents; times are durations ("30m", "7d") or dates; every part has a `key` the others name ("pool:house"); public data only, never a key.',
+    '',
+    'Fetch what you need: xsolana_guide {"part": "<name>"} (terminal: xsolana guide <name>) gives a part’s fields from the schema, who acts at play time and its nested shapes.',
+    'Parts, and when to fetch each:',
+    ...Object.entries(PARTS).map(([name, p]) => `- ${name}: ${p.when}`),
+    'Topics, fetched the same way:',
+    ...Object.entries(TOPICS).map(([name, t]) => `- ${name}: ${t.when}`),
+    '',
+    feesLine(),
+  ].join('\n');
+}
+
+/** The guide in words: every part (or one, with its nested shapes, or one topic), the conventions and what loot cannot do. */
 export function guideText(only) {
+  if (only && Object.hasOwn(TOPICS, only)) return [TOPICS[only].title, ...TOPICS[only].lines()].join('\n');
   const parts = catalog(only);
   return [
     only
@@ -442,15 +513,8 @@ export function guideText(only) {
     ...(only
       ? []
       : [
-          '\nWriting it:',
-          ...CONVENTIONS.map(c => `- ${c}`),
-          '\nDesigning against farming and cheating (no code removes these; a design makes them small):',
-          ...SAFETY.map(x => `- ${x}`),
-          '\nAsks that look impossible but are one field or a short combination:',
-          ...HOW.map(h => `- ${h.what}: ${h.how}.`),
-          '\nWhat no part of loot does (before saying so, try combining the parts above: most ideas are several parts together). Say what is missing, then offer the nearest versions, best first, and build the one the person picks; never end on "it can’t":',
-          ...CANNOT.map(c => `- ${c.what} (${c.why}). Nearest: ${c.nearest.join('; or ')}.`),
-          `\nFees: ${sol(FEES.player)} SOL once when a player signs for something of their own (a grant's claim too), never again for what follows from it; ${sol(FEES.project)} SOL each time the owner or the authority calls loot, setting up included; ${sol(ORACLE_FEE)} SOL to MagicBlock’s oracle per random roll.`,
+          ...Object.values(TOPICS).flatMap(t => [`\n${t.title}`, ...t.lines()]),
+          `\n${feesLine()}`,
           '\nNext: xsolana_examples to find the nearest example, then write the spec and run xsolana_check.',
         ]),
   ].join('\n');
