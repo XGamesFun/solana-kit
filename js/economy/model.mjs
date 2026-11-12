@@ -604,6 +604,26 @@ export function prizeLine(p) {
 export const prizePool = p => (p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
 
 /**
+ * What a grant's voucher server signs at most, as a declared `serverLimit` says (null when it says nothing): { per
+ * ("person", "wallet", "all"), one: the prize's amount a day for one identity (or everyone, for "all"), all: a day for
+ * everyone (null when that takes a count of people the scenario doesn't give), total, says }. The chain never sees it.
+ */
+export function serverRate(g, players = 0) {
+  const b = g?.serverLimit;
+  if (!b) return null;
+  const windows = 86_400 / Math.max(toSeconds(b.every ?? '1d') || 86_400, 1);
+  const one = Number(b.amount ?? 0) * windows;
+  const all = b.per === 'all' ? one : players ? one * players : null;
+  return {
+    per: b.per,
+    one,
+    all,
+    total: b.total ?? null,
+    says: `${b.amount} ${b.per === 'all' ? 'for everyone together' : `a ${b.per}`} every ${b.every ?? '1d'}${b.total ? `, ${b.total} in all` : ''}`,
+  };
+}
+
+/**
  * What one unit staked in farm `f` earns over its whole life at x1, at its fixed rate: { perDay, days, total, says }.
  * `total` is null for good (a rate with no end, no halving, no term on every tier, no upkeep); a halving rate's total
  * is its ceiling, the rate's days halved again and again (at most twice what its first period pays). null for a farm

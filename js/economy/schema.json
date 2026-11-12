@@ -2575,6 +2575,28 @@
         "trust": {
           "enum": ["decides", "replays", "bounds"],
           "description": "What the server holding a voucher key checks before it signs, said honestly: \"decides\" (it runs the game or match itself; the page sends only inputs), \"replays\" (it runs the page's inputs again, from randomness it keeps, and reads the result), \"bounds\" (the page runs the game and reports; the server checks only pace, order and daily caps, so a script at human speed gets through). Never sent on chain and changes nothing that goes live: xsolana_review and xsolana_explain read it. Only on a grant with `vouchers` or `keys`."
+        },
+        "serverLimit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per", "amount"],
+          "description": "What the grant's voucher server signs at most, declared so the tools reason from what the economy really pays: for one identity (\"person\": the account the server counts, an X account; \"wallet\") or for everyone together (\"all\"), `amount` of the prize (tokens, or a count of an item) each window (`every`), and `total` in all. The program never sees it: the chain keeps only \"limits\", which is what a leaked voucher key could take.",
+          "properties": {
+            "per": {
+              "enum": ["person", "wallet", "all"]
+            },
+            "amount": {
+              "type": "number",
+              "minimum": 0
+            },
+            "every": {
+              "$ref": "#/$defs/duration"
+            },
+            "total": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
         }
       }
     },
