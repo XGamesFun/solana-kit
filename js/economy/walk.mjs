@@ -331,6 +331,13 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
       );
     if (r.kind === 'lottery') {
       const loop = journeyOf(r, fl);
+      const crafted = fl.assets.get(r.price[0]?.asset)?.origins.find(o => o.recipe.active !== false);
+      if (crafted && !fl.assets.get(r.price[0].asset).money) {
+        const per = num(r.price[0].amount) / num(crafted.makes || 1);
+        out.push(
+          `Entering ${named(r)} N times at once takes 1 approval with buyTickets' make (times: N${per === 1 ? '' : ` × ${+per.toFixed(9)}`}), or 2 without it (one craft of ${named(crafted.recipe)} with times N, then one purchase of N tickets); never a craft for each entry.`,
+        );
+      }
       out.push(
         `A whole go at ${named(r)} takes ${loop.prompts} wallet approval${loop.prompts === 1 ? '' : 's'}: ${loop.steps.join(', then ')}.`,
       );
@@ -371,6 +378,16 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
         pool && g && l.total && l.total * g.amount > num(pool.seed)
           ? ` Its total is more than “${pool.key}” starts with (${num(pool.seed)}): claims past that are refused until it is refilled.`
           : '';
+      // A free grant of something a route sells is a paid thing given away.
+      const sold = g ? fl.assets.get(g.asset)?.origins.find(o => o.recipe.active !== false) : null;
+      if (sold && !fl.assets.get(g.asset).money)
+        out.push(
+          `${named(r)} gives away a paid ${sym(g.asset)}: ${named(sold.recipe)} sells ${sold.makes} for ${amount(sold.pays)}, and a free one is accepted wherever a bought one is.`,
+        );
+      if (signed && ['bounds', undefined].includes(r.part.trust))
+        out.push(
+          `${named(r)} takes the page's word within its caps: a script claiming at a steady, human pace gets the most its caps allow. A server check that only clamps to a bound costs that script nothing; one that refuses costs it the attempt.`,
+        );
       if (caps.length)
         out.push(
           `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}`,

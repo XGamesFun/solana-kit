@@ -4,6 +4,45 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.11: one model of the spec, and the analyses that challenge it (loot 0.28.0, unchanged)
+
+The tools alone. The checker, `explain` and the review now read one model of the spec (`js/economy/flows.mjs`). It
+holds what every asset is worth at the spec's own rates and where it comes from. It also holds every route (lotteries,
+boxes and shop items, recipes, grants, contests) as states of steps: who sends each, who pays, what moves, and what
+happens if nobody does. Every route is also an exchange from what it takes to what it gives (`exchanges.mjs`). Five
+analyses run over the model, each finding with a severity that follows how likely its state is:
+
+- **`W-VALUE`, follow the value.** A refund against what was paid. A way back open at all times. A free thing worth a
+  paid one. Any loop of routes that comes back with more, caps or not. Net flow from what the caps allow. A farm's
+  payback, its growth when rewards are staked again, and earning items given away. A free feature that pays the most.
+  A token made after its last use.
+- **`W-STEPS`, one intent, one step.** A player's whole loop (getting the price, buying, settling, collecting), past
+  two approvals, with what folds steps together.
+- **`W-ASSUMPTION`, check every assumption.** Every number that rests on who takes part (a least sale, a least pot, a
+  shared farm's stake, the largest holder, demand against a capped supply, a grant's total against its audience) is
+  checked against the scenario. When the scenario says nothing, the finding is the question to ask, never a default.
+  It also covers who runs each step only a person or a server sends, and what freezes at the first sale.
+  `W-POOL-RUNS-DRY` is now one of its findings.
+- **`W-ENFORCED`, where each rule is kept.** Who names a result, what else that key can do, what its holder gains, and
+  when the outcome can first be known. It replaces `W-CONTEST`'s note on who names the winner.
+- **Who makes it happen.** The walk-through gives every route "who sends what" and "every way it ends", every date in
+  order, and each player action's approvals and SOL.
+
+`xsolana_check`'s answer now ends with three lists. "Ask the person" holds the questions. "Tell the person, as written"
+holds short final sentences: a fixed price or a chance, how a farm pays, a whole go's approvals and N at once, what a
+cancel refunds, and each grant's caps in claims and in amount. "When it goes wrong" says what each route leaves a
+player.
+
+A spec may declare what a server or page does off chain (`"offchain"`). Those steps are followed like any route. An
+outside token's holders can be given in `"scenario.holders"`. One farm ceiling (`farmCeiling`) is used by every tool, so
+a halving rate is bounded the same way everywhere. The quick simulation's default span covers the longest farm. The
+approval code masks the analyses' times too.
+
+Skill: rule 9 is "Challenge before you build", with how to put it: one pick that keeps every stated goal, findings as
+questions, the "Tell the person" lines passed on as written, caps in one unit, what freezes when, and "fixed price" said
+outright. Rule 11 puts the trade between a button on the page and a capped key on a server. The loop adds "check before
+you describe".
+
 ## 0.28.10: four errors an audit of the tools found (loot 0.28.0, unchanged)
 
 The tools alone.
