@@ -54,6 +54,7 @@ export function challenge(m, warn, now, economy) {
       if (!a || a.money || !origin) continue;
       const ways = a.backs.filter(b => b.gives.some(g => origin.pays.some(p => p.asset === g.asset)));
       const p = c.participation;
+      const burned = origin.pays.every(x => x.to === 'burn');
       const why =
         c.likely === 'likely'
           ? `likely: the scenario sells about ${p.expected} a round (${p.how}), short of ${c.minSold}`
@@ -67,7 +68,14 @@ export function challenge(m, warn, now, economy) {
         route.where,
         `Following ${a.symbol} into ${named(route)}, cancelled: players buy ${a.symbol} with ${words(a.origins.map(o => `${named(o.recipe)} (${priced(o.pays)} for ${o.makes})`))}, and a cancelled round (${c.causes.join(', or ')}) refunds ${a.symbol}, not the ${priced(origin.pays)} paid for it, which ${origin.pays.every(x => x.to === 'burn') ? 'was burned' : `stays where ${named(origin.recipe)} sent it (${words([...new Set(origin.pays.map(x => x.to))])})`}. ${ways.length ? `${words(ways.map(w => named(w.recipe)))} turns ${a.symbol} back${ways.some(w => on(w.recipe)) ? '' : ' once the project switches it on'}.` : `Nothing turns ${a.symbol} back.`} Each refund waits until someone pulls it (anyone may; the page's claims() lists a player's). How likely a cancel is: ${why}.`,
         `The pick for the refund (it keeps the payment ${origin.pays.every(x => x.to === 'burn') ? 'burned' : 'going where it goes'}, one approval, no swap and nothing for the owner to do after a cancel; it assumes nothing else): hold the payment until the outcome is final and settle it then. Price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid. A free entry then is either ${sym(origin.pays[0].asset)} itself (which can be spent) or a ticket to a draw of its own (a second draw): with more wants than the refund (a free entry that isn't money, one draw), run xsolana_design, which weighs them all. The other fix gives up something: a recipe that turns ${a.symbol} back, switched off and switched on after a cancel, needs the owner after every cancel and is a swap players can use while it is on.`,
-        { severity: BY_LIKELY[c.likely] },
+        // A payment that is burned can't be given back by anyone, so how a cancel ends is the person's to decide when
+        // they ask for the burn, however rare a cancel is: at least medium, with the question.
+        burned
+          ? {
+              severity: BY_LIKELY[c.likely] === 'low' ? 'medium' : BY_LIKELY[c.likely],
+              ask: `${a.symbol} for ${named(route)} is bought with ${priced(origin.pays)} that is burned, and a cancelled round (${c.causes.join(', or ')}) can only refund ${a.symbol}: is that what players should get back, or should what they paid come back?`,
+            }
+          : { severity: BY_LIKELY[c.likely] },
       );
     }
   }

@@ -16,6 +16,10 @@ The tools and the skill. What an agent loads before it has done anything is a fr
 | `references/sentence-to-spec.md`     | 133,025           | 42,218 (with the token table it took in) |
 | MCP instructions                     | 382 words         | 253                                      |
 
+- **A burn is decided when it is asked for.** A refund in another asset than what was paid for it, where that payment
+  is burned, is at least a medium finding with a question for the person, even when only the oracle's timeout can
+  cancel the round: nobody can give a burned payment back, so how a cancel ends is settled with the burn, not after
+  a later setting makes a cancel likely.
 - **The guide is an index first.** With no `part`, `xsolana_guide` (and `xsolana guide`) gives the loop, then every
   part and topic with when to fetch it. Parts are unchanged. The guide's other sections are topics fetched the same
   way: `writing`, `cheating`, `asks`, `cannot`. `guideText()` still gives the whole guide.
