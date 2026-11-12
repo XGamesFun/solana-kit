@@ -244,7 +244,7 @@ export function challenge(m, warn, now, economy) {
         `Ask, then write it in the scenario ("scenario.players", and "perWallet" or "scenario.perDay": {"lottery:${route.key}": n}) and check again; or leave "minSold" out.`,
         {
           severity: 'medium',
-          ask: `How many players will ${named(route)} have, and how many tickets will each buy before its draw? It needs ${c.minSold}.`,
+          ask: `It needs ${c.minSold} tickets to draw: how many players will ${named(route)} have, and how many tickets will each buy before its draw?`,
         },
       );
     else if (p.expected < c.minSold)
@@ -266,7 +266,7 @@ export function challenge(m, warn, now, economy) {
       `Ask, then write it in the scenario ("scenario.perDay": {"contest:${ct.key}": n}) and check again.`,
       {
         severity: 'medium',
-        ask: `How many will enter ${named(ct)}, and with how much? It needs ${ct.minPot} in its sides.`,
+        ask: `It needs ${ct.minPot} in its sides: how many will enter ${named(ct)}, and with how much?`,
       },
     );
   }
@@ -486,7 +486,7 @@ export function challenge(m, warn, now, economy) {
       'Close entries before the first moment anyone can learn the outcome, and publish what each verdict rests on.',
       {
         severity: 'medium',
-        ask: `When can someone first learn the outcome of ${named(route)}? Entries must close before that.`,
+        ask: `Entries must close before anyone can know the result: when can someone first learn the outcome of ${named(route)}?`,
       },
     );
   }
@@ -568,7 +568,7 @@ export function challenge(m, warn, now, economy) {
       'Ask, then declare it: "serverLimit": { "per": "person" | "wallet" | "all", "amount", "every", "total" }.',
       {
         severity: 'low',
-        ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all? And how does it set each claim's amount (a multiplier, a streak, a rank, a code)? Anything it converts goes in "offchain".`,
+        ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all? And how does it set each claim's amount (a multiplier, a streak, a rank, a code)? And what does it convert, so it can go in "offchain"?`,
       },
     );
 
@@ -683,7 +683,7 @@ export function challenge(m, warn, now, economy) {
       {
         severity: 'low',
         ask: {
-          deliver: `Who delivers the off-chain prize of ${names} to each winner, and how will they reach them? The chain knows only the winning wallet.`,
+          deliver: `The chain knows only the winning wallet: who delivers the off-chain prize of ${names} to each winner, and how will they reach them?`,
           server: `Who runs the results server that signs the vouchers of ${names}, and is it up for the whole run?`,
           decide: `Who holds the decider key of ${names}, what does it check before it signs, and will they be there before the result is due?`,
           'decide-authority': `Who names the result of ${names} with the authority key, and will they be there before the result is due?`,
