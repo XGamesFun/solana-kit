@@ -2,7 +2,7 @@
 // followed across routes: a recipe at its lines' amounts, a box at its outcomes' odds, a farm at what one unit staked
 // earns over its life (its ceiling; boosts at their best). And what each feature pays one player a day, in the
 // project's currency at the spec's own rates. Pure.
-import { farmCeiling, prizeLine, toSeconds } from './model.mjs';
+import { farmCeiling, prizeLine, serverRate, toSeconds } from './model.mjs';
 import { lineToken, named, num } from './flows.mjs';
 
 const DAY = 86_400;
@@ -149,6 +149,18 @@ export function payouts(m, fl, sim) {
     const prize = prizeLine(g.prize ?? g.gives);
     const asset = prize?.gives === 'item' ? `item:${prize.item}` : lineToken(prize, m);
     const each = asset ? value([{ asset, amount: prize.gives === 'item' ? 1 : num(prize.amount) }]) : null;
+    // What its server declares it signs for one identity a day, when it does; else the chain's caps.
+    const held = serverRate(g);
+    if (held && asset && worth(asset) !== undefined && held.per !== 'all') {
+      rows.push({
+        name: g.name ?? g.key,
+        where: `economy.grants.${g.key}`,
+        perDay: worth(asset) * held.one,
+        how: `its server signs at most ${held.says}`,
+        free: true,
+      });
+      continue;
+    }
     const d = daily(g.limits);
     if (each === null || !d) continue;
     rows.push({

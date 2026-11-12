@@ -5,7 +5,7 @@
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
 import { realMoney } from '../client/pda.js';
-import { FEES, prizeLine, prizeWords, toSeconds, toTime } from './model.mjs';
+import { FEES, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -403,7 +403,7 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
           : '';
       const server =
         signed && (r.part.vouchers ?? []).length
-          ? ` Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly. If its voucher key leaks, the chain still allows ${day ? `${+day.toFixed(9)} ${sym(g.asset)} a day` : 'whatever its caps allow'}${l.total && g ? ` and ${+(l.total * g.amount).toFixed(9)} in all` : ''}${drains}.`
+          ? `${r.part.serverLimit ? ` Its server signs at most ${serverRate(r.part).says}: that is what it really pays.` : ' Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly.'} If its voucher key leaks, the chain still allows ${day ? `${+day.toFixed(9)} ${sym(g.asset)} a day` : 'whatever its caps allow'}${l.total && g ? ` and ${+(l.total * g.amount).toFixed(9)} in all` : ''}${drains}.`
           : '';
       if (caps.length)
         out.push(

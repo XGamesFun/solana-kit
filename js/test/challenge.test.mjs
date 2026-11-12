@@ -495,3 +495,37 @@ test('lessons: the cheapest of several paths, every ending told, odds that move,
   assert.match(explained, /Who controls what: the chain, your server, your owner key/);
   assert.match(explained, /any cap above can be raised or lowered/);
 });
+
+test('a limit the server keeps: declared, the tools count it; undeclared, they ask', async () => {
+  // Popped bubbles takes the page's word within caps its server keeps, and says nothing of them: ask.
+  const s = spec();
+  s.grants[0].trust = 'bounds';
+  assert.ok(
+    check(s, { now: NOW }).warnings.some(
+      w => w.where === 'economy.grants.pops' && w.ask?.includes('How much does your server let one person'),
+    ),
+  );
+  // Declared: the Tell line says what it really pays beside what a leaked key could take, and the question is gone.
+  s.grants[0].serverLimit = { per: 'person', amount: 1750, every: '1h' };
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: s }, { now: NOW })).text;
+  assert.match(
+    text,
+    /Its server signs at most 1750 a person every 1h: that is what it really pays\. If its voucher key leaks/,
+  );
+  assert.ok(
+    !check(s, { now: NOW }).warnings.some(
+      w => w.where === 'economy.grants.pops' && w.ask?.includes('How much does your server'),
+    ),
+  );
+  // A minted reward counted at its server's rate in the net flow: 50 a day for everyone, against what burns.
+  const mint = spec();
+  mint.grants[1] = {
+    ...mint.grants[1],
+    limits: { perWallet: 1 },
+    serverLimit: { per: 'all', amount: 50, every: '1d' },
+  };
+  const flow = check(mint, { now: NOW }).warnings.find(w => w.message.includes('net flow:'));
+  if (flow)
+    assert.match(flow.message, /“Free entry”'s server signs at most 50 for everyone together every 1d, about 50 a day/);
+});

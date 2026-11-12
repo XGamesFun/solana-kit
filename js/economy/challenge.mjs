@@ -15,7 +15,7 @@
 // Who sends each later step and what happens if nobody does is in the walk-through (walk.mjs, from the same model); a
 // voucher's trust in the review's trust levels.
 import { at, flows, lineToken, named, num, ticketOf, words } from './flows.mjs';
-import { prizeLine, toSeconds, toTime } from './model.mjs';
+import { prizeLine, serverRate, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
 import { exchanges, payouts } from './exchanges.mjs';
 import { journeyOf } from './walk.mjs';
@@ -311,10 +311,16 @@ export function challenge(m, warn, now, economy) {
     if (!grants.length && !farms.length) continue;
     sim ??= simulateOrNull(economy, now);
     const amountOf = g => num(prizeLine(g.prize ?? g.gives).amount);
-    const daily = grants.filter(g => num(g.limits?.perDay));
-    const totalOnly = grants.filter(g => !num(g.limits?.perDay) && num(g.limits?.total));
-    const uncapped = grants.filter(g => !num(g.limits?.perDay) && !num(g.limits?.total));
-    const capped = daily.reduce((n, g) => n + amountOf(g) * num(g.limits.perDay), 0);
+    // A grant whose server declares what it signs ("serverLimit") is counted at that rate: what the economy really
+    // pays. Its chain caps are only what a leaked voucher key could take, said beside it.
+    const players = num(m.scenario.players);
+    const held = grants.filter(g => g.serverLimit).map(g => ({ g, rate: serverRate(g, players) }));
+    const chainOnly = grants.filter(g => !g.serverLimit);
+    const served = held.reduce((n, x) => n + (x.rate.all ?? 0), 0);
+    const daily = chainOnly.filter(g => num(g.limits?.perDay));
+    const totalOnly = chainOnly.filter(g => !num(g.limits?.perDay) && num(g.limits?.total));
+    const uncapped = chainOnly.filter(g => !num(g.limits?.perDay) && !num(g.limits?.total));
+    const capped = daily.reduce((n, g) => n + amountOf(g) * num(g.limits.perDay), 0) + served;
     // A farm at what the routes can create, not the scenario's example: every unit that can exist, staked at its best
     // boost (a shared rate is the whole farm's).
     const atCaps = farms.map(f => {
@@ -325,13 +331,18 @@ export function challenge(m, warn, now, economy) {
     });
     const farmed = atCaps.reduce((n, x) => n + x.perDay, 0);
     const burned = num(sim?.perDay?.burned?.[key]);
-    if (!uncapped.length && !totalOnly.length && capped + farmed <= burned) continue;
     if (!uncapped.length && capped + farmed <= burned) continue;
     warn(
       'W-VALUE',
       `economy.tokens.${key}`,
       `Following ${sym(key)}, net flow: ${[
-        capped ? `grants mint up to ${+capped.toFixed(9)} a day at their caps (${words(daily.map(named))})` : '',
+        daily.length
+          ? `grants mint up to ${+(capped - served).toFixed(9)} a day at their caps (${words(daily.map(named))})`
+          : '',
+        ...held.map(
+          ({ g, rate }) =>
+            `${named(g)}'s server signs at most ${rate.says}${rate.all !== null ? `, about ${+rate.all.toFixed(6)} a day${rate.per === 'all' ? '' : ` with the scenario's ${players} players`}` : ' (the scenario names no players, so not a day in all)'}${num(g.limits?.perDay) ? `; if its voucher key leaks, the chain allows ${+(amountOf(g) * num(g.limits.perDay)).toFixed(9)} a day` : ''}`,
+        ),
         ...atCaps.map(x =>
           x.perDay === Infinity
             ? `${named(x.f)} mints as rewards with no cap: nothing bounds how many ${x.f.stakes === 'collectibles' ? 'NFTs it takes' : `${sym(x.f.stakes)} can be staked`}${x.said ? ` (the scenario's example, ${+x.said.toFixed(6)} a day, is not a cap)` : ''}`
@@ -532,6 +543,20 @@ export function challenge(m, warn, now, economy) {
       },
     );
   }
+
+  // A voucher grant that takes the page's word (or doesn't say) holds its real limit on its server: declared, the tools
+  // reason from it; undeclared, ask.
+  for (const g of m.grants.filter(g => (g.vouchers ?? []).length && !g.serverLimit && g.trust !== 'decides'))
+    warn(
+      'W-ASSUMPTION',
+      `economy.grants.${g.key}`,
+      `${named(g)} takes ${g.trust === 'replays' ? 'a replayed result' : "the page's word"} within the caps its server keeps, and the spec doesn't say what those are ("serverLimit"): every figure here is the chain's caps, which only bound a leaked voucher key.`,
+      'Ask, then declare it: "serverLimit": { "per": "person" | "wallet" | "all", "amount", "every", "total" }.',
+      {
+        severity: 'low',
+        ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all?`,
+      },
+    );
 
   // A result or reward decided off chain (a voucher server, a decider) may give more than the spec shows: a boost, a
   // ranking that pays. Declared in "offchain", it is followed like any route; undeclared, ask.
