@@ -219,6 +219,39 @@
           "description": "How many compressed NFTs it holds in all: the tree is made for the next power of two (at least 16,384). Once full, no more are given."
         }
       }
+    },
+    "offchain": {
+      "type": "array",
+      "description": "What a server or the game's page does off chain with what players hold or win, declared so the tools follow value through it (a boost the server grants for a token spent, a ranking it turns into rewards). The program never sees these; the checker follows loops through them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "takes", "gives"],
+        "properties": {
+          "key": {
+            "$ref": "#/$defs/key"
+          },
+          "name": {
+            "$ref": "#/$defs/words"
+          },
+          "takes": {
+            "type": "string",
+            "description": "What a player spends or holds for it: a token key, or \"item:<key>\"."
+          },
+          "gives": {
+            "type": "string",
+            "description": "What it gives: a token key, \"item:<key>\", or \"farm:<key>\" for a share more of that farm's rewards."
+          },
+          "rate": {
+            "type": "number",
+            "minimum": 0,
+            "description": "How much it gives for each one taken (a token or an item); for \"farm:<key>\", the percent a seat earns more."
+          },
+          "says": {
+            "$ref": "#/$defs/words"
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -1900,6 +1933,28 @@
           "additionalProperties": {
             "$ref": "#/$defs/amount"
           }
+        },
+        "holders": {
+          "type": "object",
+          "description": "Token key → who holds it: { \"supply\": all there is, \"owner\": what the owner's wallet holds, \"largest\": what the largest other holder holds }. For a token the project doesn't mint (an outside one), so the largest holder can be followed in.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "supply": {
+                "type": "number",
+                "minimum": 0
+              },
+              "owner": {
+                "type": "number",
+                "minimum": 0
+              },
+              "largest": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
         }
       }
     },
@@ -2090,13 +2145,17 @@
         "oneOf": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "The attribute is one of these texts: a tier of two, one species of forty. As many as the record holds; a lottery's NFT ticket takes at most 170, and a box's gate about 340 (what one answer of the oracle's reads)."
         },
         "items": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/key" },
+          "items": {
+            "$ref": "#/$defs/key"
+          },
           "description": "Any of these items the game mints, in its own collection: a farm for three tree species, a gate for holders of any of five plots. Read by the program as the collection's `item_id` being one of theirs; not with `item`, `collection` or `attribute`."
         },
         "time": {

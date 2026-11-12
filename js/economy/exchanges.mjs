@@ -102,6 +102,23 @@ export function exchanges(m, fl, sim) {
       cap: null,
     });
   }
+  // What the spec declares a server or page does off chain: followed like any route.
+  for (const x of m.offchain ?? []) {
+    const farm = x.gives.startsWith('farm:') ? m.farm.get(x.gives.slice(5)) : null;
+    const y = farm ? farmYield(farm, sim) : null;
+    const to = farm ? farm.rewardsToken : x.gives;
+    const rate = farm ? (y ? (y.total * num(x.rate)) / 100 : 0) : num(x.rate ?? 1);
+    if (to && rate > 0)
+      edges.push({
+        from: x.takes,
+        to,
+        rate,
+        route: `offchain:${x.key}`,
+        where: 'economy.offchain',
+        says: `${named(x)} off chain`,
+        cap: null,
+      });
+  }
   return edges;
 }
 

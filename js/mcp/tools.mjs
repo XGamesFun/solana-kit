@@ -27,7 +27,7 @@ import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
-import { endStates } from '../economy/walk.mjs';
+import { endStates, tells } from '../economy/walk.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -396,6 +396,10 @@ export const tools = [
       // What a player is left with when a route goes wrong, in front of the agent at the moment it decides.
       const now = nowOf(ctx);
       const ends = verdict.ok ? endStates(model(economy, { now }), { now }) : [];
+      const told = verdict.ok ? tells(model(economy, { now }), { now }) : [];
+      const tell = told.length
+        ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`
+        : '';
       const states = ends.length
         ? `\n\nWhen it goes wrong or a player changes their mind (tell the person before building on it):\n${ends.map(l => `- ${l}`).join('\n')}`
         : '';
@@ -407,7 +411,7 @@ export const tools = [
         from,
         refusals: verdict.refusals,
         warnings: verdict.warnings,
-        text: `${head}${states}${tail}${footer()}`,
+        text: `${head}${tell}${states}${tail}${footer()}`,
       };
     },
   },

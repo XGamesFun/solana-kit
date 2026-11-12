@@ -60,7 +60,7 @@ export function challenge(m, warn, now, economy) {
         'W-VALUE',
         route.where,
         `Following ${a.symbol} into ${named(route)}, cancelled: players buy ${a.symbol} with ${words(a.origins.map(o => `${named(o.recipe)} (${priced(o.pays)} for ${o.makes})`))}, and a cancelled round (${c.causes.join(', or ')}) refunds ${a.symbol}, not the ${priced(origin.pays)} paid for it, which ${origin.pays.every(x => x.to === 'burn') ? 'was burned' : `stays where ${named(origin.recipe)} sent it (${words([...new Set(origin.pays.map(x => x.to))])})`}. ${ways.length ? `${words(ways.map(w => named(w.recipe)))} turns ${a.symbol} back${ways.some(w => on(w.recipe)) ? '' : ' once the project switches it on'}.` : `Nothing turns ${a.symbol} back.`} Each refund waits until someone pulls it (anyone may; the page's claims() lists a player's). How likely a cancel is: ${why}.`,
-        `Hold the payment until the outcome is final, then burn or route it at settlement: price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid and nothing is burned before the outcome. Otherwise, keep a recipe that turns ${a.symbol} back switched off ("active": false) and switch it on after a cancel.`,
+        `The pick, which keeps every goal (the payment still ${origin.pays.every(x => x.to === 'burn') ? 'burned' : 'goes where it goes'}, one approval, no swap, nothing for the owner to do after a cancel): hold the payment until the outcome is final and settle it then. Price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid. A free entry stays free with a ticket of its own (a separate lottery, or an NFT ticket), still moving no ${sym(origin.pays[0].asset)}. The other fix gives up something: a recipe that turns ${a.symbol} back, switched off and switched on after a cancel, needs the owner after every cancel and is a swap players can use while it is on.`,
         { severity: BY_LIKELY[c.likely] },
       );
     }
@@ -239,6 +239,27 @@ export function challenge(m, warn, now, economy) {
       },
     );
   }
+  /** How many units farm `f` can ever hold staked: an item's supply, the totals of what gives it, a token's supply. */
+  const stakeCap = f => {
+    if (f.stakes !== 'collectibles') return num(m.tokens.get(f.stakes)?.supply) || Infinity;
+    if (!f.item) {
+      // The items its gate names, else every collectible of the project's (a gate on another collection: no cap known).
+      const rules = Array.isArray(f.gate) ? f.gate : f.gate ? [f.gate] : [];
+      if (rules.some(r => r.collection)) return Infinity;
+      const named = rules.flatMap(r => [r.item, ...(r.items ?? [])]).filter(Boolean);
+      const items = named.length ? named.map(k => m.item.get(k)) : m.items.filter(it => it.kind === 'collectible');
+      return items.length && items.every(it => num(it?.supply))
+        ? items.reduce((n, it) => n + num(it.supply), 0)
+        : Infinity;
+    }
+    const supply = num(m.item.get(f.item)?.supply);
+    if (supply) return supply;
+    const gives = x => prizeLine(x)?.gives === 'item' && prizeLine(x).item === f.item;
+    const sold = m.allBoxes.some(b => (b.outcomes ?? []).some(gives)) || m.recipes.some(r => (r.out ?? []).some(gives));
+    const totals = m.grants.filter(g => gives(g.prize ?? g.gives)).map(g => num(g.limits?.total));
+    if (sold || !totals.length || totals.some(t => !t)) return Infinity;
+    return totals.reduce((a, b) => a + b, 0);
+  };
   // Net flow: a token with value (the project's currency, one that turns back into money, a farm's rewards) minted for
   // free a day at its caps, against what the scenario burns of it a day.
   const valued = key => {
@@ -263,7 +284,15 @@ export function challenge(m, warn, now, economy) {
     const totalOnly = grants.filter(g => !num(g.limits?.perDay) && num(g.limits?.total));
     const uncapped = grants.filter(g => !num(g.limits?.perDay) && !num(g.limits?.total));
     const capped = daily.reduce((n, g) => n + amountOf(g) * num(g.limits.perDay), 0);
-    const farmed = farms.reduce((n, f) => n + num(sim?.farms?.find(x => x.key === f.key)?.rewardsPerDay), 0);
+    // A farm at what the routes can create, not the scenario's example: every unit that can exist, staked at its best
+    // boost (a shared rate is the whole farm's).
+    const atCaps = farms.map(f => {
+      const cap = stakeCap(f);
+      const best = 1 + Math.max(0, ...(f.boosts ?? []).map(x => num(x.add?.addPercent))) / 100;
+      const said = num(sim?.farms?.find(x => x.key === f.key)?.rewardsPerDay);
+      return { f, cap, perDay: f.rate.shared ? num(f.rate.perDay) : cap * num(f.rate.perDay) * best, said };
+    });
+    const farmed = atCaps.reduce((n, x) => n + x.perDay, 0);
     const burned = num(sim?.perDay?.burned?.[key]);
     if (!uncapped.length && !totalOnly.length && capped + farmed <= burned) continue;
     if (!uncapped.length && capped + farmed <= burned) continue;
@@ -272,9 +301,11 @@ export function challenge(m, warn, now, economy) {
       `economy.tokens.${key}`,
       `Following ${sym(key)}, net flow: ${[
         capped ? `grants mint up to ${+capped.toFixed(9)} a day at their caps (${words(daily.map(named))})` : '',
-        farmed
-          ? `${words(farms.map(named))} mint${farms.length === 1 ? 's' : ''} about ${+farmed.toFixed(9)} a day as rewards at the scenario's stake`
-          : '',
+        ...atCaps.map(x =>
+          x.perDay === Infinity
+            ? `${named(x.f)} mints as rewards with no cap: nothing bounds how many ${x.f.stakes === 'collectibles' ? 'NFTs it takes' : `${sym(x.f.stakes)} can be staked`}${x.said ? ` (the scenario's example, ${+x.said.toFixed(6)} a day, is not a cap)` : ''}`
+            : `${named(x.f)} mints up to ${+x.perDay.toFixed(6)} a day as rewards with all ${x.f.rate.shared ? 'it pays' : `${x.cap} that can exist staked`}${x.said && x.said < x.perDay ? ` (the scenario's example stakes less: ${+x.said.toFixed(6)} a day)` : ''}`,
+        ),
         totalOnly.length
           ? `${words(totalOnly.map(g => `${named(g)} (up to ${+(amountOf(g) * num(g.limits.total)).toFixed(9)} in all)`))} ${totalOnly.length === 1 ? 'has' : 'have'} no daily cap`
           : '',
@@ -287,6 +318,7 @@ export function challenge(m, warn, now, economy) {
           '; ',
         )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.`,
       'Cap every free mint a day ("limits.perDay") at or below what is burned, burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
+      // (a free mint with no cap at all is high; a farm with no cap on its stake is medium, as the review's endless farm)
       { severity: uncapped.length ? 'high' : 'medium' },
     );
   }
@@ -410,37 +442,73 @@ export function challenge(m, warn, now, economy) {
   // its pools are seeded with; where holding more takes more (a farm shared by stake, a lottery, a contest), the owner
   // taking part takes that share.
   for (const [key, t] of m.tokens) {
-    const supply = num(t.supply);
-    if (!supply || !['game', 'project'].includes(t.source)) continue;
-    const seeded =
-      m.pools.filter(p => p.currency === key).reduce((n, p) => n + num(p.seed), 0) +
-      m.farms.filter(f => f.rewards === key).reduce((n, f) => n + num(f.seed), 0);
-    const owner = supply - seeded;
-    if (!(owner > 0)) continue;
     const shared = m.farms.filter(f => f.stakes === key && (!f.rate || f.rate.shared));
     const chances = [
       ...m.lotteries.filter(l => ticketOf(l, m) === key),
       ...m.contests.filter(c => (c.currency ?? m.currencyKey) === key),
     ];
-    if (!shared.length && !chances.length) continue;
-    const pct = (owner / supply) * 100;
+    if ((!shared.length && !chances.length) || t.source === 'sol') continue;
+    // Who holds it: the scenario's word, else a fixed supply the project made (all in the owner's wallet but its pools'
+    // seeds), else unknown for a token made elsewhere: ask.
+    const said = m.scenario.holders?.[key];
+    let supply = num(said?.supply ?? t.supply);
+    let held = said ? Math.max(num(said.owner), num(said.largest)) : null;
+    const who = said && num(said.largest) > num(said.owner) ? 'the largest holder' : "the owner's wallet";
+    if (!said && ['game', 'project'].includes(t.source) && supply) {
+      const seeded =
+        m.pools.filter(p => p.currency === key).reduce((n, p) => n + num(p.seed), 0) +
+        m.farms.filter(f => f.rewards === key).reduce((n, f) => n + num(f.seed), 0);
+      held = supply - seeded;
+    }
+    if (held === null) {
+      if (t.source === 'existing')
+        warn(
+          'W-ASSUMPTION',
+          `economy.tokens.${key}`,
+          `Unknown: ${sym(key)} is made elsewhere and taken where holding more takes more (${words([...shared, ...chances].map(named))}), and the scenario doesn't say who holds it ("scenario.holders"). A holder of most of it takes most of what those pay.`,
+          'Ask, then write it in "scenario.holders" ({"supply", "owner", "largest"}) and check again.',
+          {
+            severity: 'medium',
+            ask: `Who holds ${sym(key)}: how much is there, and how much do the owner and the largest holder have?`,
+          },
+        );
+      continue;
+    }
+    if (!(held > 0) || !supply) continue;
+    const pct = (held / supply) * 100;
     const shares = shared.map(f => {
       const others = num(m.scenario.staked?.[f.key]);
       return others
-        ? `${named(f)}: ${+((owner / (owner + others)) * 100).toFixed(1)}% of its rewards against the ${others} the scenario has others stake`
+        ? `${named(f)}: ${+((held / (held + others)) * 100).toFixed(1)}% of its rewards against the ${others} the scenario has others stake`
         : `${named(f)}: most of its rewards, unless others stake far more (the scenario names no stake)`;
     });
+    if (pct < 10) continue;
     warn(
       'W-ASSUMPTION',
       `economy.tokens.${key}.supply`,
-      `The largest holder takes part: after setup the owner's wallet holds ${+owner.toFixed(6)} ${sym(key)}, ${+pct.toFixed(1)}% of its supply of ${supply}. Staked or spent where holding more takes more, it takes ${words([...shares, ...chances.map(x => `${named(x)}: as many tickets or as much of a side as it likes`)])}.`,
-      `Say whether the owner (and any other large holder) takes part; if not, keep those ${sym(key)} out (seed them into a pool, a vesting schedule, or burn them), or rate the farm per seat instead of shared by stake.`,
+      `The largest holder takes part: ${said ? '' : 'after setup '}${who} holds ${+held.toFixed(6)} ${sym(key)}, ${+pct.toFixed(1)}% of its supply of ${supply}. Staked or spent where holding more takes more, it takes ${words([...shares, ...chances.map(x => `${named(x)}: as many tickets or as much of a side as it likes`)])}.`,
+      `Say whether ${who === 'the largest holder' ? 'the largest holder' : 'the owner'} takes part; if not, keep those ${sym(key)} out (seed them into a pool, a vesting schedule, or burn them), or rate the farm per seat instead of shared by stake.`,
       {
         severity: pct > 50 ? 'high' : 'medium',
-        ask: `Will the owner's ${+owner.toFixed(6)} ${sym(key)} (${+pct.toFixed(1)}% of the supply) be staked or played?`,
+        ask: `Will ${who === 'the largest holder' ? 'the largest holder' : 'the owner'}'s ${+held.toFixed(6)} ${sym(key)} (${+pct.toFixed(1)}% of the supply) be staked or played?`,
       },
     );
   }
+
+  // A result or reward decided off chain (a voucher server, a decider) may give more than the spec shows: a boost, a
+  // ranking that pays. Declared in "offchain", it is followed like any route; undeclared, ask.
+  const offChain = [...m.grants.filter(g => (g.vouchers ?? []).length), ...m.contests];
+  if (offChain.length && !(m.offchain ?? []).length)
+    warn(
+      'W-ASSUMPTION',
+      'economy.offchain',
+      `${words(offChain.map(named))} ${offChain.length === 1 ? 'is' : 'are'} decided off chain, and the spec declares nothing a server or the page does with what players hold or win ("offchain"). A boost, a ranking or a better reward the server grants for it is invisible to these checks, so a loop through it is not followed.`,
+      'Ask, then declare each in "offchain" ({ "key", "takes", "gives", "rate" }) and check again.',
+      {
+        severity: 'low',
+        ask: 'Does your server or page turn anything players hold or win into an advantage (a boost, a better reward, a ranking that pays)?',
+      },
+    );
 
   // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
   // only a person or a server sends; what freezes at the first sale.
@@ -521,6 +589,34 @@ export function challenge(m, warn, now, economy) {
       'Ask who sends it and when they are available; or make it "sealed" so its recipient runs it.',
       { severity: 'low', ask: `Who sends each run of ${named(sc)} on time, and what if they are away?` },
     );
+  // Scarce supply: an item of fixed supply sold first come, first served, against how many want one.
+  for (const it of m.items.filter(it => num(it.supply) > 0)) {
+    const sold = m.shop.find(b => b.shopOf === it.key && num(b.price) > 0 && b.active !== false);
+    if (!sold) continue;
+    const supply = num(it.supply);
+    const per = num(it.perWallet) || null;
+    const said = m.scenario.perDay?.[`item:${it.key}`];
+    const days = num(m.scenario.days) || 30;
+    const players = num(m.scenario.players);
+    const demand = said !== undefined ? num(said) * days : players ? players * (per ?? 1) : null;
+    const resold = !it.soulbound;
+    if (demand === null)
+      warn(
+        'W-ASSUMPTION',
+        `economy.items.${it.key}.supply`,
+        `Unknown: ${named(it)} sells ${supply} first come, first served${per ? `, ${per} a wallet` : ''}, and the scenario says nothing of how many want one${resold ? '. It can be resold, so a bot or a reseller with many wallets has every reason to buy first' : ''}.`,
+        'Ask, then write it in the scenario ("scenario.players", or "perDay": {"item:<key>": n}).',
+        { severity: 'medium', ask: `How many people will want one of the ${supply} ${named(it)}?` },
+      );
+    else if (demand > supply)
+      warn(
+        'W-ASSUMPTION',
+        `economy.items.${it.key}.supply`,
+        `${named(it)} sells ${supply} first come, first served${per ? `, ${per} a wallet` : ''}, and the scenario has about ${Math.round(demand)} wanting one: it sells out to whoever is fastest${resold ? ', a bot or a reseller with many wallets first, who can sell them on' : ''}.`,
+        'To share it fairly, count people, not wallets: one a person through vouchers naming an X account ("perPerson": 1), or draw the buyers (a lottery or raffle of the items).',
+        { severity: resold && demand > 2 * supply ? 'high' : 'medium' },
+      );
+  }
   for (const it of m.items.filter(it => it.kind === 'collectible' && !it.uri))
     warn(
       'W-ASSUMPTION',

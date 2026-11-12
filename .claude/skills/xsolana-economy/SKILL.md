@@ -78,6 +78,8 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
 
    How to put it:
    - Lead with one pick, its sub-choices made too, even when a tool lists several fixes; the others follow in a line.
+     Of several fixes, pick the one that keeps every goal the person stated (a burn, a free entry that moves no tokens,
+     one approval); say what each other one gives up.
      A finding reaches the person with its fix and your pick, never as the symptom alone.
    - Run your own ideas through the tools before you offer them: a burn, a free token that can be spent, a new route
      is a spec change like any other (`xsolana_check`), and an alternative is offered only once it checks.
@@ -92,6 +94,9 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
    - Say outright when a real-money sale is a fixed price and not random.
    - When use changes hands for a while (a stake, a listing, a rental, a loan), say who holds the NFT at each stage
      and who can move it.
+   - Pass on `xsolana_check`'s "Tell the person" lines in your answer, as written: they are final, not notes.
+   - Check every limit you write against what you told the person (a cap of a day is not a cap of a week; a grant's
+     caps count claims, each up to its amount).
    - Never promise a report, a follow-up or a channel you don't have.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
@@ -100,7 +105,7 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
     replay a result worth paying rather than take the page's word (`@xgamesfun/solana/results`: `collectiblesOf`,
     `verifyProof`, `makeCodes`). Keep entry fees and prize pools for results the server decides and for chance, and
     give a minted farm an end. Price each measure against bots by what a failed attempt costs a script, not only by
-    the daily ceiling. A short secret (a code, a PIN) is never stored as a plain hash, which a small space reverses:
+    the daily ceiling: a check that clamps to its bound costs a script nothing, one that refuses costs it the attempt. A short secret (a code, a PIN) is never stored as a plain hash, which a small space reverses:
     hash it with a key, or keep it in the server's secret store. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
     `references/trust-and-cheating.md` says why.
 

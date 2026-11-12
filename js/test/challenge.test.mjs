@@ -410,3 +410,50 @@ test('loops across routes, the biggest payout, every way a round ends', async ()
     /“draw”, every way it ends: Nothing sold: .* Nobody asks for the draw: .* The oracle never answers: /,
   );
 });
+
+test('round 4: what to tell the person, scarce supply, a loop through the server, an outside token’s holders', async () => {
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
+  assert.match(text, /Tell the person, as written/);
+  assert.match(text, /> If “draw” is cancelled, a ticket's refund is ENTRY, not the 100 BUBL it was bought with\./);
+  assert.match(
+    text,
+    /> “Popped bubbles”: each claim gives up to 12000 BUBL from “taps”; the caps count claims: .*2000 a person in all \(up to 24000000 BUBL\)/,
+  );
+
+  // A capped item for sale, demand unknown: ask; demand far over supply, resellable: high.
+  const drop = spec();
+  drop.items.push({ key: 'card', name: 'Card', price: 50, supply: 10 });
+  delete drop.scenario.players;
+  assert.ok(check(drop, { now: NOW }).warnings.some(w => w.where === 'economy.items.card.supply' && w.ask));
+  drop.scenario.perDay = { ...drop.scenario.perDay, 'item:card': 100 };
+  assert.equal(check(drop, { now: NOW }).warnings.find(w => w.where === 'economy.items.card.supply').severity, 'high');
+
+  // The server turns ENTRY into 150 BUBL: a loop with the entry recipe, followed through "offchain".
+  const server = spec();
+  server.recipes.pop();
+  server.offchain = [{ key: 'boost', name: 'Entry bonus', takes: 'entry', gives: 'bubl', rate: 150 }];
+  const loop = check(server, { now: NOW }).warnings.find(w => w.message.includes('around a loop:'));
+  assert.match(loop.message, /“Entry bonus” off chain/);
+
+  // An outside token staked in a shared farm: who holds it is asked, then followed.
+  const farm = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  farm.tokens.push({
+    key: 'gld',
+    source: 'existing',
+    mint: 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD',
+    symbol: 'GLD',
+    decimals: 6,
+  });
+  farm.farms.push({ key: 'vault', name: 'Vault', stakes: 'gld', rewards: 'gem', tiers: [{ lock: 0, multiplier: 1 }] });
+  assert.ok(
+    check(farm, { now: NOW }).warnings.some(
+      w => w.where === 'economy.tokens.gld' && w.ask?.startsWith('Who holds GLD'),
+    ),
+  );
+  farm.scenario = { holders: { gld: { supply: 1000, owner: 600 } } };
+  assert.match(
+    check(farm, { now: NOW }).warnings.find(w => w.message.startsWith('The largest holder')).message,
+    /holds 600 GLD, 60% of its supply/,
+  );
+});

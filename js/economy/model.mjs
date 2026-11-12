@@ -512,6 +512,8 @@ export function model(economy, { now = 0 } = {}) {
     grants: assignIds(e.grants ?? [], 'id', 1),
     traits: e.traits ?? [],
     decisions: e.decisions ?? [],
+    /** What a server or page does off chain with what players hold, declared so value is followed through it. */
+    offchain: e.offchain ?? [],
     scenario: e.scenario ?? {},
     live: e.live ?? {},
   };

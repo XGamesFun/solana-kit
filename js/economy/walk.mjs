@@ -4,7 +4,7 @@
 // routes the model holds (flows.mjs) are written from its steps (who sends each, who pays, what moves, what happens if
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
-import { FEES, toSeconds, toTime } from './model.mjs';
+import { FEES, prizeLine, prizeWords, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -279,8 +279,13 @@ export function journeyOf(r, fl) {
   const bundles = [];
   if (a && !a.money) {
     const craft = a.origins.find(o => o.recipe.active !== false);
-    if (craft) steps.push(`craft ${a.symbol} with ${named(craft.recipe)}`);
-    else if (a.free.length) steps.push(`claim ${a.symbol} from ${named(a.free[0])}`);
+    if (craft) {
+      // What a player holds who stops after this step: what turns it back, or nothing.
+      const back = a.backs.find(b => b.recipe.active !== false);
+      steps.push(
+        `craft ${a.symbol} with ${named(craft.recipe)} (stopping there leaves ${a.symbol}${back ? `, which ${named(back.recipe)} turns back` : ', which nothing turns back'})`,
+      );
+    } else if (a.free.length) steps.push(`claim ${a.symbol} from ${named(a.free[0])}`);
     if (craft && r.kind === 'lottery' && !(craft.recipe.out ?? []).some(o => o.gives === 'roll')) {
       const per = num(r.price[0].amount) / num(craft.makes || 1);
       bundles.push(
@@ -303,7 +308,80 @@ export function journeyOf(r, fl) {
       'a key of the project’s may settle rolls for players (rule 11), so the player signs only the purchase',
     );
   }
-  if (r.kind === 'lottery') steps.push('pull a win (a winner)');
-  if (r.kind === 'contest') steps.push('claim a win (a winner)');
+  if (r.kind === 'lottery') steps.push('pull the win (winners only)');
+  if (r.kind === 'contest') steps.push('claim the win (winners only)');
   return { steps, prompts: steps.length, bundles };
+}
+
+/**
+ * What the person must hear, in short final sentences the agent passes on as written: for each route, what a player
+ * gets for their money (a fixed price or a chance), how a farm pays over time, a whole loop's approvals, what a cancel
+ * refunds, every cap in one unit (an amount per identity per window), and who names a result.
+ */
+export function tells(m, { now, fl = flows(m, { now }) }) {
+  const sym = key => fl.assets.get(key)?.symbol ?? key;
+  const out = [];
+  const amount = list => list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`).join(' and ');
+  for (const r of fl.routes) {
+    if ((r.kind === 'item' || r.kind === 'box') && r.price.length)
+      out.push(
+        r.roll
+          ? `${named(r)} is a chance, not a fixed price: ${amount(r.price)} buys one roll, and the oracle picks what it gives.`
+          : `${named(r)} is a fixed price, not random: ${amount(r.price)} buys exactly what it says.`,
+      );
+    if (r.kind === 'lottery') {
+      const loop = journeyOf(r, fl);
+      out.push(
+        `A whole go at ${named(r)} takes ${loop.prompts} wallet approval${loop.prompts === 1 ? '' : 's'}: ${loop.steps.join(', then ')}.`,
+      );
+      const a = fl.assets.get(r.cancel?.refund[0]?.asset);
+      const origin = a && !a.money ? a.origins[0] : null;
+      if (origin)
+        out.push(
+          `If ${named(r)} is cancelled, a ticket's refund is ${a.symbol}, not the ${amount(origin.pays)} it was bought with.`,
+        );
+      if (r.cancel?.minSold)
+        out.push(`${named(r)} draws only if ${r.cancel.minSold} tickets sell; otherwise every ticket is refunded.`);
+    }
+    if (r.kind === 'contest')
+      out.push(
+        `${named(r)}'s result is named by ${r.decider === 'authority' ? 'the project' : 'its decider key'}; with no result by its deadline, everyone takes their money back.`,
+      );
+    if (r.kind === 'grant') {
+      const l = r.part.limits ?? {};
+      const g = r.gives[0];
+      const signed = (r.part.vouchers ?? []).length || r.part.list;
+      // Each cap in claims, and in the prize's own amount when it is tokens (a claim gives at most its amount).
+      const of = n => (g ? ` (up to ${+(n * g.amount).toFixed(9)} ${sym(g.asset)})` : '');
+      const caps = [
+        l.perWalletEach
+          ? `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}${of(l.perWalletEach.count)}`
+          : '',
+        l.perWallet ? `${l.perWallet} a wallet in all${of(l.perWallet)}` : '',
+        l.perPerson ? `${l.perPerson} a person in all${of(l.perPerson)}` : '',
+        l.perDay
+          ? `${l.perDay} a day for everyone together${of(l.perDay)}, so the first claims of a day can use it up`
+          : '',
+        l.total ? `${l.total} in all${of(l.total)}` : '',
+      ].filter(Boolean);
+      const pool = prizeLine(r.part.prize ?? r.part.gives)?.from?.startsWith('pool:')
+        ? m.pool.get(prizeLine(r.part.prize ?? r.part.gives).from.slice(5))
+        : null;
+      const over =
+        pool && g && l.total && l.total * g.amount > num(pool.seed)
+          ? ` Its total is more than “${pool.key}” starts with (${num(pool.seed)}): claims past that are refused until it is refilled.`
+          : '';
+      if (caps.length)
+        out.push(
+          `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}`,
+        );
+    }
+  }
+  for (const f of m.farms) {
+    const locks = (f.tiers ?? []).map(t => t.lock).filter(x => x && toSeconds(x) > 0);
+    out.push(
+      `${named(f)} pays by the second while staked${f.rate ? (f.rate.shared ? ', sharing its rate by stake' : ' at a fixed rate a seat') : ', sharing what arrives by stake'}: staking just before a payout gains nothing${locks.length ? `, and a stake is locked for ${words([...new Set(locks)])} by its tier` : ', and there is no lock: a stake can leave at any time'}.`,
+    );
+  }
+  return out;
 }
