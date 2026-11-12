@@ -2580,13 +2580,17 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["per", "amount"],
-          "description": "What the grant's voucher server signs at most, declared so the tools reason from what the economy really pays: for one identity (\"person\": the account the server counts, an X account; \"wallet\") or for everyone together (\"all\"), `amount` of the prize (tokens, or a count of an item) each window (`every`), and `total` in all. The program never sees it: the chain keeps only \"limits\", which is what a leaked voucher key could take.",
+          "description": "What the grant's voucher server signs at most, declared so the tools reason from what the economy really pays: for one identity (\"person\": the account the server counts, an X account; \"wallet\") or for everyone together (\"all\"), `amount` of the prize (tokens, or a count of an item) each window (`every`), `claims`, the most claims it signs in that window (the chain's caps count claims, not amounts), and `total` in all. The program never sees it: the chain keeps only \"limits\", which is what a leaked voucher key could take.",
           "properties": {
             "per": {
               "enum": ["person", "wallet", "all"]
             },
             "amount": {
               "type": "number",
+              "minimum": 0
+            },
+            "claims": {
+              "type": "integer",
               "minimum": 0
             },
             "every": {

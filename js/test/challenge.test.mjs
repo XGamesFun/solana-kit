@@ -307,7 +307,7 @@ test('check every assumption: one item through two routes, a cap against the aud
 test('the check tool asks the questions and shows each route’s cancel and change of mind', async () => {
   const { runTool } = await import('../mcp/server.mjs');
   const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
-  assert.match(r.text, /Ask the person before building on it:\n\? /);
+  assert.match(r.text, /Ask the person before building on it[^\n]*:\n\? /);
   assert.match(r.text, /When it goes wrong or a player changes their mind/);
   assert.match(r.text, /“draw”, cancelled or failed: Anyone: refunds every ticket in ENTRY/);
 });
@@ -572,24 +572,48 @@ test('round 5: a fund against its audience, a contest’s every ending, who else
   );
 });
 
-test('every cap against the pace the game allows: a lifetime cap an honest player reaches in hours, a day’s, a total', () => {
+test('every cap against the pace the game allows: lifetime, a day’s, the server’s count against the chain’s', () => {
   const s = spec();
   Object.assign(s.grants[0], {
-    serverLimit: { per: 'person', amount: 12000, every: '4m' },
+    serverLimit: { per: 'person', amount: 12000, claims: 1, every: '4m' },
     limits: { perPerson: 60, perDay: 500, total: 100000 },
   });
-  const ws = check(s, { now: NOW }).warnings.filter(w => w.where.startsWith('economy.grants.pops.limits.'));
-  const mine = ws.find(w => w.where.endsWith('.perPerson'));
+  const at = (x, end) => check(x, { now: NOW }).warnings.find(w => w.where === `economy.grants.pops.${end}`);
+  const mine = at(s, 'limits.perPerson');
   assert.equal(mine.severity, 'medium');
   assert.match(mine.message, /reaches the cap in about 4 hours/);
-  assert.match(mine.ask, /claim 60 times in all.*done in about 4 hours\. Is 60 meant for good, or for a day\?/);
-  // Two players, each done after 60: 120 claims, under the day's 500.
-  assert.ok(!ws.some(w => w.where.endsWith('.perDay')));
+  assert.match(
+    mine.ask,
+    /claim 60 times in all \(claims, not BUBL\).*done in about 4 hours\. Is 60 meant for good, or for a day\?/,
+  );
+  // Two players, each done after 60: 120 claims, under the day's 500; at 100, used up in hours, asked in their numbers.
+  assert.equal(at(s, 'limits.perDay'), undefined);
   s.grants[0].limits.perDay = 100;
-  const day = check(s, { now: NOW }).warnings.find(w => w.where === 'economy.grants.pops.limits.perDay');
+  const day = at(s, 'limits.perDay');
   assert.match(day.message, /about 120 a day, so the day's cap is used up about 3.3 hours into each day/);
+  assert.match(day.ask, /^2 players claiming .* about 120 claims a day, and the chain takes 100 a day/);
+  // The server counts BUBL only: how many claims is the question, and the caps are reached at least as soon.
+  delete s.grants[0].serverLimit.claims;
+  assert.match(at(s, 'serverLimit').ask, /server counts BUBL, while the chain counts claims .*how many times a day/);
+  assert.match(at(s, 'limits.perPerson').message, /reaches the cap within about 4 hours/);
+  // A server that signs more claims a day than the chain's window takes.
+  const w = spec();
+  Object.assign(w.grants[0], {
+    serverLimit: { per: 'wallet', amount: 12000, claims: 1, every: '4m' },
+    limits: { perWalletEach: { count: 5, every: '1d' } },
+  });
+  assert.match(at(w, 'limits.perWalletEach').message, /the server signs and counts a claim the chain refuses/);
+  // A grant with no end: a lifetime cap reached after the scenario's days is still said, as low.
+  const slow = spec();
+  Object.assign(slow.grants[0], {
+    serverLimit: { per: 'person', amount: 12000, claims: 2, every: '1d' },
+    limits: { perPerson: 200 },
+  });
+  const far = at(slow, 'limits.perPerson');
+  assert.equal(far.severity, 'low');
+  assert.match(far.message, /no end \("until"\).*in about 100 days/);
   // A pace the spec doesn't state is not guessed.
   const none = spec();
   none.grants[0].limits = { perPerson: 60 };
-  assert.ok(!check(none, { now: NOW }).warnings.some(w => w.where === 'economy.grants.pops.limits.perPerson'));
+  assert.equal(at(none, 'limits.perPerson'), undefined);
 });

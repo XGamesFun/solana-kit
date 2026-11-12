@@ -4,6 +4,21 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.20: a grant's caps in claims against what its server counts, each as a question in the person's numbers (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **`serverLimit.claims`**: the most claims the server signs in its window, beside the amount. The chain's caps count
+  claims; a server that counts only an amount can sign a claim the chain then refuses, after counting it. With no
+  `claims` and a chain cap that counts claims, the check asks how many times a day a regular player claims.
+- **A server that signs more claims than the chain's window takes** (`perWalletEach`) is a medium finding: have the
+  server refuse first.
+- **A lifetime cap on a grant with no end** is said even past the scenario's days (low), with when a regular player
+  reaches it; within them, medium. Every lifetime-cap question says the cap counts claims, not the prize's tokens.
+- **A shared day's cap the audience uses up** is a medium finding with a question in the person's numbers.
+- **The scenario is the person's numbers**: the "Ask the person" list says to change it only with their answer, and
+  to tell them which finding an answer clears.
+
 ## 0.28.19: what each end owes and who sends it, and every grant cap against an honest player's pace (loot 0.28.0, unchanged)
 
 The tools alone.

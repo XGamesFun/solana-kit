@@ -619,7 +619,9 @@ export function serverRate(g, players = 0) {
     one,
     all,
     total: b.total ?? null,
-    says: `${b.amount} ${b.per === 'all' ? 'for everyone together' : `a ${b.per}`} every ${b.every ?? '1d'}${b.total ? `, ${b.total} in all` : ''}`,
+    // (the claims it signs a day for one identity, or for everyone with "all"; null when it counts only amounts)
+    claimsPerDay: b.claims === undefined ? null : b.claims * windows,
+    says: `${b.amount}${b.claims === undefined ? '' : ` in at most ${b.claims} claims`} ${b.per === 'all' ? 'for everyone together' : `a ${b.per}`} every ${b.every ?? '1d'}${b.total ? `, ${b.total} in all` : ''}`,
   };
 }
 
