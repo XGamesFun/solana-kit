@@ -5928,7 +5928,11 @@ export function describe({ refusals, warnings }) {
       w => `! ${w.code}${w.severity ? ` (${w.severity})` : ''} ${w.message}${w.fix ? `\n    ${w.fix}` : ''}`,
     ),
     ...(warnings.some(w => w.ask)
-      ? ['', 'Ask the person before building on it:', ...warnings.filter(w => w.ask).map(w => `? ${w.ask}`)]
+      ? [
+          '',
+          'Ask the person before building on it (the scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which):',
+          ...warnings.filter(w => w.ask).map(w => `? ${w.ask}`),
+        ]
       : []),
   ].join('\n');
 }

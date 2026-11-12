@@ -573,7 +573,7 @@ export function challenge(m, warn, now, economy) {
       'W-ASSUMPTION',
       `economy.grants.${g.key}`,
       `${named(g)} takes ${g.trust === 'replays' ? 'a replayed result' : "the page's word"} within the caps its server keeps, and the spec doesn't say what those are ("serverLimit"): every figure here is the chain's caps, which only bound a leaked voucher key.`,
-      'Ask, then declare it: "serverLimit": { "per": "person" | "wallet" | "all", "amount", "every", "total" }.',
+      'Ask, then declare it: "serverLimit": { "per": "person" | "wallet" | "all", "amount", "claims", "every", "total" }.',
       {
         severity: 'low',
         ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all? And how does it set each claim's amount (a multiplier, a streak, a rank, a code)? And what does it convert, so it can go in "offchain"?`,
@@ -674,38 +674,85 @@ export function challenge(m, warn, now, economy) {
       { severity: 'medium' },
     );
   }
-  // Every cap of every grant against the pace the game allows an honest player (the server's own limit, or the chain's
-  // per-wallet window): when one player reaches each cap of their own, and when everyone together reaches the shared
-  // ones. A cap reached in hours by honest play is a day's limit written as a lifetime one, or the audience outgrowing it.
+  // Every cap of every grant against the pace the game allows an honest player. The chain's caps count claims; a
+  // server's limit counts what it signs (an amount, and claims when it says so). When one player reaches each cap of
+  // their own, when everyone together reaches the shared ones, and whether the server signs a claim the chain then
+  // refuses (it has counted the claim; the player gets nothing until the cap's window turns).
   const horizon = num(m.scenario.days) || 30;
   const about = d => (d * 24 < 48 ? `${+(d * 24).toFixed(1)} hours` : `${+d.toFixed(1)} days`);
   for (const g of m.grants.filter(on)) {
     const l = g.limits ?? {};
-    const each = num(prizeLine(g.prize ?? g.gives)?.amount) || 1;
+    const line = prizeLine(g.prize ?? g.gives);
+    const each = num(line?.amount) || 1;
+    const unit = line?.gives === 'tokens' ? sym(line.currency ?? line.asset ?? m.currency) : 'of its prize';
     const sr = serverRate(g);
-    const pace =
-      sr && sr.per !== 'all' && sr.one > 0
-        ? { perDay: sr.one / each, says: `its server signs ${sr.says}` }
-        : l.perWalletEach?.count
-          ? {
-              perDay: (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1),
-              says: `the chain allows ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
-            }
-          : null;
+    const own = sr && sr.per !== 'all' && sr.one > 0;
+    const counts = [
+      l.perWalletEach?.count && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+      l.perWallet && `${l.perWallet} a wallet in all`,
+      l.perPerson && `${l.perPerson} a person in all`,
+      l.perDay && `${l.perDay} a day for everyone`,
+      l.total && `${l.total} in all`,
+    ].filter(Boolean);
+    // Claims a day for one honest player at the most the game allows: the server's claims, or its amount over the
+    // most one claim gives (at least that many claims), or the chain's own window.
+    const pace = own
+      ? sr.claimsPerDay !== null
+        ? { perDay: sr.claimsPerDay, atLeast: false, says: `its server signs ${sr.says}` }
+        : { perDay: sr.one / each, atLeast: true, says: `its server signs ${sr.says}` }
+      : l.perWalletEach?.count
+        ? {
+            perDay: (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1),
+            atLeast: false,
+            says: `the chain allows ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+          }
+        : null;
+    // The server counts an amount and the chain counts claims: how many claims an honest player makes is the question.
+    if (own && sr.claimsPerDay === null && counts.length)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.serverLimit`,
+        `${named(g)}'s server limits what it signs in ${unit} (${sr.says}), and the chain's caps count claims (${words(counts)}): how many claims an honest player makes is unknown, so each cap below is reached at least as soon as said, and a server that counts only ${unit} can sign a claim the chain then refuses, after it has counted it.`,
+        'Ask, then declare it ("serverLimit": { …, "claims": n }), and have the server refuse a claim before it signs whatever the chain would refuse.',
+        {
+          severity: l.perWalletEach?.count || l.perDay ? 'medium' : 'low',
+          ask: `${named(g)}'s server counts ${unit}, while the chain counts claims (${words(counts)}): how many times a day does a regular player claim it, at most?`,
+        },
+      );
     if (!pace) continue;
+    // A server that signs more claims in a window than the chain takes: the extra are signed, counted and refused.
+    if (own && l.perWalletEach?.count) {
+      const chainDay = (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1);
+      if (pace.perDay > chainDay)
+        warn(
+          'W-ASSUMPTION',
+          `economy.grants.${g.key}.limits.perWalletEach`,
+          `${named(g)}'s server signs ${pace.atLeast ? 'at least ' : ''}about ${+pace.perDay.toFixed(2)} claims a day for an honest player (${sr.says}), and the chain takes ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}: past that, the server signs and counts a claim the chain refuses, and the player gets nothing for it until the window turns.`,
+          `Have the server refuse first: its claims a window at or under the chain's (${l.perWalletEach.count} every ${l.perWalletEach.every ?? '1d'}), or raise the chain's cap to what the server allows.`,
+          {
+            severity: 'medium',
+            ask: `A regular player can earn about ${Math.ceil(pace.perDay)} claims a day of ${named(g)}, and the chain takes ${l.perWalletEach.count} every ${l.perWalletEach.every ?? '1d'}: should the server stop at ${l.perWalletEach.count}, or should the chain take more?`,
+          },
+        );
+    }
     const who = l.perPerson ? 'person' : 'wallet';
     const mine = l.perPerson ?? l.perWallet;
-    if (mine && mine / pace.perDay < horizon)
+    const until = l.until !== undefined ? toTime(l.until, now) : null;
+    const life = until !== null ? Math.max((until - now) / 86_400, 0) : null;
+    const reach = mine ? mine / pace.perDay : null;
+    if (reach !== null && (life === null || reach < life)) {
+      const soon = reach < horizon;
       warn(
         'W-ASSUMPTION',
         `economy.grants.${g.key}.limits.${l.perPerson ? 'perPerson' : 'perWallet'}`,
-        `${named(g)} gives each ${who} ${mine} claims in all, and ${pace.says} (about ${+pace.perDay.toFixed(2)} claims a day): an honest player reaches the cap in about ${about(mine / pace.perDay)}, and every claim after that is refused for good. What the game keeps counting toward it after that can never be claimed. A cap “in all” is for a player's whole time in the game.`,
+        `${named(g)} gives each ${who} ${mine} claims in all${life === null ? ', and it has no end ("until")' : ''}, and ${pace.says} (${pace.atLeast ? 'at least ' : ''}about ${+pace.perDay.toFixed(2)} claims a day): an honest player reaches the cap ${pace.atLeast ? 'within' : 'in'} about ${about(reach)}, and every claim after that is refused for good. What the game keeps counting toward it after that can never be claimed. A cap “in all” counts claims, not ${unit}, for a player's whole time in the game.`,
         `If it is a day's limit, write it as one ("perWalletEach": { "count": ${mine}, "every": "1d" }, or the server's "serverLimit"); if it is meant for good, tell players when they reach it and stop counting what can't be paid.`,
         {
-          severity: 'medium',
-          ask: `${named(g)} lets each ${who} claim ${mine} times in all, and ${pace.says}: an honest player is done in about ${about(mine / pace.perDay)}. Is ${mine} meant for good, or for a day?`,
+          severity: soon ? 'medium' : 'low',
+          ask: `${named(g)} lets each ${who} claim ${mine} times in all (claims, not ${unit}), and ${pace.says}: a regular player is done ${pace.atLeast ? 'within' : 'in'} about ${about(reach)}. Is ${mine} meant for good, or for a day?`,
         },
       );
+    }
     if (!players) continue;
     // Everyone at full pace: a day's claims (each stopping at their own cap), and how fast they come.
     const fast = players * pace.perDay;
@@ -716,10 +763,13 @@ export function challenge(m, warn, now, economy) {
         `economy.grants.${g.key}.limits.perDay`,
         `${named(g)}'s ${l.perDay} claims a day for everyone together: the scenario's ${players} players at that pace would make about ${Math.round(day)} a day, so the day's cap is used up about ${about(l.perDay / fast)} into each day, and later claims wait for the next.`,
         'Raise "perDay" to the audience you expect, or tell players the day’s claims are first come, first served.',
-        { severity: 'low' },
+        {
+          severity: 'medium',
+          ask: `${players} players claiming ${named(g)} as often as the game lets them make about ${Math.round(day)} claims a day, and the chain takes ${l.perDay} a day for everyone: the day's claims are gone about ${about(l.perDay / fast)} in, and the rest wait for tomorrow. Is that what you want, or should the day's cap be about ${Math.round(day)}?`,
+        },
       );
     // (with a cap of their own, the count against the audience is the check above)
-    if (l.total && !mine && l.total / fast < horizon)
+    if (l.total && !mine && l.total / fast < (life ?? horizon))
       warn(
         'W-ASSUMPTION',
         `economy.grants.${g.key}.limits.total`,
