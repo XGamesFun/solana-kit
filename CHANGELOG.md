@@ -4,6 +4,28 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.15: what a grant's server really pays (loot 0.28.0, unchanged)
+
+The tools alone. Most limits that matter in a game live on its server. A grant may now declare what its voucher server
+signs at most:
+
+`"serverLimit": { "per": "person" | "wallet" | "all", "amount", "every", "total" }`
+
+`amount` is in the prize's own units. The program never sees this field; the chain keeps only `"limits"`, which is
+what a leaked voucher key could take. The tools count the grant at its server's rate:
+
+- **net flow** (its chain caps said beside it, as the key-leak figure);
+- **what each feature pays a player a day**;
+- **what a grant of an earning item prints**, and **what a free thing is worth**.
+
+The grant's "Tell the person" line says what its server really pays, before what the chain allows if its key leaks.
+
+Two new questions for the person:
+
+- A voucher grant that takes the page's word or a replayed result, and declares no server limit: how much may one
+  person or wallet take, per hour or per day, and in all?
+- A conversion declared `"offchain"` with no `"rate"`: it is counted one for one, and a loop through it says so.
+
 ## 0.28.14: fewer warnings, and the last eval's lessons (loot 0.28.0, unchanged)
 
 The tools alone.

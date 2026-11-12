@@ -115,7 +115,7 @@ export function exchanges(m, fl, sim) {
         rate,
         route: `offchain:${x.key}`,
         where: 'economy.offchain',
-        says: `${named(x)} off chain`,
+        says: `${named(x)} off chain${x.rate === undefined ? ' (its rate not given: one for one)' : ''}`,
         cap: null,
       });
   }

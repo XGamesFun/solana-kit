@@ -99,7 +99,7 @@ export function challenge(m, warn, now, economy) {
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
-          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.${serverHeld(g) ? SERVER_NOTE : ''}`,
+          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by ${g.serverLimit ? `what its server signs (${serverRate(g).says}): up to ${priced(b.gives.map(x => ({ asset: x.asset, amount: (x.amount * serverRate(g).one) / b.takes })))} a ${g.serverLimit.per === 'all' ? 'day for everyone' : `${g.serverLimit.per} a day`}` : 'the grant’s limits'}.${serverHeld(g) ? SERVER_NOTE : ''}`,
           'Give the free one an asset of its own that turns into nothing, keep every way back switched off, or set the grant’s "limits" to what you would pay out.',
           { severity: serverHeld(g) ? lower(on(b.recipe) ? 'high' : 'medium') : on(b.recipe) ? 'high' : 'medium' },
         );
@@ -438,11 +438,15 @@ export function challenge(m, warn, now, economy) {
     // Giveaways of what this farm takes, priced in what they print.
     if (f.stakes === 'collectibles' && f.item)
       for (const g of m.grants.filter(g => prizeLine(g.prize ?? g.gives)?.item === f.item)) {
-        const count = num(g.limits?.total);
+        // What its server really gives (its declared total, or its rate over the run for everyone), else the chain total.
+        const held = serverRate(g, num(m.scenario.players));
+        const count = held
+          ? num(held.total) || (held.all !== null ? Math.floor(held.all * days) : 0) || num(g.limits?.total)
+          : num(g.limits?.total);
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
-          `Following ${sym(f.rewardsToken)}, given away: ${named(g)} gives ${named(m.item.get(f.item))}, which earns ${per} ${sym(f.rewardsToken)} a day in ${named(f)}: ${count ? `its ${count} claims print up to ${+(count * per * days).toFixed(6)} ${sym(f.rewardsToken)} over ${+days.toFixed(2)} days${reward !== undefined && f.rewardsToken !== m.currencyKey ? `, worth ${+(count * per * days * reward).toFixed(6)} ${money}` : ''}` : 'it has no total, so what it prints has no cap'}.`,
+          `Following ${sym(f.rewardsToken)}, given away: ${named(g)} gives ${named(m.item.get(f.item))}, which earns ${per} ${sym(f.rewardsToken)} a day in ${named(f)}: ${count ? `its ${count} claims print up to ${+(count * per * days).toFixed(6)} ${sym(f.rewardsToken)} over ${+days.toFixed(2)} days${held ? ' (its server’s limit)' : ''}${reward !== undefined && f.rewardsToken !== m.currencyKey ? `, worth ${+(count * per * days * reward).toFixed(6)} ${money}` : ''}` : 'it has no total, so what it prints has no cap'}.`,
           'Cap the grant ("limits.total") at what you would pay out, or give an item the farm doesn’t take.',
           { severity: count ? 'medium' : 'high' },
         );
@@ -556,6 +560,16 @@ export function challenge(m, warn, now, economy) {
         severity: 'low',
         ask: `How much does your server let one person (or wallet) take from ${named(g)}, per hour or per day, and in all?`,
       },
+    );
+
+  // A conversion declared off chain with no rate is counted one for one: what follows from it rests on that guess.
+  for (const x of (m.offchain ?? []).filter(x => x.rate === undefined))
+    warn(
+      'W-ASSUMPTION',
+      'economy.offchain',
+      `Unknown: ${named(x)} (off chain) says what it takes and gives but not how much ("rate"), so it is counted one for one, and any loop through it is sized on that guess.`,
+      'Ask, then give it a "rate": how much it gives for each one taken (for "farm:<key>", the percent a seat earns more).',
+      { severity: 'low', ask: `How much does ${named(x)} give for each one it takes?` },
     );
 
   // A result or reward decided off chain (a voucher server, a decider) may give more than the spec shows: a boost, a

@@ -529,3 +529,13 @@ test('a limit the server keeps: declared, the tools count it; undeclared, they a
   if (flow)
     assert.match(flow.message, /“Free entry”'s server signs at most 50 for everyone together every 1d, about 50 a day/);
 });
+
+test('a server conversion with no rate is asked about; a server’s total bounds what is given away', () => {
+  const server = spec();
+  server.recipes.pop();
+  server.offchain = [{ key: 'boost', name: 'Entry bonus', takes: 'entry', gives: 'bubl' }];
+  const ws = check(server, { now: NOW }).warnings;
+  assert.ok(ws.some(w => w.ask?.startsWith('How much does “Entry bonus” give for each one it takes?')));
+  const loop = ws.find(w => w.message.includes('around a loop:'));
+  if (loop) assert.match(loop.message, /its rate not given: one for one/);
+});
