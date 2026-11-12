@@ -4,6 +4,12 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.17: every "Ask the person" line is a question (loot 0.28.0, unchanged)
+
+The tools alone. Each line of `xsolana_check`'s "Ask the person" list now ends as a question. Its context comes first
+("It needs 100 tickets to draw: how many players…?"), and the server question ends "…and what does it convert, so it
+can go in "offchain"?".
+
 ## 0.28.16: the last eval round's lessons (loot 0.28.0, unchanged)
 
 The tools alone. In the round on 0.28.15 against 0.28.10, three fresh exams scored 20.5 against 17.5 caught early, and

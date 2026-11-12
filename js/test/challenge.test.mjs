@@ -287,7 +287,7 @@ test('check every assumption: one item through two routes, a cap against the aud
     1,
     'one question for the voucher server',
   );
-  assert.ok(asks.some(a => a.startsWith('Who delivers the off-chain prize of “draw” and “draw2”')));
+  assert.ok(asks.some(a => a.includes('who delivers the off-chain prize of “draw” and “draw2”')));
   assert.ok(asks.some(a => a.startsWith('Who asks for “draw”')));
   const few = spec();
   few.scenario.players = 20000;
@@ -352,7 +352,7 @@ test('where each rule is kept: a contest’s decider, what it gains, and when th
   const key = ws.find(w => w.where === 'economy.contests.duel');
   assert.match(key.message, /authority key, which can also mint/);
   assert.equal(key.severity, 'medium');
-  assert.ok(ws.some(w => w.ask?.startsWith('When can someone first learn the outcome of “Duel”')));
+  assert.ok(ws.some(w => w.ask?.includes('when can someone first learn the outcome of “Duel”')));
   // With a decider key, only the trust remains.
   duel.contests[0].deciders = ['HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD'];
   const decided = check(duel, { now: NOW }).warnings.find(
