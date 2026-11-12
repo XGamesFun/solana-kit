@@ -103,6 +103,7 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
     item: ['sells', 'nothing is sold'],
     recipe: ['crafts', 'nothing is crafted'],
     grant: ['takes claims', 'no claim is taken'],
+    contest: ['takes entries', 'no entry is taken'],
   };
   for (const r of fl.routes) {
     const rows = [];
@@ -137,7 +138,7 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
     if (later.length)
       rows.push([
         'Who sends what',
-        `${later.map(x => `${x.short}: ${WHO[x.by] === 'Owner' ? 'the project' : (WHO[x.by] ?? x.by).toLowerCase()}${x.pays === 'sender' ? ', paying its fee' : ''}, ${x.per}; if nobody does, ${x.ifNobody}`).join('. ')}.`,
+        `${later.map(x => `${x.short[0].toUpperCase()}${x.short.slice(1)}: ${WHO[x.by] === 'Owner' ? 'the project' : (WHO[x.by] ?? x.by).toLowerCase()}${x.pays === 'sender' ? ', paying its fee' : ''}, ${x.per}; if nobody does, ${x.ifNobody}`).join('. ')}.`,
       ]);
     if (r.fixed) rows.push([`Only before ${r.fixed.when}`, r.fixed.says]);
     route(`${named(r)}: ${r.title}`, rows);
@@ -161,22 +162,6 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
       ['Won', 'Anyone ends it after its end: the lot to the high bidder, the bid to the seller and the shares.'],
       ['A change of mind', 'A bid can’t be taken back: only a higher bid returns it before the end.'],
       ['Only before the first bid', 'Every term is fixed when it opens.'],
-    ]);
-  }
-
-  for (const c of m.contests) {
-    route(`${named(c)}: a contest`, [
-      [
-        'While it runs',
-        `Player: enters one side${c.stake ? `, a stake of ${num(c.stake)}` : ''}${c.entriesClose ? ` (entries close: ${c.entriesClose})` : ''}; a wallet backs one side, never two. Owner: ${c.decidedBy === 'authority' || !c.deciders ? 'the result is yours to decide once entries close' : 'its deciders sign the result once entries close'}. Cheater: the result is worth what its decider checks; nobody names a side before entries close.`,
-      ],
-      [
-        'Cancelled or failed',
-        `With no result by its result deadline${c.minPot ? `, or less than ${num(c.minPot)} in its sides when entries close` : ''}, or a call-off, every entry is refunded.`,
-      ],
-      ['Won', 'The winners claim their share of the pot, by what each put in.'],
-      ['A change of mind', 'An entry stays until the result or a refund.'],
-      ['Only before the first entry', 'Every term is fixed when it opens and never edited.'],
     ]);
   }
 

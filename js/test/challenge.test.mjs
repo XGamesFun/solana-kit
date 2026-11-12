@@ -338,3 +338,19 @@ test('follow the value through a farm: a seat that earns back more than it costs
     /its 50 claims print up to 1500 GEM over 30 days\./,
   );
 });
+
+test('where each rule is kept: a contest’s decider, what it gains, and when the outcome can first be known', () => {
+  const duel = JSON.parse(readFileSync(new URL('../../examples/duel-arena.json', import.meta.url), 'utf8'));
+  const ws = check(duel, { now: NOW }).warnings.filter(w => w.code === 'W-ENFORCED');
+  const key = ws.find(w => w.where === 'economy.contests.duel');
+  assert.match(key.message, /authority key, which can also mint/);
+  assert.equal(key.severity, 'medium');
+  assert.ok(ws.some(w => w.ask?.startsWith('When can someone first learn the outcome of “Duel”')));
+  // With a decider key, only the trust remains.
+  duel.contests[0].deciders = ['HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD'];
+  const decided = check(duel, { now: NOW }).warnings.find(
+    w => w.code === 'W-ENFORCED' && w.where === 'economy.contests.duel',
+  );
+  assert.equal(decided.severity, 'low');
+  assert.match(decided.message, /decider keys' signed verdict/);
+});

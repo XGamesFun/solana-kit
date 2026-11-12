@@ -4986,12 +4986,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       c.resultDue ?? c.entriesClose,
       'every entry’s stake waits in its pot',
     );
-    // Whoever names the winner, and how the pot is paid.
-    warn(
-      'W-CONTEST',
-      where,
-      `${label(c)}’s winner is named by ${(c.deciders ?? []).length ? 'its deciders’ verdict' : 'the project’s keys'}, who can also enter it: players trust them with the result. The pot is the contest’s own account, paid only by each entry’s claim.`,
-    );
+    // Whoever names the winner: W-ENFORCED (challenge.mjs).
     // One prize a winning entry, and nothing that costs an entry anything: one person's many wallets take one each.
     const stakeUnits = c.stakeNft ? 1n : quietUnits(c.stake, tok);
     if (c.prize && !c.prize.split && !c.gate && !c.stakeNft && !(stakeUnits > 0n))

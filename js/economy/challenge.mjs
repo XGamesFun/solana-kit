@@ -6,12 +6,14 @@
 //   in another asset than the one paid), value that converts back at any time, appears from nothing, grows around a
 //   loop of recipes, or keeps being made after its last use.
 // - W-STEPS, one intent, one step: an intent that takes more transactions (wallet prompts) than it needs.
+// - W-ENFORCED, where each rule is kept: a result named by a key (what else it can do, what its holder gains under
+//   each outcome, when the outcome can first be known, how a player checks it).
 // - W-ASSUMPTION, check every assumption: a number that depends on how many take part (a lottery's least sale, a
 //   contest's least pot) against the scenario. A number the scenario doesn't state is unknown: the finding is the
 //   question to ask the person, never an estimate from a default.
 //
-// Who sends each later step and what happens if nobody does, and where each rule is kept (chain, server or page), are
-// in the walk-through (walk.mjs, from the same model) and the review's trust levels.
+// Who sends each later step and what happens if nobody does is in the walk-through (walk.mjs, from the same model); a
+// voucher's trust in the review's trust levels.
 import { at, flows, lineToken, named, num, words } from './flows.mjs';
 import { prizeLine, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
@@ -351,6 +353,44 @@ export function challenge(m, warn, now, economy) {
       }
   }
 
+  // ---- W-ENFORCED: where each rule is kept. A result named by a key: what else that key can do, what its holder gains
+  // under each outcome, how a player checks it, and every moment someone can learn the outcome before entries close.
+  for (const route of routes.filter(r => r.kind === 'contest')) {
+    const c = route.part;
+    const toProject = route.shares.filter(
+      x => ['treasury', 'owner'].includes(x.to) || String(x.to).startsWith('wallet:'),
+    );
+    warn(
+      'W-ENFORCED',
+      route.where,
+      route.decider === 'authority'
+        ? `${named(route)}'s result is named with the authority key, which can also mint the project's tokens, move its pools and edit every route: a key on a server for this holds all of that. Whoever holds it can also enter: players trust them with the result. A decider key ("deciders") only signs a verdict, and anyone sends it.`
+        : `${named(route)}'s result is named by its decider keys' signed verdict: they sign nothing else, and whoever holds one can also enter, so players trust them with the result.`,
+      route.decider === 'authority'
+        ? 'Name a decider key (up to three) for the server, and keep the authority off it.'
+        : 'Say who holds each decider key and what it checks before it signs.',
+      { severity: route.decider === 'authority' ? 'medium' : 'low' },
+    );
+    if (toProject.length)
+      warn(
+        'W-ENFORCED',
+        `${route.where}.split`,
+        `${named(route)} pays ${words(toProject.map(x => `${x.percent}% to ${x.to}`))} only when a side is named; a call-off refunds everyone and pays it nothing. Whoever decides for the project gains by naming a side rather than calling it off, whatever happened.`,
+        'Say so to players, or take the project’s part as a flat fee on entry instead (a payment), so naming a side or calling it off pays the same.',
+        { severity: 'low' },
+      );
+    warn(
+      'W-ENFORCED',
+      `${route.where}.entriesClose`,
+      `${named(route)}'s entries close ${c.entriesClose ? `${c.entriesClose} after it opens` : 'when it says'}, by the clock, and the program names a side only after that. If its outcome can be known earlier (a match that ends, a score posted, a result leaked), whoever knows it can back the sure side before entries close. A verdict is only a signature: players can check a result only against what the decider publishes.`,
+      'Close entries before the first moment anyone can learn the outcome, and publish what each verdict rests on.',
+      {
+        severity: 'medium',
+        ask: `When can someone first learn the outcome of ${named(route)}? Entries must close before that.`,
+      },
+    );
+  }
+
   // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
   // only a person or a server sends; what freezes at the first sale.
   const givers = new Map();
@@ -402,10 +442,12 @@ export function challenge(m, warn, now, economy) {
       'Ask, then say it on the page; for a step a key sends, give that key only the powers it needs (a voucher key, a decider key), never the owner’s.',
       {
         severity: 'low',
-        ask:
-          kind === 'deliver'
-            ? `Who delivers the off-chain prize of ${names} to each winner, and how will they reach them? The chain knows only the winning wallet.`
-            : `Who runs the results server that signs the vouchers of ${names}, and is it up for the whole run?`,
+        ask: {
+          deliver: `Who delivers the off-chain prize of ${names} to each winner, and how will they reach them? The chain knows only the winning wallet.`,
+          server: `Who runs the results server that signs the vouchers of ${names}, and is it up for the whole run?`,
+          decide: `Who holds the decider key of ${names}, what does it check before it signs, and will they be there before the result is due?`,
+          'decide-authority': `Who names the result of ${names} with the authority key, and will they be there before the result is due?`,
+        }[kind],
       },
     );
   }

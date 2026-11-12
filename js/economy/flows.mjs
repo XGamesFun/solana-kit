@@ -523,6 +523,101 @@ export function flows(m, { now }) {
       ],
     });
   }
+  // ---- contests: players back a side; a decider (or the authority) names one once entries close
+  for (const c of m.contests) {
+    const cur = c.currency ?? m.currencyKey;
+    const minPot = num(c.minPot);
+    const deciders = (c.deciders ?? []).length;
+    const people = minPot
+      ? m.scenario.perDay?.[`contest:${c.key}`] === undefined && !num(m.scenario.players)
+        ? {
+            expected: null,
+            said: false,
+            how: `the scenario names no entries for it (“contest:${c.key}”) and no players`,
+          }
+        : null
+      : null;
+    const shares = (c.split ?? []).map(x => ({ to: x.to, percent: num(x.percent) }));
+    const route = {
+      kind: 'contest',
+      key: c.key,
+      name: c.name ?? c.key,
+      where: `economy.contests.${c.key}`,
+      part: c,
+      price: c.stakeNft ? [{ asset: 'nft', amount: 1 }] : [{ asset: cur, amount: num(c.stake) || 1 }],
+      active: true,
+      gate: Boolean(c.gate),
+      title: `a contest, decided by ${deciders ? `${deciders === 1 ? 'a decider key' : `${deciders} decider keys`} (verdicts only)` : 'the project’s authority'}`,
+      decider: deciders ? 'decider' : 'authority',
+      shares,
+      cancel: {
+        causes: [
+          `no result by its result deadline${c.resultDue ? ` (${c.resultDue} after it opens)` : ''}`,
+          ...(minPot ? [`less than ${minPot} in its sides when entries close`] : []),
+          'a call-off',
+        ],
+        likely: minPot ? (people ? 'unknown' : 'unlikely') : 'rare',
+        participation: people,
+        refund: c.stakeNft ? [{ asset: 'nft', amount: 1 }] : [{ asset: cur, amount: num(c.stake) || 1 }],
+      },
+      fixed: { when: 'it opens', says: 'Every term is fixed when it opens and never edited.' },
+      states: [
+        {
+          state: 'run',
+          steps: [
+            {
+              by: 'player',
+              pays: 'player',
+              says: `backs one side${c.stake ? ` with exactly ${num(c.stake)} ${sym(cur)}` : c.stakeNft ? ' with one NFT' : ` with ${sym(cur)}`}${c.entriesClose ? ` until entries close (${c.entriesClose} after it opens)` : ''}; a wallet backs one side, never two`,
+            },
+            { by: 'keys', says: 'nothing to send until entries close; its terms are fixed' },
+          ],
+          cheater: `the result is worth what its ${deciders ? 'decider keys check' : 'authority checks'}; nobody names a side before entries close, but whoever learns the outcome before entries close can back the sure side`,
+        },
+        {
+          state: 'cancel',
+          steps: [
+            {
+              by: 'anyone',
+              pays: 'sender',
+              says: `claims each entry's money back for it (anyone may)`,
+              ifNobody: 'an entry nobody claims waits, with no deadline',
+              per: 'each entry',
+              short: 'each entry’s refund claimed',
+            },
+          ],
+        },
+        {
+          state: 'win',
+          steps: [
+            {
+              by: deciders ? 'anyone' : 'keys',
+              pays: 'sender',
+              says: deciders
+                ? 'sends a decider’s signed verdict naming the side, once entries close (anyone may send it)'
+                : 'names the side once entries close, with the authority key',
+              ifNobody: 'no result by its deadline: it is called off and everyone takes their money back',
+              per: 'once',
+              short: 'the result',
+              ...(deciders ? { manual: 'decide' } : { manual: 'decide-authority' }),
+            },
+            {
+              by: 'anyone',
+              pays: 'sender',
+              says: `claims each winner's share of the pot, by what each put in${shares.length ? `, after the shares (${words(shares.map(x => `${x.percent}% to ${x.to}`))}) taken when the result is named` : ''}`,
+              ifNobody: 'a winner’s part waits for them, with no deadline',
+              per: 'each winner',
+              short: 'each winner’s part claimed',
+            },
+          ],
+        },
+        { state: 'undo', steps: [{ by: 'player', says: 'An entry stays until the result or a refund.' }] },
+      ],
+    };
+    assets.get(cur)?.uses.push(route);
+    routes.push(route);
+  }
+
   // The kinds not modelled yet still use what they take: an auction's, a contest's or a payment's currency, a farm's
   // staked token.
   const other = (kind, list, assetOf) =>
@@ -534,7 +629,6 @@ export function flows(m, { now }) {
           ?.uses.push({ kind, key: x.key, name: x.name ?? x.key, price: [], states: [], active: true, ends: null });
     });
   other('auction', m.auctions, a => a.currency ?? m.currencyKey);
-  other('contest', m.contests, c => c.currency ?? m.currencyKey);
   other('payment', m.payments, p => p.currency ?? m.currencyKey);
   other('farm', m.farms, f => (m.tokens.has(f.stakes) ? f.stakes : null));
   return { assets, routes, worth };
