@@ -401,7 +401,9 @@ export const tools = [
       const told = verdict.ok ? tells(model(economy, { now }), { now }) : [];
       // A draw with a value or step finding: the design tool weighs every known way to build it against the person's wants.
       const draws = verdict.warnings.filter(
-        w => ['W-VALUE', 'W-STEPS'].includes(w.code) && /^economy\.lotteries\./.test(w.where),
+        w =>
+          ['W-VALUE', 'W-STEPS', 'W-ENFORCED', 'W-ASSUMPTION'].includes(w.code) &&
+          /^economy\.(lotteries|items|grants|farms|contests)\./.test(w.where),
       );
       // A cancel made likely (a least sale the scenario doesn't reach, or doesn't say it reaches) changes which design is
       // best: say to run the design tool again.
@@ -409,7 +411,7 @@ export const tools = [
         w => w.code === 'W-ASSUMPTION' && /^economy\.lotteries\.[^.]+\.minSold$/.test(w.where),
       );
       const designHint = draws.length
-        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (pay-in, burn, refund-as-paid, free-entry, one-approval, one-draw, one-token, first-reward-no-sol).${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
+        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (its description lists the kinds for a draw, a sale, a reward, staking and a contest).${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
         : '';
       const tell = told.length
         ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`
@@ -536,7 +538,8 @@ export const tools = [
     name: 'xsolana_design',
     annotations: READ,
     description:
-      'From what the person wants to the specs that do it, when no single part does it all or their wants pull against each other (pay in any of many currencies; burn what is paid but refund it on a cancel; a free entry that is not money). Write each want as a requirement (kinds: "pay-in" {route, currencies: [{token, amount}]}, "burn" {route}, "refund-as-paid" {route}, "free-entry" {route, grant, perPerson, spendable}, "one-approval" {route}, "one-draw" {route}), and pass the spec as it stands with the draw (a lottery whose key is the route) and its tokens, prize and grants. It builds every combination of known bridges (an entry token each currency buys, crafted in the purchase; the payment held until the draw and burned then; a way back the owner switches on after a cancel; a free draw of its own), checks each, tests every requirement on it, and answers the designs best first, with what each keeps (✓), keeps in part (~) and gives up (✗); when none keeps them all, what has to give and the best design for each choice. Read the requirements back to the person, put the choice to them with your pick, then build the one they choose (its spec is in `designs`) and run xsolana_check on it.',
+      'From what the person wants to the specs that do it, when no single part does it all or their wants pull against each other. Write each want as a requirement naming its route (the key of the lottery, item, grant, farm or contest it is about; its family follows from that): a draw ("pay-in" {currencies: [{token, amount}]}, "burn", "refund-as-paid", "free-entry" {grant, perPerson, spendable}, "one-approval", "one-draw", "one-token", "first-reward-no-sol"); a sale of an item ("pay-in", "fixed-price", "instant", "fair-scarce" {perPerson, list}, "one-approval"); a reward, a grant ("per-person" {claims}, "no-server", "bot-proof", "bounded" {total}, "first-reward-no-sol"; a server\'s voucher keys as "serverKeys" on any of them); staking, a farm ("emission-cap" {total}, "predictable", "no-lock", "whale-fair"; "perDay" and "days" on any of them); a contest ("no-owner-trust", "equal-stakes" {amount}, "refund-if-no-result"; decider keys as "serverKeys"). Pass the spec as it stands, with each route\'s skeleton. For each route it builds every combination of known bridges (an entry token each currency buys, crafted in the purchase; a payment held to the draw; a fixed-price listing in each currency; an allowlist; a deciding voucher server; a fixed or shared rate, minted or from a vault, with an end or a halving; a decider key), checks each, tests every requirement on it, and answers the designs best first (what the person asked for, then how it plays, then how clean, then how secure), with what each keeps (✓), keeps in part (~) and gives up (✗), a "Say" sentence for the person and what each needs from them; when none keeps them all, what has to give. Read the requirements back to the person, put the choice to them with your pick, then build the one they choose (its spec is in `designs`) and run xsolana_check on it.',
+
     inputSchema: {
       type: 'object',
       properties: {
