@@ -29,6 +29,12 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  */
 export function challenge(m, warn, now, economy) {
   const fl = flows(m, { now });
+  // The owner's order is plays best, then clean, then secure: a bound the server keeps (a voucher server that decides or
+  // replays who earns) is where such a limit lives when an on-chain cap tight enough to hold it would cost real players.
+  const serverHeld = g => (g?.vouchers ?? []).length > 0 && ['decides', 'replays'].includes(g.trust);
+  const lower = sev => ({ high: 'medium', medium: 'low', low: 'low' })[sev];
+  const SERVER_NOTE =
+    ' Its voucher server decides who earns, so the server holds this bound in practice: a cap on chain tight enough to hold it would also stop real players (a claim every few minutes), so keep it there and say so.';
   /** The quick simulation at the spec's scenario, run once when an analysis needs it. */
   let sim = null;
   const { assets, routes } = fl;
@@ -60,7 +66,7 @@ export function challenge(m, warn, now, economy) {
         'W-VALUE',
         route.where,
         `Following ${a.symbol} into ${named(route)}, cancelled: players buy ${a.symbol} with ${words(a.origins.map(o => `${named(o.recipe)} (${priced(o.pays)} for ${o.makes})`))}, and a cancelled round (${c.causes.join(', or ')}) refunds ${a.symbol}, not the ${priced(origin.pays)} paid for it, which ${origin.pays.every(x => x.to === 'burn') ? 'was burned' : `stays where ${named(origin.recipe)} sent it (${words([...new Set(origin.pays.map(x => x.to))])})`}. ${ways.length ? `${words(ways.map(w => named(w.recipe)))} turns ${a.symbol} back${ways.some(w => on(w.recipe)) ? '' : ' once the project switches it on'}.` : `Nothing turns ${a.symbol} back.`} Each refund waits until someone pulls it (anyone may; the page's claims() lists a player's). How likely a cancel is: ${why}.`,
-        `The pick, which keeps every goal (the payment still ${origin.pays.every(x => x.to === 'burn') ? 'burned' : 'goes where it goes'}, one approval, no swap, nothing for the owner to do after a cancel): hold the payment until the outcome is final and settle it then. Price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid. A free entry stays free with a ticket of its own (a separate lottery, or an NFT ticket), still moving no ${sym(origin.pays[0].asset)}. The other fix gives up something: a recipe that turns ${a.symbol} back, switched off and switched on after a cancel, needs the owner after every cancel and is a swap players can use while it is on.`,
+        `The pick for the refund (it keeps the payment ${origin.pays.every(x => x.to === 'burn') ? 'burned' : 'going where it goes'}, one approval, no swap and nothing for the owner to do after a cancel; it assumes nothing else): hold the payment until the outcome is final and settle it then. Price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid. A free entry then is either ${sym(origin.pays[0].asset)} itself (which can be spent) or a ticket to a draw of its own (a second draw): with more wants than the refund (a free entry that isn't money, one draw), run xsolana_design, which weighs them all. The other fix gives up something: a recipe that turns ${a.symbol} back, switched off and switched on after a cancel, needs the owner after every cancel and is a swap players can use while it is on.`,
         { severity: BY_LIKELY[c.likely] },
       );
     }
@@ -93,9 +99,9 @@ export function challenge(m, warn, now, economy) {
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
-          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.`,
+          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.${serverHeld(g) ? SERVER_NOTE : ''}`,
           'Give the free one an asset of its own that turns into nothing, keep every way back switched off, or set the grant’s "limits" to what you would pay out.',
-          { severity: on(b.recipe) ? 'high' : 'medium' },
+          { severity: serverHeld(g) ? lower(on(b.recipe) ? 'high' : 'medium') : on(b.recipe) ? 'high' : 'medium' },
         );
       }
     // After the end: still made once the last route it was good for has ended, and nothing else takes it.
@@ -174,9 +180,11 @@ export function challenge(m, warn, now, economy) {
         .filter(x => x.perDay > 0)
         .slice(0, 3)
         .map(x => `${named({ name: x.name })} ${+x.perDay.toPrecision(4)} (${x.how})`)
-        .join(', ')}. A free feature that pays most is what every extra identity is made for.`,
-      'Make it pay less than the paid features, cap it per identity per day, or gate it on something that costs.',
-      { severity: 'medium' },
+        .join(
+          ', ',
+        )}. A free feature that pays most is what every extra identity is made for.${serverHeld(m.grant.get(top.where.split('.').at(-1))) ? SERVER_NOTE : ''}`,
+      'Make it pay less than the paid features, cap it per identity per day where that costs real players nothing (else keep the bound on the server and say so), or gate it on something that costs.',
+      { severity: serverHeld(m.grant.get(top.where.split('.').at(-1))) ? 'low' : 'medium' },
     );
 
   // ---- W-STEPS: a player's whole loop through a route (getting its price, buying, collecting), one wallet prompt a
@@ -316,10 +324,17 @@ export function challenge(m, warn, now, economy) {
         .filter(Boolean)
         .join(
           '; ',
-        )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.`,
-      'Cap every free mint a day ("limits.perDay") at or below what is burned, burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
+        )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.${grants.length && !farms.length && grants.every(serverHeld) ? SERVER_NOTE : ''}`,
+      'Cap every free mint a day ("limits.perDay") at or below what is burned where that costs real players nothing (else keep the bound on the voucher server and say so), burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
       // (a free mint with no cap at all is high; a farm with no cap on its stake is medium, as the review's endless farm)
-      { severity: uncapped.length ? 'high' : 'medium' },
+      {
+        severity:
+          grants.length && !farms.length && grants.every(serverHeld)
+            ? lower(uncapped.length ? 'high' : 'medium')
+            : uncapped.length
+              ? 'high'
+              : 'medium',
+      },
     );
   }
 
