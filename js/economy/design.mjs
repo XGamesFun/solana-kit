@@ -39,7 +39,12 @@ export const REQUIREMENTS = {
         ? { kept: true, why: 'burned at the purchase' }
         : c.plan.burn === 'settle'
           ? { kept: true, why: 'burned once the round is drawn (a cancel refunds it instead)' }
-          : { kept: false, why: 'nothing burns it' },
+          : c.plan.burn === 'held'
+            ? {
+                kept: 'partly',
+                why: 'held in a pool until the draw, then burned by the owner (one action after each draw)',
+              }
+            : { kept: false, why: 'nothing burns it' },
   },
   'refund-as-paid': {
     says: () => 'If the draw is cancelled, people get back what they paid.',
@@ -204,6 +209,23 @@ export const BRIDGES = {
       },
     },
     {
+      id: 'held',
+      says: 'what each currency pays for an entry is held in a pool of its own until the draw, and the owner burns it after the draw (one action), so a cancel can still pay it back',
+      build: (s, x) => {
+        if (!x.plan.entry) return false;
+        s.pools ??= [];
+        for (const cur of x.currencies) {
+          const pool = `${x.route}-${cur.token}`.slice(0, 32);
+          if (!s.pools.some(p => p.key === pool)) s.pools.push({ key: pool, currency: cur.token, seed: 0 });
+          const buy = s.recipes.find(r => r.key === `${x.route}-buy-${cur.token}`.slice(0, 32));
+          buy.in[0].to = `pool:${pool}`;
+        }
+        x.plan.burn = 'held';
+        x.plan.held = true;
+        return true;
+      },
+    },
+    {
       id: 'at-settle',
       says: 'the payment is held until the draw and burned then ("rest": "burn"), so a cancel refunds it',
       build: (s, x) => {
@@ -228,7 +250,7 @@ export const BRIDGES = {
         s.pools ??= [];
         for (const cur of x.currencies) {
           const pool = `${x.route}-${cur.token}`.slice(0, 32);
-          s.pools.push({ key: pool, currency: cur.token, seed: 0 });
+          if (!s.pools.some(p => p.key === pool)) s.pools.push({ key: pool, currency: cur.token, seed: 0 });
           const buy = s.recipes.find(r => r.key === `${x.route}-buy-${cur.token}`.slice(0, 32));
           buy.in[0].to = `pool:${pool}`;
           s.recipes.push({
@@ -399,6 +421,8 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
             },
             parts: spec.lotteries.length + spec.recipes.length + spec.grants.length,
             experience: experienceOf(c),
+            fl,
+            plan: x.plan,
             spec,
           });
         }
@@ -436,7 +460,17 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
             .join('+') === [...kinds].sort().join('+'),
       ),
     }));
-  return { candidates, conflicts, allKept: all };
+  // A design that gives nothing up entirely, keeping some wants only in part, is an option of its own.
+  const inPart = [];
+  for (const c of all ? [] : candidates.filter(c => !c.results.some(q => q.kept === false))) {
+    const partial = c.results
+      .filter(q => q.kept === 'partly')
+      .map(q => q.kind)
+      .sort()
+      .join('+');
+    if (!inPart.some(x => x.partial === partial)) inPart.push({ partial, best: c });
+  }
+  return { candidates, conflicts, allKept: all, inPart };
 }
 
 /** The design in words, for the agent to read and put to the person: the requirements, the conflicts, the top specs. */
@@ -445,8 +479,20 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
   for (const r of requirements) lines.push(`- ${REQUIREMENTS[r.kind].says(r)}`);
   if (result.allKept) lines.push('', 'A design keeps every one of them:');
   else {
-    lines.push('', 'No design keeps all of them. What has to give, and the best design for each choice:');
-    for (const c of result.conflicts.slice(0, top)) {
+    lines.push(
+      '',
+      'No design keeps all of them. This is the person’s choice, not yours: put every option below to them, each with what it gives up and costs, and your pick; build none of them until they choose.',
+      '',
+      'What has to give, and the best design for each choice:',
+    );
+    for (const { best } of result.inPart.slice(0, 2))
+      lines.push(
+        `- Keep every want, some only in part (${best.results
+          .filter(q => q.kept === 'partly')
+          .map(q => `“${q.says.replace(/\.$/, '')}”: ${q.why}`)
+          .join('; ')}): ${best.says.join('; ')}.`,
+      );
+    for (const c of result.conflicts.filter(x => !result.inPart.some(y => y.best === x.best)).slice(0, top)) {
       const gave = c.best.results.filter(q => q.kept !== true);
       lines.push(
         `- Give up ${gave.map(q => `“${q.says.replace(/\.$/, '')}”${q.kept === 'partly' ? ' in part' : ''} (${q.why})`).join(' and ')}: ${c.best.says.join('; ')}.`,
@@ -458,6 +504,19 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
     lines.push(`${i + 1}. ${c.says.join('; ')}.`);
     for (const q of c.results)
       lines.push(`   ${q.kept === true ? '✓' : q.kept === 'partly' ? '~' : '✗'} ${q.says} ${q.why}.`);
+    // After the draw: every step someone must send, who, and what happens if nobody does.
+    const after = c.fl.routes
+      .filter(r => c.plan.draws.includes(r.key))
+      .flatMap(r => r.states.flatMap(st => st.steps))
+      .filter(x => x.per)
+      .map(x => `${x.short} (${x.by === 'keys' ? 'the project' : x.by}, ${x.per}; if nobody does, ${x.ifNobody})`);
+    if (c.plan.held)
+      after.push(
+        'the held payments burned after the draw (the owner, once a draw; if nobody does, they stay in their pools)',
+      );
+    if (c.plan.swapBack)
+      after.push('the way back switched on after a cancel (the owner; if nobody does, a refund stays in entries)');
+    if (after.length) lines.push(`   After the draw: ${[...new Set(after)].join('; ')}.`);
     lines.push(
       `   Plays: ${c.experience.approvals} approval${c.experience.approvals === 1 ? '' : 's'} to enter; ${c.experience.tokens ? `${c.experience.tokens} token${c.experience.tokens === 1 ? '' : 's'} of its own to learn` : 'nothing new to learn'}. Findings: ${c.findings.high} high, ${c.findings.medium} medium (xsolana_check on its spec gives each).`,
     );

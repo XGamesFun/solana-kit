@@ -394,9 +394,16 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
         out.push(
           `${named(r)} takes the page's word within its caps: a script claiming at a steady, human pace gets the most its caps allow. A server check that only clamps to a bound costs that script nothing; one that refuses costs it the attempt.`,
         );
+      // What the chain still allows when only its caps stand (the voucher key leaked, or the server loosened): a day and
+      // in all, against the pool it pays from.
+      const day = g && l.perDay ? l.perDay * g.amount : null;
+      const drains =
+        pool && day
+          ? ` (“${pool.key}” starts with ${num(pool.seed)}: emptied in ${+(num(pool.seed) / day).toFixed(2)} days at that pace)`
+          : '';
       const server =
         signed && (r.part.vouchers ?? []).length
-          ? ' Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly.'
+          ? ` Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly. If its voucher key leaks, the chain still allows ${day ? `${+day.toFixed(9)} ${sym(g.asset)} a day` : 'whatever its caps allow'}${l.total && g ? ` and ${+(l.total * g.amount).toFixed(9)} in all` : ''}${drains}.`
           : '';
       if (caps.length)
         out.push(

@@ -399,6 +399,13 @@ export const tools = [
       const now = nowOf(ctx);
       const ends = verdict.ok ? endStates(model(economy, { now }), { now }) : [];
       const told = verdict.ok ? tells(model(economy, { now }), { now }) : [];
+      // A draw with a value or step finding: the design tool weighs every known way to build it against the person's wants.
+      const draws = verdict.warnings.filter(
+        w => ['W-VALUE', 'W-STEPS'].includes(w.code) && /^economy\.lotteries\./.test(w.where),
+      );
+      const designHint = draws.length
+        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (pay-in, burn, refund-as-paid, free-entry, one-approval, one-draw, one-token).`
+        : '';
       const tell = told.length
         ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`
         : '';
@@ -413,7 +420,7 @@ export const tools = [
         from,
         refusals: verdict.refusals,
         warnings: verdict.warnings,
-        text: `${head}${tell}${states}${tail}${footer()}`,
+        text: `${head}${tell}${states}${designHint}${tail}${footer()}`,
       };
     },
   },
