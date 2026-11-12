@@ -5827,7 +5827,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   }
 
   // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
-  if (!refusals.length) challenge(m, warn, now);
+  if (!refusals.length) challenge(m, warn, now, economy);
 
   // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
   // but pays out faster drains, and then skips or fails what it owes.

@@ -12,17 +12,18 @@
 //
 // Who sends each later step and what happens if nobody does, and where each rule is kept (chain, server or page), are
 // in the walk-through (walk.mjs, from the same model) and the review's trust levels.
-import { at, flows, named, num, words } from './flows.mjs';
-import { toTime } from './model.mjs';
+import { at, flows, lineToken, named, num, words } from './flows.mjs';
+import { prizeLine, toSeconds, toTime } from './model.mjs';
+import { simulate } from './simulate.mjs';
 
 /** A cancel's severity, by how likely it is: the scenario says it is (or says nothing), says it isn't, or only the oracle's timeout. */
 const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: 'low' };
 
 /**
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
- * in seconds. Returns the model, for the caller to show.
+ * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
  */
-export function challenge(m, warn, now) {
+export function challenge(m, warn, now, economy) {
   const fl = flows(m, { now });
   const { assets, routes } = fl;
   const sym = key => (key === 'nft' ? 'the NFT' : (assets.get(key)?.symbol ?? key));
@@ -53,7 +54,7 @@ export function challenge(m, warn, now) {
         'W-VALUE',
         route.where,
         `Following ${a.symbol} into ${named(route)}, cancelled: players buy ${a.symbol} with ${words(a.origins.map(o => `${named(o.recipe)} (${priced(o.pays)} for ${o.makes})`))}, and a cancelled round (${c.causes.join(', or ')}) refunds ${a.symbol}, not the ${priced(origin.pays)} paid for it, which ${origin.pays.every(x => x.to === 'burn') ? 'was burned' : `stays where ${named(origin.recipe)} sent it (${words([...new Set(origin.pays.map(x => x.to))])})`}. ${ways.length ? `${words(ways.map(w => named(w.recipe)))} turns ${a.symbol} back${ways.some(w => on(w.recipe)) ? '' : ' once the project switches it on'}.` : `Nothing turns ${a.symbol} back.`} Each refund waits until someone pulls it (anyone may; the page's claims() lists a player's). How likely a cancel is: ${why}.`,
-        `Price the route in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', "rest": "burn" if the tickets should burn' : ''}), so a refund pays back what was paid; or keep a recipe that turns ${a.symbol} back switched off ("active": false), switched on after a cancel.`,
+        `Hold the payment until the outcome is final, then burn or route it at settlement: price ${named(route)} in ${sym(origin.pays[0].asset)} itself ("currency": "${origin.pays[0].asset}", "price": ${origin.pays[0].amount / origin.makes}${route.kind === 'lottery' ? ', with "rest": "burn" to burn it once the round is drawn' : ''}), so a cancel refunds what was paid and nothing is burned before the outcome. Otherwise, keep a recipe that turns ${a.symbol} back switched off ("active": false) and switch it on after a cancel.`,
         { severity: BY_LIKELY[c.likely] },
       );
     }
@@ -98,7 +99,9 @@ export function challenge(m, warn, now) {
       const last = Math.max(...ends);
       const lastUse = live.find(r => r.ends === last);
       const after = `Following ${a.symbol}, after the end: it has no use after ${named(lastUse)} (${at(last)})`;
-      for (const g of a.free.filter(on))
+      for (const g of a.free
+        .filter(on)
+        .filter(g => !(g.limits?.until !== undefined && toTime(g.limits.until, now) <= last)))
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
@@ -218,5 +221,152 @@ export function challenge(m, warn, now) {
       },
     );
   }
+  // Net flow: a token with value (the project's currency, one that turns back into money, a farm's rewards) minted for
+  // free a day at its caps, against what the scenario burns of it a day.
+  const valued = key => {
+    const a = assets.get(key);
+    return (
+      key === m.currencyKey ||
+      a?.backs.some(b => b.gives.some(g => assets.get(g.asset)?.money)) ||
+      m.farms.some(f => f.rewards === key)
+    );
+  };
+  let sim = null;
+  for (const [key, t] of m.tokens) {
+    if (!['game', 'project'].includes(t.source) || !valued(key)) continue;
+    const grants = m.grants.filter(
+      g =>
+        on(g) && prizeLine(g.prize ?? g.gives)?.from === 'mint' && lineToken(prizeLine(g.prize ?? g.gives), m) === key,
+    );
+    const farms = m.farms.filter(f => f.rewards === key && f.rate?.minted && num(f.rate.perDay) > 0);
+    if (!grants.length && !farms.length) continue;
+    sim ??= simulateOrNull(economy, now);
+    const amountOf = g => num(prizeLine(g.prize ?? g.gives).amount);
+    const daily = grants.filter(g => num(g.limits?.perDay));
+    const totalOnly = grants.filter(g => !num(g.limits?.perDay) && num(g.limits?.total));
+    const uncapped = grants.filter(g => !num(g.limits?.perDay) && !num(g.limits?.total));
+    const capped = daily.reduce((n, g) => n + amountOf(g) * num(g.limits.perDay), 0);
+    const farmed = farms.reduce((n, f) => n + num(sim?.farms?.find(x => x.key === f.key)?.rewardsPerDay), 0);
+    const burned = num(sim?.perDay?.burned?.[key]);
+    if (!uncapped.length && !totalOnly.length && capped + farmed <= burned) continue;
+    if (!uncapped.length && capped + farmed <= burned) continue;
+    warn(
+      'W-VALUE',
+      `economy.tokens.${key}`,
+      `Following ${sym(key)}, net flow: ${[
+        capped ? `grants mint up to ${+capped.toFixed(9)} a day at their caps (${words(daily.map(named))})` : '',
+        farmed
+          ? `${words(farms.map(named))} mint${farms.length === 1 ? 's' : ''} about ${+farmed.toFixed(9)} a day as rewards at the scenario's stake`
+          : '',
+        totalOnly.length
+          ? `${words(totalOnly.map(g => `${named(g)} (up to ${+(amountOf(g) * num(g.limits.total)).toFixed(9)} in all)`))} ${totalOnly.length === 1 ? 'has' : 'have'} no daily cap`
+          : '',
+        uncapped.length
+          ? `${words(uncapped.map(named))} mint${uncapped.length === 1 ? 's' : ''} it with no cap at all`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(
+          '; ',
+        )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.`,
+      'Cap every free mint a day ("limits.perDay") at or below what is burned, burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
+      { severity: uncapped.length ? 'high' : 'medium' },
+    );
+  }
+
+  // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
+  // only a person or a server sends; what freezes at the first sale.
+  const givers = new Map();
+  const give = (item, route) => item && givers.set(item, [...(givers.get(item) ?? []), route]);
+  for (const b of m.allBoxes)
+    for (const o of b.outcomes ?? []) if (o.gives === 'item') give(o.item, b.shopOf ? `the shop` : named(b));
+  for (const g of m.grants) give(prizeLine(g.prize ?? g.gives)?.item, named(g));
+  for (const l of m.lotteries) for (const p of l.places ?? []) give(prizeLine(p.prize)?.item, named(l));
+  for (const r of m.recipes) for (const o of r.out ?? []) if (o.gives === 'item') give(o.item, named(r));
+  for (const a of m.auctions) give(a.lot?.item, named(a));
+  for (const [key, list] of givers) {
+    const by = [...new Set(list)];
+    if (by.length < 2) continue;
+    const it = m.item.get(key);
+    warn(
+      'W-ASSUMPTION',
+      `economy.items.${key}`,
+      `${named(it)} reaches players through ${words(by)}: ${it?.supply ? `its supply of ${it.supply} is shared by all of them, first come first served, and ` : ''}each route's per-wallet limit counts on its own, so one wallet may take it through each, an early list's buyer again in public.`,
+      'Say which route comes first and whether one wallet may take it twice; if not, give it through one route, or gate the later one on not holding it.',
+      { severity: 'low' },
+    );
+  }
+  const players = num(m.scenario.players);
+  for (const g of m.grants) {
+    const per = num(g.limits?.perPerson ?? g.limits?.perWallet);
+    const total = num(g.limits?.total);
+    if (!players || !per || !total || total >= players * per) continue;
+    warn(
+      'W-ASSUMPTION',
+      `economy.grants.${g.key}.limits.total`,
+      `${named(g)} gives ${total} claims in all, and ${players} players at ${per} each would take ${players * per}: it runs out before every player has claimed, first come first served (a bot first of all).`,
+      'Raise "total" to the audience you expect, or tell players it is first come, first served.',
+      { severity: 'medium' },
+    );
+  }
+  // One question for each kind of step only a person or a server sends, naming every route that needs it.
+  const manual = new Map();
+  for (const route of routes)
+    for (const st of route.states)
+      for (const step of st.steps.filter(x => x.manual))
+        manual.set(step.manual, [...(manual.get(step.manual) ?? []), { route, step }]);
+  for (const [kind, list] of manual) {
+    const names = words([...new Set(list.map(x => named(x.route)))]);
+    const { step } = list[0];
+    warn(
+      'W-ASSUMPTION',
+      list[0].route.where,
+      `${names} need${list.length === 1 ? 's' : ''} a person or a server: ${step.says} (if nobody does: ${step.ifNobody}). Ask who, and when they are available, before placing it.`,
+      'Ask, then say it on the page; for a step a key sends, give that key only the powers it needs (a voucher key, a decider key), never the owner’s.',
+      {
+        severity: 'low',
+        ask:
+          kind === 'deliver'
+            ? `Who delivers the off-chain prize of ${names} to each winner, and how will they reach them? The chain knows only the winning wallet.`
+            : `Who runs the results server that signs the vouchers of ${names}, and is it up for the whole run?`,
+      },
+    );
+  }
+  for (const l of m.lotteries.filter(l => l.firstDraw && !toSeconds(l.every)))
+    warn(
+      'W-ASSUMPTION',
+      `economy.lotteries.${l.key}.firstDraw`,
+      `${named(l)} draws at ${at(toTime(l.firstDraw, now))}, but only when someone asks for it: a player's button on the page (it waits for a visitor) or a key on a server (on time; a key that can be stolen, its fees the owner's).`,
+      'Ask the person which, and build that (skill rule 11).',
+      {
+        severity: 'low',
+        ask: `Who asks for ${named(l)}'s draw at its time: a button players press, or a key on a server?`,
+      },
+    );
+  for (const sc of m.schedules.filter(sc => !sc.sealed))
+    warn(
+      'W-ASSUMPTION',
+      `economy.schedules.${sc.key}`,
+      `${named(sc)} runs only when the project's keys send each run, and a missed run lapses.`,
+      'Ask who sends it and when they are available; or make it "sealed" so its recipient runs it.',
+      { severity: 'low', ask: `Who sends each run of ${named(sc)} on time, and what if they are away?` },
+    );
+  for (const it of m.items.filter(it => it.kind === 'collectible' && !it.uri))
+    warn(
+      'W-ASSUMPTION',
+      `economy.items.${it.key}.uri`,
+      `${named(it)} has no picture link ("uri"): each one is minted with the link it has then, and keeps it.`,
+      'Give it its link (a JSON file with "name" and "image") before the first one is minted.',
+      { severity: 'medium' },
+    );
   return fl;
+}
+
+/** The quick simulation at the spec's scenario, or null when it can't run. */
+function simulateOrNull(economy, now) {
+  try {
+    return economy ? simulate(economy, { now }) : null;
+  } catch {
+    return null;
+  }
 }

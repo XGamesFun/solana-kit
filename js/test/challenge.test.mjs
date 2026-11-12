@@ -251,3 +251,49 @@ test('the worked example of sentence-to-spec.md checks, and explain puts every l
   );
   assert.match(law, /resell/i);
 });
+
+test('follow the value: a loop of recipes that gains, and a valued token minted for free faster than it burns', () => {
+  const loop = spec();
+  loop.recipes[1].out[0].amount = 150; // an entry back for 150 BUBL, bought for 100
+  loop.recipes[1].active = true;
+  const w = check(loop, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('around a loop:'));
+  assert.ok(w, 'a loop that gives 1.5 for 1');
+  assert.equal(w.severity, 'high');
+  assert.match(w.message, /gives back 1\.5 for each 1/);
+  // ENTRY, which turns back into BUBL, minted free by a grant with no daily cap: net flow.
+  const mint = spec();
+  delete mint.grants[1].limits.perDay;
+  delete mint.grants[1].limits.total;
+  const flow = check(mint, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('net flow:'));
+  assert.ok(flow && flow.severity === 'high' && /with no cap at all/.test(flow.message), flow?.message);
+  // Capped at 5 a day, below the 8 a day the scenario burns (the first draw's "rest": "burn"): no flag.
+  mint.grants[1].limits.perDay = 5;
+  assert.ok(!check(mint, { now: NOW }).warnings.some(x => x.message.includes('net flow:')));
+});
+
+test('check every assumption: one item through two routes, a cap against the audience, who runs each step, a link fixed at mint', () => {
+  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-ASSUMPTION');
+  assert.ok(ws.some(w => w.where === 'economy.items.winner' && /supply of 1 is shared/.test(w.message)));
+  const asks = ws.filter(w => w.ask).map(w => w.ask);
+  assert.equal(
+    asks.filter(a => a.startsWith('Who runs the results server')).length,
+    1,
+    'one question for the voucher server',
+  );
+  assert.ok(asks.some(a => a.startsWith('Who delivers the off-chain prize of “draw” and “draw2”')));
+  assert.ok(asks.some(a => a.startsWith('Who asks for “draw”')));
+  const few = spec();
+  few.scenario.players = 20000;
+  assert.ok(check(few, { now: NOW }).warnings.some(w => w.where === 'economy.grants.free-entry.limits.total'));
+  const card = spec();
+  card.items[0].kind = 'collectible';
+  assert.ok(check(card, { now: NOW }).warnings.some(w => w.where === 'economy.items.winner.uri'));
+});
+
+test('the check tool asks the questions and shows each route’s cancel and change of mind', async () => {
+  const { runTool } = await import('../mcp/server.mjs');
+  const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
+  assert.match(r.text, /Ask the person before building on it:\n\? /);
+  assert.match(r.text, /When it goes wrong or a player changes their mind/);
+  assert.match(r.text, /“draw”, cancelled or failed: Anyone: refunds every ticket in ENTRY/);
+});

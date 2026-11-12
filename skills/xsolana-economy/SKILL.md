@@ -63,17 +63,26 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
    states (before it opens, while it runs, cancelled or failed, won, after it ends, a change of mind) as a player, the
    owner and a cheater see them, and what can change only before a first sale or claim; the checker's warnings name
    the traps a game already fell into. Read both before you answer.
-   Composing parts is still how you find the versions. Most ideas are several parts working together: break the idea
-   into its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for
-   how long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a
-   match, a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a
-   list. The program checks the signer's signature and limits, never what happened, so a signed result is worth what
-   that server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the
-   tools' words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the
-   checker and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when
-   no part or combination does it: say in one line what is missing and why, and offer the nearest versions
-   (`xsolana_examples` with the words of that piece returns them), best first, each with what it gives up and its "in
-   all" cost.
+   How to put it:
+   - Lead with one pick, its sub-choices made too, even when a tool lists several fixes; the others follow in a line.
+   - Turn each finding into a question to the person when it rests on what they know (how many players, who counts
+     as one buyer, who delivers a prize, who is around when a step is due): `xsolana_check` lists the questions.
+   - Before you build an ask that removes a way out (a burn, a token that can't move, a payment taken before the
+     outcome), name the simpler version that keeps it.
+   - When a new fact reopens a settled choice, say what changed and why.
+   - Check an alternative with the tools before you offer it, and never promise a report, a follow-up or a channel
+     you don't have.
+     Composing parts is still how you find the versions. Most ideas are several parts working together: break the idea
+     into its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for
+     how long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a
+     match, a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a
+     list. The program checks the signer's signature and limits, never what happened, so a signed result is worth what
+     that server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the
+     tools' words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the
+     checker and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when
+     no part or combination does it: say in one line what is missing and why, and offer the nearest versions
+     (`xsolana_examples` with the words of that piece returns them), best first, each with what it gives up and its "in
+     all" cost.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
     (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the

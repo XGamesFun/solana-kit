@@ -50,11 +50,12 @@ function signWire(key, b64) {
 }
 
 /**
- * A time as the steps' lines write one: to the second ("2026-11-11T08:34:11Z"), or, for one years off, by the day and
- * the years it is away ("11 November 2030, 4 years from now").
+ * A time as the steps' lines write one: to the second ("2026-11-11T08:34:11Z"), to the minute as the checker's
+ * analyses and walk-through do ("2026-11-11 08:34 UTC"), or, for one years off, by the day and the years it is away
+ * ("11 November 2030, 4 years from now").
  */
 const WRITTEN_TIME =
-  /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b|\b\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4,}\b|\b[\d,]+ years (?:from now|after go-live)\b/g;
+  /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b|\b\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\b|\b\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4,}\b|\b[\d,]+ years (?:from now|after go-live)\b/g;
 
 /**
  * The code that stands for one printout: the whole file (the spec, and its live section with every address it gives

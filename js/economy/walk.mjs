@@ -3,8 +3,8 @@
 // mind), as a player, the owner and a cheater see it, and what can change only before its first sale or claim. The
 // routes the model holds (flows.mjs) are written from its steps (who sends each, who pays, what moves, what happens if
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
-import { at, flows, named, num, words } from './flows.mjs';
-import { toTime } from './model.mjs';
+import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
+import { FEES, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -107,7 +107,12 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
   for (const r of fl.routes) {
     const rows = [];
     const open = r.states.find(s => s.state === 'open');
-    rows.push([STATE.open, open ? stepWords(open.steps) : windowWords(r.part, ...OPEN[r.kind])]);
+    rows.push([
+      STATE.open,
+      open
+        ? stepWords(open.steps)
+        : windowWords(r.kind === 'grant' ? { ...r.part, opens: r.part.limits?.opens } : r.part, ...OPEN[r.kind]),
+    ]);
     for (const st of r.states.filter(s => s.state !== 'open')) {
       let text = stepWords(st.steps) + extraWords(r, st.state, fl);
       if (st.state === 'run') {
@@ -127,6 +132,13 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
       if (st.state === 'cancel' && r.cancel) text += ' Cheater: nothing to gain: a refund goes only to its own buyer.';
       rows.push([STATE[st.state], text]);
     }
+    // After its deadline: every step someone must send, who, who pays, how often, and what happens if nobody does.
+    const later = r.states.flatMap(st => st.steps).filter(x => x.per);
+    if (later.length)
+      rows.push([
+        'Who sends what',
+        `${later.map(x => `${x.short}: ${WHO[x.by] === 'Owner' ? 'the project' : (WHO[x.by] ?? x.by).toLowerCase()}${x.pays === 'sender' ? ', paying its fee' : ''}, ${x.per}; if nobody does, ${x.ifNobody}`).join('. ')}.`,
+      ]);
     if (r.fixed) rows.push([`Only before ${r.fixed.when}`, r.fixed.says]);
     route(`${named(r)}: ${r.title}`, rows);
   }
@@ -214,9 +226,28 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
     ]);
 
   if (!routes.length) return [];
+  const actions = actionWords(fl);
   return [
+    ...(actions.length ? ['Each player action: its wallet prompts and SOL', ...actions.map(x => `- ${x}`), ''] : []),
     'Each route, state by state (as a player, the owner and a cheater see it)',
     'The owner’s pause stops every purchase, ticket, entry, stake and bid coming in; nothing owed waits on it: claims, refunds, unstakes, draws and payouts go on.',
     ...routes,
   ];
+}
+
+/** Each player action of the routes the model holds: its wallet prompts and the SOL it costs, its price aside. */
+export function actionWords(fl) {
+  const fee = Number(FEES.player) / 1e9;
+  return fl.routes
+    .filter(r => r.price.length)
+    .map(r => {
+      const run = r.states.find(st => st.state === 'run');
+      const prompts = (run?.steps ?? []).filter(x => x.by === 'player').length || 1;
+      const oracle = r.roll && r.kind === 'box' ? ORACLE_SOL : 0;
+      const sol = +(prompts * fee + oracle).toFixed(9);
+      const price = r.price
+        .map(p => `${+num(p.amount).toFixed(9)} ${fl.assets.get(p.asset)?.symbol ?? p.asset}`)
+        .join(' and ');
+      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens.`;
+    });
 }

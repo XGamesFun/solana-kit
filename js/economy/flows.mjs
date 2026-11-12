@@ -218,6 +218,8 @@ export function flows(m, { now }) {
             says: `refunds every ticket${t ? ` in ${sym(t)}` : ''}${l.ticketNft ? ' (the NFT back)' : ''}, the player fee not; each refund waits until someone pulls it to its buyer (anyone may: the page's claims() lists a player's)`,
             moves: route.cancel.refund.map(p => ({ ...p, from: `round:${l.key}`, to: 'player' })),
             ifNobody: 'a refund nobody pulls waits, with no deadline; a round nobody asks to draw waits too',
+            per: 'each buyer',
+            short: 'a refund pulled to its buyer',
           },
         ],
       },
@@ -230,17 +232,31 @@ export function flows(m, { now }) {
             says: `asks for the draw once it is due, paying the oracle ${ORACLE_SOL} SOL`,
             ifNobody:
               'the round waits undrawn: a player or the project must ask (the page’s button, or the next buyer)',
+            per: 'once a round',
+            short: 'the ask for the draw (or the cancel, when the round is short)',
           },
           { by: 'oracle', says: 'answers; its answer picks the winners, drawn after sales close' },
           {
             by: 'anyone',
             pays: 'sender',
             says: `pulls each winner's part to the winner: ${words((l.places ?? []).map((p, i) => `place ${i + 1} ${p.prize ? prizeWords(p.prize, m) : `${num(p.percent)}% of the pot`}`)) || 'the pot'}. An item is given while it has stock`,
+            ifNobody: 'a part nobody pulls waits for its winner, with no deadline',
+            per: 'each winner',
+            short: 'each winner’s part pulled to them',
           },
           ...((l.places ?? []).some(
             p => prizeLine(p.prize)?.gives === 'item' && m.item.get(prizeLine(p.prize).item)?.kind !== 'collectible',
           )
-            ? [{ by: 'keys', says: 'deliver a normal item, an off-chain prize, from its receipt' }]
+            ? [
+                {
+                  by: 'keys',
+                  says: 'deliver a normal item, an off-chain prize, from its receipt',
+                  ifNobody: 'the winner holds a receipt and nothing else',
+                  per: 'each winner',
+                  short: 'the off-chain prize delivered',
+                  manual: 'deliver',
+                },
+              ]
             : []),
         ],
       },
@@ -444,6 +460,8 @@ export function flows(m, { now }) {
       price: [],
       gives: asset ? [{ asset, amount: num(prize.amount) }] : [],
       active: on(g),
+      opens: g.limits?.opens !== undefined ? toTime(g.limits.opens, now) : null,
+      ends: g.limits?.until !== undefined ? toTime(g.limits.until, now) : null,
       title: 'a grant',
       trust: g.vouchers?.length ? (g.trust ?? 'what it checks') : null,
       states: [
@@ -456,7 +474,7 @@ export function flows(m, { now }) {
               says: `claims ${prizeWords(g.prize ?? g.gives, m)}, proving it with ${how}; only their own wallet signs the claim`,
             },
             ...(g.vouchers?.length
-              ? [{ by: 'server', says: 'signs each voucher', ifNobody: 'no server, no claims' }]
+              ? [{ by: 'server', says: 'signs each voucher', ifNobody: 'no server, no claims', manual: 'server' }]
               : []),
             { by: 'keys', says: "its funds pay each claim's rent: keep them topped up" },
           ],
@@ -476,7 +494,10 @@ export function flows(m, { now }) {
           steps: [
             {
               by: 'keys',
-              says: 'It gives until its limits are reached or the project switches it off: it has no end date.',
+              says:
+                g.limits?.until !== undefined
+                  ? `It takes no claim after ${at(toTime(g.limits.until, now))} (its "until"), nor once its limits are reached or the project switches it off.`
+                  : 'It gives until its limits are reached or the project switches it off: it has no end date.',
             },
           ],
         },
