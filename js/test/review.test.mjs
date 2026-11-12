@@ -78,7 +78,8 @@ test('the same economy decided by the server, or with an end and a total, has no
     { now: NOW },
   );
   assert.equal(first.ok, true);
-  assert.deepEqual(ids(first, 'medium'), ['R-FARM-ENDLESS farm:vault']);
+  // (and the net flow of what it mints: no cap on how many NFTs it takes)
+  assert.deepEqual(ids(first, 'medium').sort(), ['R-FARM-ENDLESS farm:vault', 'R-VALUE token:shard']);
 });
 
 test('a voucher grant with no trust said is read as bounds, and says so', () => {

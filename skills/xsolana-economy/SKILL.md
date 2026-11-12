@@ -11,9 +11,9 @@ signed by a key file on the owner's own machine, once they have read what will b
 **devnet**, where nothing is real money, and on **mainnet**, where everything is: an economy is on devnet unless its
 file says `"network": "mainnet"`.
 
-The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.10 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.28.10 token <mint>` for a coin made elsewhere,
-or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always with the exact version).
+The tools are the `xsolana_*` MCP tools. Without MCP, the same from a terminal: `npx -y @xgamesfun/solana@0.28.11 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.28.11 token <mint>` for a coin made elsewhere,
+or `npx -y @xgamesfun/solana@0.28.11 tool <name> '<json>'` for any tool (always with the exact version).
 
 ## Rules (always)
 
@@ -59,37 +59,69 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
 9. **Challenge before you build.** For every request, name the simplest version that delivers most of it. Say what
    it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act
    later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it.
-   Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_explain` ends with each route's
-   states (before it opens, while it runs, cancelled or failed, won, after it ends, a change of mind) as a player, the
-   owner and a cheater see them, and what can change only before a first sale or claim; the checker's warnings name
-   the traps a game already fell into. Read both before you answer.
-   Composing parts is still how you find the versions. Most ideas are several parts working together: break the idea
-   into its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for
-   how long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a
-   match, a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a
-   list. The program checks the signer's signature and limits, never what happened, so a signed result is worth what
-   that server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the
-   tools' words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the
-   checker and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when
-   no part or combination does it: say in one line what is missing and why, and offer the nearest versions
-   (`xsolana_examples` with the words of that piece returns them), best first, each with what it gives up and its "in
-   all" cost.
+   Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_check` gives the analyses
+   (`W-VALUE`, follow the value; `W-STEPS`, a player's whole loop; `W-ASSUMPTION`, every number that rests on who takes
+   part, with the questions to ask; `W-ENFORCED`, who decides and what that key can do) and what each route leaves a
+   player when it goes wrong; `xsolana_explain` ends with each route state by state, every way a round ends, every date
+   in order, and each player action's prompts and SOL. Read both before you answer.
+
+   Composing parts is how you find the versions. Most ideas are several parts working together: break the idea into
+   its pieces (what players pay, what they get, what is random, what the chain can't see, what is held and for how
+   long, who is paid) and find the part for each (`references/sentence-to-spec.md`). What the chain can't see (a match,
+   a score, something done offline) is vouched for by a signer: a results server's voucher, a decider's key, a list.
+   The program checks the signer's signature and limits, never what happened, so a signed result is worth what that
+   server checks (it decides the result, replays it, or only bounds what the page reports: rule 12). When the tools'
+   words and the checker disagree (a field the schema takes that a sentence somewhere calls impossible), the checker
+   and `xsolana_guide`'s parts decide: try it in a spec and run `xsolana_check`. A piece is a limit only when no part
+   or combination does it: say in one line what is missing and why, and offer the nearest versions (`xsolana_examples`
+   with the words of that piece returns them), best first, each with what it gives up and its "in all" cost.
+
+   How to put it:
+   - Lead with one pick, its sub-choices made too, even when a tool lists several fixes; the others follow in a line.
+     Of several fixes, pick the one that keeps every goal the person stated (a burn, a free entry that moves no tokens,
+     one approval); say what each other one gives up.
+     A finding reaches the person with its fix and your pick, never as the symptom alone.
+   - Run your own ideas through the tools before you offer them: a burn, a free token that can be spent, a new route
+     is a spec change like any other (`xsolana_check`), and an alternative is offered only once it checks.
+   - Turn each finding into a question to the person when it rests on what they know (how many players, who counts
+     as one buyer, who delivers a prize, who is around when a step is due): `xsolana_check` lists the questions.
+   - Before you build an ask that removes a way out (a burn, a token that can't move, a payment taken before the
+     outcome), name the simpler version that keeps it.
+   - Say what freezes as each setting is agreed (`Only before …` in the walk-through), not only in the last checklist;
+     when a new fact reopens a settled choice, say what changed and why.
+   - State every cap in one unit, every time: an amount per identity per window ("1 a wallet a day", "2,000 a person
+     in all").
+   - Say outright when a real-money sale is a fixed price and not random.
+   - When use changes hands for a while (a stake, a listing, a rental, a loan), say who holds the NFT at each stage
+     and who can move it.
+   - Pass on `xsolana_check`'s "Tell the person" lines in your answer, as written: they are final, not notes.
+   - Check every limit you write against what you told the person (a cap of a day is not a cap of a week; a grant's
+     caps count claims, each up to its amount).
+   - Never promise a report, a follow-up or a channel you don't have.
 
 10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
     (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the
     server naming an X account, never a wallet), keep token rewards for results small, and have a server decide or
     replay a result worth paying rather than take the page's word (`@xgamesfun/solana/results`: `collectiblesOf`,
     `verifyProof`, `makeCodes`). Keep entry fees and prize pools for results the server decides and for chance, and
-    give a minted farm an end. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
+    give a minted farm an end. Price each measure against bots by what a failed attempt costs a script, not only by
+    the daily ceiling: a check that clamps to its bound costs a script nothing, one that refuses costs it the attempt. A short secret (a code, a PIN) is never stored as a plain hash, which a small space reverses:
+    hash it with a key, or keep it in the server's secret store. The checker warns about the rest (`W-GRANT-TOTAL`, `W-GRANT-OPEN`, `W-FARM-MINT`);
     `references/trust-and-cheating.md` says why.
 
-11. **People finish what follows; build the button, not a server.** Every step after a player's ask (settle a roll,
-    draw a lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a
-    win, end an auction, run a sealed schedule, take a rental's NFT home) can be sent by the person who
-    gains from it, from the page (`app.claims()` lists them, `app.claim(c)` sends one). A
-    grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay its fees,
-    nobody claims for a player. loot needs no server to finish anything. Never make a key in a page or a server for
-    the owner to fund: whoever signs pays.
+11. **Say who finishes each step, and let the person choose.** Every step after a player's ask (settle a roll, draw a
+    lottery, pull its parts (each place, a refund, a share), refund a draw the oracle never answered, claim a win, end
+    an auction, run a schedule, take a rental's NFT home) is sent by someone, and waits until it is. The walk-through
+    (`xsolana_explain`, "Each route, state by state") names who may send each, who pays, and what happens if nobody
+    does. Two ways to finish them, and the trade between them:
+    - **A button on the page** for whoever gains from it (`app.claims()` lists them, `app.claim(c)` sends one): no
+      server and no key to keep, and the player pays its fee, but it waits for a visitor.
+    - **A key on a server** that sends them on time (the owner's authority, or a key of the project's with only the
+      powers it needs): nothing waits, but the server holds a key whoever breaks in can use, and the owner funds its
+      fees. Keep it small and capped, and say what it can do.
+      Put both to the person when timing matters (a reveal at a set hour, refunds after a cancel) and build what they
+      choose. A grant's claim is the winner's alone: the winning wallet signs it, whatever proves it won; anyone may pay
+      its fees.
 
 12. **Review before going live, and let the person choose the trade-off.** Run `xsolana_review` before the owner
     approves. Fix every high finding, or have the person accept it in plain words. Declare `"trust"` honestly on every
@@ -110,6 +142,11 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
    sentence in `prompt`. Add a `scenario` with the counts they expect (how many opens a day).
 4. **Check it**: `xsolana_check {"spec": …}`. Fix every refusal; every warning is something to tell the person, in a
    sentence of its own.
+   **Check before you describe.** Name no mechanism that moves value (a burn, a free token, a swap, a refund, a payment
+   held or not) to the person until `xsolana_check` has seen a draft with it and you have read its "Tell the person",
+   "Ask the person" and "When it goes wrong" lines. With only their sentence, draft from `xsolana_examples {"query"}`
+   and check that first: your first plan is a checked one. Quote every count of approvals from the check, never your
+   own (N at once is in its lines).
 5. **Simulate and explain it**: `xsolana_simulate`, then `xsolana_explain`. Tell the person, in a few short lines, what each
    play costs and is worth, where the money goes, how the pools fill and drain, what going live costs, what the
    authority must sign while it runs, and the flags: `references/telling-the-person.md`. Before they approve, say who
@@ -143,7 +180,7 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
 9. **When they say "put it live"**: `xsolana_publish` lists every step and its cost and gives the commands, which you
    run in the project folder exactly as given (they name the exact version; never drop it):
    - **A new economy gets a key file**, unless the project has one:
-     `npx -y @xgamesfun/solana@0.28.10 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
+     `npx -y @xgamesfun/solana@0.28.11 keygen ~/.config/xsolana/<name>.json`. Give the person the address it prints. A
      Solana key file they already have and name themselves (`~/.config/solana/id.json`) works the same; never go
      looking for one.
    - **Say what the key file is** before anything is sent: the project's owner, and, unless the spec says otherwise,
@@ -158,7 +195,7 @@ or `npx -y @xgamesfun/solana@0.28.10 tool <name> '<json>'` for any tool (always 
      devnet SOL for an economy on devnet, real SOL for one on mainnet), any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names. A
      collection they already have needs the key's address as its update authority. If they would rather not move
      those, offer the browser wallet.
-   - **Show it**: `npx -y @xgamesfun/solana@0.28.10 approve xsolana.json --keypair <key file>` prints every step with
+   - **Show it**: `npx -y @xgamesfun/solana@0.28.11 approve xsolana.json --keypair <key file>` prints every step with
      what it pays and trusts, the warnings, the notice and a code, and sends nothing. Give the person that printout as
      it is, not a summary of it, and ask.
    - **On their yes**, the same command with `--yes <code>`. What lands is written back into `xsolana.json`. If it

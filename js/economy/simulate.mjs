@@ -207,7 +207,8 @@ export function salePrices(part, perDay, days, fallStartsAfter = 0, budget = wal
 export function simulate(economy, { now = 0 } = {}) {
   const m = model(economy, { now });
   const game = m.currencyKey;
-  const days = m.scenario.days ?? 30;
+  // The scenario's days, or 30, or as long as the longest farm runs when that is longer.
+  const days = m.scenario.days ?? Math.max(30, ...m.farms.map(f => Math.ceil((toSeconds(f.runs) || 0) / DAY)));
   /** The days a one-off (an auction's sale, a lottery that draws once) is spread over: the scenario's, or one when it has none. */
   const scenarioDays = days > 0 ? days : 1;
   const budget = walkBudget();

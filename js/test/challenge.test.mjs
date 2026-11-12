@@ -83,8 +83,8 @@ test('three analyses, three codes: the situation each found is in its message', 
   );
   assert.deepEqual([...codes].sort(), ['W-ASSUMPTION', 'W-STEPS', 'W-VALUE']);
   const r = review(spec(), { now: NOW });
-  assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'medium'));
-  assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'medium'));
+  assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'high'));
+  assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'high'));
   assert.ok(r.findings.some(f => f.id === 'R-STEPS' && f.severity === 'low'));
 });
 
@@ -98,7 +98,8 @@ test('follow the value, cancelled: a refund in the ticket token, not what was pa
   const none = spec();
   for (const l of none.lotteries) delete l.minSold;
   const [w] = check(none, { now: NOW }).warnings.filter(x => x.code === 'W-VALUE' && x.message.includes('cancelled:'));
-  assert.match(w.message, /one the oracle hasn't answered 7 days after its ask/);
+  assert.match(w.message, /a draw the oracle hasn't answered 7 days after it was asked/);
+  assert.equal(w.severity, 'low', 'only the oracle’s timeout: rare');
   assert.doesNotMatch(w.message, /short of/);
 });
 
@@ -158,7 +159,7 @@ test('one intent, one step: a price the player crafts first points to make, one 
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
   assert.deepEqual(found(own, 'W-STEPS'), []);
-  // A box priced in the crafted token: the same two steps.
+  // A box priced in the crafted token, which rolls: craft, buy, settle.
   const box = spec();
   box.boxes = [
     {
@@ -166,7 +167,10 @@ test('one intent, one step: a price the player crafts first points to make, one 
       name: 'Chest',
       price: 2,
       currency: 'entry',
-      outcomes: [{ gives: 'item', item: 'winner', weight: 1 }],
+      outcomes: [
+        { gives: 'item', item: 'winner', weight: 1 },
+        { gives: 'nothing', weight: 9 },
+      ],
     },
   ];
   assert.ok(found(box, 'W-STEPS').includes('economy.boxes.chest'));
@@ -217,7 +221,7 @@ test('explain and the review end with each route, state by state, as a player, t
   ])
     assert.match(draw, new RegExp(`- ${state}: `), state);
   for (const who of ['Player:', 'Owner:', 'Cheater:']) assert.ok(draw.includes(who), who);
-  assert.match(draw, /refunded in ENTRY/);
+  assert.match(draw, /refunds every ticket in ENTRY/);
   assert.match(draw, /“100 BUBL for an Entry” turns it back once the project switches it on/);
   assert.match(walk, /“100 BUBL for an Entry”: a recipe\n {2}- Before it opens: It is switched off/);
   assert.match(review(s, { now: NOW }).tradeoffs, /Each route, state by state/);
@@ -249,4 +253,207 @@ test('the worked example of sentence-to-spec.md checks, and explain puts every l
     'the gacha is flagged W-CHANCE-ITEMS',
   );
   assert.match(law, /resell/i);
+});
+
+test('follow the value: a loop of recipes that gains, and a valued token minted for free faster than it burns', () => {
+  const loop = spec();
+  loop.recipes[1].out[0].amount = 150; // an entry back for 150 BUBL, bought for 100
+  loop.recipes[1].active = true;
+  const w = check(loop, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('around a loop:'));
+  assert.ok(w, 'a loop that gives 1.5 for 1');
+  assert.equal(w.severity, 'high');
+  assert.match(w.message, /gives back 1\.5 for each 1/);
+  // ENTRY, which turns back into BUBL, minted free by a grant with no daily cap: net flow.
+  const mint = spec();
+  delete mint.grants[1].limits.perDay;
+  delete mint.grants[1].limits.total;
+  const flow = check(mint, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('net flow:'));
+  assert.ok(flow && flow.severity === 'high' && /with no cap at all/.test(flow.message), flow?.message);
+  // Capped at 5 a day, below the 8 a day the scenario burns (the first draw's "rest": "burn"): no flag.
+  mint.grants[1].limits.perDay = 5;
+  assert.ok(!check(mint, { now: NOW }).warnings.some(x => x.message.includes('net flow:')));
+});
+
+test('check every assumption: one item through two routes, a cap against the audience, who runs each step, a link fixed at mint', () => {
+  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-ASSUMPTION');
+  assert.ok(ws.some(w => w.where === 'economy.items.winner' && /supply of 1 is shared/.test(w.message)));
+  const asks = ws.filter(w => w.ask).map(w => w.ask);
+  assert.equal(
+    asks.filter(a => a.startsWith('Who runs the results server')).length,
+    1,
+    'one question for the voucher server',
+  );
+  assert.ok(asks.some(a => a.startsWith('Who delivers the off-chain prize of “draw” and “draw2”')));
+  assert.ok(asks.some(a => a.startsWith('Who asks for “draw”')));
+  const few = spec();
+  few.scenario.players = 20000;
+  assert.ok(check(few, { now: NOW }).warnings.some(w => w.where === 'economy.grants.free-entry.limits.total'));
+  const card = spec();
+  card.items[0].kind = 'collectible';
+  assert.ok(check(card, { now: NOW }).warnings.some(w => w.where === 'economy.items.winner.uri'));
+});
+
+test('the check tool asks the questions and shows each route’s cancel and change of mind', async () => {
+  const { runTool } = await import('../mcp/server.mjs');
+  const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
+  assert.match(r.text, /Ask the person before building on it:\n\? /);
+  assert.match(r.text, /When it goes wrong or a player changes their mind/);
+  assert.match(r.text, /“draw”, cancelled or failed: Anyone: refunds every ticket in ENTRY/);
+});
+
+test('follow the value through a farm: growth when rewards are staked again, payback of what a seat costs', () => {
+  const farm = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  // 5% a day minted on a stake of the same token, for 90 days: it doubles in about 14 days.
+  farm.farms[0] = { ...farm.farms[0], rate: { perDay: 0.05, minted: true }, runs: '90d' };
+  const grows = check(farm, { now: NOW }).warnings.find(w => w.message.includes('growth:'));
+  assert.ok(grows, 'growth is reported');
+  assert.match(grows.message, /doubling every 14\.2 days/);
+  assert.equal(grows.severity, 'high');
+  // No rate given and no stake in the scenario: what a seat earns is a question for the person.
+  const plain = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  assert.ok(check(plain, { now: NOW }).warnings.some(w => w.code === 'W-ASSUMPTION' && w.ask?.includes('staked')));
+});
+
+test('follow the value through a farm: a seat that earns back more than it costs, and earning items given away', () => {
+  const s = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  s.collection = { name: 'Land' };
+  s.items = [{ key: 'deed', name: 'Deed', kind: 'collectible', uri: 'https://example.com/deed.json', price: 10 }];
+  s.farms.push({
+    key: 'land',
+    name: 'The land',
+    stakes: 'collectibles',
+    item: 'deed',
+    rewards: 'gem',
+    custody: 'escrow',
+    rate: { perDay: 1, minted: true },
+    runs: '30d',
+    tiers: [{ lock: 0, multiplier: 1 }],
+  });
+  s.grants = [
+    { key: 'drop', name: 'Deed drop', prize: { gives: 'item', item: 'deed' }, limits: { total: 50, perWallet: 1 } },
+  ];
+  const ws = check(s, { now: NOW }).warnings;
+  const payback = ws.find(w => w.message.includes('payback:'));
+  assert.match(payback.message, /earns 30 GEM over 30 days at x1, against the 10 GEM it costs: 3× back/);
+  assert.equal(payback.severity, 'high', 'some are given away free');
+  assert.match(
+    ws.find(w => w.message.includes('given away:')).message,
+    /its 50 claims print up to 1500 GEM over 30 days\./,
+  );
+});
+
+test('where each rule is kept: a contest’s decider, what it gains, and when the outcome can first be known', () => {
+  const duel = JSON.parse(readFileSync(new URL('../../examples/duel-arena.json', import.meta.url), 'utf8'));
+  const ws = check(duel, { now: NOW }).warnings.filter(w => w.code === 'W-ENFORCED');
+  const key = ws.find(w => w.where === 'economy.contests.duel');
+  assert.match(key.message, /authority key, which can also mint/);
+  assert.equal(key.severity, 'medium');
+  assert.ok(ws.some(w => w.ask?.startsWith('When can someone first learn the outcome of “Duel”')));
+  // With a decider key, only the trust remains.
+  duel.contests[0].deciders = ['HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD'];
+  const decided = check(duel, { now: NOW }).warnings.find(
+    w => w.code === 'W-ENFORCED' && w.where === 'economy.contests.duel',
+  );
+  assert.equal(decided.severity, 'low');
+  assert.match(decided.message, /decider keys' signed verdict/);
+});
+
+test('the largest holder takes part: the owner’s fixed supply staked in a farm shared by stake', () => {
+  const coin = JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
+  const w = check(coin, { now: NOW }).warnings.find(x => x.message.startsWith('The largest holder takes part'));
+  assert.ok(w, 'the owner’s holding is followed into the farm');
+  assert.match(w.message, /60% of its supply/);
+  assert.equal(w.severity, 'high');
+  assert.ok(w.ask);
+});
+
+test('loops across routes, the biggest payout, every way a round ends', async () => {
+  const s = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  s.collection = { name: 'Land' };
+  s.items = [
+    { key: 'deed', name: 'Deed', kind: 'collectible', uri: 'https://example.com/deed.json', price: 10, perWallet: 5 },
+  ];
+  s.farms.push({
+    key: 'land',
+    name: 'The land',
+    stakes: 'collectibles',
+    item: 'deed',
+    rewards: 'gem',
+    custody: 'escrow',
+    rate: { perDay: 1, minted: true },
+    runs: '30d',
+    tiers: [{ lock: 0, multiplier: 1 }],
+  });
+  s.grants = [
+    {
+      key: 'spin',
+      name: 'Daily spin',
+      prize: { gives: 'tokens', amount: 5, from: 'mint', currency: 'gem' },
+      limits: { perWalletEach: { count: 1, every: '1d' } },
+    },
+  ];
+  const ws = check(s, { now: NOW }).warnings;
+  const loop = ws.find(w => w.message.includes('around a loop:'));
+  assert.match(
+    loop.message,
+    /buying “Deed” .* then staking in “The land” for 30 days .* One turn gives back 3 for each 1 put in/,
+  );
+  assert.match(loop.message, /5 a wallet bounds how often, not the edge/);
+  assert.match(
+    ws.find(w => w.message.includes('a day: the free')).message,
+    /“Daily spin” pays a player about 5 GEM a day/,
+  );
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
+  assert.match(
+    text,
+    /“draw”, every way it ends: Nothing sold: .* Nobody asks for the draw: .* The oracle never answers: /,
+  );
+});
+
+test('round 4: what to tell the person, scarce supply, a loop through the server, an outside token’s holders', async () => {
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
+  assert.match(text, /Tell the person, as written/);
+  assert.match(text, /> If “draw” is cancelled, a ticket's refund is ENTRY, not the 100 BUBL it was bought with\./);
+  assert.match(
+    text,
+    /> “Popped bubbles”: each claim gives up to 12000 BUBL from “taps”; the caps count claims: .*2000 a person in all \(up to 24000000 BUBL\)/,
+  );
+
+  // A capped item for sale, demand unknown: ask; demand far over supply, resellable: high.
+  const drop = spec();
+  drop.items.push({ key: 'card', name: 'Card', price: 50, supply: 10 });
+  delete drop.scenario.players;
+  assert.ok(check(drop, { now: NOW }).warnings.some(w => w.where === 'economy.items.card.supply' && w.ask));
+  drop.scenario.perDay = { ...drop.scenario.perDay, 'item:card': 100 };
+  assert.equal(check(drop, { now: NOW }).warnings.find(w => w.where === 'economy.items.card.supply').severity, 'high');
+
+  // The server turns ENTRY into 150 BUBL: a loop with the entry recipe, followed through "offchain".
+  const server = spec();
+  server.recipes.pop();
+  server.offchain = [{ key: 'boost', name: 'Entry bonus', takes: 'entry', gives: 'bubl', rate: 150 }];
+  const loop = check(server, { now: NOW }).warnings.find(w => w.message.includes('around a loop:'));
+  assert.match(loop.message, /“Entry bonus” off chain/);
+
+  // An outside token staked in a shared farm: who holds it is asked, then followed.
+  const farm = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  farm.tokens.push({
+    key: 'gld',
+    source: 'existing',
+    mint: 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD',
+    symbol: 'GLD',
+    decimals: 6,
+  });
+  farm.farms.push({ key: 'vault', name: 'Vault', stakes: 'gld', rewards: 'gem', tiers: [{ lock: 0, multiplier: 1 }] });
+  assert.ok(
+    check(farm, { now: NOW }).warnings.some(
+      w => w.where === 'economy.tokens.gld' && w.ask?.startsWith('Who holds GLD'),
+    ),
+  );
+  farm.scenario = { holders: { gld: { supply: 1000, owner: 600 } } };
+  assert.match(
+    check(farm, { now: NOW }).warnings.find(w => w.message.startsWith('The largest holder')).message,
+    /holds 600 GLD, 60% of its supply/,
+  );
 });

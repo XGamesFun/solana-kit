@@ -512,6 +512,8 @@ export function model(economy, { now = 0 } = {}) {
     grants: assignIds(e.grants ?? [], 'id', 1),
     traits: e.traits ?? [],
     decisions: e.decisions ?? [],
+    /** What a server or page does off chain with what players hold, declared so value is followed through it. */
+    offchain: e.offchain ?? [],
     scenario: e.scenario ?? {},
     live: e.live ?? {},
   };
@@ -600,6 +602,45 @@ export function prizeLine(p) {
 
 /** The pool a prize line pays from: tokens' "pool:<key>". */
 export const prizePool = p => (p?.gives === 'tokens' && p.from?.startsWith('pool:') ? p.from.slice(5) : null);
+
+/**
+ * What one unit staked in farm `f` earns over its whole life at x1, at its fixed rate: { perDay, days, total, says }.
+ * `total` is null for good (a rate with no end, no halving, no term on every tier, no upkeep); a halving rate's total
+ * is its ceiling, the rate's days halved again and again (at most twice what its first period pays). null for a farm
+ * that shares what lands.
+ */
+export function farmCeiling(f) {
+  if (!f?.rate) return null;
+  const perDay = Number(f.rate.perDay ?? 0);
+  const runs = f.runs ? toSeconds(f.runs) / 86_400 : null;
+  const halve = f.rate.halveEvery ? toSeconds(f.rate.halveEvery) / 86_400 : null;
+  const term =
+    (f.tiers ?? []).length && (f.tiers ?? []).every(t => t.earnsFor)
+      ? Math.max(...f.tiers.map(t => toSeconds(t.earnsFor) / 86_400))
+      : null;
+  const life = [runs, term].filter(x => x !== null);
+  const days = life.length ? Math.min(...life) : null;
+  if (!halve) {
+    if (days === null || f.upkeepAttribute)
+      return {
+        perDay,
+        days,
+        total: days === null ? null : perDay * days,
+        says: days === null ? `${perDay} a day for good` : `${perDay} a day for ${+days.toFixed(2)} days`,
+      };
+    return { perDay, days, total: perDay * days, says: `${perDay} a day for ${+days.toFixed(2)} days` };
+  }
+  // Halving every `halve` days: period k pays perDay / 2^k a day, until the farm's end if it has one.
+  let total = 0;
+  for (let k = 0, left = days ?? Infinity; left > 0 && k < 64; k++, left -= halve)
+    total += (perDay / 2 ** k) * Math.min(halve, left);
+  return {
+    perDay,
+    days,
+    total,
+    says: `${perDay} a day halving every ${+halve.toFixed(2)} days${days !== null ? ` for ${+days.toFixed(2)} days` : ''}: at most ${+total.toFixed(6)} in all, ${+(perDay * halve).toFixed(6)} of it in the first ${+halve.toFixed(2)} days`,
+  };
+}
 
 /** The token a prize line pays in: its pool's, or the one it mints. */
 export const prizeToken = (p, m) =>

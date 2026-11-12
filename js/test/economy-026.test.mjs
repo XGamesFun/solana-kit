@@ -352,7 +352,7 @@ describe('each warning, in the words a founder reads', () => {
       contests: [{ key: 'c', name: 'C', sides: 2, entriesClose: '1d', stake: 1 }],
     });
     assert.match(said(spec, 'W-HOLD', 'economy.holds.h').message, /the project’s authority alone decides/);
-    assert.match(said(spec, 'W-CONTEST', 'economy.contests.c').message, /can also enter it/);
+    assert.match(said(spec, 'W-ENFORCED', 'economy.contests.c').message, /can also enter/);
   });
 
   test('a no-loss lottery that sells until the draw', () => {
