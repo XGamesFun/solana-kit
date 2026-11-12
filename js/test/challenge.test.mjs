@@ -297,3 +297,44 @@ test('the check tool asks the questions and shows each route’s cancel and chan
   assert.match(r.text, /When it goes wrong or a player changes their mind/);
   assert.match(r.text, /“draw”, cancelled or failed: Anyone: refunds every ticket in ENTRY/);
 });
+
+test('follow the value through a farm: growth when rewards are staked again, payback of what a seat costs', () => {
+  const farm = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  // 5% a day minted on a stake of the same token, for 90 days: it doubles in about 14 days.
+  farm.farms[0] = { ...farm.farms[0], rate: { perDay: 0.05, minted: true }, runs: '90d' };
+  const grows = check(farm, { now: NOW }).warnings.find(w => w.message.includes('growth:'));
+  assert.ok(grows, 'growth is reported');
+  assert.match(grows.message, /doubling every 14\.2 days/);
+  assert.equal(grows.severity, 'high');
+  // No rate given and no stake in the scenario: what a seat earns is a question for the person.
+  const plain = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  assert.ok(check(plain, { now: NOW }).warnings.some(w => w.code === 'W-ASSUMPTION' && w.ask?.includes('staked')));
+});
+
+test('follow the value through a farm: a seat that earns back more than it costs, and earning items given away', () => {
+  const s = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+  s.collection = { name: 'Land' };
+  s.items = [{ key: 'deed', name: 'Deed', kind: 'collectible', uri: 'https://example.com/deed.json', price: 10 }];
+  s.farms.push({
+    key: 'land',
+    name: 'The land',
+    stakes: 'collectibles',
+    item: 'deed',
+    rewards: 'gem',
+    custody: 'escrow',
+    rate: { perDay: 1, minted: true },
+    runs: '30d',
+    tiers: [{ lock: 0, multiplier: 1 }],
+  });
+  s.grants = [
+    { key: 'drop', name: 'Deed drop', prize: { gives: 'item', item: 'deed' }, limits: { total: 50, perWallet: 1 } },
+  ];
+  const ws = check(s, { now: NOW }).warnings;
+  const payback = ws.find(w => w.message.includes('payback:'));
+  assert.match(payback.message, /earns 30 GEM over 30 days at x1, against the 10 GEM it costs: 3× back/);
+  assert.equal(payback.severity, 'high', 'some are given away free');
+  assert.match(
+    ws.find(w => w.message.includes('given away:')).message,
+    /its 50 claims print up to 1500 GEM over 30 days\./,
+  );
+});

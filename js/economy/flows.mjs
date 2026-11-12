@@ -78,7 +78,8 @@ function participation(m, kind, key, days, perWallet) {
 }
 
 /**
- * The model: { assets, routes }.
+ * The model: { assets, routes, worth }. `worth`: Map asset key (an item's as "item:<key>") → its worth in the project's
+ * currency at the spec's own rates.
  *
  * `assets`: Map asset key → { key, symbol, money, origins, free, backs, uses }: `money` for the project's currency
  * and SOL, what a player already holds as value; `origins`, recipes that sell it for another asset ({ recipe, pays,
@@ -114,6 +115,24 @@ export function flows(m, { now }) {
   }
   const priced = list => words(list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`));
   const on = x => x?.active !== false;
+  // What each asset is worth in the project's currency, at the spec's own rates: the currency itself, what a recipe
+  // sells it for, else what a recipe turns it into; an item at its shop price. null when nothing prices it.
+  const worth = new Map([[m.currencyKey, 1]]);
+  for (let pass = 0; pass < 4; pass++)
+    for (const [key, a] of assets) {
+      if (worth.has(key)) continue;
+      const value = list =>
+        list.every(p => worth.has(p.asset)) ? list.reduce((n, p) => n + worth.get(p.asset) * p.amount, 0) : null;
+      const bought = a.origins.map(o => value(o.pays)).find(v => v !== null);
+      if (bought !== undefined) worth.set(key, bought / a.origins.find(o => value(o.pays) === bought).makes);
+      else {
+        const back = a.backs.find(b => value(b.gives) !== null);
+        if (back) worth.set(key, value(back.gives) / back.takes);
+      }
+    }
+  for (const b of m.shop)
+    if ((b.currency ?? m.currencyKey) === m.currencyKey || worth.has(b.currency))
+      worth.set(`item:${b.shopOf}`, num(b.price) * (worth.get(b.currency ?? m.currencyKey) ?? 1));
   const routes = [];
 
   // ---- lotteries
@@ -518,7 +537,7 @@ export function flows(m, { now }) {
   other('contest', m.contests, c => c.currency ?? m.currencyKey);
   other('payment', m.payments, p => p.currency ?? m.currencyKey);
   other('farm', m.farms, f => (m.tokens.has(f.stakes) ? f.stakes : null));
-  return { assets, routes };
+  return { assets, routes, worth };
 }
 
 /** A recipe's inputs in words. */

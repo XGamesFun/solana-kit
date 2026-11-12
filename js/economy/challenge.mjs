@@ -274,6 +274,83 @@ export function challenge(m, warn, now, economy) {
     );
   }
 
+  // Farms: what a seat earns over the farm's run against what its stake costs (payback), how fast a stake grows when
+  // its rewards buy more of it (growth), and what the earning items given away print. At x1, before any halving.
+  const { worth } = fl;
+  const money = sym(m.currencyKey);
+  for (const f of m.farms) {
+    sim ??= simulateOrNull(economy, now);
+    const row = sim?.farms?.find(x => x.key === f.key);
+    const days = f.runs ? toSeconds(f.runs) / 86_400 : num(sim?.scenario?.days);
+    if (!row) continue;
+    if (row.perUnitPerDay === undefined) {
+      if (f.rate?.shared || !f.rate)
+        warn(
+          'W-ASSUMPTION',
+          `economy.farms.${f.key}`,
+          `Unknown: what a seat of ${named(f)} earns depends on how much is staked, and the scenario doesn't say ("scenario.staked": {"${f.key}": n}). Ask the person how much they expect staked, then check again.`,
+          `Ask, then write it in "scenario.staked".`,
+          { severity: 'medium', ask: `How much do you expect staked in ${named(f)}?` },
+        );
+      continue;
+    }
+    const per = num(row.perUnitPerDay);
+    const stakeKey = f.stakes === 'collectibles' ? (f.item ? `item:${f.item}` : null) : f.stakes;
+    const cost = stakeKey ? worth.get(stakeKey) : undefined;
+    const reward = worth.get(f.rewardsToken);
+    const unit =
+      f.stakes === 'collectibles' ? `${f.item ? named(m.item.get(f.item)) : 'NFT'} staked` : `${sym(f.stakes)} staked`;
+    const halving = f.rate?.halveEvery ? `, before its halving every ${f.rate.halveEvery}` : '';
+    const freeStake =
+      f.stakes === 'collectibles'
+        ? f.item &&
+          (m.grants.some(g => prizeLine(g.prize ?? g.gives)?.item === f.item) ||
+            m.lotteries.some(l => (l.places ?? []).some(p => prizeLine(p.prize)?.item === f.item)) ||
+            m.allBoxes.some(b => !b.shopOf && (b.outcomes ?? []).some(o => o.item === f.item)))
+        : assets.get(f.stakes)?.free.length > 0;
+    if (cost && reward !== undefined && days) {
+      const ratio = (per * days * reward) / cost;
+      if (ratio > 1)
+        warn(
+          'W-VALUE',
+          `economy.farms.${f.key}`,
+          `Following ${sym(f.rewardsToken)} out of ${named(f)}, payback: each ${unit} earns ${+(per * days).toFixed(6)} ${sym(f.rewardsToken)} over ${+days.toFixed(2)} days at x1${halving}${f.rewardsToken !== m.currencyKey ? `, worth ${+(per * days * reward).toFixed(6)} ${money}` : ''}, against the ${+cost.toFixed(6)} ${money} it costs: ${+ratio.toFixed(3)}× back, so every extra wallet that stakes one more profits${freeStake ? ', and some are given away free, so every extra identity that gets one prints for nothing' : ''}.`,
+          'Lower the rate or the run until a seat earns back at most what it costs, pay from a fixed vault instead of minting, or cap who may stake (a gate, perWallet).',
+          { severity: freeStake ? 'high' : 'medium' },
+        );
+    }
+    // Growth: rewards that buy more of the stake (the same token, or one that prices it).
+    const sameToken = f.rewardsToken === f.stakes;
+    const rate = sameToken
+      ? per
+      : cost && reward !== undefined && f.stakes !== 'collectibles'
+        ? (per * reward) / cost
+        : null;
+    if (rate && rate > 0 && days) {
+      const doubling = Math.log(2) / Math.log(1 + rate);
+      if (doubling < days)
+        warn(
+          'W-VALUE',
+          `economy.farms.${f.key}`,
+          `Following ${sym(f.rewardsToken)} back into ${named(f)}, growth: a stake whose rewards are staked again grows ${+(rate * 100).toFixed(4)}% a day, doubling every ${+doubling.toFixed(1)} days, ×${+Math.pow(1 + rate, days).toPrecision(4)} over its ${+days.toFixed(2)} days${halving}. Its end limits how long it grows, not how fast.`,
+          'Lower the rate (halve it every so often: "halveEvery"), or pay rewards in a token that doesn’t buy more stake.',
+          { severity: doubling < days / 4 ? 'high' : 'medium' },
+        );
+    }
+    // Giveaways of what this farm takes, priced in what they print.
+    if (f.stakes === 'collectibles' && f.item)
+      for (const g of m.grants.filter(g => prizeLine(g.prize ?? g.gives)?.item === f.item)) {
+        const count = num(g.limits?.total);
+        warn(
+          'W-VALUE',
+          `economy.grants.${g.key}`,
+          `Following ${sym(f.rewardsToken)}, given away: ${named(g)} gives ${named(m.item.get(f.item))}, which earns ${per} ${sym(f.rewardsToken)} a day in ${named(f)}: ${count ? `its ${count} claims print up to ${+(count * per * days).toFixed(6)} ${sym(f.rewardsToken)} over ${+days.toFixed(2)} days${reward !== undefined && f.rewardsToken !== m.currencyKey ? `, worth ${+(count * per * days * reward).toFixed(6)} ${money}` : ''}` : 'it has no total, so what it prints has no cap'}.`,
+          'Cap the grant ("limits.total") at what you would pay out, or give an item the farm doesn’t take.',
+          { severity: count ? 'medium' : 'high' },
+        );
+      }
+  }
+
   // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
   // only a person or a server sends; what freezes at the first sale.
   const givers = new Map();
