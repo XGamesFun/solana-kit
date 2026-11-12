@@ -4,6 +4,41 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.18: a short first call, a short skill, and the skill's per-case lines in the outputs that fire them (loot 0.28.0, unchanged)
+
+The tools and the skill. What an agent loads before it has done anything is a fraction of what it was:
+
+|                                      | 0.28.17           | 0.28.18                                  |
+| ------------------------------------ | ----------------- | ---------------------------------------- |
+| `xsolana_guide {}`, text             | 80,555 characters | 3,759                                    |
+| `xsolana_guide {}`, whole MCP result | 233,681           | 6,643                                    |
+| `SKILL.md`                           | 28,140            | 14,955                                   |
+| `references/sentence-to-spec.md`     | 133,025           | 42,218 (with the token table it took in) |
+| MCP instructions                     | 382 words         | 253                                      |
+
+- **The guide is an index first.** With no `part`, `xsolana_guide` (and `xsolana guide`) gives the loop, then every
+  part and topic with when to fetch it. Parts are unchanged. The guide's other sections are topics fetched the same
+  way: `writing`, `cheating`, `asks`, `cannot`. `guideText()` still gives the whole guide.
+- **structuredContent is the data alone**, not the text again; `xsolana_review` drops `tradeoffs`, which its text
+  holds.
+- **The MCP instructions** are the tools' order and limits, naming every tool (`xsolana_design` was missing). The key
+  rule stays in `xsolana_publish`'s description and `approve`'s printout.
+- **Errors show the fix's shape.** `E-SCHEMA` gives the shape the schema takes where it failed, or the fields a place
+  takes, and the guide part to fetch. An argument a tool doesn't take lists the ones it does.
+- **One rule for what the person hears.** `xsolana_check` prints the law's lines under "The law", said as written once
+  when first raised and again before mainnet; trust facts (what a script or a leaked key can take) as written; every
+  other line in the agent's own words, every number kept, none dropped. Each warning reaches the person once, with
+  its fix and a pick. Every way a round ends is said once.
+- **The skill's per-case lines moved to where they fire**: check before you describe (`xsolana_check`'s description),
+  what to settle before calling it ready (`xsolana_review`), what freezes as each setting is agreed (the walk-through),
+  play first, then clean, then secure, and the version that keeps a way out (`xsolana_design`).
+- **The skill** keeps its safety rules, the method and each "never" that guards keys or money, with its reason. The
+  token table moved to `sentence-to-spec.md`. Reference tables are compact, and Prettier leaves `skills/` out.
+- **Doc-lint:** every tool, CLI command and guide part the skill, the references, the instructions and the README name
+  exists; every tool is in the instructions; the skill and the guide's index stay within their budgets.
+- **Evals:** a prompt with `"offer": true` (a result decided off the chain, whose trust level is the person's) passes
+  a run that stops to ask the person, where it used to need a saved spec.
+
 ## 0.28.17: every "Ask the person" line is a question (loot 0.28.0, unchanged)
 
 The tools alone. Each line of `xsolana_check`'s "Ask the person" list now ends as a question. Its context comes first
