@@ -167,6 +167,29 @@ export function challenge(m, warn, now, economy) {
   };
   for (const key of new Set(edges.map(x => x.from))) walkLoop(key, key, [], 1);
 
+  // Every path to the same thing, priced at the spec's own rates (a crafted input at what crafting it costs, so a chain
+  // of recipes is priced through): one far cheaper than the others is the path everyone takes.
+  const costs = new Map();
+  for (const e of edges) {
+    const w = fl.worth.get(e.from);
+    if (w === undefined || !(e.rate > 0)) continue;
+    costs.set(e.to, [...(costs.get(e.to) ?? []), { cost: w / e.rate, e }]);
+  }
+  for (const [to, paths] of costs) {
+    const byRoute = [...new Map(paths.map(p => [p.e.route, p])).values()].sort((a, b) => a.cost - b.cost);
+    if (byRoute.length < 2) continue;
+    const [cheap, dear] = [byRoute[0], byRoute.at(-1)];
+    if (!(cheap.cost < dear.cost * 0.67)) continue;
+    const item = to.startsWith('item:') ? m.item.get(to.slice(5)) : null;
+    warn(
+      'W-VALUE',
+      cheap.e.where,
+      `Following ${label(to)}, its paths: ${byRoute.map(p => `${p.e.says} costs about ${+p.cost.toPrecision(4)} ${sym(m.currencyKey)} for one`).join('; ')}. The cheapest is ${+(dear.cost / cheap.cost).toFixed(2)}× cheaper than the dearest, so it is the path everyone takes${item?.supply ? `, and the ${item.supply} there are go that way first` : ''}.`,
+      'Price the paths to meet, or say which one is meant to be the cheap one and why.',
+      { severity: item?.supply ? 'medium' : 'low' },
+    );
+  }
+
   // What each feature pays a player a day, in the project's currency: a free one that pays the most is the economy's
   // biggest payout, whatever it was meant to be.
   const pays = payouts(m, fl, sim);
@@ -521,7 +544,7 @@ export function challenge(m, warn, now, economy) {
       'Ask, then declare each in "offchain" ({ "key", "takes", "gives", "rate" }) and check again.',
       {
         severity: 'low',
-        ask: 'Does your server or page turn anything players hold or win into an advantage (a boost, a better reward, a ranking that pays)?',
+        ask: 'Does your server or page turn anything players hold or win into an advantage (a boost, a better reward, a ranking that pays)? For each thing your server runs, what does it compute itself, and what does it only record from the page?',
       },
     );
 

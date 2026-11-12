@@ -32,7 +32,8 @@ test('a bounded claim whose NFT earns minted tokens in a farm with no end is hig
   const high = ids(r, 'high');
   for (const g of ['found-bronze', 'found-silver', 'found-gold'])
     assert.ok(high.includes(`R-CLAIM-COMPOUNDS grant:${g}`), high.join());
-  assert.ok(ids(r).includes('R-FARM-ENDLESS farm:vault'));
+  // (the farm minting with no end: the net flow of what it mints)
+  assert.ok(ids(r).includes('R-VALUE token:shard'));
   // The shape another package reads.
   for (const route of r.routes)
     assert.deepEqual(Object.keys(route), [
@@ -79,7 +80,7 @@ test('the same economy decided by the server, or with an end and a total, has no
   );
   assert.equal(first.ok, true);
   // (and the net flow of what it mints: no cap on how many NFTs it takes)
-  assert.deepEqual(ids(first, 'medium').sort(), ['R-FARM-ENDLESS farm:vault', 'R-VALUE token:shard']);
+  assert.deepEqual(ids(first, 'medium').sort(), ['R-VALUE token:shard']);
 });
 
 test('a voucher grant with no trust said is read as bounds, and says so', () => {

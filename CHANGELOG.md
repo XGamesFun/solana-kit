@@ -4,6 +4,36 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.14: fewer warnings, and the last eval's lessons (loot 0.28.0, unchanged)
+
+The tools alone.
+
+**Removed, because an analysis covers them:**
+
+- the lottery warning "needs N tickets sold, at most M a wallet": `W-ASSUMPTION` checks a least sale against the
+  scenario's players and asks when it doesn't know;
+- `W-FARM-MINT`, a farm that mints with no end: `W-VALUE`'s net flow, growth and loops compute it with numbers;
+- the review's `R-FARM-ENDLESS` (now `R-VALUE`'s net flow) and `R-CONTEST-RESULT` (now `R-ENFORCED`).
+
+**Corrected:** a player's whole loop no longer counts settling a box's roll as a wallet prompt. The page's own settle
+key does it (`openBox`, `recover()`).
+
+**Added:**
+
+- `W-VALUE` prices every path to the same item or token at the spec's own rates (shop, box, recipe, a crafted input at
+  what crafting it costs) and flags one far cheaper than the others: it is the path everyone takes.
+- "Tell the person" adds:
+  - every way each draw and contest ends;
+  - that a schedule's missed run lapses;
+  - that a box's odds move when stock runs out and whenever it is edited (show the odds as they are now);
+  - that buying or opening several at once is one approval (`count`), and collecting wins as few as the wallet allows
+    (`claimAll`).
+- The walk-through adds "Who controls what": what the chain keeps exactly as written (each cap listed), what is decided
+  off chain, and what the owner's key can still change. Every cap on a box, item, recipe, grant or lottery can be
+  raised by an edit; a farm and a contest can't be edited once open.
+- Skill: when the person says "our server runs X", ask what it computes and what it only records. Before calling
+  anything ready, check the spec and the page for everything the replies promised.
+
 ## 0.28.13: xsolana_design covers sales, rewards, staking and contests (loot 0.28.0, unchanged)
 
 The tools alone. `xsolana_design` covered one family of routes, a draw and how it is paid. Its search now runs over

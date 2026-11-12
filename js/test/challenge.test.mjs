@@ -159,7 +159,7 @@ test('one intent, one step: a price the player crafts first points to make, one 
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
   assert.deepEqual(found(own, 'W-STEPS'), []);
-  // A box priced in the crafted token, which rolls: craft, buy, settle.
+  // A box priced in the crafted token, which rolls.
   const box = spec();
   box.boxes = [
     {
@@ -173,7 +173,8 @@ test('one intent, one step: a price the player crafts first points to make, one 
       ],
     },
   ];
-  assert.ok(found(box, 'W-STEPS').includes('economy.boxes.chest'));
+  // Craft, then buy: two approvals (the roll is settled by the page's own key, no prompt), within the two a loop takes.
+  assert.ok(!found(box, 'W-STEPS').includes('economy.boxes.chest'));
 });
 
 test('check every assumption: a least sale above what the scenario’s players buy, and when it can change', () => {
@@ -459,4 +460,38 @@ test('round 4: what to tell the person, scarce supply, a loop through the server
     check(farm, { now: NOW }).warnings.find(w => w.message.startsWith('The largest holder')).message,
     /holds 600 GLD, 60% of its supply/,
   );
+});
+
+test('lessons: the cheapest of several paths, every ending told, odds that move, several at once, who controls what', async () => {
+  // A Hat sold in the shop for 100 BUBL, and crafted from 2 ENTRY (100 BUBL each to buy, so 200): the shop is cheaper.
+  const s = spec();
+  s.collection = { name: 'Hats' };
+  s.items.push({
+    key: 'hat',
+    name: 'Hat',
+    kind: 'collectible',
+    uri: 'https://example.com/hat.json',
+    price: 40,
+    supply: 50,
+  });
+  s.recipes.push({
+    key: 'make-hat',
+    name: 'Hat from entries',
+    in: [{ takes: 'pay', amount: 2, currency: 'entry', to: 'burn' }],
+    out: [{ gives: 'item', item: 'hat' }],
+  });
+  const paths = check(s, { now: NOW }).warnings.find(w => w.code === 'W-VALUE' && w.message.includes('its paths:'));
+  assert.ok(paths, 'the paths to the Hat are compared');
+  assert.match(
+    paths.message,
+    /buying “Hat” costs about 40 BUBL for one; crafting “Hat from entries” costs about 200 BUBL for one/,
+  );
+  assert.equal(paths.severity, 'medium', 'a Hat has a supply');
+  const { runTool } = await import('../mcp/server.mjs');
+  const text = (await runTool('xsolana_check', { spec: s }, { now: NOW })).text;
+  assert.match(text, /> Every way “draw” ends: nothing sold: /);
+  assert.match(text, /> Buying or opening several of “Hat from the shop” at once is one approval \(count: N\)/);
+  const explained = explainEconomy(s, { now: NOW }).text;
+  assert.match(explained, /Who controls what: the chain, your server, your owner key/);
+  assert.match(explained, /any cap above can be raised or lowered/);
 });

@@ -489,16 +489,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ceiling: `${best}. Whoever holds the most of what it takes earns the most: how cheaply that is had is what to look at.`,
       feeds: [...new Set([...tokenFeeds(f.rewardsToken), ...(f.tiers ?? []).flatMap(t => feedsOf(t.prize))])],
     });
-    if (mints(f) && endless(f)) {
-      const self = warned('W-FARM-MINT', `economy.farms.${f.key}`);
-      find(
-        'R-FARM-ENDLESS',
-        'medium',
-        id,
-        `${label(f)} mints ${sym(f.rewardsToken)} with no end: ${best}. Nothing bounds the supply${self.length ? `, and what it pays ${f.stakes === f.rewardsToken ? 'can be staked in it for more' : 'buys more of what earns it'}: whoever stakes most compounds it` : ''}. Every source of what it takes is worth that stream to a cheater.`,
-        'Give it an end ("runs"), a term on every tier ("earnsFor"), an upkeep, or a halving rate ("halveEvery"), or pay its rate from its vault (no "minted") so it pays only what it holds.',
-      );
-    }
+    // (a farm that mints without end: R-VALUE's net flow, from W-VALUE)
     if (f.custody === 'watch')
       find(
         'R-FARM-WATCH',
@@ -565,12 +556,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         'The losing sides’ stakes, for whichever side the signer names: the pot is only as honest as that result.',
       feeds: feedsOf(c.prize),
     });
-    find(
-      'R-CONTEST-RESULT',
-      'info',
-      `contest:${c.key}`,
-      `Who takes ${label(c)}’s pot is what ${deciders.length ? 'its decider key signs' : 'the authority names'}: players’ stakes ride on that result. Keep contests for results the server decides (a match it runs) or that anyone can check outside the game.`,
-    );
+    // (who names the result, what that key can also do, and when it can be known: R-ENFORCED, from W-ENFORCED)
   }
   for (const a of m.auctions) {
     routes.push({
