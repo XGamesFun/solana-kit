@@ -4,6 +4,7 @@
 // routes the model holds (flows.mjs) are written from its steps (who sends each, who pays, what moves, what happens if
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
+import { realMoney } from '../client/pda.js';
 import { FEES, prizeLine, prizeWords, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
@@ -321,6 +322,11 @@ export function journeyOf(r, fl) {
 export function tells(m, { now, fl = flows(m, { now }) }) {
   const sym = key => fl.assets.get(key)?.symbol ?? key;
   const out = [];
+  // A first-time player, from the link to the first reward: what they need before anything works.
+  if (fl.routes.length)
+    out.push(
+      `A first-time player needs a wallet and a little SOL before their first action${realMoney() ? '' : ' (devnet SOL, from a faucet)'}: each action costs the player fee (${Number(FEES.player) / 1e9} SOL) and a network fee, unless the page or server pays a claim's fees for them (anyone may pay them).`,
+    );
   const amount = list => list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`).join(' and ');
   for (const r of fl.routes) {
     if ((r.kind === 'item' || r.kind === 'box') && r.price.length)
@@ -388,9 +394,13 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
         out.push(
           `${named(r)} takes the page's word within its caps: a script claiming at a steady, human pace gets the most its caps allow. A server check that only clamps to a bound costs that script nothing; one that refuses costs it the attempt.`,
         );
+      const server =
+        signed && (r.part.vouchers ?? []).length
+          ? ' Its voucher server can hold a tighter limit of its own; an on-chain cap that would stop real players (a claim every few minutes) belongs on the server, said plainly.'
+          : '';
       if (caps.length)
         out.push(
-          `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}`,
+          `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}${server}`,
         );
     }
   }

@@ -3,7 +3,8 @@
 // known ways to build a want loot has no single part for (any of many currencies → an entry token each currency buys,
 // bundled into the purchase), each with what it adds. The search builds every combination of bridges for the route,
 // checks each one (the checker and its analyses) and tests every requirement on it, then ranks them: the specs that keep
-// the most, with the fewest findings and moving parts. When none keeps them all, it says which requirements can't hold
+// the most, then the ones that play best (fewest approvals, fewest tokens to learn), then the cleanest, then the most
+// secure. When none keeps them all, it says which requirements can't hold
 // together and what giving up each one costs. Pure.
 //
 // A first vocabulary, for a draw (a lottery or raffle) and how it is paid: more route kinds and bridges join it the same
@@ -97,6 +98,16 @@ export const REQUIREMENTS = {
           ? { kept: true, why: 'the craft rides in the purchase (buyTickets’ make)' }
           : { kept: false, why: `${crafts + 1} approvals` };
     },
+  },
+  'one-token': {
+    says: () => 'Players handle no token besides what they already hold and the prize.',
+    test: c =>
+      c.plan.entry || c.plan.freeDraw
+        ? {
+            kept: false,
+            why: `players hold a token of its own (${[c.plan.entry, c.plan.freeDraw ? c.plan.free?.asset : null].filter(Boolean).join(', ')}) to understand`,
+          }
+        : { kept: true, why: 'nothing new to hold' },
   },
   'one-draw': {
     says: () => 'There is one draw for the prize.',
@@ -290,6 +301,17 @@ export const BRIDGES = {
   ],
 };
 
+/** How a candidate plays: the approvals to enter the draw, and the tokens of its own a player must learn. */
+function experienceOf(c) {
+  const draw = c.fl.routes.find(x => x.key === c.plan.draw);
+  const j = draw ? journeyOf(draw, c.fl) : null;
+  const crafts = j ? j.steps.length - (draw.kind === 'lottery' ? 2 : 1) : 0;
+  return {
+    approvals: 1 + (crafts > 0 && !j?.bundles.length ? crafts : 0),
+    tokens: [c.plan.entry, c.plan.freeDraw ? c.plan.free?.asset : null].filter(Boolean).length,
+  };
+}
+
 /**
  * Every spec the bridges build for `route` (a lottery of `base`) under `requirements`, checked and tested, best first:
  * { candidates: [{ bridges, says, kept, partly, broken, results, findings, spec }], conflicts }. `conflicts`: when no
@@ -376,10 +398,19 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
               medium: lens.filter(w => w.severity === 'medium').length,
             },
             parts: spec.lotteries.length + spec.recipes.length + spec.grants.length,
+            experience: experienceOf(c),
             spec,
           });
         }
-  const score = c => c.kept + c.partly / 2 - c.findings.high * 0.5 - c.findings.medium * 0.1 - c.parts * 0.01;
+  // Best first: what the person asked for, then how it plays (approvals to enter, tokens a player must learn), then how
+  // clean it is (fewer parts), then the findings (the owner's order: plays best, cleaner, more secure).
+  const score = c =>
+    (c.kept + c.partly / 2) * 100 -
+    (c.experience.approvals - 1) * 10 -
+    c.experience.tokens * 5 -
+    c.parts -
+    c.findings.high * 0.5 -
+    c.findings.medium * 0.1;
   candidates.sort((a, b) => score(b) - score(a));
   // What can't hold together: the smallest sets of requirements the candidates give up (partly kept counts as given up).
   const gaveUp = candidates.map(c =>
@@ -428,7 +459,7 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
     for (const q of c.results)
       lines.push(`   ${q.kept === true ? '✓' : q.kept === 'partly' ? '~' : '✗'} ${q.says} ${q.why}.`);
     lines.push(
-      `   Findings: ${c.findings.high} high, ${c.findings.medium} medium (xsolana_check on its spec gives each).`,
+      `   Plays: ${c.experience.approvals} approval${c.experience.approvals === 1 ? '' : 's'} to enter; ${c.experience.tokens ? `${c.experience.tokens} token${c.experience.tokens === 1 ? '' : 's'} of its own to learn` : 'nothing new to learn'}. Findings: ${c.findings.high} high, ${c.findings.medium} medium (xsolana_check on its spec gives each).`,
     );
   });
   return lines.join('\n');

@@ -268,7 +268,10 @@ test('follow the value: a loop of recipes that gains, and a valued token minted 
   delete mint.grants[1].limits.perDay;
   delete mint.grants[1].limits.total;
   const flow = check(mint, { now: NOW }).warnings.find(x => x.code === 'W-VALUE' && x.message.includes('net flow:'));
-  assert.ok(flow && flow.severity === 'high' && /with no cap at all/.test(flow.message), flow?.message);
+  assert.ok(flow && /with no cap at all/.test(flow.message), flow?.message);
+  // Its voucher server decides who earns: the bound lives there, one level lower, and the finding says so.
+  assert.equal(flow.severity, 'medium');
+  assert.match(flow.message, /the server holds this bound in practice/);
   // Capped at 5 a day, below the 8 a day the scenario burns (the first draw's "rest": "burn"): no flag.
   mint.grants[1].limits.perDay = 5;
   assert.ok(!check(mint, { now: NOW }).warnings.some(x => x.message.includes('net flow:')));

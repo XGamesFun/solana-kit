@@ -29,6 +29,12 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  */
 export function challenge(m, warn, now, economy) {
   const fl = flows(m, { now });
+  // The owner's order is plays best, then clean, then secure: a bound the server keeps (a voucher server that decides or
+  // replays who earns) is where such a limit lives when an on-chain cap tight enough to hold it would cost real players.
+  const serverHeld = g => (g?.vouchers ?? []).length > 0 && ['decides', 'replays'].includes(g.trust);
+  const lower = sev => ({ high: 'medium', medium: 'low', low: 'low' })[sev];
+  const SERVER_NOTE =
+    ' Its voucher server decides who earns, so the server holds this bound in practice: a cap on chain tight enough to hold it would also stop real players (a claim every few minutes), so keep it there and say so.';
   /** The quick simulation at the spec's scenario, run once when an analysis needs it. */
   let sim = null;
   const { assets, routes } = fl;
@@ -93,9 +99,9 @@ export function challenge(m, warn, now, economy) {
         warn(
           'W-VALUE',
           `economy.grants.${g.key}`,
-          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.`,
+          `Following ${a.symbol}, from nothing: ${named(g)} gives ${amount} for free, ${named(origin.recipe)} sells it for ${priced(origin.pays)}, and ${named(b.recipe)} turns it back into ${priced(b.gives)}${on(b.recipe) ? '' : ' once it is switched on'}: each claim is worth ${priced(worth)}, held back only by the grant’s limits.${serverHeld(g) ? SERVER_NOTE : ''}`,
           'Give the free one an asset of its own that turns into nothing, keep every way back switched off, or set the grant’s "limits" to what you would pay out.',
-          { severity: on(b.recipe) ? 'high' : 'medium' },
+          { severity: serverHeld(g) ? lower(on(b.recipe) ? 'high' : 'medium') : on(b.recipe) ? 'high' : 'medium' },
         );
       }
     // After the end: still made once the last route it was good for has ended, and nothing else takes it.
@@ -174,9 +180,11 @@ export function challenge(m, warn, now, economy) {
         .filter(x => x.perDay > 0)
         .slice(0, 3)
         .map(x => `${named({ name: x.name })} ${+x.perDay.toPrecision(4)} (${x.how})`)
-        .join(', ')}. A free feature that pays most is what every extra identity is made for.`,
-      'Make it pay less than the paid features, cap it per identity per day, or gate it on something that costs.',
-      { severity: 'medium' },
+        .join(
+          ', ',
+        )}. A free feature that pays most is what every extra identity is made for.${serverHeld(m.grant.get(top.where.split('.').at(-1))) ? SERVER_NOTE : ''}`,
+      'Make it pay less than the paid features, cap it per identity per day where that costs real players nothing (else keep the bound on the server and say so), or gate it on something that costs.',
+      { severity: serverHeld(m.grant.get(top.where.split('.').at(-1))) ? 'low' : 'medium' },
     );
 
   // ---- W-STEPS: a player's whole loop through a route (getting its price, buying, collecting), one wallet prompt a
@@ -316,10 +324,17 @@ export function challenge(m, warn, now, economy) {
         .filter(Boolean)
         .join(
           '; ',
-        )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.`,
-      'Cap every free mint a day ("limits.perDay") at or below what is burned, burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
+        )}, and the scenario burns ${+burned.toFixed(9)} a day. What is minted and not burned stays in players' hands: each ${sym(key)} buys less as they pile up.${grants.length && !farms.length && grants.every(serverHeld) ? SERVER_NOTE : ''}`,
+      'Cap every free mint a day ("limits.perDay") at or below what is burned where that costs real players nothing (else keep the bound on the voucher server and say so), burn more (a share of each sale, a recipe that burns), or fix the supply (mint it once into a pool and pay from there).',
       // (a free mint with no cap at all is high; a farm with no cap on its stake is medium, as the review's endless farm)
-      { severity: uncapped.length ? 'high' : 'medium' },
+      {
+        severity:
+          grants.length && !farms.length && grants.every(serverHeld)
+            ? lower(uncapped.length ? 'high' : 'medium')
+            : uncapped.length
+              ? 'high'
+              : 'medium',
+      },
     );
   }
 

@@ -59,6 +59,12 @@ or `npx -y @xgamesfun/solana@0.28.11 tool <name> '<json>'` for any tool (always 
 9. **Challenge before you build.** For every request, name the simplest version that delivers most of it. Say what
    it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act
    later. Recommend one. Build the asked-for version only after the person has seen that trade and still wants it.
+   Which version is better, in this order: the one that plays best (fewest approvals, waits and tokens to learn,
+   nothing a new player needs before the first reward), then the cleanest, then the most secure. Use an on-chain
+   guard when it is clear and costs the player nothing; otherwise keep the rule on the server and say so plainly, and
+   name the trade when you make it. Walk it as a first-time player on a phone: from the link to the first reward,
+   what they need first (a wallet, SOL), every wait, every prompt and what it says, what they see when something fails
+   or ends.
    Challenge economy, flow and irreversible choices; don't challenge taste. `xsolana_check` gives the analyses
    (`W-VALUE`, follow the value; `W-STEPS`, a player's whole loop; `W-ASSUMPTION`, every number that rests on who takes
    part, with the questions to ask; `W-ENFORCED`, who decides and what that key can do) and what each route leaves a
@@ -99,7 +105,8 @@ or `npx -y @xgamesfun/solana@0.28.11 tool <name> '<json>'` for any tool (always 
      caps count claims, each up to its amount).
    - Never promise a report, a follow-up or a channel you don't have.
 
-10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals
+10. **Design for many wallets and bots.** Wallets are free and bots play well: bound every reward with totals where
+    the bound costs real players nothing (a tighter one belongs on the server)
     (`perDay`, `total`), gate open rewards on holding something or count people by vouchers (`perPerson`, with the
     server naming an X account, never a wallet), keep token rewards for results small, and have a server decide or
     replay a result worth paying rather than take the page's word (`@xgamesfun/solana/results`: `collectiblesOf`,
