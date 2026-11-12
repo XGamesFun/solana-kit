@@ -403,8 +403,13 @@ export const tools = [
       const draws = verdict.warnings.filter(
         w => ['W-VALUE', 'W-STEPS'].includes(w.code) && /^economy\.lotteries\./.test(w.where),
       );
+      // A cancel made likely (a least sale the scenario doesn't reach, or doesn't say it reaches) changes which design is
+      // best: say to run the design tool again.
+      const likely = verdict.warnings.filter(
+        w => w.code === 'W-ASSUMPTION' && /^economy\.lotteries\.[^.]+\.minSold$/.test(w.where),
+      );
       const designHint = draws.length
-        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (pay-in, burn, refund-as-paid, free-entry, one-approval, one-draw, one-token).`
+        ? `\n\nTo weigh every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what the person wants, run xsolana_design with their wants as requirements (pay-in, burn, refund-as-paid, free-entry, one-approval, one-draw, one-token, first-reward-no-sol).${likely.length ? ` A cancel is now likely or unknown (${likely.map(w => `“${w.where.split('.')[2]}”`).join(', ')}): run it again with “refund-as-paid”, since which design is best changes with it.` : ''}`
         : '';
       const tell = told.length
         ? `\n\nTell the person, as written (each is final; say it in your own answer, not only in notes):\n${told.map(l => `> ${l}`).join('\n')}`

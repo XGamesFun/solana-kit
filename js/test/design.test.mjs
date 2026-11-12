@@ -63,6 +63,12 @@ test('a raffle in any of several currencies: one entry token they each buy, craf
   assert.match(text, /No design keeps all of them/);
   assert.match(text, /an entry bought with one can be taken back in another/);
   assert.match(text, /Give up “There is one draw for the prize”/);
+  // Each option comes with one sentence for the person, and the turn ends with the choice.
+  assert.match(
+    text,
+    /Say: “Players buy an entry with 0\.1 SOL or 15 USDC or 500000 BONK, and buying it rides in the ticket purchase: one approval/,
+  );
+  assert.match(text, /end your turn there: build none until they choose/);
 });
 
 test('a burn that a cancel must refund, and a free entry that is not money: what has to give', () => {

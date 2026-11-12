@@ -4,6 +4,41 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.12: xsolana_design, from what a person wants to the specs that do it (loot 0.28.0, unchanged)
+
+The tools alone. A new MCP tool, `xsolana_design`, for a draw (a lottery or a raffle) and how it is paid.
+
+- **Requirements.** The agent writes the person's wants as requirements, each a test on a spec: `pay-in` (any of
+  several currencies), `burn`, `refund-as-paid`, `free-entry` (spendable or not), `one-approval`, `one-draw`,
+  `one-token` and `first-reward-no-sol`.
+- **Bridges.** These are the known ways to build what no single part does:
+  - an entry token each currency buys, crafted inside the ticket purchase;
+  - the payment held to the draw and burned then;
+  - payments held in pools, burned by the owner after the draw;
+  - a way back the owner switches on after a cancel;
+  - a separate draw for free entries.
+- **Search.** Every combination is built, run through the checker and its analyses, and tested against every
+  requirement. Designs are ranked by the requirements they keep, then how they play (approvals to enter, tokens of
+  their own to learn), then how clean they are, then their findings.
+- **The answer.** It lists the designs best first, each requirement kept (✓), kept in part (~) or given up (✗), and
+  for each design the steps someone must send after the draw and a "Say" sentence for the person, to pass on as
+  written. When nothing keeps every want, the choice is the person's: the answer lists every option with its cost and
+  ends the turn there.
+- **Pointers.** `xsolana_check` points to `xsolana_design` when a draw has a value or approval finding, and asks for a
+  re-run when a cancel becomes likely.
+
+The owner's principles are in the analyses and the skill. A better version is ranked by how it plays, then how clean
+it is, then how secure. An on-chain guard is used when it is clear and costs the player nothing; otherwise the rule
+stays on the server, said plainly.
+
+- A value finding a deciding voucher server already bounds is one level lower, and says so.
+- A cap on chain is suggested only where it costs real players nothing.
+- "Tell the person" opens with what a first-time player needs before the first action.
+- A voucher grant's caps say what the chain still allows if its key leaks, and how fast that empties its pool.
+
+The cancel finding no longer claims its fix keeps every goal; with more wants it points to `xsolana_design`. The
+skill's "check before you describe" now means one draft with the mechanism, checked once, not every variant.
+
 ## 0.28.11: one model of the spec, and the analyses that challenge it (loot 0.28.0, unchanged)
 
 The tools alone. The checker, `explain` and the review now read one model of the spec (`js/economy/flows.mjs`). It

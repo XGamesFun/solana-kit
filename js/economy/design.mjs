@@ -114,6 +114,16 @@ export const REQUIREMENTS = {
           }
         : { kept: true, why: 'nothing new to hold' },
   },
+  'first-reward-no-sol': {
+    says: () => 'A new player gets their first reward without needing SOL first.',
+    test: c =>
+      c.plan.free
+        ? {
+            kept: 'partly',
+            why: 'the free entry is a claim, whose fees the page or server can pay for them (anyone may); they still need a wallet',
+          }
+        : { kept: false, why: 'their first entry is bought: they need SOL for its fees first' },
+  },
   'one-draw': {
     says: () => 'There is one draw for the prize.',
     test: c =>
@@ -133,6 +143,7 @@ export const BRIDGES = {
     {
       id: 'direct',
       says: 'the draw is priced in the one currency itself',
+      plain: x => `players pay ${x.currencies[0].amount} ${x.currencies[0].token.toUpperCase()} a ticket`,
       build: (s, x) => {
         if (x.currencies.length !== 1) return false;
         const [cur] = x.currencies;
@@ -145,6 +156,8 @@ export const BRIDGES = {
     {
       id: 'entry-token',
       says: 'an entry token, which each currency buys through a recipe; the draw takes the entry token, and the purchase crafts it in the same approval',
+      plain: x =>
+        `players buy an entry with ${x.currencies.map(c => `${c.amount} ${c.token.toUpperCase()}`).join(' or ')}, and buying it rides in the ticket purchase: one approval`,
       build: (s, x) => {
         const entry = `${x.route}-entry`;
         s.tokens.push({
@@ -172,6 +185,7 @@ export const BRIDGES = {
     {
       id: 'draw-each',
       says: 'one draw for each currency, each priced in its own',
+      plain: () => 'there is a separate draw in each currency, each with its own winner and prize',
       build: (s, x) => {
         if (x.currencies.length < 2) return false;
         const base = x.lottery(s);
@@ -196,10 +210,16 @@ export const BRIDGES = {
     },
   ],
   burn: [
-    { id: 'none', says: 'the payment goes to the treasury', build: (s, x) => ((x.plan.burn = null), true) },
+    {
+      id: 'none',
+      says: 'the payment goes to the treasury',
+      plain: () => 'what they pay goes to your treasury',
+      build: (s, x) => ((x.plan.burn = null), true),
+    },
     {
       id: 'at-entry',
       says: 'the payment is burned when the entry is bought',
+      plain: () => 'what they pay is burned the moment they buy',
       // Only an entry token's recipe can burn at the purchase; a draw priced in the currency holds it until the draw.
       build: (s, x) => {
         if (!x.plan.entry) return false;
@@ -211,6 +231,7 @@ export const BRIDGES = {
     {
       id: 'held',
       says: 'what each currency pays for an entry is held in a pool of its own until the draw, and the owner burns it after the draw (one action), so a cancel can still pay it back',
+      plain: () => 'what they pay waits in a pool until the draw, and you burn it after each draw (one action)',
       build: (s, x) => {
         if (!x.plan.entry) return false;
         s.pools ??= [];
@@ -228,6 +249,7 @@ export const BRIDGES = {
     {
       id: 'at-settle',
       says: 'the payment is held until the draw and burned then ("rest": "burn"), so a cancel refunds it',
+      plain: () => 'what they pay is burned when the draw happens, and refunded instead if it is cancelled',
       build: (s, x) => {
         if (x.plan.entry) return false;
         for (const l of s.lotteries.filter(l => x.plan.draws.includes(l.key))) {
@@ -244,6 +266,7 @@ export const BRIDGES = {
     {
       id: 'swap-back',
       says: 'what each currency pays for an entry is held in a pool of its own, and a recipe pays an entry back from it, switched off and switched on by the owner after a cancel',
+      plain: () => 'after a cancel you switch on a swap that gives what was paid back for each entry',
       build: (s, x) => {
         // A burned payment can't come back; a held one can.
         if (!x.plan.entry || x.plan.burn === 'entry') return false;
@@ -270,12 +293,15 @@ export const BRIDGES = {
     {
       id: 'none',
       says: 'no free entry',
+      plain: () => 'there is no free entry',
       // (a grant the person named for free entries, with no prize yet, goes)
       build: (s, x) => ((s.grants = s.grants.filter(g => g.key !== x.freeKey || g.prize || g.gives)), true),
     },
     {
       id: 'grant-ticket',
       says: 'a grant gives what the draw takes, one a person',
+      plain: x =>
+        `the free entry is ${x.plan.free?.asset === x.plan.entry ? 'one entry token' : `${x.currencies[0]?.amount ?? ''} ${(x.plan.free?.asset ?? '').toUpperCase()}, which they could also spend`}`,
       build: (s, x) => {
         if (!x.wantsFree) return false;
         const draw = s.lotteries.find(l => l.key === x.plan.draw);
@@ -296,6 +322,7 @@ export const BRIDGES = {
     {
       id: 'free-draw',
       says: 'free entries go into a draw of their own, with a ticket token that is good for nothing else',
+      plain: () => 'free entries go into a second draw with a prize of its own',
       build: (s, x) => {
         if (!x.wantsFree) return false;
         const base = s.lotteries.find(l => l.key === x.plan.draw);
@@ -421,6 +448,7 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
             },
             parts: spec.lotteries.length + spec.recipes.length + spec.grants.length,
             experience: experienceOf(c),
+            plain: [p, b, r, f].map(step => step.plain?.(x)).filter(Boolean),
             fl,
             plan: x.plan,
             spec,
@@ -473,6 +501,13 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
   return { candidates, conflicts, allKept: all, inPart };
 }
 
+/** One sentence for the person, to pass on as written: what players see, then what it gives up. */
+function sayIt(c) {
+  const gave = c.results.filter(q => q.kept !== true);
+  const what = c.plain.join('; ');
+  return `“${what.charAt(0).toUpperCase()}${what.slice(1)}.${gave.length ? ` The catch: ${gave.map(q => q.why).join('; ')}.` : ''}”`;
+}
+
 /** The design in words, for the agent to read and put to the person: the requirements, the conflicts, the top specs. */
 export function describeDesign(result, requirements, { top = 3 } = {}) {
   const lines = ['What the person wants, as requirements (read these back to them):'];
@@ -490,18 +525,18 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
         `- Keep every want, some only in part (${best.results
           .filter(q => q.kept === 'partly')
           .map(q => `“${q.says.replace(/\.$/, '')}”: ${q.why}`)
-          .join('; ')}): ${best.says.join('; ')}.`,
+          .join('; ')}): ${best.says.join('; ')}.\n  Say: ${sayIt(best)}`,
       );
     for (const c of result.conflicts.filter(x => !result.inPart.some(y => y.best === x.best)).slice(0, top)) {
       const gave = c.best.results.filter(q => q.kept !== true);
       lines.push(
-        `- Give up ${gave.map(q => `“${q.says.replace(/\.$/, '')}”${q.kept === 'partly' ? ' in part' : ''} (${q.why})`).join(' and ')}: ${c.best.says.join('; ')}.`,
+        `- Give up ${gave.map(q => `“${q.says.replace(/\.$/, '')}”${q.kept === 'partly' ? ' in part' : ''} (${q.why})`).join(' and ')}: ${c.best.says.join('; ')}.\n  Say: ${sayIt(c.best)}`,
       );
     }
     lines.push('', 'The designs, best first:');
   }
   result.candidates.slice(0, top).forEach((c, i) => {
-    lines.push(`${i + 1}. ${c.says.join('; ')}.`);
+    lines.push(`${i + 1}. ${c.says.join('; ')}.`, `   Say: ${sayIt(c)}`);
     for (const q of c.results)
       lines.push(`   ${q.kept === true ? '✓' : q.kept === 'partly' ? '~' : '✗'} ${q.says} ${q.why}.`);
     // After the draw: every step someone must send, who, and what happens if nobody does.
@@ -521,5 +556,10 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
       `   Plays: ${c.experience.approvals} approval${c.experience.approvals === 1 ? '' : 's'} to enter; ${c.experience.tokens ? `${c.experience.tokens} token${c.experience.tokens === 1 ? '' : 's'} of its own to learn` : 'nothing new to learn'}. Findings: ${c.findings.high} high, ${c.findings.medium} medium (xsolana_check on its spec gives each).`,
     );
   });
+  if (!result.allKept)
+    lines.push(
+      '',
+      'Put these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose.',
+    );
   return lines.join('\n');
 }
