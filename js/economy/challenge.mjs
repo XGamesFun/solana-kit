@@ -674,6 +674,61 @@ export function challenge(m, warn, now, economy) {
       { severity: 'medium' },
     );
   }
+  // Every cap of every grant against the pace the game allows an honest player (the server's own limit, or the chain's
+  // per-wallet window): when one player reaches each cap of their own, and when everyone together reaches the shared
+  // ones. A cap reached in hours by honest play is a day's limit written as a lifetime one, or the audience outgrowing it.
+  const horizon = num(m.scenario.days) || 30;
+  const about = d => (d * 24 < 48 ? `${+(d * 24).toFixed(1)} hours` : `${+d.toFixed(1)} days`);
+  for (const g of m.grants.filter(on)) {
+    const l = g.limits ?? {};
+    const each = num(prizeLine(g.prize ?? g.gives)?.amount) || 1;
+    const sr = serverRate(g);
+    const pace =
+      sr && sr.per !== 'all' && sr.one > 0
+        ? { perDay: sr.one / each, says: `its server signs ${sr.says}` }
+        : l.perWalletEach?.count
+          ? {
+              perDay: (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1),
+              says: `the chain allows ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+            }
+          : null;
+    if (!pace) continue;
+    const who = l.perPerson ? 'person' : 'wallet';
+    const mine = l.perPerson ?? l.perWallet;
+    if (mine && mine / pace.perDay < horizon)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.limits.${l.perPerson ? 'perPerson' : 'perWallet'}`,
+        `${named(g)} gives each ${who} ${mine} claims in all, and ${pace.says} (about ${+pace.perDay.toFixed(2)} claims a day): an honest player reaches the cap in about ${about(mine / pace.perDay)}, and every claim after that is refused for good. What the game keeps counting toward it after that can never be claimed. A cap “in all” is for a player's whole time in the game.`,
+        `If it is a day's limit, write it as one ("perWalletEach": { "count": ${mine}, "every": "1d" }, or the server's "serverLimit"); if it is meant for good, tell players when they reach it and stop counting what can't be paid.`,
+        {
+          severity: 'medium',
+          ask: `${named(g)} lets each ${who} claim ${mine} times in all, and ${pace.says}: an honest player is done in about ${about(mine / pace.perDay)}. Is ${mine} meant for good, or for a day?`,
+        },
+      );
+    if (!players) continue;
+    // Everyone at full pace: a day's claims (each stopping at their own cap), and how fast they come.
+    const fast = players * pace.perDay;
+    const day = players * (mine ? Math.min(pace.perDay, mine) : pace.perDay);
+    if (l.perDay && l.perDay < day)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.limits.perDay`,
+        `${named(g)}'s ${l.perDay} claims a day for everyone together: the scenario's ${players} players at that pace would make about ${Math.round(day)} a day, so the day's cap is used up about ${about(l.perDay / fast)} into each day, and later claims wait for the next.`,
+        'Raise "perDay" to the audience you expect, or tell players the day’s claims are first come, first served.',
+        { severity: 'low' },
+      );
+    // (with a cap of their own, the count against the audience is the check above)
+    if (l.total && !mine && l.total / fast < horizon)
+      warn(
+        'W-ASSUMPTION',
+        `economy.grants.${g.key}.limits.total`,
+        `${named(g)}'s ${l.total} claims in all: the scenario's ${players} players at that pace make about ${Math.round(fast)} a day, so it runs out in about ${about(l.total / fast)}, and every claim after that is refused.`,
+        'Raise "total" to what you would pay out over the time it should run, or tell players it ends when it runs out.',
+        { severity: 'medium' },
+      );
+  }
+
   // One question for each kind of step only a person or a server sends, naming every route that needs it.
   const manual = new Map();
   for (const route of routes)

@@ -4,6 +4,20 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.19: what each end owes and who sends it, and every grant cap against an honest player's pace (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **Who sends what is owed.** For a lottery or a contest, `xsolana_check`'s lines to tell now say, for each refund,
+  payout and draw a round still owes, who may send it, what it costs them (no loot fee; the oracle's SOL for a draw),
+  and what happens if nobody does. A refund returns the price, not the player fee paid with it. The short lines no
+  longer say "every ticket is refunded" alone.
+- **Every cap against the pace the game allows.** A grant whose pace is known (its server's `serverLimit`, or
+  `perWalletEach`) has each cap checked against it: a lifetime cap (`perPerson`, `perWallet`) an honest player reaches
+  within the scenario's days is a medium finding with a question ("meant for good, or for a day?"); a `perDay` the
+  scenario's players use up within a day, and a `total` they use up within its days, are findings too. With no stated
+  pace, nothing is guessed.
+
 ## 0.28.18: a short first call, a short skill, and the skill's per-case lines in the outputs that fire them (loot 0.28.0, unchanged)
 
 The tools and the skill. What an agent loads before it has done anything is a fraction of what it was:

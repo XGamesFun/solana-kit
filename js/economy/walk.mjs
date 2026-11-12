@@ -370,11 +370,13 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
           `If ${named(r)} is cancelled, a ticket's refund is ${a.symbol}, not the ${amount(origin.pays)} it was bought with.`,
         );
       if (r.cancel?.minSold)
-        out.push(`${named(r)} draws only if ${r.cancel.minSold} tickets sell; otherwise every ticket is refunded.`);
+        out.push(
+          `${named(r)} draws only if ${r.cancel.minSold} tickets sell; otherwise it is cancelled, and each ticket's price waits until someone pulls it back to its buyer.`,
+        );
     }
     if (r.kind === 'contest')
       out.push(
-        `${named(r)}'s result is named by ${r.decider === 'authority' ? 'the project' : 'its decider key'}; with no result by its deadline, everyone takes their money back.`,
+        `${named(r)}'s result is named by ${r.decider === 'authority' ? 'the project' : 'its decider key'}; with no result by its deadline, it is called off, and each entry's money waits until someone claims it back.`,
       );
     if (r.kind === 'grant') {
       const l = r.part.limits ?? {};
@@ -436,6 +438,23 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   // Every way a round ends (each kept in its own words), and a schedule's runs.
   for (const r of fl.routes.filter(x => x.endings))
     out.push(`Every way ${named(r)} ends: ${r.endings.map(e => `${e.ending.toLowerCase()}: ${e.then}`).join('; ')}.`);
+  // What each end state still owes moves only when someone sends it: who may, what it costs them, and what happens if
+  // nobody does ("refunded" or "paid" alone hides all three).
+  const WHO = {
+    anyone: 'anyone may send it (a player from the page, the project or a keeper), with no loot fee',
+    keys: 'only the project’s keys send it',
+    winner: 'the winner sends it',
+    player: 'the player sends it',
+  };
+  for (const r of fl.routes.filter(x => x.endings)) {
+    const owed = r.states
+      .filter(st => ['cancel', 'win'].includes(st.state))
+      .flatMap(st => st.steps.filter(s => s.ifNobody && s.short && WHO[s.by]));
+    if (owed.length)
+      out.push(
+        `What ${named(r)} owes moves only when someone sends it: ${owed.map(s => `${s.short[0].toUpperCase()}${s.short.slice(1)}${s.note ? ` (${s.note})` : ''}: ${WHO[s.by]}${s.cost ? `, the sender paying ${s.cost}` : ''}; if nobody does, ${s.ifNobody}`).join('. ')}.`,
+      );
+  }
   for (const sc of m.schedules)
     out.push(
       sc.sealed
