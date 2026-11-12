@@ -4329,12 +4329,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         `${where}.places`,
         `${label(l)} holds ${held.length === 1 ? 'its NFT' : 'its NFTs'} in its own stash: nobody, the owner included, can take ${held.length === 1 ? 'it' : 'them'} out while a place names ${held.length === 1 ? 'it' : 'them'}, and the winner pulls ${held.length === 1 ? 'it' : 'them'} after the draw, in any order with the money. If the NFT's collection lets someone freeze or move it (a permanent freeze, transfer or burn delegate), they could stop the prize: anyone may then make it a hold for its winner, so the rest of the round pays out.`,
       );
-    if (l.minSold && l.perWallet && !l.every && l.minSold > l.perWallet * 1000)
-      warn(
-        'W-LOTTERY',
-        `${where}.minSold`,
-        `${label(l)} needs ${l.minSold} tickets sold, and each wallet may hold ${l.perWallet}: it takes at least ${Math.ceil(l.minSold / l.perWallet)} wallets.`,
-      );
+    // (a least sale against how many wallets and players it takes: W-ASSUMPTION, challenge.mjs)
     const total = places.reduce((a, b, i) => a + b * placed[i].times, 0);
     if (total > 10_000)
       refuse(
@@ -5525,30 +5520,8 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     rule(g.gate, `${where}.gate`, label(g));
   }
 
-  // ---- farms that mint without end: a rate minted for good is supply nobody bounds, and when that token buys more of
-  // what earns it (or is staked for more of itself), whoever stakes most (a bot never sleeps) compounds it.
-  for (const f of m.farms) {
-    const t = m.tokens.get(f.rewardsToken);
-    // (a farm whose seats' earning ends, by its run, its tiers' terms, an upkeep or a halving rate, has a ceiling: farmCeiling)
-    if (!f.rate?.minted || !(Number(f.rate.perDay ?? 0) > 0) || !t?.gameMints || f.upkeepAttribute) continue;
-    if (farmCeiling(f)?.total !== null) continue;
-    const buys = [
-      ...m.allBoxes.filter(b => (b.currency ?? m.currencyKey) === t.key && Number(b.price ?? 0) > 0).map(b => label(b)),
-      ...m.recipes
-        .filter(r => (r.in ?? []).some(i => i.takes === 'pay' && (i.currency ?? m.currencyKey) === t.key))
-        .map(r => label(r)),
-      ...m.lotteries.filter(l => (l.ticketCurrency ?? l.currency ?? m.currencyKey) === t.key).map(l => label(l)),
-      ...(m.currencyKey === t.key ? m.items.filter(it => Number(it.price ?? 0) > 0).map(it => label(it)) : []),
-    ];
-    const self = f.stakes === t.key;
-    if (!buys.length && !self) continue;
-    warn(
-      'W-FARM-MINT',
-      `economy.farms.${f.key}.rate`,
-      `${label(f)} mints ${t.symbol ?? t.key} for good, with no end${self ? ', and stakes the same token: what it pays can be staked for more' : `, and ${t.symbol ?? t.key} buys ${buys.slice(0, 3).join(', ')}${buys.length > 3 ? ' and more' : ''}`}. Nothing bounds the supply, and whoever stakes most (a bot included) compounds it.`,
-      'Give it an end ("runs"), a term on its tiers ("earnsFor"), or an upkeep, or pay its rewards from its vault (no "minted": a seed, a share of sales or a schedule) so it can only pay what it holds.',
-    );
-  }
+  // (a farm that mints without end, and rewards that buy more of what earns them: W-VALUE's net flow, growth and
+  // loops, challenge.mjs)
   // An NFT a farm watches (left free in its wallet) can be staked in a farm that holds it: its watched seat stops, and
   // what it was owed and not harvested is gone (farm.rs: a watched seat earns only while its NFT is still there).
   const farmCollections = f =>

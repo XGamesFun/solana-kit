@@ -220,10 +220,14 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
   if (!routes.length) return [];
   const actions = actionWords(fl);
   const times = timeline(m, fl, now);
+  const control = controlWords(m, fl);
   return [
     ...(actions.length ? ['Each player action: its wallet prompts and SOL', ...actions.map(x => `- ${x}`), ''] : []),
     ...(times.length
       ? ['Every date, in order (from going live now)', ...times.map(x => `- ${x.when}: ${x.what}`), '']
+      : []),
+    ...(control.length
+      ? ['Who controls what: the chain, your server, your owner key', ...control.map(x => `- ${x}`), '']
       : []),
     'Each route, state by state (as a player, the owner and a cheater see it)',
     'The owner’s pause stops every purchase, ticket, entry, stake and bid coming in; nothing owed waits on it: claims, refunds, unstakes, draws and payouts go on.',
@@ -303,12 +307,8 @@ export function journeyOf(r, fl) {
           ? 'craft'
           : 'buy',
   );
-  if (r.kind === 'box' && r.roll) {
-    steps.push('settle the roll once the oracle answers');
-    bundles.push(
-      'a key of the project’s may settle rolls for players (rule 11), so the player signs only the purchase',
-    );
-  }
+  // (a box's roll is settled by the page's own settle key once the oracle answers: no wallet prompt; the play client's
+  // openBox does it, and recover() finishes one a closed page left)
   if (r.kind === 'lottery') steps.push('pull the win (winners only)');
   if (r.kind === 'contest') steps.push('claim the win (winners only)');
   return { steps, prompts: steps.length, bundles };
@@ -417,5 +417,71 @@ export function tells(m, { now, fl = flows(m, { now }) }) {
       `${named(f)} pays by the second while staked${f.rate ? (f.rate.shared ? ', sharing its rate by stake' : ' at a fixed rate a seat') : ', sharing what arrives by stake'}: staking just before a payout gains nothing${locks.length ? `, and a stake is locked for ${words([...new Set(locks)])} by its tier` : ', and there is no lock: a stake can leave at any time'}.`,
     );
   }
+  // Every way a round ends (each kept in its own words), and a schedule's runs.
+  for (const r of fl.routes.filter(x => x.endings))
+    out.push(`Every way ${named(r)} ends: ${r.endings.map(e => `${e.ending.toLowerCase()}: ${e.then}`).join('; ')}.`);
+  for (const sc of m.schedules)
+    out.push(
+      sc.sealed
+        ? `${named(sc)} pays each run when its recipient sends it, and every run due is paid.`
+        : `${named(sc)} pays only when your keys send each run; a run nobody sends on time lapses, and only the latest one due is paid.`,
+    );
+  // Odds that move: a box's chances shift when an outcome runs out, and whenever the project edits it.
+  const rolled = fl.routes.filter(r => (r.kind === 'box' || r.kind === 'item') && r.roll);
+  if (rolled.length)
+    out.push(
+      `${words(rolled.map(named))}'s odds can change: when an outcome runs out of stock, and whenever you edit ${rolled.length === 1 ? 'it' : 'them'}. Show players the odds as they are now (the play client's boxes() gives each outcome's chance) and say when you change them.`,
+    );
+  // Several at once: one approval.
+  const sold = fl.routes.filter(r => (r.kind === 'box' || r.kind === 'item') && r.price.length);
+  if (sold.length)
+    out.push(
+      `Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N), and the wins to collect afterwards go in as few approvals as the wallet allows (claimAll).`,
+    );
   return out;
+}
+
+/**
+ * Who controls what, in one table: what the chain keeps (each cap, price and lock as written), what a server decides
+ * (a voucher server's grants, a decider's contests), and what the owner's key can still change (and so whether a cap
+ * can be raised).
+ */
+export function controlWords(m, fl) {
+  const rows = [];
+  const caps = [];
+  for (const r of fl.routes) {
+    const p = r.part ?? {};
+    const l = p.limits ?? p;
+    const said = [
+      l.perWallet && `${l.perWallet} a wallet`,
+      l.perWalletEach && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+      l.perPerson && `${l.perPerson} a person`,
+      l.perDay && `${l.perDay} a day`,
+      l.total && `${l.total} in all`,
+      r.kind === 'lottery' && r.cancel?.minSold && `at least ${r.cancel.minSold} tickets`,
+    ].filter(Boolean);
+    if (said.length) caps.push(`${named(r)} ${said.join(', ')}`);
+  }
+  rows.push(
+    `The chain keeps, exactly as written: every price and cap (${caps.length ? caps.join('; ') : 'none set'}), every lock and term, and every draw's and roll's odds at the moment it is drawn (the oracle's answer). Nobody, you included, can break them while they stand.`,
+  );
+  const signed = m.grants.filter(g => (g.vouchers ?? []).length);
+  const decided = m.contests;
+  if (signed.length || decided.length)
+    rows.push(
+      `Decided off chain, by your server or by you: ${[
+        signed.length
+          ? `who earns ${words(signed.map(named))} (it signs each claim: ${[...new Set(signed.map(g => g.trust ?? 'what it checks, unsaid'))].join(', ')})`
+          : '',
+        decided.length
+          ? `the result of ${words(decided.map(named))} (${decided.some(c => (c.deciders ?? []).length) ? 'a decider key signs it' : 'your authority key names it'})`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('; ')}. The chain checks its signature and caps, never what happened.`,
+    );
+  rows.push(
+    `Your owner key can still change: any box's, item's, recipe's, grant's or lottery's terms by an edit (so any cap above can be raised or lowered, a price changed, a route switched off; a lottery round already selling keeps its terms), pause what comes in from players, and close routes. It can't edit a farm or a contest once open (a new one replaces it), take what a round or a stake holds, or skip what is owed.${[...m.tokens.values()].some(t => t.gameMints) ? ' It mints the project’s tokens wherever a route mints them.' : ''}`,
+  );
+  return rows;
 }
