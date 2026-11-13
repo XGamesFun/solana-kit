@@ -383,6 +383,26 @@ describe('xsolana approve holds the file’s live section against the chain', ()
     },
   );
 
+  /**
+   * A mint's first name record, written by a stranger while still its minter. `updateAuthority`: whose it is to
+   * change (they sign nothing; the stranger's own by default); `locked`: it can never be changed; `royalty`: a
+   * resale royalty in hundredths of a percent.
+   */
+  const recordIx = ({ mint, stranger, updateAuthority = stranger, locked = false, royalty = 0 }) => {
+    const [name, symbol] = ['Not Arena', 'ARENA'];
+    const ix = createFungibleMetadataIx({ mint, authority: stranger, name, symbol });
+    const data = Uint8Array.from(ix.data);
+    // (after the two bytes that say what is made and the three texts: the royalty, no creators, sold once, changeable)
+    const at = 2 + 4 + utf8(name).length + 4 + utf8(symbol).length + 4;
+    data.set(uintLE(royalty, 2), at);
+    data[at + 4] = locked ? 0 : 1;
+    return {
+      ...ix,
+      data,
+      keys: ix.keys.map((k, i) => (i === 5 && updateAuthority !== stranger ? meta(updateAuthority, false, false) : k)),
+    };
+  };
+
   /** A mint a stranger makes for a token of the owner's spec: the stranger's `supply` out, then `authority` its minter. */
   const plantMint = (
     w,
@@ -399,9 +419,7 @@ describe('xsolana approve holds the file’s live section against the chain', ()
         owner: tokenProgram,
       }),
       initializeMint2Ix({ mint, decimals, authority: stranger.address, tokenProgram }),
-      ...(record
-        ? [createFungibleMetadataIx({ mint, authority: stranger.address, name: 'Arena', symbol: 'ARENA' })]
-        : []),
+      ...(record ? [recordIx({ mint, stranger: stranger.address, ...(record === true ? {} : record) })] : []),
       ...(supply
         ? [
             createAssociatedTokenAccountIdempotent(stranger.address, stranger.address, mint, tokenProgram),
@@ -487,6 +505,23 @@ describe('xsolana approve holds the file’s live section against the chain', ()
         ).text,
         /The name record of the mint .* is .*’s to change, not this wallet’s/,
       );
+      // A name record that names the owner (who signed nothing) and can never be changed, or carries a royalty: the
+      // token would wear the stranger's words for good.
+      for (const [n, record, says] of [
+        ['locked', { locked: true }, /can never be changed: a setup writes its token’s name plain/],
+        ['royalty', { royalty: 1000 }, /carries a royalty, creators, a collection or uses: a setup writes/],
+      ]) {
+        const { text } = await refusal({
+          seed: `hardening-planted-mint-record-${n}`,
+          plant: ({ project, owner }) => ({
+            decimals: 6,
+            authority: project,
+            record: { updateAuthority: owner.address, ...record },
+          }),
+          live: partial,
+        });
+        assert.match(text, says);
+      }
       // A fixed supply, its minting off for good, all of it the stranger's.
       const coin = JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
       const fixed = coin.tokens.find(t => t.supply !== undefined);

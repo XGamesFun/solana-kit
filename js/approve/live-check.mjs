@@ -7,8 +7,9 @@
 // its new owner's to change. Its treasury and authority are read from the chain, never taken from the file, and its
 // collection is one the Project account itself lists. A mint the file calls the setup's is a classic one, as every
 // mint a setup makes is; and before the project is made it is as a setup leaves it a moment after making it: none of
-// it minted (a fixed supply: all of it in the owner's own account), its name record the owner's. Anyone can make a
-// mint that names the project-to-be its minter, with a supply of their own already out.
+// it minted (a fixed supply: all of it in the owner's own account), its name record plain and the owner's to change.
+// Anyone can make a mint that names the project-to-be its minter, with a supply of their own already out, or with a
+// name of their choosing written on it for good.
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { utf8 } from '../chain/bytes.js';
@@ -172,6 +173,12 @@ export async function checkLive({ live, m, wallet, chain }) {
         record
           ? `The name record of the mint ${address} the file names for ${t.symbol ?? key} is ${record.updateAuthority}’s to change, not this wallet’s: a setup writes its token’s name as its owner.`
           : `The mint ${address} the file names for ${t.symbol ?? key} has no name record on chain: a setup writes one in the step that makes the mint.`,
+      );
+    // (anyone can write a mint's first record and name another wallet its update authority, with words of their own
+    // that can never be changed, or with creators and a royalty: a setup's own record is plain and can be changed)
+    if (!record.mutable || !record.plain)
+      throw new LiveMismatch(
+        `The name record of the mint ${address} the file names for ${t.symbol ?? key} ${record.mutable ? 'carries a royalty, creators, a collection or uses' : 'can never be changed'}: a setup writes its token’s name plain, and its owner’s to change.`,
       );
   }
 

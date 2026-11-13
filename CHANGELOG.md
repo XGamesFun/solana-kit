@@ -17,7 +17,8 @@ shown by a planted file against the real program:
 - **A mint before its project.** A file could name a mint a stranger made for one of the spec's tokens: the right
   decimals, the project-to-be its minter, and a supply of the stranger's own already out. The economy was built on
   it. Before the project is made, a mint the file names must now be as a setup leaves it: none of it minted (a fixed
-  supply: all of it in the owner's own account), and its name record there and the owner's to change.
+  supply: all of it in the owner's own account), and its name record there, plain, and the owner's to change (a
+  stranger can write a mint's first record with words that can never be changed, naming the owner).
 - **A Token-2022 mint named as the setup's own**, on a project that is live too. A setup makes its tokens with the
   Token program; a Token-2022 mint can carry powers over every holder, and is now refused wherever the file calls it
   one the setup made.
