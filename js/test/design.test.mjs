@@ -166,6 +166,17 @@ test('a reward with no server, one a person and no gain for a script: a list, or
     'a list keeps every want, a script only in part',
   );
   assert.ok(r.conflicts.some(c => c.giveUp.join() === 'no-server' && c.best.bridges[0] === 'voucher-decides'));
+  // A reward a server signs needs the person's own numbers and rule before its first spec: asked with the design.
+  const signed = r.conflicts.find(c => c.best.bridges[0] === 'voucher-decides').best;
+  assert.match(
+    signed.needs[0],
+    /its caps, each with your pick, before the first spec: the most claims one player makes a day/,
+  );
+  assert.match(
+    signed.needs[1],
+    /earned and did not claim when a day turns or a voucher runs out: kept for them \(until when\), or lost/,
+  );
+  assert.ok(!r.inPart.find(x => x.best.bridges[0] === 'list').best.needs.some(n => n.includes('its caps')));
 });
 
 test('staking with a cap on what it pays and a rate a staker can count on: what gives', () => {

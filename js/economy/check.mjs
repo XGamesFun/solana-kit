@@ -5920,6 +5920,9 @@ function rateRoom(f, warn, m) {
   );
 }
 
+/** The order of the questions: by how much their finding weighs. */
+const ASK_ORDER = { high: 0, medium: 1, low: 2 };
+
 /** A one-line summary for each refusal and warning, as a person reads them. */
 export function describe({ refusals, warnings }) {
   return [
@@ -5927,11 +5930,16 @@ export function describe({ refusals, warnings }) {
     ...warnings.map(
       w => `! ${w.code}${w.severity ? ` (${w.severity})` : ''} ${w.message}${w.fix ? `\n    ${w.fix}` : ''}`,
     ),
+    // (the questions whose finding weighs most first: a builder puts the first few to the person)
     ...(warnings.some(w => w.ask)
       ? [
           '',
-          'Ask the person before building on it. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation, never as a statement of what you chose or changed. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
-          ...warnings.filter(w => w.ask).map(w => `? ${w.ask}`),
+          'Ask the person before building on it, the first ones first. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation. One you answer yourself still goes to them, as one plain sentence saying what you chose, so they can overrule it; check it is true first. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
+          ...warnings
+            .filter(w => w.ask)
+            .map((w, i) => ({ w, i }))
+            .sort((a, b) => (ASK_ORDER[a.w.severity] ?? 3) - (ASK_ORDER[b.w.severity] ?? 3) || a.i - b.i)
+            .map(({ w }) => `? ${w.ask}`),
         ]
       : []),
   ].join('\n');

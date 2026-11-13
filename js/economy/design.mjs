@@ -513,6 +513,12 @@ const perWord = n => (n === 1 ? 'one' : String(n));
  * The families of routes, each with its choices (`dims`: one bridge from each), how a candidate is set up (`init`), which
  * combinations make no sense (`skip`), and how a candidate plays (`experience`).
  */
+/** What a reward a server signs needs from the person before its first spec: the numbers and the rule only they have. */
+const SERVER_NEEDS = Object.freeze([
+  'its caps, each with your pick, before the first spec: the most claims one player makes a day, the most for everyone together a day, and the most in all (the chain counts claims: a cap of N claims is N times the most one claim gives)',
+  'what happens to what a player earned and did not claim when a day turns or a voucher runs out: kept for them (until when), or lost; follow the balance your server keeps from the moment it signs',
+]);
+
 export const FAMILIES = {
   // ---- a draw (a lottery or a raffle) and how it is paid
   draw: {
@@ -663,6 +669,8 @@ export const FAMILIES = {
   },
 
   // ---- a reward: what proves a claim, and what caps it
+  // (what only the person has, for a reward a server signs: asked with the design, before the first spec, where a
+  // builder puts its questions; the checker asks again for whatever a spec then leaves unsaid)
   reward: {
     dims: [
       [
@@ -706,6 +714,7 @@ export const FAMILIES = {
               ? (Object.assign(x.grant(s), { vouchers: x.keys, trust: 'bounds' }),
                 delete x.grant(s).list,
                 (x.plan.proof = 'bounds'),
+                (x.plan.needs = SERVER_NEEDS),
                 true)
               : false,
         },
@@ -718,6 +727,7 @@ export const FAMILIES = {
               ? (Object.assign(x.grant(s), { vouchers: x.keys, trust: 'decides' }),
                 delete x.grant(s).list,
                 (x.plan.proof = 'decides'),
+                (x.plan.needs = SERVER_NEEDS),
                 true)
               : false,
         },

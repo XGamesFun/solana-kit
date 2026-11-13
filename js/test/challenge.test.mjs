@@ -150,7 +150,7 @@ test('follow the value, cancelled: a refund in the ticket token, not what was pa
   );
   assert.match(
     b.ask,
-    /The burn can wait for the outcome instead: “draw” priced in BUBL itself holds each payment until the outcome is final and burns it then, and a cancel gives it back\. Which do you want: the payment held until the outcome \(the pick\), or burned on entry with ENTRY as the only refund\? Choose before it is built: a round's terms are fixed at the first ticket\./,
+    /The burn can wait for the outcome instead: “draw” priced in BUBL itself holds each payment until the outcome is final and burns it then, and a cancel gives it back\. Which do you want: the payment held until the outcome \(it keeps the refund\), or burned on entry with ENTRY as the only refund\? Choose before it is built: a round's terms are fixed at the first ticket\./,
   );
 });
 
@@ -353,6 +353,15 @@ test('the check tool asks the questions and shows each route’s cancel and chan
   const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
   assert.match(r.text, /Ask the person before building on it[^\n]*:\n\? /);
   assert.match(r.text, /Each one is theirs to answer: put it to them as a question, with the answer you would pick/);
+  // one the builder answers itself still goes to the person, and the questions come heaviest first
+  assert.match(r.text, /One you answer yourself still goes to them, as one plain sentence saying what you chose/);
+  const order = check(spec(), { now: NOW }).warnings.filter(w => w.ask);
+  const rank = { high: 0, medium: 1, low: 2 };
+  const printed = r.text
+    .split('\n')
+    .filter(l => l.startsWith('? '))
+    .map(l => rank[order.find(w => `? ${w.ask}` === l).severity] ?? 3);
+  assert.deepEqual(printed, [...printed].sort(), 'by how much each finding weighs');
   // what "a round pays once" covers, for every grant a server signs for: as written
   assert.match(
     r.text,

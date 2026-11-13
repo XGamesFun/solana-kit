@@ -81,7 +81,7 @@ export function challenge(m, warnTo, now, economy) {
           ? {
               severity: BY_LIKELY[c.likely] === 'low' ? 'medium' : BY_LIKELY[c.likely],
               // (a want that removes a way out is asked with the version that keeps it, never as a yes or no)
-              ask: `${a.symbol} for ${named(route)} is bought with ${priced(origin.pays)} that is burned on the spot, and nobody can give a burned payment back: a cancelled round (${c.causes.join(', or ')}) then refunds only ${a.symbol}. The burn can wait for the outcome instead: ${named(route)} priced in ${sym(origin.pays[0].asset)} itself holds each payment until the outcome is final${route.kind === 'lottery' ? ' and burns it then' : ''}, and a cancel gives it back. Which do you want: the payment held until the outcome (the pick), or burned on entry with ${a.symbol} as the only refund?${route.fixed ? ` Choose before it is built: a round's terms are fixed at ${route.fixed.when}.` : ''}`,
+              ask: `${a.symbol} for ${named(route)} is bought with ${priced(origin.pays)} that is burned on the spot, and nobody can give a burned payment back: a cancelled round (${c.causes.join(', or ')}) then refunds only ${a.symbol}. The burn can wait for the outcome instead: ${named(route)} priced in ${sym(origin.pays[0].asset)} itself holds each payment until the outcome is final${route.kind === 'lottery' ? ' and burns it then' : ''}, and a cancel gives it back. Which do you want: the payment held until the outcome (it keeps the refund), or burned on entry with ${a.symbol} as the only refund?${route.fixed ? ` Choose before it is built: a round's terms are fixed at ${route.fixed.when}.` : ''}`,
             }
           : { severity: BY_LIKELY[c.likely] },
       );
