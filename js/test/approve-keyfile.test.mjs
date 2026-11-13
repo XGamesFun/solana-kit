@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import * as loot from '../client/index.js';
 import { freshKeypair, verifySignature } from '../approve/ed25519.mjs';
 import { toBase64 } from '../chain/bytes.js';
+import { parseMint } from '../chain/mint.js';
 import { transferLamports } from '../chain/programs.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, makeKeyFile, readKeyFile } from '../approve/keyfile.mjs';
@@ -618,6 +619,143 @@ describe('xsolana approve --keypair', () => {
     },
   );
 
+  test(
+    'a token’s new mint is made at the address of a key file the owner supplies (--mint-key)',
+    { skip: skip ?? false },
+    async () => {
+      const { w, run, saved, sends, file } = await setup(example('coin-flip-arena'));
+      assert.equal((await run({ yes: true })).done, true);
+      const live = saved();
+      // A new token for the live project, its mint at an address the owner chose: the address of a key file.
+      writeFileSync(
+        file,
+        JSON.stringify(
+          {
+            ...live,
+            tokens: [...live.tokens, { key: 'potr', source: 'game', name: 'Pot Raffle', symbol: 'POTR', decimals: 0 }],
+            pools: [...live.pools, { key: 'entries', currency: 'potr' }],
+          },
+          null,
+          2,
+        ),
+      );
+      const mintFile = path.join(folder(), 'potr-mint.json');
+      const mint = await makeKeyFile(mintFile);
+      const mintKeyFiles = { potr: mintFile };
+
+      // The printout names the address, as the owner's own and not as one new at each showing, and never the key.
+      const shown = await run({ mintKeyFiles });
+      assert.equal(shown.ok, true, shown.text);
+      assert.equal(shown.sent, 0);
+      assert.equal(sends() > 0, true);
+      const before = sends();
+      assert.ok(
+        shown.text.includes(
+          `The mint of the token POTR is made at ${mint.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and can do nothing once it is made.`,
+        ),
+        shown.text,
+      );
+      assert.ok(!shown.text.includes(`at ${mint.address} (a new address each time this is shown)`));
+      assert.ok(!shown.text.includes(JSON.parse(readFileSync(mintFile, 'utf8')).slice(0, 8).join(',')));
+      assert.ok(!shown.text.includes(mintFile), 'nor where the file is');
+      // Its code stands for that address: the same at a second showing, another without the key file.
+      assert.equal((await run({ mintKeyFiles })).code, shown.code);
+      assert.notEqual((await run()).code, shown.code);
+      assert.equal(sends(), before, 'showing sends nothing');
+
+      const sent = await run({ mintKeyFiles, yes: shown.code });
+      assert.equal(sent.done, true, sent.text);
+      assert.ok(sends() > before);
+      assert.equal(saved().live.mints.potr, mint.address, 'the file records the mint at the supplied address');
+      const account = await w.chain.rpc.account(mint.address);
+      const made = parseMint(mint.address, account.owner, account.data);
+      assert.equal(made.decimals, 0);
+      assert.equal(made.mintAuthority, live.live.project, 'its minting is the project’s, as any mint the setup makes');
+      assert.equal(made.freezeAuthority, null);
+
+      // Given again once the mint is made there: nothing is left for the key to sign, and nothing is refused.
+      const after = sends();
+      const again = await run({ mintKeyFiles, yes: true });
+      assert.equal(again.ok, true, again.text);
+      assert.equal(again.sent, 0);
+      assert.equal(sends(), after);
+      // Another key file for a mint that is live: a mint's address never changes.
+      const otherFile = path.join(folder(), 'other-mint.json');
+      await makeKeyFile(otherFile);
+      const elsewhere = await run({ mintKeyFiles: { potr: otherFile } });
+      assert.equal(elsewhere.ok, false);
+      assert.equal(sends(), after);
+      assert.ok(
+        elsewhere.text.includes(
+          `The token POTR’s mint is live already at ${mint.address}, and a mint’s address never changes: leave --mint-key out for it.`,
+        ),
+        elsewhere.text,
+      );
+    },
+  );
+
+  test(
+    '--mint-key is refused for a token the setup does not make, an address something holds, and a key given twice',
+    { skip: skip ?? false },
+    async () => {
+      const spec = example('coin-flip-arena');
+      const { w, run, saved, sends, file, keyFile } = await setup(spec);
+      const mintFile = path.join(folder(), 'mint.json');
+      const mint = await makeKeyFile(mintFile);
+      // A token the spec does not have, and one whose mint the setup does not make (SOL).
+      await assert.rejects(
+        run({ mintKeyFiles: { gold: mintFile } }),
+        /--mint-key names the token “gold”, and xsolana\.json has no token with that key \(the tokens it makes: arena\)/,
+      );
+      await assert.rejects(run({ mintKeyFiles: { sol: mintFile } }), /whose mint this setup does not make/);
+      // The same key for two tokens.
+      writeFileSync(
+        file,
+        JSON.stringify(
+          {
+            ...spec,
+            tokens: [...spec.tokens, { key: 'gem', source: 'game', name: 'Gem', symbol: 'GEM', decimals: 0 }],
+          },
+          null,
+          2,
+        ),
+      );
+      await assert.rejects(
+        run({ mintKeyFiles: { arena: mintFile, gem: mintFile } }),
+        new RegExp(`--mint-key gives the same key \\(${mint.address}\\) for the tokens “arena” and “gem”`),
+      );
+      writeFileSync(file, JSON.stringify(spec, null, 2));
+      // A key file that is not there, said with the token it was given for and nothing about a project's key.
+      await assert.rejects(run({ mintKeyFiles: { arena: path.join(folder(), 'none.json') } }), e => {
+        assert.match(e.message, /^--mint-key arena: .*none\.json does not exist\.$/);
+        return true;
+      });
+      // The key that signs the approval is no mint's.
+      const own = await run({ mintKeyFiles: { arena: keyFile } });
+      assert.equal(own.ok, false);
+      assert.match(own.text, /--mint-key gives the token ARENA the key that signs this approval/);
+      // An address the chain already has an account at (SOL sent to it is enough).
+      w.chain.airdrop(mint.address, 1_000_000n);
+      const held = await run({ mintKeyFiles: { arena: mintFile }, yes: true });
+      assert.equal(held.ok, false);
+      assert.ok(
+        held.text.includes(
+          `--mint-key gives the token ARENA the address ${mint.address}, and an account is there already on`,
+        ),
+        held.text,
+      );
+      assert.equal(sends(), 0, 'nothing was sent by any of them');
+      assert.equal(saved().live, undefined);
+
+      // A new setup takes one too: the project's own token at the address of a key file nothing holds.
+      const freeFile = path.join(folder(), 'free.json');
+      const free = await makeKeyFile(freeFile);
+      const went = await run({ mintKeyFiles: { arena: freeFile }, yes: true });
+      assert.equal(went.done, true, went.text);
+      assert.equal(saved().live.mints.arena, free.address);
+    },
+  );
+
   test('another key than the owner’s cannot change a live economy', { skip: skip ?? false }, async () => {
     const { w, run, saved, sends, file } = await setup(example('coin-flip-arena'));
     assert.equal((await run({ yes: true })).done, true);
@@ -1113,6 +1251,16 @@ describe('the command line', () => {
     assert.match(xsolana(['approve', '--browser=false']).stderr, /--browser takes no value/);
     assert.match(xsolana(['approve', '--keypair', 'a.json', '--keypair', 'b.json']).stderr, /--keypair is given twice/);
     assert.match(xsolana(['approve', '--keypair=a.json', '--keypair=b.json']).stderr, /--keypair is given twice/);
+    assert.match(xsolana(['approve', '--mint-key', 'potr=m.json']).stderr, /--mint-key goes with --keypair/);
+    assert.match(xsolana(['approve', '--browser', '--mint-key=potr=m.json']).stderr, /--mint-key goes with --keypair/);
+    assert.match(
+      xsolana(['approve', '--keypair', 'k.json', '--mint-key', 'potr']).stderr,
+      /--mint-key takes <token key>=<key file>/,
+    );
+    assert.match(
+      xsolana(['approve', '--keypair', 'k.json', '--mint-key', 'potr=a.json', '--mint-key', 'potr=b.json']).stderr,
+      /--mint-key names the token “potr” twice/,
+    );
     // (a bare -- is not a file's name: with no way to sign named, the two ways are said)
     assert.match(xsolana(['approve', '--']).stderr, /say how going live is signed/);
   });

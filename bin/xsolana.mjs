@@ -10,6 +10,7 @@
 //   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
 //   xsolana keygen <file>                 make a key file for a project's owner (outside any repository; the key is never printed)
 //   xsolana approve [file] --keypair <keyfile> [--yes <code>]   put the economy live, signed by a key file: no browser, no page
+//       [--mint-key <token>=<keyfile>]…   a token's new mint at the address of a key file the owner has
 //   xsolana approve [file] --browser [--port n] [--no-open]     the same in a browser wallet, on a local page: only when the person asks for it
 //   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
@@ -33,6 +34,7 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
   xsolana publish [file]          what going live does, and how to approve it
   xsolana keygen <file>           make a key file for the project’s owner, outside any repository (prints its address, never the key)
   xsolana approve [file] --keypair <keyfile>   what going live sends, then (--yes <code>) send it, signed by that key file
+                                  (--mint-key <token>=<keyfile>: that token’s new mint at the address of a key file you have)
   xsolana approve [file] --browser             the same on a local page, signed in a browser wallet (--port n, --no-open)
   xsolana status [file]           a live economy on chain
   xsolana token <mint>            a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do
@@ -49,7 +51,9 @@ const USAGE = `xsolana: the tools for loot, one shared Solana program for game a
 class UsageError extends Error {}
 
 /** The flags that take a value: `--name value` or `--name=value`. */
-const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host', '--keypair', '--yes']);
+const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host', '--keypair', '--yes', '--mint-key']);
+/** The valued flags that may be given more than once: each value is kept, in order (`lists`). */
+const REPEATED = new Set(['--mint-key']);
 /** The flags each command takes; any other is refused. */
 const TOOL_FLAGS = ['--json'];
 const FLAGS = {
@@ -65,17 +69,25 @@ const FLAGS = {
   status: TOOL_FLAGS,
   token: TOOL_FLAGS,
   keygen: [],
-  approve: ['--keypair', '--yes', '--browser', '--port', '--no-open'],
+  approve: ['--keypair', '--yes', '--mint-key', '--browser', '--port', '--no-open'],
   connect: ['--agent', '--scope', '--local', '--remove', '--dry-run'],
   tool: ['--list', '--args-file', ...TOOL_FLAGS],
   version: [],
 };
 
-/** The arguments after the command: { flags (every --name given), values (--name → value), positional }. */
+/**
+ * The arguments after the command: { flags (every --name given), values (--name → value), lists (--name → every
+ * value of a flag that may be given more than once), positional }.
+ */
 function parseArgs(rest) {
   const flags = new Set();
   const values = new Map();
+  const lists = new Map();
   const positional = [];
+  const keep = (name, value) => {
+    if (REPEATED.has(name)) lists.set(name, [...(lists.get(name) ?? []), value]);
+    else values.set(name, value);
+  };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     // (a bare -- is the shell's own end of flags, not a file's name)
@@ -86,17 +98,18 @@ function parseArgs(rest) {
     }
     const eq = a.indexOf('=');
     const name = eq > 0 ? a.slice(0, eq) : a;
-    if (VALUED.has(name) && flags.has(name)) throw new UsageError(`${name} is given twice: give it once.`);
+    if (VALUED.has(name) && flags.has(name) && !REPEATED.has(name))
+      throw new UsageError(`${name} is given twice: give it once.`);
     if (eq > 0 && !VALUED.has(name)) throw new UsageError(`${name} takes no value: write it alone, or leave it out.`);
     flags.add(name);
-    if (eq > 0) values.set(name, a.slice(eq + 1));
+    if (eq > 0) keep(name, a.slice(eq + 1));
     else if (VALUED.has(name)) {
       if (i + 1 >= rest.length || rest[i + 1].startsWith('--'))
         throw new UsageError(`${name} needs a value (${name} <value> or ${name}=<value>).`);
-      values.set(name, rest[++i]);
+      keep(name, rest[++i]);
     }
   }
-  return { flags, values, positional };
+  return { flags, values, lists, positional };
 }
 
 /** What `xsolana approve` says when it is not told how the setup is signed. */
@@ -106,6 +119,9 @@ const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
                         would be sent, with a code, and sends nothing; run again with --yes <code>, it sends exactly
                         that. \`xsolana keygen <file>\` makes a new project's key file; one that is live is signed
                         only by the key it went live with.
+  --mint-key <token>=<keyfile>   with --keypair: make that token's new mint at the address of a key file you have
+                        (an address you chose), not at a new one. Given once for each such token. The file signs the
+                        transaction that makes the mint and can do nothing after.
   --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
                         when the person whose economy it is asks for that; they run it themselves.`;
 
@@ -120,7 +136,7 @@ function portOf(value) {
 
 async function main(argv) {
   const [command, ...rest] = argv;
-  const { flags, values, positional } = parseArgs(rest);
+  const { flags, values, lists, positional } = parseArgs(rest);
   const takes = Object.hasOwn(FLAGS, command) ? FLAGS[command] : null;
   const unknown = takes && [...flags].find(f => !takes.includes(f));
   if (unknown)
@@ -229,12 +245,26 @@ async function main(argv) {
       const page = flags.has('--browser');
       if (keyFile !== undefined && page)
         throw new UsageError('--keypair and --browser are two ways to sign: give one.');
+      // A key file for a token's new mint, so the mint is at an address the owner chose: <token key>=<key file>.
+      const mintKeyFiles = {};
+      for (const pair of lists.get('--mint-key') ?? []) {
+        const eq = pair.indexOf('=');
+        if (eq <= 0 || eq === pair.length - 1)
+          throw new UsageError(
+            '--mint-key takes <token key>=<key file>: the token’s key in the spec, then the key file its mint is made at.',
+          );
+        const token = pair.slice(0, eq);
+        if (Object.hasOwn(mintKeyFiles, token))
+          throw new UsageError(`--mint-key names the token “${token}” twice: give it one key file.`);
+        mintKeyFiles[token] = pair.slice(eq + 1);
+      }
+      if (flags.has('--mint-key') && keyFile === undefined) throw new UsageError('--mint-key goes with --keypair.');
       if (keyFile !== undefined) {
         if (flags.has('--port') || flags.has('--no-open'))
           throw new UsageError('--port and --no-open go with --browser.');
         const { approveWithKey } = await import('../js/approve/with-key.mjs');
         // It shows, and sends only when given the code of what it showed: it never stops to ask.
-        const r = await approveWithKey({ file, keyFile, yes: values.get('--yes') ?? null });
+        const r = await approveWithKey({ file, keyFile, yes: values.get('--yes') ?? null, mintKeyFiles });
         if (!r.ok) process.exitCode = 1;
         break;
       }

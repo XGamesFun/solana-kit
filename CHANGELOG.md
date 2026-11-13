@@ -4,6 +4,23 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.29: a token's new mint at an address the owner chose (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **`xsolana approve --keypair … --mint-key <token key>=<key file>`.** A token the setup makes got a new address for
+  its mint each time. Given the key file of an address the owner has (one they chose), the mint is made there: for a
+  new setup, and for a token added to a project that is live. The flag is given once for each such token.
+  - The file is read as the owner's key file is (its user alone can read it, outside any repository, a whole key). It
+    is never printed or copied, signs the one transaction that makes the mint, and can do nothing once the mint is
+    made.
+  - The printout names the address, and its code stands for it: the same code at each showing, another without the
+    flag.
+  - Refused before anything is built: a token the spec does not have; a token whose mint the setup does not make; a
+    mint that is live at another address; an address the chain already has an account at (SOL sent to it counts);
+    the same key for two tokens; the key that signs the approval. A mint an earlier run already made at that address
+    needs nothing more, and the flag is then ignored.
+
 ## 0.28.28: a project handed to a new owner is the new owner's to change, and nothing of a project's keys is taken from the file (loot 0.28.0, unchanged)
 
 The tools alone.
