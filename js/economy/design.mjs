@@ -1094,6 +1094,13 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
   return { ...routes[0], routes };
 }
 
+/**
+ * What "build none" covers, said wherever a choice is left to the person: a spec saved before they answer, a draft
+ * too, is already built on (the game and its server are then written to it), so the question comes before the save.
+ */
+const SAVING_IS_BUILDING =
+  'Saving a spec is building, a draft too (xsolana_save, or a file you write), and so is writing the game or its server on one: ask first, and save after they answer.';
+
 /** One sentence for the person, to pass on as written: what players see, then what it gives up. */
 function sayIt(c) {
   const gave = c.results.filter(q => q.kept !== true);
@@ -1121,23 +1128,23 @@ function unaskedSigned(result, requirements) {
 }
 
 /**
- * What a design run leaves for the person, as data (the words of describeDesign say the same): { choose, wayOut, also }.
+ * What a design run leaves for the person, as data (the words of describeDesign say the same):
+ * { choose, wayOut, also, before }.
  * `choose`: no design is to be built until they choose (no design keeps every want, or two differ in a way out);
  * `wayOut`: { removes, keeps, why }, the numbers of those two designs in the list; `also`: the rewards a server signs
- * that no requirement was about, each with what it needs from them.
+ * that no requirement was about, each with what it needs from them; `before`: what the asking comes before (saving a
+ * spec, a draft too), in words, or null when nothing is left for them.
  */
 export function designAsks(result, requirements, { top = 3 } = {}) {
   const routes = (result.routes ?? [result]).filter(r => !r.unknown);
   const wayOut = routes.map(r => wayOutChoice(r, top)).find(Boolean) ?? null;
-  return {
-    choose: routes.some(r => !r.allKept) || !!wayOut,
-    wayOut,
-    also: unaskedSigned(result, requirements).map(g => ({
-      grant: g.key,
-      name: g.name ?? g.key,
-      needs: [...SERVER_NEEDS],
-    })),
-  };
+  const choose = routes.some(r => !r.allKept) || !!wayOut;
+  const also = unaskedSigned(result, requirements).map(g => ({
+    grant: g.key,
+    name: g.name ?? g.key,
+    needs: [...SERVER_NEEDS],
+  }));
+  return { choose, wayOut, also, before: choose || also.length ? SAVING_IS_BUILDING : null };
 }
 
 function alsoSigned(result, requirements) {
@@ -1147,7 +1154,7 @@ function alsoSigned(result, requirements) {
   return [
     '',
     '',
-    `Also in this spec, with no design asked for ${others.length === 1 ? 'it' : 'them'}: ${names}, ${others.length === 1 ? 'a reward' : 'rewards'} a server signs. Before ${others.length === 1 ? 'its' : 'their'} first spec ${others.length === 1 ? 'it needs' : 'each needs'} from you ${SERVER_NEEDS.length} things. Each is its own question to the person, with your pick; one you answer yourself is still said to them on a line of its own:`,
+    `Also in this spec, with no design asked for ${others.length === 1 ? 'it' : 'them'}: ${names}, ${others.length === 1 ? 'a reward' : 'rewards'} a server signs. Before ${others.length === 1 ? 'its' : 'their'} first spec is saved, a draft too, ${others.length === 1 ? 'it needs' : 'each needs'} from you ${SERVER_NEEDS.length} things. Each is its own question to the person, with your pick; one you answer yourself is still said to them on a line of its own:`,
     ...SERVER_NEEDS.map((n, i) => `  ${i + 1}. ${n}`),
   ].join('\n');
 }
@@ -1163,7 +1170,7 @@ function describeRoutes(result, requirements, { top = 3 } = {}) {
     return `For “${r.route}” (${FAMILY_WORDS[r.family]}):\n${describeRoute(r, reqs, { top, last: false })}`;
   });
   const any = routes.some(r => !r.unknown && (!r.allKept || wayOutChoice(r, top)));
-  return `${parts.join('\n\n')}${any ? '\n\nPut these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose.' : ''}`;
+  return `${parts.join('\n\n')}${any ? `\n\nPut these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose. ${SAVING_IS_BUILDING}` : ''}`;
 }
 
 /**
@@ -1255,7 +1262,7 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
   if ((!result.allKept || wayOut) && last)
     lines.push(
       '',
-      'Put these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose.',
+      `Put these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose. ${SAVING_IS_BUILDING}`,
     );
   return lines.join('\n');
 }

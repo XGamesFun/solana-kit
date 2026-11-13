@@ -21,7 +21,7 @@ const ABOUT =
 
 /** The order of the tools that work on a spec, and when to stop for the person: the same on both servers. */
 const ORDER =
-  'Order: xsolana_guide is a short index, so fetch the part you need from it; xsolana_examples with the person’s own words; write the spec. Challenge before you build: name the simplest version, what it gives up and what the asked-for one costs, and recommend one. xsolana_check after every change, and on one draft before you describe how value moves. xsolana_design when the person’s wants pull against each other: the choice is theirs, so put it and end your turn. Quote xsolana_simulate, xsolana_cost and xsolana_explain for every number. xsolana_review before going live. xsolana_token reads a coin made elsewhere; xsolana_client gives an app the program and its calls; xsolana_status reads what is live.';
+  'Order: xsolana_guide is a short index, so fetch the part you need from it; xsolana_examples with the person’s own words; write the spec. Challenge before you build: name the simplest version, what it gives up and what the asked-for one costs, and recommend one. xsolana_check after every change, and on one draft before you describe how value moves. xsolana_design when the person’s wants pull against each other: the choice is theirs, so put it and end your turn before saving even a draft spec. Quote xsolana_simulate, xsolana_cost and xsolana_explain for every number. xsolana_review before going live. xsolana_token reads a coin made elsewhere; xsolana_client gives an app the program and its calls; xsolana_status reads what is live.';
 
 /** Going live from the local server: the tool that says how, and the one rule it keeps. */
 const LIVE =

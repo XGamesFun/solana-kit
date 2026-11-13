@@ -70,6 +70,18 @@ test('a raffle in any of several currencies: one entry token they each buy, craf
     /Say: “Players buy an entry with 0\.1 SOL or 15 USDC or 500000 BONK, and buying it rides in the ticket purchase: one approval/,
   );
   assert.match(text, /end your turn there: build none until they choose/);
+  // "Build none" covers a saved draft: the question comes before the save, in the words and in the data.
+  assert.match(
+    text,
+    /build none until they choose\. Saving a spec is building, a draft too \(xsolana_save, or a file you write\), and so is writing the game or its server on one: ask first, and save after they answer\./,
+  );
+  assert.match(
+    designAsks(more, [...reqs, { kind: 'refund-as-paid', route: 'raffle' }]).before,
+    /^Saving a spec is building/,
+  );
+  // Nothing left for the person: nothing to ask before a save.
+  assert.deepEqual(designAsks(r, reqs), { choose: false, wayOut: null, also: [], before: null });
+  assert.doesNotMatch(describeDesign(r, reqs), /Saving a spec is building/);
 });
 
 test('a burn: the design that keeps a way out is listed before the one that removes it, and the person chooses', () => {
@@ -139,6 +151,8 @@ test('a burn: the design that keeps a way out is listed before the one that remo
       why: 'nobody can give a burned payment back, so a cancelled draw refunds only the entry',
     },
     also: [],
+    before:
+      'Saving a spec is building, a draft too (xsolana_save, or a file you write), and so is writing the game or its server on one: ask first, and save after they answer.',
   });
   // A reward a server signs that is in the spec, with no design asked for it, still gets its questions.
   const VOUCHER_KEY = 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD';
@@ -157,12 +171,13 @@ test('a burn: the design that keeps a way out is listed before the one that remo
   const also = describeDesign(design(withPops, reqs, { now: NOW }), reqs);
   assert.match(
     also,
-    /\n\nAlso in this spec, with no design asked for it: “Popped bubbles”, a reward a server signs\. Before its first spec it needs from you 6 things\./,
+    /\n\nAlso in this spec, with no design asked for it: “Popped bubbles”, a reward a server signs\. Before its first spec is saved, a draft too, it needs from you 6 things\./,
   );
   assert.match(also, /\n {2}1\. The most claims one player makes a day\?\n/);
   assert.match(also, /\n {2}6\. A voucher that runs out before it is claimed/);
   const asks = designAsks(design(withPops, reqs, { now: NOW }), reqs);
   assert.deepEqual([asks.also.length, asks.also[0].grant, asks.also[0].needs.length], [1, 'pops', 6]);
+  assert.match(asks.before, /ask first, and save after they answer\.$/);
   assert.doesNotMatch(said, /Also in this spec/);
   // A draw for each currency can burn at the draw itself: with no want against it, that design leads on its score.
   const each = design(base, [pay, { kind: 'burn', route: 'draw' }], { now: NOW });

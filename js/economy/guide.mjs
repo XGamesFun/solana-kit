@@ -483,7 +483,7 @@ export function guideIndex() {
   return [
     `A loot economy is one JSON spec (xsolana.json) on the shared loot program ${IDL.metadata.version}, on devnet unless it says "network": "mainnet" (real money). Nobody writes a contract: the spec is checked, simulated, and put live on the owner’s own machine, signed by the project’s key file once they have said yes.`,
     '',
-    'The loop: xsolana_examples {"query": "<the person’s own words>"} for the nearest example; fetch the parts it needs (below); write the spec; xsolana_check after every change; xsolana_design when the person’s wants pull against each other; xsolana_simulate, xsolana_cost and xsolana_explain for the numbers and the words; xsolana_review before going live; xsolana_save; xsolana_publish when the person says to put it live.',
+    'The loop: xsolana_examples {"query": "<the person’s own words>"} for the nearest example; fetch the parts it needs (below); write the spec; xsolana_check after every change; xsolana_design when the person’s wants pull against each other; xsolana_simulate, xsolana_cost and xsolana_explain for the numbers and the words; xsolana_review before going live; xsolana_save; xsolana_publish when the person says to put it live. A choice or a question the tools leave for the person comes before anything is saved: saving a spec is building, a draft too.',
     '',
     'In short: amounts are whole units of their currency (0.1 is 0.1 SOL); shares are percents; times are durations ("30m", "7d") or dates; every part has a `key` the others name ("pool:house"); public data only, never a key.',
     '',

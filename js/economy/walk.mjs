@@ -324,6 +324,9 @@ export function journeyOf(r, fl) {
   return { steps, prompts: steps.length, folded: steps.length - bundles.length, bundles };
 }
 
+/** A list as a choice: “a”, “a or b”, “a, b or c”. */
+const either = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} or ${list.at(-1)}` : (list[0] ?? ''));
+
 /**
  * What the person must hear, in short final sentences the agent passes on as written: for each route, what a player
  * gets for their money (a fixed price or a chance), how a farm pays over time, a whole loop's approvals, what a cancel
@@ -343,6 +346,8 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   const out = [];
   // (a trust fact: passed on as written)
   const trust = [];
+  // (each reward a server signs, with where the chain stops paying it)
+  const stops = [];
   // A first-time player, from the link to the first reward: what they need before anything works.
   if (fl.routes.length)
     out.push(
@@ -434,8 +439,33 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
         (server ? trust : out).push(
           `${named(r)}: each claim gives ${signed && g ? 'up to ' : ''}${prizeWords(r.part.prize ?? r.part.gives, m)}; the caps count claims: ${caps.join('; ')}.${over}${server}`,
         );
+      // Where a reward a server signs stops paying: a cap in all, a prize that runs out (a pool can run dry and a
+      // limited item or a stash's NFT can run out; a minted token can't). Said once for them all, after the caps.
+      const line = prizeLine(r.part.prize ?? r.part.gives);
+      const forGood = [
+        l.perWallet ? `${l.perWallet} a wallet in all` : '',
+        l.perPerson ? `${l.perPerson} a person in all` : '',
+        l.total ? `${l.total} in all` : '',
+      ].filter(Boolean);
+      const dry = pool
+        ? `while “${pool.key}” is empty`
+        : line?.gives === 'nft' || (line?.gives === 'item' && m.item.get(line.item)?.supply)
+          ? 'once none of its prize is left'
+          : '';
+      if ((r.part.vouchers ?? []).length && (forGood.length || dry))
+        stops.push({
+          says: `${named(r)} ${[forGood.length ? `past ${either(forGood)} (for good)` : '', dry].filter(Boolean).join(' and ')}`,
+          refills: Boolean(pool),
+        });
     }
   }
+  // Where each reward a server signs stops paying, the chain refuses the claim and nothing more: the game stops giving
+  // there only where the server's code does, and players hear of it only where the page says so. Beside the caps, as
+  // written: a rule told to players that no line of code keeps is not a rule.
+  if (stops.length)
+    trust.push(
+      `A reward stops paying on the chain, not in the game. The chain refuses every claim of ${stops.map(x => x.says).join('; of ')}. Nothing on the chain stops the server counting what a player earns after that, or signing a voucher for it, and none of it can be claimed${stops.some(x => x.refills) ? ' (a pool you refill pays again, while a voucher lasts)' : ''}. So the server stops there itself: before it adds to a balance or signs, it reads what is left or keeps the count, and the page tells the player, or everyone, that the reward has ended. Both hold only once they are built: a line of the server’s code that stops, and a sentence players see.`,
+    );
   // What "a round pays once" covers: the chain keeps a paid round with its wallet (docs/program.md, a grant's
   // rounds: the record's key is sha256(round | wallet)), so a win signed again for another wallet pays again, and a
   // voucher that ran out may have been collected before it did. One line for every grant a server signs for.

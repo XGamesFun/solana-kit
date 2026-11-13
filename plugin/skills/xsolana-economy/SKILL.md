@@ -14,8 +14,8 @@ nothing is real money, and on **mainnet**, where everything is: an economy is on
 The tools: `xsolana_guide`, `xsolana_examples`, `xsolana_check`, `xsolana_design`, `xsolana_simulate`, `xsolana_cost`,
 `xsolana_explain`, `xsolana_review`, `xsolana_save`, `xsolana_publish`, `xsolana_status`, `xsolana_token`,
 `xsolana_client`. From a terminal, always with the exact version:
-`npx -y @xgamesfun/solana@0.28.26 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.28.26 token <mint>`, or `npx -y @xgamesfun/solana@0.28.26 tool <name> '<json>'` for any
+`npx -y @xgamesfun/solana@0.28.27 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.28.27 token <mint>`, or `npx -y @xgamesfun/solana@0.28.27 tool <name> '<json>'` for any
 tool (`xsolana_design` too).
 
 The tools' outputs say how to put each result to the person at the moment you need it: read them and follow them.
@@ -62,12 +62,13 @@ The tools' outputs say how to put each result to the person at the moment you ne
 9. **Challenge before you build.** For every request, name the simplest version that delivers most of it. Say what
    it gives up and what the asked-for version costs: wallet prompts, moving parts, failure states, who must act
    later. Recommend one, and build the asked-for version only after the person has seen that trade and still wants
-   it. Better means, in this order: plays best (fewest approvals, waits and tokens to learn, nothing a new player
-   needs before the first reward), then cleanest, then most secure. Use an on-chain guard when it is clear and costs
-   the player nothing; otherwise keep the rule on the server, say so plainly and name the trade. Walk it as a
-   first-time player on a phone: from the link to the first reward, what they need first, every wait, every prompt,
-   what they see when something fails or ends. Challenge economy, flow and irreversible choices (a burn, a token
-   that can't move, a payment taken before the outcome); don't challenge taste.
+   it. Saving a draft spec counts as building. Better means, in this order: plays best (fewest approvals, waits and
+   tokens to learn, nothing a new player needs before the first reward), then cleanest, then most secure. Use an
+   on-chain guard when it is clear and costs the player nothing; otherwise keep the rule on the server, say so
+   plainly and name the trade. Walk it as a first-time player on a phone: from the link to the first reward, what
+   they need first, every wait, every prompt, what they see when something fails or ends. Challenge economy, flow
+   and irreversible choices (a burn, a token that can't move, a payment taken before the outcome); don't challenge
+   taste.
    The tools do the analysis: `xsolana_check` follows the value (`W-VALUE`), a player's loop (`W-STEPS`), what rests
    on who takes part (`W-ASSUMPTION`, with the questions to ask) and who decides what (`W-ENFORCED`);
    `xsolana_explain` walks each route state by state. Read both before you answer.
