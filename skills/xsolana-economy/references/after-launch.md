@@ -129,7 +129,8 @@ now })` for the player's own wallet and claims (`app.claimGrant(key, { voucher }
   result; it pays only a wallet the player proved (`proofRequest` / `verifyProof` from `@xgamesfun/solana/results`: a
   text the wallet signs, with the game, a nonce the server takes once, and an expiry); it counts people where it can
   (`perPerson`, with a person hash the voucher names: that needs an outside sign-in such as X, and a wallet-only
-  player has none); it checks what a wallet holds on the chain, never the page's word (`collectiblesOf`, `holds`); and
+  player has none); it checks what a wallet holds on the chain, never the page's word (`collectiblesOf`, `holds`); before it signs a
+  win again for another wallet it reads whether the first was paid (`winPaid`: the chain pays a round once a wallet); and
   the grant's `perDay` and `total` bound everything whatever happens to a key. Keep token rewards for results small.
 - **Vouchers from a results server**: the grant names the server's public key in `vouchers`, and says in `trust`
   what the server checks (`"decides"`, `"replays"` or `"bounds"`: `trust-and-cheating.md`); the server checks the

@@ -5930,7 +5930,7 @@ export function describe({ refusals, warnings }) {
     ...(warnings.some(w => w.ask)
       ? [
           '',
-          'Ask the person before building on it (the scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which):',
+          'Ask the person before building on it. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation, never as a statement of what you chose or changed. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
           ...warnings.filter(w => w.ask).map(w => `? ${w.ask}`),
         ]
       : []),

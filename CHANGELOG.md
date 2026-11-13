@@ -4,6 +4,25 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.21: a win signed twice, a craft the purchase carries, and questions that stay questions (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **What "a round pays once" covers.** The chain keeps a paid round with its wallet, so the same win signed for a
+  second wallet pays again, and a voucher that ran out may have been collected before it did. For every grant a server
+  signs for, the lines to tell now say so, as written, and `xsolana_review`'s voucher-key line no longer says "pays
+  each round once" alone. New `winPaid({ rpc, game, grant, wallet, round })` in `@xgamesfun/solana/results` reads
+  whether a wallet was paid a win: a server asks it of the first wallet before it signs that win again.
+- **A craft the purchase carries is no prompt of its own.** A draw entered with a crafted token is one approval for
+  craft and purchase with `buyTickets`' `make`, so its loop is 2 prompts, and `W-STEPS` (`R-STEPS`) no longer reports
+  3 for a page that does that. The lines to tell give both counts ("2 … when the page's purchase carries the craft,
+  3 when it doesn't"), a returning player's day counts the folded one, and `xsolana_explain` keeps the call that folds
+  it. A loop nothing folds (a contest entered with a crafted token) is reported as before.
+- **A question is the person's to answer.** The "Ask the person" list says to put each one as a question, with the
+  builder's pick as its recommendation, never as a statement of what was chosen or changed.
+- Fixed: a grant paid from a pool, whose prize names no currency, printed its unit as "[object Object]" in the caps'
+  questions ("claims, not …"); it is the pool's token.
+
 ## 0.28.20: a grant's caps in claims against what its server counts, each as a question in the person's numbers (loot 0.28.0, unchanged)
 
 The tools alone.

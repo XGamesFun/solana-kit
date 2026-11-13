@@ -254,7 +254,7 @@ export function actionWords(fl) {
         .map(p => `${+num(p.amount).toFixed(9)} ${fl.assets.get(p.asset)?.symbol ?? p.asset}`)
         .join(' and ');
       const loop = journeyOf(r, fl);
-      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens. A whole loop: ${loop.steps.join(', then ')} (${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}).`;
+      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens. A whole loop: ${loop.steps.join(', then ')} (${loop.folded < loop.prompts ? `${loop.folded} with the craft carried by the purchase, ${loop.prompts} without` : `${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}`}).${loop.bundles.length ? ` To fold it: ${loop.bundles.join('; ')}.` : ''}`;
     });
 }
 
@@ -280,7 +280,8 @@ export function timeline(m, fl, now) {
 
 /**
  * A player's whole loop through route `r`: getting what it costs, buying, and collecting what it gives: { steps, prompts,
- * bundles }. Each step is one wallet prompt; `bundles` are the ways the tools can fold steps together.
+ * folded, bundles }. Each step is one wallet prompt (`prompts`); `bundles` are the ways the kit's own client folds
+ * steps together, and `folded` is how many prompts are left when the page uses every one of them.
  */
 export function journeyOf(r, fl) {
   const asset = r.price[0]?.asset;
@@ -316,7 +317,8 @@ export function journeyOf(r, fl) {
   // openBox does it, and recover() finishes one a closed page left)
   if (r.kind === 'lottery') steps.push('pull the win (winners only)');
   if (r.kind === 'contest') steps.push('claim the win (winners only)');
-  return { steps, prompts: steps.length, bundles };
+  // (each bundle folds one step into the next: a craft into the purchase it pays for)
+  return { steps, prompts: steps.length, folded: steps.length - bundles.length, bundles };
 }
 
 /**
@@ -361,7 +363,9 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
         );
       }
       out.push(
-        `A whole go at ${named(r)} takes ${loop.prompts} wallet approval${loop.prompts === 1 ? '' : 's'}: ${loop.steps.join(', then ')}.`,
+        loop.folded < loop.prompts
+          ? `A whole go at ${named(r)} takes ${loop.folded} wallet approval${loop.folded === 1 ? '' : 's'} when the page's purchase carries the craft (buyTickets' make), ${loop.prompts} when it doesn't: ${loop.steps.join(', then ')}.`
+          : `A whole go at ${named(r)} takes ${loop.prompts} wallet approval${loop.prompts === 1 ? '' : 's'}: ${loop.steps.join(', then ')}.`,
       );
       const a = fl.assets.get(r.cancel?.refund[0]?.asset);
       const origin = a && !a.money ? a.origins[0] : null;
@@ -429,6 +433,14 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
         );
     }
   }
+  // What "a round pays once" covers: the chain keeps a paid round with its wallet (docs/program.md, a grant's
+  // rounds: the record's key is sha256(round | wallet)), so a win signed again for another wallet pays again, and a
+  // voucher that ran out may have been collected before it did. One line for every grant a server signs for.
+  const signedFor = fl.routes.filter(r => r.kind === 'grant' && (r.part.vouchers ?? []).length);
+  if (signedFor.length)
+    trust.push(
+      `${words(signedFor.map(named))}: the chain pays a wallet each win (round) once, and keeps that by round and wallet together. The same win signed for a second wallet pays again, and a voucher that has run out may have been collected before it did. Before the server signs a win again (another wallet, a new voucher after the first ran out), it reads the chain for the first wallet (winPaid, from @xgamesfun/solana/results), or keeps each win on the first wallet it signed for.`,
+    );
   for (const f of m.farms) {
     const locks = (f.tiers ?? []).map(t => t.lock).filter(x => x && toSeconds(x) > 0);
     out.push(
@@ -482,7 +494,8 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   for (const r of fl.routes.filter(r => r.price.length && ['box', 'item', 'lottery', 'contest'].includes(r.kind)))
     day.push({
       what: `${r.kind === 'lottery' ? 'buy tickets of' : r.kind === 'contest' ? 'enter' : 'buy or open'} ${named(r)}`,
-      n: r.kind === 'lottery' ? Math.max(1, journeyOf(r, fl).prompts - 1) : 1,
+      // (without the win's pull, counted below; a craft the purchase carries is no approval of its own)
+      n: r.kind === 'lottery' ? Math.max(1, journeyOf(r, fl).folded - 1) : 1,
     });
   for (const f of m.farms) day.push({ what: `harvest ${named(f)}`, n: 1 });
   if (fl.routes.some(r => r.kind === 'lottery' || r.kind === 'contest' || (r.kind === 'box' && r.roll)))

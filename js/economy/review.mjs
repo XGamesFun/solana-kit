@@ -648,7 +648,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       'R-VOUCHER-KEY',
       'info',
       'economy',
-      `The voucher key ${v} signs for ${grants.join(', ')}. The program refuses any other key and any voucher moved to another wallet, grant or incarnation, and pays each round once; what it can’t check is what the key’s server decides, and which person it names. Whoever holds that key pays anyone, up to these grants’ limits.`,
+      `The voucher key ${v} signs for ${grants.join(', ')}. The program refuses any other key and any voucher moved to another wallet, grant or incarnation, and pays a wallet each round once; the same round signed for a second wallet pays again, so a server that signs a win again for another wallet first reads the chain for the first one. What it can’t check is what the key’s server decides, and which person it names. Whoever holds that key pays anyone, up to these grants’ limits.`,
       'Keep its secret on the server only (never in a page, a repository or a spec); to rotate it, put the new public key in "vouchers" and publish. Their "perDay" and "total" are what a stolen key could take.',
     );
   const owner = 'the owner’s wallet';

@@ -75,17 +75,53 @@ const found = (s, code, situation = '') =>
     .warnings.filter(w => w.code === code && (!situation || w.message.includes(`${situation}:`)))
     .map(w => w.where);
 
+/** The same game with a contest entered with the crafted entry token: a craft nothing folds into the entry. */
+const withContest = () => ({
+  ...spec(),
+  contests: [
+    {
+      key: 'duel',
+      name: 'Duel',
+      currency: 'entry',
+      sides: 2,
+      entriesClose: '10m',
+      resultDue: '1h',
+      deciders: [VOUCHER],
+    },
+  ],
+});
+
 test('three analyses, three codes: the situation each found is in its message', () => {
   const codes = new Set(
-    check(spec(), { now: NOW })
+    check(withContest(), { now: NOW })
       .warnings.map(w => w.code)
       .filter(c => ['W-VALUE', 'W-STEPS', 'W-ASSUMPTION'].includes(c)),
   );
   assert.deepEqual([...codes].sort(), ['W-ASSUMPTION', 'W-STEPS', 'W-VALUE']);
-  const r = review(spec(), { now: NOW });
+  const r = review(withContest(), { now: NOW });
   assert.ok(r.findings.some(f => f.id === 'R-VALUE' && f.severity === 'high'));
   assert.ok(r.findings.some(f => f.id === 'R-ASSUMPTION' && f.severity === 'high'));
   assert.ok(r.findings.some(f => f.id === 'R-STEPS' && f.severity === 'low'));
+});
+
+test('one intent, one step: a craft the purchase carries is no prompt of its own; one nothing folds is', async () => {
+  // A draw entered with a crafted token: the kit's own client crafts and buys in one approval (buyTickets' make), so
+  // the loop is 2 prompts (buy, then the winner's pull) and no finding says a correct page has one too many.
+  assert.deepEqual(found(spec(), 'W-STEPS'), []);
+  assert.ok(!review(spec(), { now: NOW }).findings.some(f => f.id === 'R-STEPS'));
+  const { runTool } = await import('../mcp/server.mjs');
+  const told = (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text;
+  assert.match(
+    told,
+    /A whole go at “draw” takes 2 wallet approvals when the page's purchase carries the craft \(buyTickets' make\), 3 when it doesn't: craft ENTRY/,
+  );
+  // A contest entered with the same token: craft, enter, claim, and nothing folds the craft in.
+  const steps = check(withContest(), { now: NOW }).warnings.filter(w => w.code === 'W-STEPS');
+  assert.deepEqual(
+    steps.map(w => w.where),
+    ['economy.contests.duel'],
+  );
+  assert.match(steps[0].message, /takes 3 wallet prompts: craft ENTRY .*then enter a side, then claim the win/);
 });
 
 test('follow the value, cancelled: a refund in the ticket token, not what was paid for it', () => {
@@ -156,12 +192,12 @@ test('follow the value, after the end: a token still given after the last draw i
 });
 
 test('one intent, one step: a price the player crafts first points to make, one approval for both', () => {
-  const ws = check(spec(), { now: NOW }).warnings.filter(x => x.code === 'W-STEPS');
-  assert.deepEqual(
-    ws.map(w => w.where),
-    ['economy.lotteries.draw', 'economy.lotteries.draw2'],
+  // The walk-through gives the builder the call that folds the craft into the purchase (no finding: a page that makes
+  // it is right, and the spec can't see the page).
+  assert.match(
+    explainEconomy(spec(), { now: NOW }).text,
+    /“draw”: [^\n]*\(2 with the craft carried by the purchase, 3 without\)\. To fold it: the play client's buyTickets\("draw", count, \{ listing, make: \{ recipe: "entry", times: count, listing \} \}\) crafts and buys with one approval/,
   );
-  assert.match(ws[0].fix, /make: \{ recipe: "entry", times: count, listing \}/);
   // Tickets in the game's currency need no craft.
   const own = spec();
   for (const l of own.lotteries) Object.assign(l, { currency: 'bubl', price: 100 });
@@ -308,6 +344,16 @@ test('the check tool asks the questions and shows each route’s cancel and chan
   const { runTool } = await import('../mcp/server.mjs');
   const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
   assert.match(r.text, /Ask the person before building on it[^\n]*:\n\? /);
+  assert.match(r.text, /Each one is theirs to answer: put it to them as a question, with the answer you would pick/);
+  // what "a round pays once" covers, for every grant a server signs for: as written
+  assert.match(
+    r.text,
+    /“Popped bubbles” and “Free entry”: the chain pays a wallet each win \(round\) once, and keeps that by round and wallet together\. The same win signed for a second wallet pays again.* it reads the chain for the first wallet \(winPaid/,
+  );
+  assert.match(
+    review(spec(), { now: NOW }).findings.find(f => f.id === 'R-VOUCHER-KEY').message,
+    /pays a wallet each round once; the same round signed for a second wallet pays again/,
+  );
   assert.match(r.text, /When it goes wrong or a player changes their mind/);
   assert.match(r.text, /“draw”, cancelled or failed: Anyone: refunds every ticket in ENTRY/);
 });
@@ -568,7 +614,7 @@ test('round 5: a fund against its audience, a contest’s every ending, who else
   const { runTool } = await import('../mcp/server.mjs');
   assert.match(
     (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text,
-    /> A returning player's day, doing each thing once: buy tickets of “draw” \(2\), buy tickets of “draw2” \(2\), collect wins \(1\): about 5 wallet approvals/,
+    /> A returning player's day, doing each thing once: buy tickets of “draw” \(1\), buy tickets of “draw2” \(1\), collect wins \(1\): about 3 wallet approvals/,
   );
 });
 
@@ -586,6 +632,15 @@ test('every cap against the pace the game allows: lifetime, a day’s, the serve
     mine.ask,
     /claim 60 times in all \(claims, not BUBL\).*done in about 4 hours\. Is 60 meant for good, or for a day\?/,
   );
+  // A prize paid from a pool names no currency of its own: the unit is the pool's token, never the spec's currency
+  // as an object ("claims, not [object Object]").
+  const pooled = spec();
+  Object.assign(pooled.grants[0], { serverLimit: s.grants[0].serverLimit, limits: s.grants[0].limits });
+  delete pooled.grants[0].prize.currency;
+  assert.match(at(pooled, 'limits.perPerson').ask, /claim 60 times in all \(claims, not BUBL\)/);
+  delete pooled.grants[0].serverLimit.claims;
+  assert.match(at(pooled, 'serverLimit').ask, /server counts BUBL, while the chain counts claims/);
+  for (const w of check(pooled, { now: NOW }).warnings) assert.doesNotMatch(`${w.message} ${w.ask ?? ''}`, /\[object/);
   // Two players, each done after 60: 120 claims, under the day's 500; at 100, used up in hours, asked in their numbers.
   assert.equal(at(s, 'limits.perDay'), undefined);
   s.grants[0].limits.perDay = 100;
