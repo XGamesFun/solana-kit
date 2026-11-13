@@ -519,7 +519,9 @@ const SERVER_NEEDS = Object.freeze([
   'The most claims one player makes a day?',
   'The most claims everyone together makes a day?',
   'The most claims in all, ever? (the chain counts claims: a cap of N claims is N times the most one claim gives)',
-  'What happens to what a player earned and can’t claim (past a cap, once the prize runs out, when a day turns or a voucher runs out): kept for them (until when), or lost? Follow the balance your server keeps from the moment it signs.',
+  'What a player earns past the day’s cap: kept for the next day, or lost?',
+  'What a player earns past the cap in all, or once the prize runs out, can never be claimed: does the game stop giving it there, and how are players told?',
+  'A voucher that runs out before it is claimed: signed again for them (until when), or lost? Follow the balance your server keeps from the moment it signs.',
 ]);
 
 export const FAMILIES = {
@@ -1103,7 +1105,30 @@ function sayIt(c) {
 const FAMILY_WORDS = { draw: 'a draw', sale: 'a sale', reward: 'a reward', earn: 'staking', contest: 'a contest' };
 
 /** The design in words, for every route the requirements name: one section a route. */
-export function describeDesign(result, requirements, { top = 3 } = {}) {
+export function describeDesign(result, requirements, opts = {}) {
+  return `${describeRoutes(result, requirements, opts)}${alsoSigned(result, requirements)}`;
+}
+
+/**
+ * The rewards a server signs that are in the spec and that no requirement was about (the design was asked for another
+ * route): what each needs from the person all the same, so a design run on the raffle alone still shows it.
+ */
+function alsoSigned(result, requirements) {
+  const routes = result.routes ?? [result];
+  const spec = [...routes].reverse().find(r => r.candidates?.length)?.candidates[0].spec;
+  const about = new Set(requirements.flatMap(q => [q.route, q.grant]).filter(Boolean));
+  const others = (spec?.grants ?? []).filter(g => (g.vouchers ?? []).length && !about.has(g.key));
+  if (!others.length) return '';
+  const names = others.map(g => `“${g.name ?? g.key}”`).join(' and ');
+  return [
+    '',
+    '',
+    `Also in this spec, with no design asked for ${others.length === 1 ? 'it' : 'them'}: ${names}, ${others.length === 1 ? 'a reward' : 'rewards'} a server signs. Before ${others.length === 1 ? 'its' : 'their'} first spec ${others.length === 1 ? 'it needs' : 'each needs'} from you ${SERVER_NEEDS.length} things. Each is its own question to the person, with your pick; one you answer yourself is still said to them on a line of its own:`,
+    ...SERVER_NEEDS.map((n, i) => `  ${i + 1}. ${n}`),
+  ].join('\n');
+}
+
+function describeRoutes(result, requirements, { top = 3 } = {}) {
   const routes = result.routes ?? [result];
   const first = requirements.find(r => r.route)?.route;
   if (routes.length === 1 && !routes[0].unknown) return describeRoute(routes[0], requirements, { top });

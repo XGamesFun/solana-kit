@@ -645,7 +645,7 @@ test('a grant’s edges: what the chain keeps at each, what only the server keep
   assert.equal(unclaimed.length, 1);
   assert.match(
     unclaimed[0],
-    /^When a day turns, a cap is reached or a voucher runs out, what happens to what a player earned from “Popped bubbles” and “Free entry” and did not claim in time: is it kept for them \(until when\), or lost\?/,
+    /^What a player earned from “Popped bubbles” and “Free entry” and did not claim in time, in three cases, each kept for them \(until when\) or lost: earned past the day's cap; earned past the cap in all, or once the prize runs out; and a voucher that runs out unclaimed\./,
   );
   // A cap is the person's number: with no pace stated nothing else asks about one, so every cap is asked, once, in
   // claims and in what they give (2000 claims of 12000 BUBL is 24 million BUBL).

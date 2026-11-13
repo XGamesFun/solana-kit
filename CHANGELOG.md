@@ -4,6 +4,17 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.25: a signed reward's questions shown whichever route was designed, and what can't be claimed asked case by case (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **Shown for every reward a server signs.** `xsolana_design` asked about one route (a raffle, say) now ends with an
+  "Also in this spec" list for each reward a server signs that no requirement was about: the same questions it would
+  get from a design of its own.
+- **What can't be claimed, case by case.** The one question about unclaimed earnings is three: what is earned past the
+  day's cap, what is earned past the cap in all or once the prize runs out, and a voucher that runs out. The checker's
+  question names the same three cases, so an answer that covers only the day turning shows.
+
 ## 0.28.24: one question a cap, and the design that keeps a way out listed first (loot 0.28.0, unchanged)
 
 The tools alone.

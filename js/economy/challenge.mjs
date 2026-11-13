@@ -804,7 +804,7 @@ export function challenge(m, warnTo, now, economy) {
       'Ask, then build that and say it on the page where the player earns: what carries over, what is lost and when.',
       {
         severity: 'low',
-        ask: `When a day turns, a cap is reached or a voucher runs out, what happens to what a player earned from ${words(signedGrants.map(named))} and did not claim in time: is it kept for them (until when), or lost? Players are told either way.`,
+        ask: `What a player earned from ${words(signedGrants.map(named))} and did not claim in time, in three cases, each kept for them (until when) or lost: earned past the day's cap; earned past the cap in all, or once the prize runs out; and a voucher that runs out unclaimed. Players are told each one.`,
       },
     );
   // A cap is the person's number as the scenario is: every cap of a signed grant that no question above was about, in

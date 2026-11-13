@@ -126,6 +126,28 @@ test('a burn: the design that keeps a way out is listed before the one that remo
   );
   assert.match(said, /\n {3}Removes a way out: nobody can give a burned payment back/);
   assert.match(said, /end your turn there: build none until they choose/);
+  // A reward a server signs that is in the spec, with no design asked for it, still gets its questions.
+  const VOUCHER_KEY = 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD';
+  const withPops = {
+    ...base,
+    grants: [
+      {
+        key: 'pops',
+        name: 'Popped bubbles',
+        vouchers: [VOUCHER_KEY],
+        prize: { gives: 'tokens', currency: 'bubl', amount: 10, from: 'pool:taps' },
+        limits: { perWalletEach: { count: 10, every: '1d' } },
+      },
+    ],
+  };
+  const also = describeDesign(design(withPops, reqs, { now: NOW }), reqs);
+  assert.match(
+    also,
+    /\n\nAlso in this spec, with no design asked for it: “Popped bubbles”, a reward a server signs\. Before its first spec it needs from you 6 things\./,
+  );
+  assert.match(also, /\n {2}1\. The most claims one player makes a day\?\n/);
+  assert.match(also, /\n {2}6\. A voucher that runs out before it is claimed/);
+  assert.doesNotMatch(said, /Also in this spec/);
   // A draw for each currency can burn at the draw itself: with no want against it, that design leads on its score.
   const each = design(base, [pay, { kind: 'burn', route: 'draw' }], { now: NOW });
   assert.equal(each.candidates[0].plan.burn, 'settle');
@@ -180,6 +202,8 @@ test('a burn that a cancel must refund, and a free entry that is not money: what
   const settle = r.conflicts.find(c => c.giveUp.join() === 'free-entry').best;
   assert.deepEqual(settle.bridges.slice(0, 2), ['direct', 'at-settle']);
   assert.equal(settle.spec.lotteries[0].rest, 'burn');
+  // The free entry's grant is what a requirement is about: it is not listed again as a reward with no design.
+  assert.doesNotMatch(describeDesign(r, reqs), /Also in this spec/);
 });
 
 const example = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
@@ -235,11 +259,13 @@ test('a reward with no server, one a person and no gain for a script: a list, or
       'The most claims one player makes a day',
       'The most claims everyone together makes a day',
       'The most claims in all, ever',
-      'What happens to what a player earned and can’t claim (past a cap, once the prize runs out, when a day turns or a voucher runs out): kept for them (until when), or lost',
+      'What a player earns past the day’s cap: kept for the next day, or lost',
+      'What a player earns past the cap in all, or once the prize runs out, can never be claimed: does the game stop giving it there, and how are players told',
+      'A voucher that runs out before it is claimed: signed again for them (until when), or lost',
     ],
   );
   const words = describeDesign(r, reqs);
-  assert.match(words, /Needs from you, 4 things\. Each is its own question to the person, with your pick/);
+  assert.match(words, /Needs from you, 6 things\. Each is its own question to the person, with your pick/);
   assert.match(
     words,
     /\n {5}2\. The most claims everyone together makes a day\?\n {5}3\. The most claims in all, ever\?/,
