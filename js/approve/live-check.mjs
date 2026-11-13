@@ -5,7 +5,10 @@
 // makes, and the project, the mints, the collection and the tree the file calls made must be on chain and be that
 // project's. A project's address is its creator's and its number, and a new owner keeps it: a project handed on is
 // its new owner's to change. Its treasury and authority are read from the chain, never taken from the file, and its
-// collection is one the Project account itself lists.
+// collection is one the Project account itself lists. A mint the file calls the setup's is a classic one, as every
+// mint a setup makes is; and before the project is made it is as a setup leaves it a moment after making it: none of
+// it minted (a fixed supply: all of it in the owner's own account), its name record the owner's. Anyone can make a
+// mint that names the project-to-be its minter, with a supply of their own already out.
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { utf8 } from '../chain/bytes.js';
@@ -13,9 +16,9 @@ import { METADATA_LIMITS, metadataAddress, parseRecord } from '../chain/metadata
 import { parseMint } from '../chain/mint.js';
 import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
-import { BUBBLEGUM_PROGRAM, lootProgram, pda } from '../client/pda.js';
+import { ata, BUBBLEGUM_PROGRAM, lootProgram, pda } from '../client/pda.js';
 import { METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
-import { tokenLabels } from '../economy/model.mjs';
+import { fromUnits, tokenLabels } from '../economy/model.mjs';
 import { madeSoFar } from '../economy/plan.mjs';
 
 /** A `live` section that does not match the chain: the message says what differs, in plain words. */
@@ -118,6 +121,12 @@ export async function checkLive({ live, m, wallet, chain }) {
       throw new LiveMismatch(
         `The file says the setup made the token ${t.symbol ?? key} at ${address}, and there is no mint there.`,
       );
+    // A setup makes its tokens with the Token program. A Token-2022 mint can carry powers over every holder (a
+    // delegate for good, a hook, a fee) that no setup gives a token, so one is never taken for the setup's own.
+    if (mint.program !== 'spl-token')
+      throw new LiveMismatch(
+        `The mint ${address} the file names for ${t.symbol ?? key} is a Token-2022 mint; a setup makes its tokens with the Token program.`,
+      );
     if (mint.decimals !== (t.decimals ?? 0))
       throw new LiveMismatch(
         `The mint ${address} the file names for ${t.symbol ?? key} has ${mint.decimals} decimals, not ${t.decimals ?? 0}.`,
@@ -132,6 +141,37 @@ export async function checkLive({ live, m, wallet, chain }) {
     if (mint.freezeAuthority)
       throw new LiveMismatch(
         `The mint ${address} the file names for ${t.symbol ?? key} can be frozen by ${mint.freezeAuthority}; the setup makes none that can.`,
+      );
+    if (made.project) continue;
+    // Before the project is made nothing has minted from a mint the setup made: the project mints, and it is not
+    // there yet. So none of the token is out, or (a fixed supply) all of it is in the owner's own account; and its
+    // name record is there, the owner's to change, as the step that makes the mint leaves it.
+    const supply = BigInt(mint.supply);
+    const words = units => `${fromUnits(units, t.decimals ?? 0)} ${t.symbol ?? key}`;
+    if (!t.fixedSupply && supply !== 0n)
+      throw new LiveMismatch(
+        `The mint ${address} the file names for ${t.symbol ?? key} has ${words(supply)} made already, and its project is not made yet: a mint this setup made has none until the project mints some.`,
+      );
+    if (t.fixedSupply) {
+      const account = await read(ata(wallet, address));
+      const held =
+        account?.data?.length >= 72 &&
+        encodeBase58(account.data.subarray(0, 32)) === address &&
+        encodeBase58(account.data.subarray(32, 64)) === wallet
+          ? new DataView(account.data.buffer, account.data.byteOffset, account.data.byteLength).getBigUint64(64, true)
+          : 0n;
+      if (held !== supply)
+        throw new LiveMismatch(
+          `The mint ${address} the file names for ${t.symbol ?? key} has ${words(supply)} in all, of which this wallet holds ${words(held)}, and its project is not made yet: a setup gives a fixed supply whole to its owner.`,
+        );
+    }
+    const named = await read(metadataAddress(address));
+    const record = named?.owner === METAPLEX_METADATA_PROGRAM ? parseRecord(named.data) : null;
+    if (record?.updateAuthority !== wallet)
+      throw new LiveMismatch(
+        record
+          ? `The name record of the mint ${address} the file names for ${t.symbol ?? key} is ${record.updateAuthority}’s to change, not this wallet’s: a setup writes its token’s name as its owner.`
+          : `The mint ${address} the file names for ${t.symbol ?? key} has no name record on chain: a setup writes one in the step that makes the mint.`,
       );
   }
 
