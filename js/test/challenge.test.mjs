@@ -352,6 +352,16 @@ test('the check tool asks the questions and shows each route’s cancel and chan
   const { runTool } = await import('../mcp/server.mjs');
   const r = await runTool('xsolana_check', { spec: spec() }, { now: NOW });
   assert.match(r.text, /Ask the person before building on it[^\n]*:\n\? /);
+  // a draft saved before they answer is already built on, and the header and the save tool both say so
+  assert.match(
+    r.text,
+    /Ask the person before building on it \(saving it, a draft too, is building on it\), the first ones first\./,
+  );
+  const { tools } = await import('../mcp/tools.mjs');
+  assert.match(
+    tools.find(t => t.name === 'xsolana_save').description,
+    /Saving is building, a draft too: a choice xsolana_design left to the person, and each question xsolana_check or xsolana_design has for them, is put to them before this, not after\./,
+  );
   assert.match(r.text, /Each one is theirs to answer: put it to them as a question, with the answer you would pick/);
   // one the builder answers itself still goes to the person, and the questions come heaviest first
   assert.match(r.text, /One you answer yourself still goes to them, as one plain sentence saying what you chose/);
@@ -626,6 +636,79 @@ test('a server rule on what a grant pays, for something on no chain (a printed c
   );
   // A read of the chain that gates a payout fails closed, and the trust line says so.
   assert.match(told, /A read that fails is not “not paid”: the server signs nothing until it has the answer\./);
+});
+
+test('where a signed reward stops paying, the chain stops and the game does not: said as written, after the caps', async () => {
+  const { runTool } = await import('../mcp/server.mjs');
+  const told = async s => {
+    const text = (await runTool('xsolana_check', { spec: s }, { now: NOW })).text;
+    const from = text.indexOf('Tell the person, as written');
+    return from < 0 ? '' : text.slice(from, text.indexOf('\n\n', from));
+  };
+  // A cap in all (a person's and everyone's) and a pool that can run dry: one line for every reward a server signs,
+  // with what the server and the page have to do, since the chain only refuses the claim.
+  const written = await told(spec());
+  assert.match(
+    written,
+    /^Tell the person, as written \(what a script or a leaked key can take, and what only the server can stop\):/,
+  );
+  assert.match(
+    written,
+    /\n> A reward stops paying on the chain, not in the game\. The chain refuses every claim of “Popped bubbles” past 2000 a person in all or 100000 in all \(for good\) and while “taps” is empty; of “Free entry” past 1 a wallet in all, 1 a person in all or 10000 in all \(for good\)\. Nothing on the chain stops the server counting what a player earns after that, or signing a voucher for it, and none of it can be claimed \(a pool you refill pays again, while a voucher lasts\)\./,
+  );
+  assert.match(
+    written,
+    /So the server stops there itself: before it adds to a balance or signs, it reads what is left or keeps the count, and the page tells the player, or everyone, that the reward has ended\. Both hold only once they are built: a line of the server’s code that stops, and a sentence players see\./,
+  );
+  assert.equal(written.match(/stops paying on the chain/g).length, 1, 'once for them all');
+  // after each reward's caps, before what a round pays once
+  const at = text => written.indexOf(text);
+  assert.ok(at('> “Free entry”: each claim gives') < at('> A reward stops paying on the chain'));
+  assert.ok(at('> A reward stops paying on the chain') < at('the chain pays a wallet each win (round) once'));
+  // A minted reward with only a window: nothing runs out and no cap is for good, so nothing to stop at.
+  const windows = spec();
+  windows.grants = [
+    {
+      ...windows.grants[1],
+      limits: { perWalletEach: { count: 1, every: '1d' }, perDay: 5000 },
+    },
+  ];
+  windows.recipes = [];
+  windows.lotteries = [];
+  windows.pools = [];
+  windows.items = [];
+  windows.scenario = { days: 1, players: 2 };
+  const none = await told(windows);
+  assert.match(
+    none,
+    /> “Free entry”: each claim gives up to 1 ENTRY, minted; the caps count claims: 1 a wallet every 1d/,
+  );
+  assert.doesNotMatch(none, /stops paying on the chain/);
+  // A reward no server signs: the chain's refusal is all there is, and there is no balance a server keeps.
+  const open = spec();
+  delete open.grants[0].vouchers;
+  delete open.grants[0].trust;
+  delete open.grants[1].vouchers;
+  delete open.grants[1].trust;
+  assert.doesNotMatch(await told(open), /stops paying on the chain/);
+  // A limited item as the prize: it runs out, with no pool to refill.
+  const item = spec();
+  item.items.push({ key: 'badge', name: 'Badge', supply: 500 });
+  item.grants = [
+    {
+      key: 'badge-win',
+      name: 'Badge for a win',
+      prize: { gives: 'item', item: 'badge' },
+      vouchers: [VOUCHER],
+      trust: 'decides',
+      limits: { perDay: 100 },
+    },
+  ];
+  const badge = await told(item);
+  assert.match(
+    badge,
+    /> A reward stops paying on the chain, not in the game\. The chain refuses every claim of “Badge for a win” once none of its prize is left\. Nothing on the chain stops the server counting what a player earns after that, or signing a voucher for it, and none of it can be claimed\. So the server stops there itself/,
+  );
 });
 
 test('a server conversion with no rate is asked about; a server’s total bounds what is given away', () => {

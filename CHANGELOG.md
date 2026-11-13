@@ -4,6 +4,21 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.27: saving a draft counts as building, and where a signed reward stops paying is the server's to stop (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **Saving a draft counts as building.** Wherever a choice or a question is left to the person, the tools now say that
+  a spec saved before they answer is already built on, a draft too: `xsolana_design`'s closing line and its "Also in
+  this spec" list, the header over `xsolana_check`'s questions, `xsolana_save`'s own description, the guide, the
+  server's instructions and the skill's rule 9. `xsolana_design`'s `askFirst` carries it as `before` (null when
+  nothing is left for them).
+- **Where a reward stops paying.** For every reward a server signs that has a cap in all or a prize that can run out,
+  the check's lines to pass on as written now say, after the caps: the chain refuses those claims and nothing more, so
+  the server stops counting and signing there itself and the page tells players, and both hold only once they are
+  built. The skill's trust reference adds the rule behind it: what you say the game does for its players is true only
+  where a line of the server's code or a sentence on the page does it.
+
 ## 0.28.26: a server's own rules declared and said, the design's questions in its JSON too, and a payout read that fails closed (loot 0.28.0, unchanged)
 
 The tools alone.

@@ -5934,7 +5934,7 @@ export function describe({ refusals, warnings }) {
     ...(warnings.some(w => w.ask)
       ? [
           '',
-          'Ask the person before building on it, the first ones first. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation. One you answer yourself still goes to them, as one plain sentence saying what you chose, so they can overrule it; check it is true first. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
+          'Ask the person before building on it (saving it, a draft too, is building on it), the first ones first. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation. One you answer yourself still goes to them, as one plain sentence saying what you chose, so they can overrule it; check it is true first. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
           ...warnings
             .filter(w => w.ask)
             .map((w, i) => ({ w, i }))

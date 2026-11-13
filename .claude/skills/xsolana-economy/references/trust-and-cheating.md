@@ -58,6 +58,12 @@ voucher grant that says nothing as `bounds`, the weakest.
   say), look past the payout at whatever else trusted "this wallet is this player's": a name shown beside a wallet, a
   row on a board, the record of which account a wallet belongs to. A record the server now writes from the wallet a
   request names lets any signed-in player put their own name on the winner's wallet.
+- **A rule told to players is a line of code or a sentence on the page.** Whatever you say the game does for its
+  players ("it stops giving once the prize runs out", "the page says when the cap is reached") holds only where the
+  server's code or the page does it. Before you say it, find the line or the string; when there is none, build it or
+  say it is not built. The chain stops paying past a cap in all and while a pool is empty, and it never stops a
+  server counting what a player earns after that or signing for it: `xsolana_check` lists that with what to tell
+  the person as written.
 - **Bots play well.** Even a verified result pays a bot what it pays a good player.
 
 ## What the program guarantees
