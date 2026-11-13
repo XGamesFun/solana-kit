@@ -275,6 +275,24 @@ export async function createApproval({
       : null;
 
   /**
+   * A collection made before its project is gone on with only by the session that made it (its address is then of a
+   * key this session made itself). The file's word for one, with no project yet to list it, is not built on: anyone
+   * can make a collection that names the owner its update authority and keeps a power of their own over it. This
+   * setup makes a new one, and whatever the file named is left as it is.
+   */
+  function forgetCollectionBeforeProject() {
+    const section = spec.live;
+    if (!section || madeSoFar(section)?.project) return;
+    const named = section.collection !== undefined || (section.landed ?? []).includes('collection');
+    if (!named || (section.collection && section.collection === keys.get('new:collection')?.address)) return;
+    const { collection: _collection, ...rest } = section;
+    spec = {
+      ...spec,
+      live: { ...rest, ...(rest.landed ? { landed: rest.landed.filter(id => id !== 'collection') } : {}) },
+    };
+  }
+
+  /**
    * Holds each mint key the owner supplied against the file and the chain, before anything is built: a mint is made
    * at an address nothing holds yet. A token whose mint an earlier run already made at that key's address needs
    * nothing more of it; one that is live elsewhere, an address the chain already has an account at, and the wallet's
@@ -358,6 +376,7 @@ export async function createApproval({
    * it.
    */
   async function trust(wallet) {
+    forgetCollectionBeforeProject();
     await holdSupplied(wallet);
     try {
       const m = model(spec, { now: at });

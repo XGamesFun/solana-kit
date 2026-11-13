@@ -4,6 +4,32 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.30: a file's word for a collection or a mint made before its project is not built on, and a long step name no longer locks a setup out (loot 0.28.0, unchanged)
+
+The tools alone. A spec file's live section is written by agents, by hand and by teammates, and the approval holds it
+against the chain before it builds on it. Three places took the file's word where the chain could not back it, each
+shown by a planted file against the real program:
+
+- **A collection before its project.** A file that named a collection with no project yet (a setup "cut short") had
+  that collection listed as the new project's own, so long as its update authority was the owner. Anyone can make a
+  collection that says so and keep a power of their own over it. A collection made before its project is now gone on
+  with only by the session that made it; another run makes a new one, and the earlier one is left as it is.
+- **A mint before its project.** A file could name a mint a stranger made for one of the spec's tokens: the right
+  decimals, the project-to-be its minter, and a supply of the stranger's own already out. The economy was built on
+  it. Before the project is made, a mint the file names must now be as a setup leaves it: none of it minted (a fixed
+  supply: all of it in the owner's own account), and its name record there, plain, and the owner's to change (a
+  stranger can write a mint's first record with words that can never be changed, naming the owner).
+- **A Token-2022 mint named as the setup's own**, on a project that is live too. A setup makes its tokens with the
+  Token program; a Token-2022 mint can carry powers over every holder, and is now refused wherever the file calls it
+  one the setup made.
+- **A landed step's name could be longer than the file allows.** A stash step that puts in several NFTs is recorded
+  under a name of up to about 300 characters, and the file's live section took 80: a setup cut short right after such
+  a step left a file the next `approve` refused to read. The live section's step names now take 400.
+
+Not closed by this release: on a project that is live, a file that names another classic mint for a token (one whose
+minter is the project, with a supply already out elsewhere) is still taken for the token's own when a later change
+adds a part that uses it. Nothing on chain says which mint a token's is until a part uses it.
+
 ## 0.28.29: a token's new mint at an address the owner chose (loot 0.28.0, unchanged)
 
 The tools alone.

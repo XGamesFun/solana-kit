@@ -9,15 +9,17 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { clusterChain, createApproval } from '../approve/server.mjs';
-import { fromBase64, toBase64 } from '../chain/bytes.js';
-import { TOKEN_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit } from '../chain/programs.js';
-import { createAccountIx, initializeMint2Ix, MINT_BYTES } from '../chain/token.js';
+import { concat, fromBase64, toBase64, uintLE, utf8 } from '../chain/bytes.js';
+import { SYSTEM_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent, meta } from '../chain/programs.js';
+import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx, setAuthorityIx } from '../chain/token.js';
 import { readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
-import { encodeBase58 } from '../chain/base58.js';
-import { createCollectionInstruction, parseCoreAsset } from '../chain/core.js';
+import { addressBytes, encodeBase58 } from '../chain/base58.js';
+import { createCollectionInstruction, MPL_CORE_PROGRAM, parseCoreAsset, parseCoreCollection } from '../chain/core.js';
+import { createFungibleMetadataIx } from '../chain/metadata.js';
+import { parseMint } from '../chain/mint.js';
 import { check } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import { plan, setupContext } from '../economy/plan.mjs';
@@ -309,6 +311,359 @@ describe('xsolana approve holds the file’s live section against the chain', ()
       }
     },
   );
+
+  /**
+   * A Core collection a stranger pays for and signs, which names `updateAuthority` its update authority (who signs
+   * nothing) and keeps the stranger a power over it for good (an update delegate, and its royalty).
+   */
+  const plantedCollectionIx = ({ collection, payer, updateAuthority }) => {
+    const text = t => concat(uintLE(utf8(t).length, 4), utf8(t));
+    return {
+      programId: MPL_CORE_PROGRAM,
+      keys: [
+        meta(collection, true, true),
+        meta(updateAuthority, false, false),
+        meta(payer, true, true),
+        meta(SYSTEM_PROGRAM, false, false),
+      ],
+      data: concat(
+        Uint8Array.of(21),
+        text('Planted'),
+        text(''),
+        Uint8Array.of(1),
+        uintLE(2, 4),
+        // (a royalty to the stranger, then an update delegate that names the stranger)
+        Uint8Array.of(0),
+        uintLE(500, 2),
+        uintLE(1, 4),
+        addressBytes(payer),
+        Uint8Array.of(100, 0, 0),
+        Uint8Array.of(4),
+        uintLE(1, 4),
+        addressBytes(payer),
+        Uint8Array.of(0),
+        Uint8Array.of(0),
+      ),
+    };
+  };
+
+  test(
+    'a collection the file names before its project is made is not built on: the setup makes its own',
+    { skip },
+    async () => {
+      for (const [n, live] of [
+        ['whole', x => ({ collection: x })],
+        ['partial', x => ({ partial: true, landed: ['collection'], collection: x })],
+        ['landed', () => ({ partial: true, landed: ['collection'] })],
+      ]) {
+        const w = freshWorld(`hardening-planted-collection-${n}`);
+        const owner = funded(w);
+        const stranger = funded(w);
+        // Anyone can make a collection that names the owner its update authority, and keep a power of their own.
+        const planted = freshKeypair().address;
+        w.chain.send(stranger.address, [
+          plantedCollectionIx({ collection: planted, payer: stranger.address, updateAuthority: owner.address }),
+        ]);
+        assert.equal(parseCoreCollection(w.chain.get(planted).data).updateAuthority, owner.address);
+        const file = specFile({ ...structuredClone(example), live: live(planted) });
+        const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
+        const shown = await session.stateFor(owner.address);
+        assert.equal(shown.refused, undefined, n);
+        assert.ok(
+          shown.steps.some(s => s.id === 'collection'),
+          `the setup makes its own collection (${n})`,
+        );
+        assert.ok(!JSON.stringify(shown.steps).includes(planted), `no step names the planted one (${n})`);
+        await runAll(session, owner);
+        const project = w.read('Project', pda.project(owner.address, example.projectNumber ?? 0));
+        const saved = JSON.parse(readFileSync(file, 'utf8')).live;
+        assert.deepEqual(project.collections, [saved.collection], `the project lists the one the setup made (${n})`);
+        assert.notEqual(saved.collection, planted);
+      }
+    },
+  );
+
+  /**
+   * A mint's first name record, written by a stranger while still its minter. `updateAuthority`: whose it is to
+   * change (they sign nothing; the stranger's own by default); `locked`: it can never be changed; `royalty`: a
+   * resale royalty in hundredths of a percent.
+   */
+  const recordIx = ({ mint, stranger, updateAuthority = stranger, locked = false, royalty = 0 }) => {
+    const [name, symbol] = ['Not Arena', 'ARENA'];
+    const ix = createFungibleMetadataIx({ mint, authority: stranger, name, symbol });
+    const data = Uint8Array.from(ix.data);
+    // (after the two bytes that say what is made and the three texts: the royalty, no creators, sold once, changeable)
+    const at = 2 + 4 + utf8(name).length + 4 + utf8(symbol).length + 4;
+    data.set(uintLE(royalty, 2), at);
+    data[at + 4] = locked ? 0 : 1;
+    return {
+      ...ix,
+      data,
+      keys: ix.keys.map((k, i) => (i === 5 && updateAuthority !== stranger ? meta(updateAuthority, false, false) : k)),
+    };
+  };
+
+  /** A mint a stranger makes for a token of the owner's spec: the stranger's `supply` out, then `authority` its minter. */
+  const plantMint = (
+    w,
+    stranger,
+    { decimals, supply = 0n, authority, tokenProgram = TOKEN_PROGRAM, record = null },
+  ) => {
+    const mint = freshKeypair().address;
+    w.chain.send(stranger.address, [
+      createAccountIx({
+        from: stranger.address,
+        address: mint,
+        lamports: w.chain.rent(MINT_BYTES),
+        space: MINT_BYTES,
+        owner: tokenProgram,
+      }),
+      initializeMint2Ix({ mint, decimals, authority: stranger.address, tokenProgram }),
+      ...(record ? [recordIx({ mint, stranger: stranger.address, ...(record === true ? {} : record) })] : []),
+      ...(supply
+        ? [
+            createAssociatedTokenAccountIdempotent(stranger.address, stranger.address, mint, tokenProgram),
+            mintToIx({
+              mint,
+              to: loot.ata(stranger.address, mint, tokenProgram),
+              authority: stranger.address,
+              amount: supply,
+              tokenProgram,
+            }),
+          ]
+        : []),
+      setAuthorityIx({ account: mint, current: stranger.address, newAuthority: authority, tokenProgram }),
+    ]);
+    return mint;
+  };
+
+  test(
+    'a mint the file names before its project is made is as a setup leaves it, or it is refused',
+    { skip },
+    async () => {
+      const refusal = async ({ seed, spec = example, token = 'arena', plant, live }) => {
+        const w = freshWorld(seed);
+        const owner = funded(w);
+        const stranger = funded(w);
+        const project = pda.project(owner.address, spec.projectNumber ?? 0);
+        const mint = plantMint(w, stranger, plant({ project, owner }));
+        const file = specFile({ ...structuredClone(spec), live: live(token, mint) });
+        const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
+        const shown = await session.stateFor(owner.address);
+        await assert.rejects(session.prepare(owner.address));
+        assert.equal(w.chain.get(project), null, 'no project was made');
+        return { text: shown.refused ?? '', mint };
+      };
+      const whole = (token, mint) => ({ mints: { [token]: mint } });
+      const partial = (token, mint) => ({ partial: true, landed: [`token:${token}`], mints: { [token]: mint } });
+      // A supply of the stranger's own already out, and the project-to-be named its minter: in both shapes of file.
+      for (const [n, live] of [
+        ['whole', whole],
+        ['partial', partial],
+      ]) {
+        const { text, mint } = await refusal({
+          seed: `hardening-planted-mint-${n}`,
+          plant: ({ project }) => ({ decimals: 6, supply: 1_000_000_000_000n, authority: project, record: true }),
+          live,
+        });
+        assert.ok(
+          text.includes(
+            `The mint ${mint} the file names for ARENA has 1000000 ARENA made already, and its project is not made yet: a mint this setup made has none until the project mints some.`,
+          ),
+          text,
+        );
+      }
+      // None out, but a Token-2022 mint (which can carry powers over every holder).
+      assert.match(
+        (
+          await refusal({
+            seed: 'hardening-planted-mint-2022',
+            plant: ({ project }) => ({ decimals: 6, authority: project, tokenProgram: TOKEN_2022_PROGRAM }),
+            live: partial,
+          })
+        ).text,
+        /is a Token-2022 mint; a setup makes its tokens with the Token program/,
+      );
+      // None out, a classic mint, and no name record, or one that is the stranger's to change.
+      assert.match(
+        (
+          await refusal({
+            seed: 'hardening-planted-mint-unnamed',
+            plant: ({ project }) => ({ decimals: 6, authority: project }),
+            live: partial,
+          })
+        ).text,
+        /has no name record on chain: a setup writes one in the step that makes the mint/,
+      );
+      assert.match(
+        (
+          await refusal({
+            seed: 'hardening-planted-mint-named',
+            plant: ({ project }) => ({ decimals: 6, authority: project, record: true }),
+            live: partial,
+          })
+        ).text,
+        /The name record of the mint .* is .*’s to change, not this wallet’s/,
+      );
+      // A name record that names the owner (who signed nothing) and can never be changed, or carries a royalty: the
+      // token would wear the stranger's words for good.
+      for (const [n, record, says] of [
+        ['locked', { locked: true }, /can never be changed: a setup writes its token’s name plain/],
+        ['royalty', { royalty: 1000 }, /carries a royalty, creators, a collection or uses: a setup writes/],
+      ]) {
+        const { text } = await refusal({
+          seed: `hardening-planted-mint-record-${n}`,
+          plant: ({ project, owner }) => ({
+            decimals: 6,
+            authority: project,
+            record: { updateAuthority: owner.address, ...record },
+          }),
+          live: partial,
+        });
+        assert.match(text, says);
+      }
+      // A fixed supply, its minting off for good, all of it the stranger's.
+      const coin = JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
+      const fixed = coin.tokens.find(t => t.supply !== undefined);
+      assert.match(
+        (
+          await refusal({
+            seed: 'hardening-planted-mint-fixed',
+            spec: coin,
+            token: fixed.key,
+            plant: () => ({ decimals: fixed.decimals, supply: 5_000_000n, authority: null, record: true }),
+            live: partial,
+          })
+        ).text,
+        /of which this wallet holds 0 [A-Z]+, and its project is not made yet: a setup gives a fixed supply whole to its owner/,
+      );
+    },
+  );
+
+  test(
+    'a setup cut short before its project goes on: its own mints are kept, and its collection is made again',
+    { skip },
+    async () => {
+      // (an example whose tokens and collection land in a transaction before the project's)
+      const spec = JSON.parse(readFileSync(new URL('../../examples/star-fleet.json', import.meta.url), 'utf8'));
+      const w = freshWorld('hardening-cut-before-project');
+      const owner = funded(w);
+      const file = specFile(spec);
+      let sends = 0;
+      let cut = true;
+      const chain = approvalChain(w, {
+        send: async wire => {
+          if (cut && ++sends === 2) throw Object.assign(new Error('RPC: blockhash not found'), { code: -32002 });
+          return w.chain.sendWire(wire);
+        },
+      });
+      const first = await createApproval({ file, chain, now: () => NOW });
+      const batch = await first.prepare(owner.address);
+      await assert.rejects(first.complete(owner.address, batch.id, signAll(owner, batch.transactions)));
+      first.close();
+      const stopped = JSON.parse(readFileSync(file, 'utf8')).live;
+      assert.equal(stopped.partial, true);
+      assert.equal(stopped.project, undefined, 'the project’s step had not landed');
+      assert.ok(stopped.landed.includes('collection') && stopped.collection);
+      const tokens = Object.keys(stopped.mints);
+      assert.ok(tokens.length > 0 && tokens.every(key => stopped.landed.includes(`token:${key}`)));
+
+      // Another run: the mints the first made are as a setup leaves them (none minted, their name the owner's), so
+      // they are gone on with; the collection is made anew, since nothing on chain yet says the first is the project's.
+      cut = false;
+      const second = await createApproval({ file, chain, now: () => NOW });
+      const shown = await second.stateFor(owner.address);
+      assert.equal(shown.refused, undefined);
+      assert.ok(shown.steps.some(s => s.id === 'collection'));
+      assert.ok(!shown.steps.some(s => s.id.startsWith('token:')), 'no token is made twice');
+      await runAll(second, owner);
+      const done = JSON.parse(readFileSync(file, 'utf8')).live;
+      assert.equal(done.partial, undefined);
+      assert.deepEqual(done.mints, stopped.mints);
+      assert.notEqual(done.collection, stopped.collection);
+      assert.deepEqual(w.read('Project', done.project).collections, [done.collection]);
+      for (const key of tokens)
+        assert.equal(
+          parseMint(done.mints[key], TOKEN_PROGRAM, w.chain.get(done.mints[key]).data).mintAuthority,
+          done.project,
+        );
+
+      // The session that made the collection goes on with it itself: its address is of a key that session made.
+      const w2 = freshWorld('hardening-cut-same-session');
+      const owner2 = funded(w2);
+      const file2 = specFile(spec);
+      let sent = 0;
+      let stop = true;
+      const session = await createApproval({
+        file: file2,
+        chain: approvalChain(w2, {
+          send: async wire => {
+            if (stop && ++sent === 2) throw Object.assign(new Error('RPC: blockhash not found'), { code: -32002 });
+            return w2.chain.sendWire(wire);
+          },
+        }),
+        now: () => NOW,
+      });
+      const b2 = await session.prepare(owner2.address);
+      await assert.rejects(session.complete(owner2.address, b2.id, signAll(owner2, b2.transactions)));
+      const made = JSON.parse(readFileSync(file2, 'utf8')).live.collection;
+      assert.ok(made);
+      stop = false;
+      await runAll(session, owner2);
+      const live2 = JSON.parse(readFileSync(file2, 'utf8')).live;
+      assert.equal(live2.collection, made, 'the same collection');
+      assert.deepEqual(w2.read('Project', live2.project).collections, [made]);
+    },
+  );
+
+  test('a Token-2022 mint named for a live project’s token is refused', { skip }, async () => {
+    const w = freshWorld('hardening-swap-2022');
+    const owner = funded(w);
+    const stranger = funded(w);
+    const file = specFile(example);
+    await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
+    const saved = JSON.parse(readFileSync(file, 'utf8'));
+    const swapped = plantMint(w, stranger, {
+      decimals: 6,
+      authority: saved.live.project,
+      tokenProgram: TOKEN_2022_PROGRAM,
+    });
+    writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          ...saved,
+          pools: [...saved.pools, { key: 'vault', currency: 'arena' }],
+          live: { ...saved.live, mints: { ...saved.live.mints, arena: swapped } },
+        },
+        null,
+        2,
+      ),
+    );
+    await assert.rejects(
+      (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
+      new RegExp(`The mint ${swapped} the file names for ARENA is a Token-2022 mint`),
+    );
+  });
+
+  test('a landed step’s name as long as a stash step of several NFTs makes it is taken by the checker', () => {
+    const nfts = Array.from({ length: 6 }, () => freshKeypair().address);
+    const id = `stash:${'a-stash-key-as-long-as-a-key-gets'}:${nfts.join(',')}`;
+    assert.ok(id.length > 300);
+    const verdict = check({
+      ...structuredClone(example),
+      live: {
+        partial: true,
+        landed: [id],
+        changing: [id],
+        pending: [{ signature: '1'.repeat(88), steps: [id] }],
+      },
+    });
+    assert.deepEqual(
+      verdict.refusals.filter(r => r.code === 'E-SCHEMA'),
+      [],
+    );
+  });
 
   test(
     'a live economy whose file names a collection the project does not list is refused, the owner’s own too',
