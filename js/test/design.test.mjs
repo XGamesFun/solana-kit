@@ -72,6 +72,66 @@ test('a raffle in any of several currencies: one entry token they each buy, craf
   assert.match(text, /end your turn there: build none until they choose/);
 });
 
+test('a burn: the design that keeps a way out is listed before the one that removes it, and the person chooses', () => {
+  const base = {
+    version: 2,
+    network: 'devnet',
+    name: 'Prize Day',
+    currency: 'bubl',
+    tokens: [
+      { key: 'sol', source: 'sol' },
+      { key: 'bubl', source: 'project', name: 'Bubble', symbol: 'BUBL', decimals: 0, supply: 2_000_000 },
+      { key: 'gem', source: 'project', name: 'Gem', symbol: 'GEM', decimals: 0, supply: 100_000 },
+    ],
+    pools: [
+      { key: 'taps', currency: 'bubl', seed: 2_000_000 },
+      { key: 'gems', currency: 'gem', seed: 100_000 },
+    ],
+    items: [{ key: 'winner', name: 'Prize Ticket', soulbound: true, supply: 1 }],
+    lotteries: [
+      {
+        key: 'draw',
+        name: 'Prize draw',
+        places: [{ percent: 0, prize: { gives: 'item', item: 'winner' } }],
+        firstDraw: '2026-11-13T00:00:00Z',
+        minSold: 2,
+      },
+    ],
+    scenario: { days: 1, players: 2, perDay: { 'lottery:draw': 8 } },
+  };
+  const pay = {
+    kind: 'pay-in',
+    route: 'draw',
+    currencies: [
+      { token: 'bubl', amount: 100 },
+      { token: 'gem', amount: 5 },
+    ],
+  };
+  // One draw in two currencies needs an entry token: burning at the purchase keeps the burn whole, holding it until
+  // the draw only in part. The held design is listed first all the same, and both go to the person.
+  const reqs = [pay, { kind: 'burn', route: 'draw' }, { kind: 'one-draw', route: 'draw' }];
+  const r = design(base, reqs, { now: NOW });
+  const removes = r.candidates.findIndex(c => c.plan.removes);
+  const keeps = r.candidates.findIndex(c => c.plan.burn === 'held');
+  assert.deepEqual([keeps, removes], [0, 1], 'the held design just before the first that burns at the purchase');
+  assert.ok(r.candidates[keeps].kept < r.candidates[removes].kept, 'whatever their scores');
+  const said = describeDesign(r, reqs);
+  assert.match(
+    said,
+    /they differ in a way out: design 2 removes one \(nobody can give a burned payment back, so a cancelled draw refunds only the entry\), design 1 keeps it/,
+  );
+  assert.match(
+    said,
+    /Which one is the person’s choice, not yours: put both to them before anything is built, the one that keeps it first/,
+  );
+  assert.match(said, /\n {3}Removes a way out: nobody can give a burned payment back/);
+  assert.match(said, /end your turn there: build none until they choose/);
+  // A draw for each currency can burn at the draw itself: with no want against it, that design leads on its score.
+  const each = design(base, [pay, { kind: 'burn', route: 'draw' }], { now: NOW });
+  assert.equal(each.candidates[0].plan.burn, 'settle');
+  assert.ok(each.candidates.findIndex(c => c.plan.removes) > 0);
+});
+
 test('a burn that a cancel must refund, and a free entry that is not money: what has to give', () => {
   const base = {
     version: 2,
@@ -168,15 +228,23 @@ test('a reward with no server, one a person and no gain for a script: a list, or
   assert.ok(r.conflicts.some(c => c.giveUp.join() === 'no-server' && c.best.bridges[0] === 'voucher-decides'));
   // A reward a server signs needs the person's own numbers and rule before its first spec: asked with the design.
   const signed = r.conflicts.find(c => c.best.bridges[0] === 'voucher-decides').best;
-  assert.match(
-    signed.needs[0],
-    /its caps, each with your pick, before the first spec: the most claims one player makes a day/,
+  // One need a cap, each a question of its own, then the rule for what can't be claimed.
+  assert.deepEqual(
+    signed.needs.map(n => n.split('?')[0]),
+    [
+      'The most claims one player makes a day',
+      'The most claims everyone together makes a day',
+      'The most claims in all, ever',
+      'What happens to what a player earned and can’t claim (past a cap, once the prize runs out, when a day turns or a voucher runs out): kept for them (until when), or lost',
+    ],
   );
+  const words = describeDesign(r, reqs);
+  assert.match(words, /Needs from you, 4 things\. Each is its own question to the person, with your pick/);
   assert.match(
-    signed.needs[1],
-    /earned and did not claim when a day turns or a voucher runs out: kept for them \(until when\), or lost/,
+    words,
+    /\n {5}2\. The most claims everyone together makes a day\?\n {5}3\. The most claims in all, ever\?/,
   );
-  assert.ok(!r.inPart.find(x => x.best.bridges[0] === 'list').best.needs.some(n => n.includes('its caps')));
+  assert.ok(!r.inPart.find(x => x.best.bridges[0] === 'list').best.needs.some(n => n.includes('The most claims')));
 });
 
 test('staking with a cap on what it pays and a rate a staker can count on: what gives', () => {

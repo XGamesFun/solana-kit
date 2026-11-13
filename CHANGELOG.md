@@ -4,6 +4,25 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.24: one question a cap, and the design that keeps a way out listed first (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **One question a cap.** `xsolana_design`'s "Needs from you" for a reward a server signs is now four lines, each a
+  question of its own: the most claims one player makes a day, everyone together a day, in all, and what happens to
+  what a player earned and can't claim (past a cap, once the prize runs out, when a day turns or a voucher runs out).
+  In one line, the first part was asked and the rest stated.
+- **A way out first.** Where a design removes a way out (a payment burned as the entry is bought can't be given
+  back), the best design that keeps it is listed just before it, whatever their scores, and the removing one says so
+  ("Removes a way out"). When both keep every want, the tool no longer says "a design keeps every one of them": it
+  says which of the two is the person's choice, and to put both to them before anything is built. The list's order
+  now agrees with the tool's own "Next" line, the checker's question and the review's fix.
+- **Two questions made answerable.** The question about what a server does with what players hold is now a yes or no
+  (what the server computes is the builder's to read from its own code and say), and "who runs the results server"
+  offers its two answers: the game's own, or one someone else keeps.
+- **A proof taken out.** The skill's notes on who gets paid say to follow a dropped wallet proof to everything that
+  read it (a name beside a wallet, a board, the record of whose wallet it is), not only to the payout.
+
 ## 0.28.23: the person's numbers asked with the design, and the questions in the order they weigh (loot 0.28.0, unchanged)
 
 The tools alone.
