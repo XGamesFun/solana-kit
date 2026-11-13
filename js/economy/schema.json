@@ -236,16 +236,16 @@
           },
           "takes": {
             "type": "string",
-            "description": "What a player spends or holds for it: a token key, or \"item:<key>\"."
+            "description": "What a player spends, holds or does for it: a token key, \"item:<key>\", or plain words for what is on no chain (\"a code\", \"a streak\", \"a count of wins\")."
           },
           "gives": {
             "type": "string",
-            "description": "What it gives: a token key, \"item:<key>\", or \"farm:<key>\" for a share more of that farm's rewards."
+            "description": "What it gives: a token key, \"item:<key>\", \"farm:<key>\" for a share more of that farm's rewards, or \"grant:<key>\" for more of what that grant pays."
           },
           "rate": {
             "type": "number",
             "minimum": 0,
-            "description": "How much it gives for each one taken (a token or an item); for \"farm:<key>\", the percent a seat earns more."
+            "description": "How much it gives for each one taken (a token or an item); for \"farm:<key>\", the percent a seat earns more; for \"grant:<key>\", how many times what a claim would pay (2: doubled)."
           },
           "says": {
             "$ref": "#/$defs/words"

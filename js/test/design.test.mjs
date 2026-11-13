@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { design, describeDesign } from '../economy/design.mjs';
+import { design, describeDesign, designAsks } from '../economy/design.mjs';
 
 const NOW = Date.parse('2026-11-12T00:00:00Z') / 1000;
 const VOUCHER = 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD';
@@ -126,6 +126,20 @@ test('a burn: the design that keeps a way out is listed before the one that remo
   );
   assert.match(said, /\n {3}Removes a way out: nobody can give a burned payment back/);
   assert.match(said, /end your turn there: build none until they choose/);
+  assert.match(
+    said,
+    /\n {2}\(The burn counts as a want only if they asked for it in their own words\. If you added it, ask them first/,
+  );
+  // The same as data, for a builder that reads the JSON and not the words.
+  assert.deepEqual(designAsks(r, reqs), {
+    choose: true,
+    wayOut: {
+      removes: 2,
+      keeps: 1,
+      why: 'nobody can give a burned payment back, so a cancelled draw refunds only the entry',
+    },
+    also: [],
+  });
   // A reward a server signs that is in the spec, with no design asked for it, still gets its questions.
   const VOUCHER_KEY = 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD';
   const withPops = {
@@ -147,6 +161,8 @@ test('a burn: the design that keeps a way out is listed before the one that remo
   );
   assert.match(also, /\n {2}1\. The most claims one player makes a day\?\n/);
   assert.match(also, /\n {2}6\. A voucher that runs out before it is claimed/);
+  const asks = designAsks(design(withPops, reqs, { now: NOW }), reqs);
+  assert.deepEqual([asks.also.length, asks.also[0].grant, asks.also[0].needs.length], [1, 'pops', 6]);
   assert.doesNotMatch(said, /Also in this spec/);
   // A draw for each currency can burn at the draw itself: with no want against it, that design leads on its score.
   const each = design(base, [pay, { kind: 'burn', route: 'draw' }], { now: NOW });

@@ -600,6 +600,34 @@ test('a limit the server keeps: declared, the tools count it; undeclared, they a
     assert.match(flow.message, /“Free entry”'s server signs at most 50 for everyone together every 1d, about 50 a day/);
 });
 
+test('a server rule on what a grant pays, for something on no chain (a printed code), is declared, said and not followed as a conversion', async () => {
+  // Undeclared: the question is a yes or no, and its fix gives an entry to copy, with the spec's own grant in it.
+  const bare = check(spec(), { now: NOW }).warnings.find(w => w.where === 'economy.offchain');
+  assert.equal(
+    bare.ask,
+    'Does your server or page pay a player more for anything they hold, win or do (a token or item held, a code typed in, a streak, a place on a board): yes, and which, or no?',
+  );
+  assert.match(
+    bare.fix,
+    /a printed code that doubles what a claim pays is \{ "key": "boost-code", "takes": "a code", "gives": "grant:pops", "rate": 2 \}/,
+  );
+  // Declared: no question, no loop through it, and the rule is said with what it means for the grant's numbers.
+  const coded = spec();
+  coded.offchain = [{ key: 'boost-code', name: 'Boost code', takes: 'a code', gives: 'grant:pops', rate: 2 }];
+  const r = check(coded, { now: NOW });
+  assert.ok(r.ok, JSON.stringify(r.errors));
+  assert.ok(!r.warnings.some(w => w.where === 'economy.offchain'));
+  assert.ok(!r.warnings.some(w => /Boost code/.test(w.message) && w.message.includes('around a loop:')));
+  const { runTool } = await import('../mcp/server.mjs');
+  const told = (await runTool('xsolana_check', { spec: coded }, { now: NOW })).text;
+  assert.match(
+    told,
+    /“Boost code”: off chain, the server pays 2 times what “Popped bubbles” would pay, for a code\. The chain sees only the amount on each voucher, so the most one claim gives and every cap of “Popped bubbles” are sized for the larger amount/,
+  );
+  // A read of the chain that gates a payout fails closed, and the trust line says so.
+  assert.match(told, /A read that fails is not “not paid”: the server signs nothing until it has the answer\./);
+});
+
 test('a server conversion with no rate is asked about; a server’s total bounds what is given away', () => {
   const server = spec();
   server.recipes.pop();

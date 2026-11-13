@@ -28,7 +28,7 @@ import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tellLines } from '../economy/walk.mjs';
-import { design, describeDesign, REQUIREMENTS } from '../economy/design.mjs';
+import { design, describeDesign, designAsks, REQUIREMENTS } from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -615,10 +615,18 @@ export const tools = [
         ok: true,
         from,
         allKept: r.allKept,
-        designs: r.candidates
-          .slice(0, top)
-          .map(c => ({ bridges: c.bridges, says: c.says, results: c.results, findings: c.findings, spec: c.spec })),
-        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. Added or changed a route? Run this again.${footer()}`,
+        designs: r.candidates.slice(0, top).map(c => ({
+          bridges: c.bridges,
+          says: c.says,
+          results: c.results,
+          findings: c.findings,
+          // (what the text says under each design, for a reader of the JSON alone)
+          needs: c.needs,
+          removes: c.plan.removes ?? null,
+          spec: c.spec,
+        })),
+        askFirst: designAsks(r, input.requirements, { top }),
+        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. The JSON says the same as this text: each design's "needs" and "removes", and "askFirst" (whether to stop for their choice, the two designs that differ in a way out, and what each other reward a server signs needs from them). Added or changed a route? Run this again.${footer()}`,
       };
     },
   },

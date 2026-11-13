@@ -1113,11 +1113,35 @@ export function describeDesign(result, requirements, opts = {}) {
  * The rewards a server signs that are in the spec and that no requirement was about (the design was asked for another
  * route): what each needs from the person all the same, so a design run on the raffle alone still shows it.
  */
-function alsoSigned(result, requirements) {
+function unaskedSigned(result, requirements) {
   const routes = result.routes ?? [result];
   const spec = [...routes].reverse().find(r => r.candidates?.length)?.candidates[0].spec;
   const about = new Set(requirements.flatMap(q => [q.route, q.grant]).filter(Boolean));
-  const others = (spec?.grants ?? []).filter(g => (g.vouchers ?? []).length && !about.has(g.key));
+  return (spec?.grants ?? []).filter(g => (g.vouchers ?? []).length && !about.has(g.key));
+}
+
+/**
+ * What a design run leaves for the person, as data (the words of describeDesign say the same): { choose, wayOut, also }.
+ * `choose`: no design is to be built until they choose (no design keeps every want, or two differ in a way out);
+ * `wayOut`: { removes, keeps, why }, the numbers of those two designs in the list; `also`: the rewards a server signs
+ * that no requirement was about, each with what it needs from them.
+ */
+export function designAsks(result, requirements, { top = 3 } = {}) {
+  const routes = (result.routes ?? [result]).filter(r => !r.unknown);
+  const wayOut = routes.map(r => wayOutChoice(r, top)).find(Boolean) ?? null;
+  return {
+    choose: routes.some(r => !r.allKept) || !!wayOut,
+    wayOut,
+    also: unaskedSigned(result, requirements).map(g => ({
+      grant: g.key,
+      name: g.name ?? g.key,
+      needs: [...SERVER_NEEDS],
+    })),
+  };
+}
+
+function alsoSigned(result, requirements) {
+  const others = unaskedSigned(result, requirements);
   if (!others.length) return '';
   const names = others.map(g => `“${g.name ?? g.key}”`).join(' and ');
   return [
@@ -1159,6 +1183,11 @@ function wayOutChoice(result, top) {
 function describeRoute(result, requirements, { top = 3, last = true } = {}) {
   const lines = ['What the person wants, as requirements (read these back to them):'];
   for (const r of requirements) lines.push(`- ${REQUIREMENTS[r.kind].says(r)}`);
+  // A want that removes a way out is the person's to give: one the builder added on its own is a question first.
+  if (requirements.some(r => r.kind === 'burn'))
+    lines.push(
+      '  (The burn counts as a want only if they asked for it in their own words. If you added it, ask them first, with the version that keeps a way out.)',
+    );
   if (!result.candidates.length)
     return `${lines.join('\n')}\n\nNo design checks: none of the known ways builds this on the spec as it is (the tokens it names, the item, grant, farm, lottery or contest it is for). Fix the spec and run it again, or draft it by hand.`;
   const wayOut = wayOutChoice(result, top);

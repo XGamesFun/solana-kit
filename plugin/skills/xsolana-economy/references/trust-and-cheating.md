@@ -48,6 +48,12 @@ voucher grant that says nothing as `bounds`, the weakest.
   nobody. For rewards worth farming, pay only players signed in with X.
 - **Make farming cost something.** Gate on holding a collectible the game sells or a locked stake (`gate`), pay only
   wallets a player proved (`proofRequest` / `verifyProof`), and keep prizes for results small.
+- **Say what the server adds.** A rule the server keeps on what a player is paid (a printed code that doubles a
+  round, a streak, a count, a token held) is no part of the chain, so declare it in `"offchain"` or the tools and the
+  person never hear of it: `{ "key": "boost-code", "takes": "a code", "gives": "grant:pops", "rate": 2 }`. `takes`
+  may be plain words for what is on no chain. Size the grant's amounts and caps for the larger payout.
+- **A read that gates a payout fails closed.** `winPaid` throws when the chain can't be read; a server that catches
+  that and carries on as "not paid" pays twice.
 - **A proof taken out is followed to everything that read it.** When a wallet's proof is dropped (to save a prompt,
   say), look past the payout at whatever else trusted "this wallet is this player's": a name shown beside a wallet, a
   row on a board, the record of which account a wallet belongs to. A record the server now writes from the wallet a
