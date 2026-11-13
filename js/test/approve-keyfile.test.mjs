@@ -448,7 +448,7 @@ describe('xsolana approve --keypair', () => {
   });
 
   test(
-    'a project handed to a new owner is changed by the new owner’s key, and no more by the old one',
+    'a project handed to a new owner, authority and treasury is changed by the new owner’s key',
     { skip: skip ?? false },
     async () => {
       const { w, run, saved, sends, file, keyFile, address } = await setup(example('coin-flip-arena'));
@@ -456,8 +456,8 @@ describe('xsolana approve --keypair', () => {
       const live = saved();
       assert.equal(live.live.treasury, address);
       assert.equal(live.live.authority, address);
-      // The owner hands the project on with the program's own update_project, signed by both keys: a new owner,
-      // authority and treasury. A project's address is its creator's and its number, and a new owner keeps it.
+      // The owner hands the project on with the program's own update_project, which names both keys as signers: a
+      // new owner, authority and treasury. A project's address is its creator's and its number, and stays.
       const nextFile = path.join(folder(), 'next.json');
       const next = await makeKeyFile(nextFile);
       w.chain.airdrop(next.address, 100_000_000_000n);
@@ -478,10 +478,14 @@ describe('xsolana approve --keypair', () => {
         }),
       );
       w.chain.sendWire(await now.signTransaction(await was.signTransaction(handover)));
-      const onChain = loot.decode('Project', (await w.chain.rpc.account(live.live.project)).data);
-      assert.equal(onChain.owner, next.address);
-      assert.equal(onChain.creator, address);
-      assert.equal(loot.pda.project(address, 0), live.live.project, 'its address is its creator’s still');
+      const onChain = async () => loot.decode('Project', (await w.chain.rpc.account(live.live.project)).data);
+      const handed = await onChain();
+      assert.deepEqual(
+        [handed.owner, handed.authority, handed.treasury, handed.creator],
+        [next.address, next.address, next.address, address],
+      );
+      assert.equal(loot.pda.project(handed.creator, 0), live.live.project, 'at its creator’s address still');
+      assert.notEqual(loot.pda.project(handed.owner, 0), live.live.project);
 
       // A change to the economy, with the file as the old owner's approve left it: the new owner's key sends it.
       writeFileSync(
@@ -497,20 +501,19 @@ describe('xsolana approve --keypair', () => {
       assert.equal(after.live.project, live.live.project, 'the same project');
       const pool = after.pools.find(x => x.key === 'bonus');
       assert.ok(await w.chain.rpc.account(loot.pda.pool(live.live.project, pool.index)), 'its new pool is on chain');
-      // The file now says what the chain says of the project's keys.
+      // The printout said what the chain says of the project's keys, and the file says it now.
+      for (const what of ['treasury', 'authority'])
+        assert.ok(
+          changed.text.includes(
+            `On chain the project’s ${what} is ${next.address} (the file said ${address}). Nothing is built on the file’s line, and the file is corrected when a step lands.`,
+          ),
+          changed.text,
+        );
       assert.equal(after.live.treasury, next.address);
       assert.equal(after.live.authority, next.address);
-      // The printout said whose the project is now, so nobody reads the file's old lines as current.
-      assert.ok(
-        changed.text.includes(
-          `On chain the project’s treasury is ${next.address} (the file said ${address}): the file is corrected when this lands.`,
-        ),
-        changed.text,
-      );
-
-      // The collection its creator made for it is still the project's, whoever's it is to update now.
+      // The collection its creator made for it is the project's still: the Project account lists it.
       assert.ok(after.live.collection, 'the example has a collection');
-      assert.equal(after.live.collection, live.live.collection);
+      assert.ok((await onChain()).collections.includes(after.live.collection));
 
       // A file that names it under another number is refused: its address is its creator's number, on chain.
       writeFileSync(file, JSON.stringify({ ...after, projectNumber: 5 }, null, 2));
@@ -525,7 +528,7 @@ describe('xsolana approve --keypair', () => {
         numbered.text,
       );
 
-      // The key that handed it on owns it no more: it is refused as any other key is.
+      // The key that handed all of it on is neither its owner nor its authority now: refused as any other key is.
       writeFileSync(
         file,
         JSON.stringify({ ...after, pools: [...after.pools, { key: 'late', currency: 'sol' }] }, null, 2),
@@ -535,6 +538,83 @@ describe('xsolana approve --keypair', () => {
       assert.equal(refused.ok, false);
       assert.equal(sends(), sent);
       assert.ok(refused.text.includes(`which belongs to ${next.address}, not to ${address}`), refused.text);
+    },
+  );
+
+  test(
+    'a project handed on with its authority left behind is refused in words; with nothing to send a stale file is corrected',
+    { skip: skip ?? false },
+    async () => {
+      const { w, run, saved, sends, file, address } = await setup(example('coin-flip-arena'));
+      assert.equal((await run({ yes: true })).done, true);
+      const live = saved();
+      const project = live.live.project;
+      const nextFile = path.join(folder(), 'next.json');
+      const next = await makeKeyFile(nextFile);
+      w.chain.airdrop(next.address, 100_000_000_000n);
+      // A new owner alone: the authority and the treasury stay the first key's.
+      w.chain.send(address, [loot.updateProjectIx({ owner: address, project, newOwner: next.address })]);
+      const onChain = async () => loot.decode('Project', (await w.chain.rpc.account(project)).data);
+      assert.deepEqual(await onChain().then(s => [s.owner, s.authority, s.treasury]), [next.address, address, address]);
+
+      // The spec says the owner's wallet signs the project's decisions, and on chain another key does: a step built
+      // for the owner would be signed by nobody the chain takes. Said before anything is built, and nothing is sent.
+      writeFileSync(
+        file,
+        JSON.stringify({ ...live, pools: [...live.pools, { key: 'bonus', currency: 'sol' }] }, null, 2),
+      );
+      const before = sends();
+      const refused = await run({ keyFile: nextFile, yes: true });
+      assert.equal(refused.ok, false);
+      assert.equal(sends(), before);
+      assert.ok(
+        refused.text.includes(
+          `On chain the project’s authority (the key that signs its decisions) is ${address}; the spec says it is its owner’s wallet, ${next.address}. Publishing never changes a project’s authority`,
+        ),
+        refused.text,
+      );
+      assert.match(refused.text, /have the owner set it on chain \(the program’s update_project\)/);
+      assert.doesNotMatch(refused.text, /restore the file|it is not the project’s key/);
+      assert.equal(saved().live.authority, address, 'the file is as it was');
+
+      // The owner sets the authority on chain. With the file as approve wrote it and nothing to send, the file is
+      // corrected at once, and the treasury the first key kept is said: no step will land to say either later.
+      w.chain.send(next.address, [loot.updateProjectIx({ owner: next.address, project, authority: next.address })]);
+      writeFileSync(file, JSON.stringify(live, null, 2));
+      const none = await run({ keyFile: nextFile, yes: true });
+      assert.equal(none.ok, true, none.text);
+      assert.equal(none.done, true);
+      assert.equal(none.sent, 0);
+      assert.equal(sends(), before);
+      assert.ok(
+        none.text.includes(
+          `On chain the project’s authority is ${next.address} (the file said ${address}). The file now says the chain’s.`,
+        ),
+        none.text,
+      );
+      assert.ok(
+        none.text.includes(
+          `On chain the project’s treasury is ${address}, not its owner’s wallet (${next.address}): publishing never changes it, and what a split leaves over goes to the one on chain.`,
+        ),
+        none.text,
+      );
+      assert.match(none.text, /Nothing to send: .* is live on \w+ as xsolana\.json says\./);
+      assert.equal(saved().live.authority, next.address);
+      assert.equal(saved().live.treasury, address, 'the treasury is the chain’s: the first key’s still');
+      // Said again at the next read (the spec still says nothing of a treasury), and the file needs no more writing.
+      const again = await run({ keyFile: nextFile, yes: true });
+      assert.doesNotMatch(again.text, /the file said/);
+      assert.match(again.text, /On chain the project’s treasury is .*, not its owner’s wallet/);
+
+      // The change is the new owner's to send now.
+      writeFileSync(
+        file,
+        JSON.stringify({ ...saved(), pools: [...live.pools, { key: 'bonus', currency: 'sol' }] }, null, 2),
+      );
+      const changed = await run({ keyFile: nextFile, yes: true });
+      assert.equal(changed.done, true, changed.text);
+      assert.ok(sends() > before);
+      assert.equal(saved().live.treasury, address);
     },
   );
 

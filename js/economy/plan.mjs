@@ -1819,15 +1819,21 @@ export function placeholderContext(
  * page holds what is left against the chain before it builds on it (`js/approve/live-check.mjs`).
  */
 export function madeSoFar(live) {
-  if (!live?.partial) return live;
+  if (!live?.partial) {
+    // The treasury and authority are the project's: a section that names either with no project names nothing.
+    if (!live || live.project || (live.treasury === undefined && live.authority === undefined)) return live;
+    const { treasury: _treasury, authority: _authority, ...rest } = live;
+    return rest;
+  }
   const landed = new Set(live.landed ?? []);
   const changing = new Set(live.changing ?? []);
   // A new setup makes everything; a change makes only the parts it names.
   const made = (part, id) => landed.has(id) || (Boolean(live.published) && !changing.has(part));
   const out = { ...live };
-  // The treasury and authority are the project's: named only once it is made, never from the file before then.
-  if (!made('project', 'project')) {
-    delete out.project;
+  // The treasury and authority are the project's: named only once it is made, never from the file before then, and
+  // never with no project's address beside them (a list of landed steps is the file's word too).
+  if (!made('project', 'project')) delete out.project;
+  if (!out.project) {
     delete out.treasury;
     delete out.authority;
   }
@@ -1840,16 +1846,18 @@ export function madeSoFar(live) {
 
 /**
  * The context of a real setup: the owner's wallet, fresh keys for what it creates, and what is live already.
- * `creator`: who the chain says made the live project, when it is not its owner now (a project handed on: the
- * approval's check reads it, js/approve/live-check.mjs). A project's address is its creator's and its number.
+ * `onChain`: what the chain says of the live project, read by the approval's check (js/approve/live-check.mjs) and
+ * never taken from the file: { creator, treasury, authority }. A project's address is its creator's and its number,
+ * and a new owner keeps it, so a project handed on is built in only when the chain was read for who made it.
  */
-export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent, creator = ownerKey }) {
+export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent, onChain = null }) {
   const live = madeSoFar(given) ?? {};
   // A setup goes on only in the owner's own project: never in one a file names for them.
-  const own = loot.pda.project(creator ?? ownerKey, m.projectNumber);
+  const creator = onChain?.creator ?? ownerKey;
+  const own = loot.pda.project(creator, m.projectNumber);
   if (live.project && live.project !== own)
     throw new Error(
-      `The live section names the project ${live.project}, which is not the project ${own} of the wallet ${ownerKey}${creator && creator !== ownerKey ? ` (made by ${creator})` : ''}.`,
+      `The live section names the project ${live.project}, which is not the project ${own} of the wallet ${ownerKey}${creator !== ownerKey ? ` (made by ${creator})` : ''}.`,
     );
   const collection = live.collection ?? keys['new:collection'] ?? null;
   const tree = live.tree ?? keys['new:tree'] ?? null;
@@ -1860,13 +1868,14 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent,
     mints[t.key] = t.mint && !t.mint.startsWith('@') ? t.mint : (live.mints?.[t.key] ?? keys[`new:mint/${t.key}`]);
   return {
     owner: ownerKey,
-    // A live project's authority is the one it has (the live section's, which the approval holds to the chain's):
-    // nothing here changes it, whatever the spec says of it now.
-    authority: live.authority ?? (m.authority === 'owner' ? ownerKey : m.authority),
+    // The spec's, never the file's live section's: a live project's is the chain's where the approval read it (and
+    // the approval refuses a spec that names another).
+    authority: onChain?.authority ?? (m.authority === 'owner' ? ownerKey : m.authority),
     collection,
     tree,
     project: own,
-    treasury: live.treasury ?? m.treasuryWallet ?? ownerKey,
+    // (the live section's only with its project, `madeSoFar`; the chain's where the approval read it)
+    treasury: onChain?.treasury ?? live.treasury ?? m.treasuryWallet ?? ownerKey,
     mints,
     // the project's lookup table, once its first step landed
     tables: live.tables ?? null,

@@ -293,7 +293,7 @@ function liveChange(economy) {
 
 /** In words: the spec changes the project's own settings, which publishing never writes. */
 export const settingsNote = (settings, live) =>
-  `The spec changes the project’s ${settings.join(', ')}, and publishing never changes those: on chain the authority stays ${live.authority ?? 'as it was'} and the treasury ${live.treasury ?? 'as it was'}. Changing them takes the owner’s update_project, which loot does not send yet; until then, put them back as they were in the spec.`;
+  `The spec changes the project’s ${settings.join(', ')}, and publishing never changes those: the project keeps the ones it has on chain (by the file’s live section, the authority ${live.authority ?? 'as it was'} and the treasury ${live.treasury ?? 'as it was'}). Changing them takes the owner’s update_project, which loot does not send yet; until then, put them back as they were in the spec.`;
 
 export const tools = [
   {
