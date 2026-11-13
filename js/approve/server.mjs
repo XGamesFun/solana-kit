@@ -183,6 +183,13 @@ export async function createApproval({
    */
   let renames = new Set(spec.live?.published ? changedParts(spec).renames : []);
   let renameNotes = [];
+  /**
+   * Where the chain says otherwise than the file of the live project's treasury or authority (`checkLive`), in words:
+   * its owner changed them, or handed the project on, outside these tools. Kept for the session once read.
+   */
+  let liveNotes = [];
+  /** Who the chain says made the live project (its address is theirs and its number); null until a wallet's read. */
+  let projectCreator = null;
   let held = new Set();
   /** The tokens whose record already says the spec's new name, though the file's published spec says the old one. */
   let settled = new Set();
@@ -238,6 +245,12 @@ export async function createApproval({
     try {
       const m = model(spec, { now: at });
       const trusted = await checkLive({ live: live(), m, wallet, chain });
+      projectCreator = trusted.creator;
+      if (trusted.notes.length) liveNotes = trusted.notes;
+      // The session's copy of the live section says of the project's treasury and authority what the chain says:
+      // every plan and record of this session builds on it, and the file says it once something lands.
+      if (trusted.treasury && (spec.live.treasury !== trusted.treasury || spec.live.authority !== trusted.authority))
+        spec = { ...spec, live: { ...spec.live, treasury: trusted.treasury, authority: trusted.authority } };
       // which names are written again is the chain's to say, read for the project's owner
       const read = await readRenames({
         live: live(),
@@ -290,6 +303,7 @@ export async function createApproval({
     const hashes = slotHashes((await chain.account(SYSVAR_SLOT_HASHES).catch(() => null))?.data);
     const p = prepare(spec, {
       owner,
+      creator: projectCreator ?? owner,
       keys: addresses,
       live: live() ?? {},
       now: at,
@@ -402,6 +416,7 @@ export async function createApproval({
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
+          ...liveNotes,
           ...renameNotes,
           unread(),
           remadeLists(),

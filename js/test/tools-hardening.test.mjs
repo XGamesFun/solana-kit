@@ -19,7 +19,8 @@ import * as loot from '../client/index.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
 import { check } from '../economy/check.mjs';
-import { plan } from '../economy/plan.mjs';
+import { model } from '../economy/model.mjs';
+import { plan, setupContext } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
@@ -237,45 +238,89 @@ describe('xsolana approve holds the file’s live section against the chain', ()
     },
   );
 
-  test('a live economy whose file names another treasury than the chain’s is refused', { skip }, async () => {
-    const w = freshWorld('hardening-change');
-    const owner = funded(w);
-    const file = specFile(example);
-    await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
-    const saved = JSON.parse(readFileSync(file, 'utf8'));
-    const attacker = freshKeypair().address;
-    writeFileSync(
-      file,
-      JSON.stringify(
-        { ...saved, boxes: [{ ...saved.boxes[0], price: 0.2 }], live: { ...saved.live, treasury: attacker } },
-        null,
-        2,
-      ),
+  test('a setup is built in a project another key made only when told who made it', () => {
+    const m = model(example, { now: NOW });
+    const [maker, owner, signer] = [freshKeypair().address, freshKeypair().address, freshKeypair().address];
+    const live = { project: pda.project(maker, example.projectNumber ?? 0), treasury: owner, authority: signer };
+    // With nobody named as its maker, a project that is not at the owner's own address is refused, as before.
+    assert.throws(
+      () => setupContext(m, { owner, keys: {}, live }),
+      new RegExp(`names the project ${live.project}, which is not the project .* of the wallet ${owner}`),
     );
-    const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
-    await assert.rejects(
-      session.prepare(owner.address),
-      new RegExp(`treasury is ${attacker}; on chain it is ${owner.address}`),
-    );
-    // A mint that is not the one the setup made (its minting not the project's) is refused too.
-    const other = w.newMint(owner.address);
-    writeFileSync(
-      file,
-      JSON.stringify(
-        {
-          ...saved,
-          boxes: [{ ...saved.boxes[0], price: 0.2 }],
-          live: { ...saved.live, mints: { ...saved.live.mints, arena: other } },
-        },
-        null,
-        2,
-      ),
-    );
-    await assert.rejects(
-      (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
-      /is minted by/,
+    // Told who made it (the approval reads that from the chain), it is the project at its maker's address, with the
+    // treasury and authority it has now, whatever the spec says of its authority.
+    const ctx = setupContext(m, { owner, keys: {}, live, creator: maker });
+    assert.equal(ctx.project, live.project);
+    assert.equal(ctx.owner, owner);
+    assert.equal(ctx.treasury, owner);
+    assert.equal(ctx.authority, signer);
+    // A maker that is not the one whose number makes the address is refused too.
+    assert.throws(
+      () => setupContext(m, { owner, keys: {}, live, creator: signer }),
+      new RegExp(`which is not the project .* of the wallet ${owner} \\(made by ${signer}\\)`),
     );
   });
+
+  test(
+    'a live economy whose file names another treasury than the chain’s is built on the chain’s',
+    { skip },
+    async () => {
+      const w = freshWorld('hardening-change');
+      const owner = funded(w);
+      const file = specFile(example);
+      await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      const attacker = freshKeypair().address;
+      writeFileSync(
+        file,
+        JSON.stringify(
+          { ...saved, boxes: [{ ...saved.boxes[0], price: 0.2 }], live: { ...saved.live, treasury: attacker } },
+          null,
+          2,
+        ),
+      );
+      // The treasury is the chain's to say (its owner can change it there, or hand the project on, and no file is
+      // written): the file's line is not built on, the owner is told, and the file says the chain's once the change lands.
+      const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
+      const shown = await session.stateFor(owner.address);
+      assert.equal(shown.refused, undefined);
+      assert.ok(
+        shown.warnings.includes(
+          `On chain the project’s treasury is ${owner.address} (the file said ${attacker}): the file is corrected when this lands.`,
+        ),
+        shown.warnings.join('\n'),
+      );
+      assert.ok(!JSON.stringify(shown.steps).includes(attacker), 'no step names the planted treasury');
+      const batch = await session.prepare(owner.address);
+      assert.ok(!JSON.stringify(batch.details).includes(attacker), 'nothing to sign names it');
+      for (const wire of batch.transactions)
+        assert.ok(
+          !readMessage(readTransaction(fromBase64(wire)).message).keys.includes(attacker),
+          'no transaction names it as an account',
+        );
+      await runAll(session, owner);
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).live.treasury, owner.address, 'the file says the chain’s');
+      assert.equal(w.read('Project', saved.live.project).treasury, owner.address);
+      // A mint that is not the one the setup made (its minting not the project's) is refused.
+      const other = w.newMint(owner.address);
+      writeFileSync(
+        file,
+        JSON.stringify(
+          {
+            ...saved,
+            boxes: [{ ...saved.boxes[0], price: 0.2 }],
+            live: { ...saved.live, mints: { ...saved.live.mints, arena: other } },
+          },
+          null,
+          2,
+        ),
+      );
+      await assert.rejects(
+        (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
+        /is minted by/,
+      );
+    },
+  );
 
   test(
     'no spec may name the address the plan stands in for the wallet, and only the connected wallet is “your wallet”',

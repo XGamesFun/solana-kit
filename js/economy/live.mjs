@@ -13,15 +13,26 @@ export function freshAddresses(names, random = randomBytes) {
 
 /**
  * The transactions that put `economy` live for `owner`, with `keys` the addresses of the fresh accounts (each signs
- * the transaction that creates it). `live`: what is already live (a change publishes only what differs).
+ * the transaction that creates it). `live`: what is already live (a change publishes only what differs). `creator`:
+ * who made the live project, when the chain says it was not its owner now (a project handed on keeps its address).
  */
 export function prepare(
   economy,
-  { owner, keys, live = null, now = Math.floor(Date.now() / 1000), rent, only = null, slot = null, renames = null },
+  {
+    owner,
+    keys,
+    live = null,
+    now = Math.floor(Date.now() / 1000),
+    rent,
+    only = null,
+    slot = null,
+    renames = null,
+    creator = owner,
+  },
 ) {
   const m = model(economy, { now });
   // `slot`: a recent slot (in the slot hashes now), which the project's standing lookup table is made at.
-  const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent }), slot };
+  const ctx = { ...setupContext(m, { owner, keys, live: live ?? {}, rent, creator }), slot };
   const p = plan(economy, { now, ctx, live, only, renames });
   if (!p.ok) return p;
   // Going live always makes the project's standing lookup table (the plan's "table" step). Without a recent slot it

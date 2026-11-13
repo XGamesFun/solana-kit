@@ -447,6 +447,97 @@ describe('xsolana approve --keypair', () => {
     );
   });
 
+  test(
+    'a project handed to a new owner is changed by the new owner’s key, and no more by the old one',
+    { skip: skip ?? false },
+    async () => {
+      const { w, run, saved, sends, file, keyFile, address } = await setup(example('coin-flip-arena'));
+      assert.equal((await run({ yes: true })).done, true);
+      const live = saved();
+      assert.equal(live.live.treasury, address);
+      assert.equal(live.live.authority, address);
+      // The owner hands the project on with the program's own update_project, signed by both keys: a new owner,
+      // authority and treasury. A project's address is its creator's and its number, and a new owner keeps it.
+      const nextFile = path.join(folder(), 'next.json');
+      const next = await makeKeyFile(nextFile);
+      w.chain.airdrop(next.address, 100_000_000_000n);
+      const [was, now] = [await readKeyFile(keyFile), await readKeyFile(nextFile)];
+      const handover = wireTransaction(
+        compileMessage({
+          payer: address,
+          blockhash: w.chain.svm.latestBlockhash(),
+          instructions: [
+            loot.updateProjectIx({
+              owner: address,
+              project: live.live.project,
+              authority: next.address,
+              treasury: next.address,
+              newOwner: next.address,
+            }),
+          ],
+        }),
+      );
+      w.chain.sendWire(await now.signTransaction(await was.signTransaction(handover)));
+      const onChain = loot.decode('Project', (await w.chain.rpc.account(live.live.project)).data);
+      assert.equal(onChain.owner, next.address);
+      assert.equal(onChain.creator, address);
+      assert.equal(loot.pda.project(address, 0), live.live.project, 'its address is its creator’s still');
+
+      // A change to the economy, with the file as the old owner's approve left it: the new owner's key sends it.
+      writeFileSync(
+        file,
+        JSON.stringify({ ...live, pools: [...live.pools, { key: 'bonus', currency: 'sol' }] }, null, 2),
+      );
+      const before = sends();
+      const changed = await run({ keyFile: nextFile, yes: true });
+      assert.equal(changed.ok, true, changed.text);
+      assert.equal(changed.done, true, changed.text);
+      assert.ok(sends() > before, 'the change was sent');
+      const after = saved();
+      assert.equal(after.live.project, live.live.project, 'the same project');
+      const pool = after.pools.find(x => x.key === 'bonus');
+      assert.ok(await w.chain.rpc.account(loot.pda.pool(live.live.project, pool.index)), 'its new pool is on chain');
+      // The file now says what the chain says of the project's keys.
+      assert.equal(after.live.treasury, next.address);
+      assert.equal(after.live.authority, next.address);
+      // The printout said whose the project is now, so nobody reads the file's old lines as current.
+      assert.ok(
+        changed.text.includes(
+          `On chain the project’s treasury is ${next.address} (the file said ${address}): the file is corrected when this lands.`,
+        ),
+        changed.text,
+      );
+
+      // The collection its creator made for it is still the project's, whoever's it is to update now.
+      assert.ok(after.live.collection, 'the example has a collection');
+      assert.equal(after.live.collection, live.live.collection);
+
+      // A file that names it under another number is refused: its address is its creator's number, on chain.
+      writeFileSync(file, JSON.stringify({ ...after, projectNumber: 5 }, null, 2));
+      const sentSoFar = sends();
+      const numbered = await run({ keyFile: nextFile, yes: true });
+      assert.equal(numbered.ok, false);
+      assert.equal(sends(), sentSoFar);
+      assert.ok(
+        numbered.text.includes(
+          `The file names the project ${live.live.project}, which is not project number 5 of its creator ${address}.`,
+        ),
+        numbered.text,
+      );
+
+      // The key that handed it on owns it no more: it is refused as any other key is.
+      writeFileSync(
+        file,
+        JSON.stringify({ ...after, pools: [...after.pools, { key: 'late', currency: 'sol' }] }, null, 2),
+      );
+      const sent = sends();
+      const refused = await run({ yes: true });
+      assert.equal(refused.ok, false);
+      assert.equal(sends(), sent);
+      assert.ok(refused.text.includes(`which belongs to ${next.address}, not to ${address}`), refused.text);
+    },
+  );
+
   test('another key than the owner’s cannot change a live economy', { skip: skip ?? false }, async () => {
     const { w, run, saved, sends, file } = await setup(example('coin-flip-arena'));
     assert.equal((await run({ yes: true })).done, true);

@@ -4,6 +4,22 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.28: a project handed to a new owner is the new owner's to change (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **`xsolana approve` after a handover.** A project's address is its creator's and the number they gave it, and a new
+  owner keeps it (the program's `update_project` with a new owner). The approval's check of the file's live section,
+  and the setup it builds, took the address from the owner signing now, so every change to a project handed on was
+  refused ("which is not project number 0 of its owner"). Both now take it from the creator the Project account
+  stores: the key that owns the project on chain changes it, and the key that handed it on is refused as any other.
+  The collection its creator made for it still counts as the project's.
+- **The treasury and the authority are the chain's to say.** A file whose live section named another treasury or
+  authority than the chain was refused, which also refused a project whose owner had changed either with
+  `update_project`. Nothing is built on the file's lines of them now: the approval reads both from the chain, says
+  where the file said otherwise, and the file says the chain's once the change lands. A live project's authority in a
+  setup is the one it has, whatever the spec says of it now (publishing never changes it).
+
 ## 0.28.27: saving a draft counts as building, and where a signed reward stops paying is the server's to stop (loot 0.28.0, unchanged)
 
 The tools alone.

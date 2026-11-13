@@ -211,7 +211,7 @@ export async function readKeyFile(file, { run, platform = process.platform } = {
   } catch (e) {
     if (e.code === 'ENOENT')
       throw new KeyFileError(
-        `${target} does not exist. A new project’s key file is made with \`xsolana keygen\`; a project that is live is signed only by the key it went live with.`,
+        `${target} does not exist. A new project’s key file is made with \`xsolana keygen\`; a project that is live is signed only by the key that owns it: the one it went live with, unless its owner handed it to another since.`,
       );
     throw e;
   }

@@ -1,8 +1,10 @@
 // What the spec file's `live` section says is made, held against the chain before anything is built on it. The file is
 // written by agents, by hand and by teammates, so its `live` section is no more trusted than the rest of it: a planted
 // one could name someone else's project (the owner's seeds would pay into its pools) or another treasury. The project
-// must be the connected wallet's own, at the address its number makes, and the project, the mints, the collection and
-// the tree the file calls made must be on chain and be that project's.
+// must be the connected wallet's own (it is its owner or its authority on chain), at the address its creator's number
+// makes, and the project, the mints, the collection and the tree the file calls made must be on chain and be that
+// project's. A project's address is its creator's and its number, and a new owner keeps it: a project handed on is
+// its new owner's to change. Its treasury and authority are read from the chain, never taken from the file.
 import { encodeBase58 } from '../chain/base58.js';
 import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { utf8 } from '../chain/bytes.js';
@@ -20,9 +22,12 @@ export class LiveMismatch extends Error {}
 
 /**
  * Checks `live` (the spec's live section) for `wallet`, the wallet connected on the page, against `chain` ({ account }).
- * `m` is the spec's model. Returns { owner, project }: the project's owner the setup is built for (the wallet, or the
- * project's owner when the wallet is its authority), and the project's address. Throws LiveMismatch when the file
- * names a project that is not this wallet's, or an account the chain does not have as the file says.
+ * `m` is the spec's model. Returns { owner, project, creator, treasury, authority, notes }: the project's owner the
+ * setup is built for (the wallet, or the project's owner when the wallet is its authority); the project's address;
+ * who made it (the wallet, for a project not made yet); its treasury and authority as the chain has them now (absent
+ * for a project not made yet); and `notes`, in words, where the file said otherwise of those two (its owner changed
+ * them, or handed the project on, since the file was written). Throws LiveMismatch when the file names a project that
+ * is not this wallet's, or an account the chain does not have as the file says.
  */
 export async function checkLive({ live, m, wallet, chain }) {
   const made = madeSoFar(live) ?? {};
@@ -32,7 +37,8 @@ export async function checkLive({ live, m, wallet, chain }) {
     // Only a mint the setup makes is checked: a mint the spec names by its address is the spec's to name.
     return t?.source === 'game' && (!t.mint || t.mint.startsWith('@'));
   });
-  if (!made.project && !setupMints.length && !made.collection && !made.tree) return { owner: wallet, project: own };
+  if (!made.project && !setupMints.length && !made.collection && !made.tree)
+    return { owner: wallet, project: own, creator: wallet, notes: [] };
   if (typeof chain.account !== 'function')
     throw new Error(
       'The file says part of this economy is live already, and this connection cannot read the chain to check it: nothing was sent.',
@@ -41,6 +47,10 @@ export async function checkLive({ live, m, wallet, chain }) {
 
   let owner = wallet;
   let project = own;
+  let creator = wallet;
+  let treasury;
+  let authority;
+  const notes = [];
   if (made.project) {
     const account = await read(made.project);
     if (!account || account.owner !== lootProgram() || accountKind(account.data) !== 'Project')
@@ -48,9 +58,10 @@ export async function checkLive({ live, m, wallet, chain }) {
         `The file names the project ${made.project}, and there is no loot project at that address.`,
       );
     const state = decode('Project', account.data);
-    if (pda.project(state.owner, m.projectNumber) !== made.project)
+    // A project is at the address its creator and the number they gave it make, and a new owner keeps it.
+    if (pda.project(state.creator, m.projectNumber) !== made.project)
       throw new LiveMismatch(
-        `The file names the project ${made.project}, which is not project number ${m.projectNumber} of its owner ${state.owner}.`,
+        `The file names the project ${made.project}, which is not project number ${m.projectNumber} of its creator ${state.creator}.`,
       );
     if (state.owner !== wallet && state.authority !== wallet)
       throw Object.assign(
@@ -59,12 +70,21 @@ export async function checkLive({ live, m, wallet, chain }) {
         ),
         { notOwner: true },
       );
-    if (made.treasury && made.treasury !== state.treasury)
-      throw new LiveMismatch(`The file says the treasury is ${made.treasury}; on chain it is ${state.treasury}.`);
-    if (made.authority && made.authority !== state.authority)
-      throw new LiveMismatch(`The file says the authority is ${made.authority}; on chain it is ${state.authority}.`);
+    // The project's treasury and authority are the chain's to say: its owner can change them, and hand the project
+    // on, with the program's own update_project, which writes no file. Nothing is built on the file's lines of them.
+    for (const [what, said, is] of [
+      ['treasury', made.treasury, state.treasury],
+      ['authority', made.authority, state.authority],
+    ])
+      if (said && said !== is)
+        notes.push(
+          `On chain the project’s ${what} is ${is} (the file said ${said}): the file is corrected when this lands.`,
+        );
     owner = state.owner;
     project = made.project;
+    creator = state.creator;
+    treasury = state.treasury;
+    authority = state.authority;
   }
 
   for (const [key, address] of setupMints) {
@@ -104,9 +124,10 @@ export async function checkLive({ live, m, wallet, chain }) {
       throw new LiveMismatch(
         `The file names the collection ${made.collection}, and there is no Core collection there.`,
       );
-    if (collection.updateAuthority !== owner)
+    // (a project handed on keeps the collection its creator made for it, whoever's it is to update now)
+    if (collection.updateAuthority !== owner && collection.updateAuthority !== creator)
       throw new LiveMismatch(
-        `The collection ${made.collection} the file names belongs to ${collection.updateAuthority}, not to the project's owner ${owner}.`,
+        `The collection ${made.collection} the file names belongs to ${collection.updateAuthority}, not to the project's owner ${owner}${creator === owner ? '' : ` or its creator ${creator}`}.`,
       );
   }
 
@@ -119,7 +140,7 @@ export async function checkLive({ live, m, wallet, chain }) {
     if (creator !== project)
       throw new LiveMismatch(`The file names the tree ${made.tree}, which is not a tree of the project ${project}.`);
   }
-  return { owner, project };
+  return { owner, project, creator, ...(treasury ? { treasury, authority } : {}), notes };
 }
 
 /**

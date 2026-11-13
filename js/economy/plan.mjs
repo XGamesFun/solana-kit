@@ -1838,14 +1838,18 @@ export function madeSoFar(live) {
   return out;
 }
 
-/** The context of a real setup: the owner's wallet, fresh keys for what it creates, and what is live already. */
-export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent }) {
+/**
+ * The context of a real setup: the owner's wallet, fresh keys for what it creates, and what is live already.
+ * `creator`: who the chain says made the live project, when it is not its owner now (a project handed on: the
+ * approval's check reads it, js/approve/live-check.mjs). A project's address is its creator's and its number.
+ */
+export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent, creator = ownerKey }) {
   const live = madeSoFar(given) ?? {};
   // A setup goes on only in the owner's own project: never in one a file names for them.
-  const own = loot.pda.project(ownerKey, m.projectNumber);
+  const own = loot.pda.project(creator ?? ownerKey, m.projectNumber);
   if (live.project && live.project !== own)
     throw new Error(
-      `The live section names the project ${live.project}, which is not the project ${own} of the wallet ${ownerKey}.`,
+      `The live section names the project ${live.project}, which is not the project ${own} of the wallet ${ownerKey}${creator && creator !== ownerKey ? ` (made by ${creator})` : ''}.`,
     );
   const collection = live.collection ?? keys['new:collection'] ?? null;
   const tree = live.tree ?? keys['new:tree'] ?? null;
@@ -1856,7 +1860,9 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent 
     mints[t.key] = t.mint && !t.mint.startsWith('@') ? t.mint : (live.mints?.[t.key] ?? keys[`new:mint/${t.key}`]);
   return {
     owner: ownerKey,
-    authority: m.authority === 'owner' ? ownerKey : m.authority,
+    // A live project's authority is the one it has (the live section's, which the approval holds to the chain's):
+    // nothing here changes it, whatever the spec says of it now.
+    authority: live.authority ?? (m.authority === 'owner' ? ownerKey : m.authority),
     collection,
     tree,
     project: own,
