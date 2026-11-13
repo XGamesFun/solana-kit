@@ -383,7 +383,8 @@ export const giveaways = {
   },
 };
 
-// What a game's server checks: a wallet's collectibles, a wallet's signed proof, promo codes (server.js).
+// What a game's server checks: a wallet's collectibles, a wallet's signed proof, promo codes, a win already paid
+// (server.js).
 export {
   codeAddresses,
   codeKey,
@@ -396,4 +397,5 @@ export {
   proofText,
   readProof,
   verifyProof,
+  winPaid,
 } from './server.js';

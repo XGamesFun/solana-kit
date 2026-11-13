@@ -15,7 +15,7 @@
 // Who sends each later step and what happens if nobody does is in the walk-through (walk.mjs, from the same model); a
 // voucher's trust in the review's trust levels.
 import { at, flows, lineToken, named, num, ticketOf, words } from './flows.mjs';
-import { prizeLine, serverRate, toSeconds, toTime } from './model.mjs';
+import { prizeLine, prizeToken, serverRate, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
 import { exchanges, payouts } from './exchanges.mjs';
 import { journeyOf } from './walk.mjs';
@@ -219,14 +219,16 @@ export function challenge(m, warn, now, economy) {
     );
 
   // ---- W-STEPS: a player's whole loop through a route (getting its price, buying, collecting), one wallet prompt a
-  // step: past two, say each step and what folds them together.
+  // step that nothing folds into another: past two, say each step and what folds them together.
   for (const route of routes.filter(r => r.price.length && r.kind !== 'recipe' && r.kind !== 'item')) {
     const j = journeyOf(route, fl);
-    if (j.prompts <= 2) continue;
+    // (what is left with every fold the kit's own client makes: a page that buys with `make` is not told it has a
+    // prompt too many; the walk-through says what the page must call, and what it costs without it)
+    if (j.folded <= 2) continue;
     warn(
       'W-STEPS',
       route.where,
-      `A player's loop through ${named(route)} takes ${j.prompts} wallet prompts: ${j.steps.join(', then ')}.`,
+      `A player's loop through ${named(route)} takes ${j.folded} wallet prompts${j.folded < j.prompts ? ` at best (${j.prompts} when the page folds nothing)` : ''}: ${j.steps.join(', then ')}.`,
       j.bundles.length
         ? `Fold them: ${j.bundles.join('; ')}.`
         : 'Price it in what the player already holds, or give it without a step the player must sign.',
@@ -684,7 +686,9 @@ export function challenge(m, warn, now, economy) {
     const l = g.limits ?? {};
     const line = prizeLine(g.prize ?? g.gives);
     const each = num(line?.amount) || 1;
-    const unit = line?.gives === 'tokens' ? sym(line.currency ?? line.asset ?? m.currency) : 'of its prize';
+    // (the token it pays in: its pool's, or the one it mints; a pool-paid prize names no currency of its own)
+    const unit =
+      line?.gives === 'tokens' ? (prizeToken(line, m)?.symbol ?? sym(line.currency ?? m.currencyKey)) : 'of its prize';
     const sr = serverRate(g);
     const own = sr && sr.per !== 'all' && sr.one > 0;
     const counts = [

@@ -59,7 +59,11 @@ These were attacked on devnet and refused by the program; there is nothing to bu
   not among the grant's voucher keys is refused, and so is a claim with no voucher on a grant that isn't open.
 - **The winning wallet signs its own claim.** Anyone may pay its fees; nobody claims for it.
 - **A round pays a wallet once** per grant incarnation, whoever signs it again and whenever; `perWallet`,
-  `perPerson`, `perKey`, `perDay` and `total` are kept by the program.
+  `perPerson`, `perKey`, `perDay` and `total` are kept by the program. Once for that wallet: the chain keeps a paid
+  round with its wallet, so the same round signed for a second wallet pays again, and a voucher that ran out may have
+  been collected before it did. A server that signs a win again (a player's other wallet, a new voucher after the
+  first ran out) first reads the chain for the first wallet (`winPaid` from `@xgamesfun/solana/results`), or keeps each
+  win on the first wallet it signed for.
 - **A farm's gate can't be forged.** It checks the project's collection and the item number the program writes at mint
   and never lets change: an NFT of another collection, one in no collection, an attribute written by hand, or a mint
   into the project's collection by anyone but the project are refused. Boosts read the staked NFT's own item number.

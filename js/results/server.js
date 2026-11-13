@@ -13,6 +13,8 @@
 //   const codes = makeCodes(50)                                 // print these on flyers; keep them out of the repository
 //   spec.grants[i].keys = await codeAddresses(codes)            // only public keys go in the spec
 //   const voucher = await codeVoucher({ code, game, grant: 3, incarnation, wallet, now })  // the player typed `code`
+//
+//   if (await winPaid({ rpc: RPC_URL, game, grant: 3, wallet: first, round })) …   // before a win is signed again
 import { decodeBase58, encodeBase58, isAddress } from '../chain/base58.js';
 import { toHex, utf8 } from '../chain/bytes.js';
 import { MPL_CORE_PROGRAM, ownedAssetFilters, parseCoreAsset } from '../chain/core.js';
@@ -20,6 +22,7 @@ import { rpcClient } from '../chain/rpc.js';
 import { sha256 } from '../chain/sha256.js';
 import { signVoucher } from './index.js';
 import { cluster as onCluster } from '../client/cluster.js';
+import { decode, lootProgram, pda, readListAccount, roundPaid, walletShard } from '../client/index.js';
 
 const subtle = () => globalThis.crypto.subtle;
 const rpcOf = rpc => (typeof rpc === 'string' ? rpcClient(rpc) : rpc);
@@ -59,6 +62,28 @@ export async function holds({ rpc, spec, wallet, item = null, atLeast = 1, attri
       (item === null || c.item === item) && (attribute === null || Number(c.attributes?.[attribute] ?? 0) >= minimum),
   );
   return mine.length >= atLeast ? mine.length : 0;
+}
+
+// ---------------------------------------------------------------- a win already paid
+
+/**
+ * Whether the grant has paid `wallet` for `round` (a win's id, 16 bytes hex), read from the chain. The program keeps a
+ * paid round with its wallet, so the same round signed for a second wallet pays again, and a voucher that ran out may
+ * have been collected before it did: a server asks this of the first wallet before it signs a win again (another
+ * wallet, or a new voucher after the first one's expiry). `game`: the project's address; `grant`: the grant's number;
+ * `rpc`: an RPC link or a `rpcClient`. It reads the grant as it is now: a grant written again (a new incarnation) has
+ * paid nobody yet, and no voucher of the old one is taken.
+ */
+export async function winPaid({ rpc, game, grant, wallet, round }) {
+  if (!isAddress(wallet)) throw new Error('Name the wallet (its public address).');
+  const client = rpcOf(rpc);
+  const address = pda.grant(game, grant);
+  const account = await client.account(address);
+  if (!account || account.owner !== lootProgram())
+    throw new Error(`There is no grant ${grant} of ${game} on this cluster.`);
+  const record = decode('Grant', account.data);
+  const shard = await client.account(pda.rounds(address, record.incarnation, walletShard(record, wallet)));
+  return roundPaid(readListAccount(shard), wallet, round);
 }
 
 // ---------------------------------------------------------------- a wallet's signed proof
