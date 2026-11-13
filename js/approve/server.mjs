@@ -128,6 +128,17 @@ function walletAddress(wallet) {
 }
 
 /**
+ * Whether `value` (a spec, or any part of one) names `address`: a string that is the address, or that has it as one
+ * of its parts between colons ("wallet:<address>", "@ata:<address>:<key>"), as a value or as a name. A link or a
+ * sentence that only mentions the address names nothing.
+ */
+function namesAddress(value, address) {
+  if (typeof value === 'string') return value.split(':').includes(address);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([name, v]) => name.split(':').includes(address) || namesAddress(v, address));
+}
+
+/**
  * One approval session for the spec in `file`. `chain`: { latestBlockhash, rent(bytes), send(wire), confirm(sig) }.
  * `write(file, text)` writes the spec file (`writeWhole`). Exposed for tests; `approve` serves it.
  * `mintKeys`: a Map or an object of <token key> → { address, sign(message), drop?() }, a key the owner supplies for
@@ -277,7 +288,8 @@ export async function createApproval({
     // The keys of the project as the chain has them: an address that is one of them is a key somebody signs with.
     const roles = new Map([[wallet, 'the key that signs this approval']]);
     if (so.project && typeof chain.account === 'function') {
-      const account = await chain.account(so.project).catch(() => null);
+      // (a read that fails stops here: with no answer, nothing says the address is not one of the project's keys)
+      const account = await chain.account(so.project);
       if (account && account.owner === lootProgram() && accountKind(account.data) === 'Project') {
         const state = decode('Project', account.data);
         for (const [role, address] of [
@@ -296,17 +308,20 @@ export async function createApproval({
       // Anything else the file names by that address (an authority, a treasury, a wallet a split pays, another
       // token's mint, the project, its collection): the file's own record of this very mint under way aside.
       const { pending: _pending, transactions: _transactions, ...section } = spec.live ?? {};
-      const elsewhere = JSON.stringify({
-        ...spec,
-        ...(spec.live
-          ? {
-              live: {
-                ...section,
-                mints: Object.fromEntries(Object.entries(section.mints ?? {}).filter(([n]) => n !== key)),
-              },
-            }
-          : {}),
-      }).includes(k.address);
+      const elsewhere = namesAddress(
+        {
+          ...spec,
+          ...(spec.live
+            ? {
+                live: {
+                  ...section,
+                  mints: Object.fromEntries(Object.entries(section.mints ?? {}).filter(([n]) => n !== key)),
+                },
+              }
+            : {}),
+        },
+        k.address,
+      );
       if (made[key])
         throw new ApproveError(
           409,
@@ -330,7 +345,7 @@ export async function createApproval({
       if (await chain.account(k.address))
         throw new ApproveError(
           409,
-          `--mint-key gives the token ${what} the address ${k.address}, and an account is there already on ${cluster()} (anything at an address counts, SOL sent to it too): a mint is made at an address nothing holds yet. Nothing was sent. (If an earlier run of this setup made the token’s mint there, the file’s live section has lost its record of it: restore the file as approve wrote it.)`,
+          `--mint-key gives the token ${what} the address ${k.address}, and an account is there already on ${cluster()} (anything at an address counts, SOL sent to it too): a mint is made at an address nothing holds yet. Nothing was sent. (If an earlier run of this setup made the token’s mint there, the file has lost its record of it: restore the file as approve last wrote it. Leaving --mint-key out would make the mint at a new address.)`,
         );
       keys.set(name, k);
     }
@@ -540,7 +555,7 @@ export async function createApproval({
             .filter(([name]) => todo.has(`token:${name.slice('new:mint/'.length)}`))
             .map(
               ([name, k]) =>
-                `The mint of the token ${model(spec, { now: at }).tokens.get(name.slice('new:mint/'.length))?.symbol ?? name.slice('new:mint/'.length)} is made at ${k.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and no other. Once the mint is there the key can do nothing more at that address on ${cluster()}; on another cluster the same file can still make an account there, so keep it as you keep a key until it is used wherever you mean to, then delete it.`,
+                `The mint of the token ${model(spec, { now: at }).tokens.get(name.slice('new:mint/'.length))?.symbol ?? name.slice('new:mint/'.length)} is made at ${k.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and no other. Once the mint is there the key can do nothing more at that address on ${cluster()}; on another cluster the same file can still make an account there, so keep it as you keep a key until it is used wherever you mean to.`,
             ),
           ...fileCorrections.map(
             line => `${line} Nothing is built on the file’s line, and the file is corrected when a step lands.`,

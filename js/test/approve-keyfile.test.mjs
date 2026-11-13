@@ -626,18 +626,32 @@ describe('xsolana approve --keypair', () => {
       const { w, run, saved, sends, file, address } = await setup(example('coin-flip-arena'));
       assert.equal((await run({ yes: true })).done, true);
       const live = saved();
-      // A new token for the live project, its mint at an address the owner chose: the address of a key file.
-      const potr = { key: 'potr', source: 'project', name: 'Pot Raffle', symbol: 'POTR', decimals: 0 };
+      // A new token for the live project, its mint at an address the owner chose: the address of a key file. Its
+      // picture link is named after that address, and a note mentions it: neither names the address for something
+      // else.
+      const mintFile = path.join(folder(), 'potr-mint.json');
+      const mint = await makeKeyFile(mintFile);
+      const potr = {
+        key: 'potr',
+        source: 'project',
+        name: 'Pot Raffle',
+        symbol: 'POTR',
+        decimals: 0,
+        uri: `https://example.com/${mint.address}.json`,
+      };
       writeFileSync(
         file,
         JSON.stringify(
-          { ...live, tokens: [...live.tokens, potr], pools: [...live.pools, { key: 'entries', currency: 'potr' }] },
+          {
+            ...live,
+            prompt: `${live.prompt ?? ''} The entry token is at ${mint.address}.`,
+            tokens: [...live.tokens, potr],
+            pools: [...live.pools, { key: 'entries', currency: 'potr' }],
+          },
           null,
           2,
         ),
       );
-      const mintFile = path.join(folder(), 'potr-mint.json');
-      const mint = await makeKeyFile(mintFile);
       const secret = JSON.parse(readFileSync(mintFile, 'utf8')).slice(0, 8).join(',');
       const mintKeyFiles = { potr: mintFile };
 
@@ -648,7 +662,7 @@ describe('xsolana approve --keypair', () => {
       assert.equal(shown.sent, 0);
       assert.ok(
         shown.text.includes(
-          `The mint of the token POTR is made at ${mint.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and no other. Once the mint is there the key can do nothing more at that address on ${loot.cluster()}; on another cluster the same file can still make an account there, so keep it as you keep a key until it is used wherever you mean to, then delete it.`,
+          `The mint of the token POTR is made at ${mint.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and no other. Once the mint is there the key can do nothing more at that address on ${loot.cluster()}; on another cluster the same file can still make an account there, so keep it as you keep a key until it is used wherever you mean to.`,
         ),
         shown.text,
       );
@@ -705,7 +719,7 @@ describe('xsolana approve --keypair', () => {
       assert.equal(refused.ok, false);
       assert.ok(
         refused.text.includes(
-          `and an account is there already on ${loot.cluster()} (anything at an address counts, SOL sent to it too): a mint is made at an address nothing holds yet. Nothing was sent. (If an earlier run of this setup made the token’s mint there, the file’s live section has lost its record of it: restore the file as approve wrote it.)`,
+          `and an account is there already on ${loot.cluster()} (anything at an address counts, SOL sent to it too): a mint is made at an address nothing holds yet. Nothing was sent. (If an earlier run of this setup made the token’s mint there, the file has lost its record of it: restore the file as approve last wrote it. Leaving --mint-key out would make the mint at a new address.)`,
         ),
         refused.text,
       );
@@ -782,7 +796,12 @@ describe('xsolana approve --keypair', () => {
       const own = await run({ mintKeyFiles: { arena: keyFile } });
       assert.equal(own.ok, false);
       assert.match(own.text, /--mint-key gives the token ARENA the key that signs this approval/);
-      // An address the file names for something else (here the project's authority to be).
+      // An address the file names for something else (here the project's authority to be; a treasury too).
+      write({ treasury: `wallet:${mint.address}` });
+      assert.match(
+        (await run({ mintKeyFiles: { arena: mintFile } })).text,
+        /which xsolana\.json names for something else/,
+      );
       write({ keys: { authority: mint.address } });
       const namedTwice = await run({ mintKeyFiles: { arena: mintFile } });
       assert.equal(namedTwice.ok, false);
