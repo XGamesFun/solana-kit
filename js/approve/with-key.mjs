@@ -7,10 +7,11 @@
 // agent after the person's yes) sends exactly what was shown. The command never stops to ask: an agent's terminal
 // would hang on a question, or answer it.
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
-import { readKeyFile } from './keyfile.mjs';
+import { KeyFileError, keyFilePath, readKeyFile } from './keyfile.mjs';
 import { clusterChain, createApproval } from './server.mjs';
 import { realMoney } from '../client/cluster.js';
 
@@ -170,9 +171,39 @@ export async function approveWithKey({
   now,
   keyReader = readKeyFile,
   approval = createApproval,
+  mintKeyFiles = {},
 }) {
   const key = await keyReader(keyFile);
-  const session = await approval({ file: path.resolve(file), chain, ...(now ? { now } : {}) });
+  // A key file the owner supplies for a token's new mint (`--mint-key <token key>=<file>`): read as the owner's own
+  // is (its user alone, outside any repository, a whole key), never printed, and dropped with it.
+  const mintKeys = new Map();
+  const dropAll = () => {
+    for (const k of mintKeys.values()) k.drop();
+    key.drop();
+  };
+  let session;
+  try {
+    // (a Map, or an object's own names: a name like "__proto__" is a name here and nothing else)
+    for (const [token, given] of mintKeyFiles instanceof Map ? mintKeyFiles : Object.entries(mintKeyFiles ?? {})) {
+      if (!existsSync(keyFilePath(given)))
+        throw new KeyFileError(`--mint-key ${token}: ${keyFilePath(given)} does not exist.`);
+      try {
+        mintKeys.set(token, await keyReader(given));
+      } catch (e) {
+        if (!(e instanceof KeyFileError)) throw e;
+        throw new KeyFileError(`--mint-key ${token}: ${e.message}`);
+      }
+    }
+    session = await approval({
+      file: path.resolve(file),
+      chain,
+      ...(now ? { now } : {}),
+      ...(mintKeys.size ? { mintKeys } : {}),
+    });
+  } catch (e) {
+    dropAll();
+    throw e;
+  }
   // How many transactions this run saw land (its own, and any an earlier run sent that it found landed).
   const landed = () => session.state().signatures.length;
   const live = () => !session.spec.live?.partial && Boolean(session.spec.live);
@@ -306,6 +337,6 @@ export async function approveWithKey({
     return { ok: false, sent, done: false, code: null };
   } finally {
     session.close();
-    key.drop();
+    dropAll();
   }
 }

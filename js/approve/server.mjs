@@ -128,8 +128,23 @@ function walletAddress(wallet) {
 }
 
 /**
+ * Whether `value` (a spec, or any part of one) names `address`: a string that is the address, or that has it as one
+ * of its parts between colons ("wallet:<address>", "@ata:<address>:<key>"), as a value or as a name. A link or a
+ * sentence that only mentions the address names nothing.
+ */
+function namesAddress(value, address) {
+  if (typeof value === 'string') return value.split(':').includes(address);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([name, v]) => name.split(':').includes(address) || namesAddress(v, address));
+}
+
+/**
  * One approval session for the spec in `file`. `chain`: { latestBlockhash, rent(bytes), send(wire), confirm(sig) }.
  * `write(file, text)` writes the spec file (`writeWhole`). Exposed for tests; `approve` serves it.
+ * `mintKeys`: a Map or an object of <token key> → { address, sign(message), drop?() }, a key the owner supplies for
+ * a token's new mint, so the mint is made at that key's address (one they chose) and not at a new one. It signs the
+ * transaction that makes the mint as a fresh key would, and no other. Once the mint is made it can do nothing more at
+ * that address on that cluster; on another cluster the same key can still make an account there.
  */
 export async function createApproval({
   file,
@@ -137,6 +152,7 @@ export async function createApproval({
   now = () => Math.floor(Date.now() / 1000),
   clock = Date.now,
   write = writeWhole,
+  mintKeys = {},
 }) {
   let spec = JSON.parse(await readFile(file, 'utf8'));
   if (spec.economy) spec = spec.economy;
@@ -144,6 +160,35 @@ export async function createApproval({
   if (!verdict.ok)
     throw new ApproveError(400, `${file} does not check:\n${describe({ refusals: verdict.refusals, warnings: [] })}`);
   const keys = new Map();
+  /** The mints whose key the owner supplied (`mintKeys`), by the name of the fresh account each stands for. */
+  const supplied = new Map();
+  {
+    const m = model(spec, { now: now() });
+    const given = new Map();
+    // (a Map, or an object's own names: a name like "__proto__" is a name here and nothing else)
+    for (const [key, k] of mintKeys instanceof Map ? mintKeys : Object.entries(mintKeys ?? {})) {
+      const t = m.tokens.get(key);
+      const named = [...m.tokens.values()].filter(x => x.source === 'game').map(x => x.key);
+      if (!t)
+        throw new ApproveError(
+          400,
+          `--mint-key names the token “${key}”, and ${path.basename(file)} has no token with that key${named.length ? ` (the tokens it makes: ${named.join(', ')})` : ''}. Nothing was sent.`,
+        );
+      // (a mint the spec names by its address is made already, and SOL or another project's token is not this one's)
+      if (t.source !== 'game' || (t.mint && !t.mint.startsWith('@')))
+        throw new ApproveError(
+          400,
+          `--mint-key names the token ${t.symbol ?? key}, whose mint this setup does not make${t.mint && !t.mint.startsWith('@') ? ` (the spec names it: ${t.mint})` : ''}: a key file is only for a mint the setup makes. Nothing was sent.`,
+        );
+      if (given.has(k.address))
+        throw new ApproveError(
+          400,
+          `--mint-key gives the same key (${k.address}) for the tokens “${given.get(k.address)}” and “${key}”: each mint has an address of its own. Nothing was sent.`,
+        );
+      given.set(k.address, key);
+      supplied.set(`new:mint/${key}`, k);
+    }
+  }
   let prepared = null;
   let busy = false;
   // One wallet read, prepare or complete at a time: each settles and writes the live section, and a batch built while
@@ -230,12 +275,90 @@ export async function createApproval({
       : null;
 
   /**
+   * Holds each mint key the owner supplied against the file and the chain, before anything is built: a mint is made
+   * at an address nothing holds yet. A token whose mint an earlier run already made at that key's address needs
+   * nothing more of it; one that is live elsewhere, an address the chain already has an account at, and the wallet's
+   * own key are refused.
+   */
+  async function holdSupplied(wallet) {
+    if (!supplied.size) return;
+    const so = madeSoFar(live()) ?? {};
+    const made = so.mints ?? {};
+    const m = model(spec, { now: at });
+    // The keys of the project as the chain has them: an address that is one of them is a key somebody signs with.
+    const roles = new Map([[wallet, 'the key that signs this approval']]);
+    if (so.project && typeof chain.account === 'function') {
+      // (a read that fails stops here: with no answer, nothing says the address is not one of the project's keys)
+      const account = await chain.account(so.project);
+      if (account && account.owner === lootProgram() && accountKind(account.data) === 'Project') {
+        const state = decode('Project', account.data);
+        for (const [role, address] of [
+          ['creator', state.creator],
+          ['treasury', state.treasury],
+          ['authority', state.authority],
+          ['owner', state.owner],
+        ])
+          if (address !== wallet) roles.set(address, `the project’s ${role} on chain`);
+      }
+    }
+    for (const [name, k] of supplied) {
+      const key = name.slice('new:mint/'.length);
+      const what = m.tokens.get(key)?.symbol ?? key;
+      if (made[key] === k.address) continue;
+      // Anything else the file names by that address (an authority, a treasury, a wallet a split pays, another
+      // token's mint, the project, its collection): the file's own record of this very mint under way aside.
+      const { pending: _pending, transactions: _transactions, ...section } = spec.live ?? {};
+      const elsewhere = namesAddress(
+        {
+          ...spec,
+          ...(spec.live
+            ? {
+                live: {
+                  ...section,
+                  mints: Object.fromEntries(Object.entries(section.mints ?? {}).filter(([n]) => n !== key)),
+                },
+              }
+            : {}),
+        },
+        k.address,
+      );
+      if (made[key])
+        throw new ApproveError(
+          409,
+          `The token ${what}’s mint is live already at ${made[key]}, and a mint’s address never changes: leave --mint-key out for it. Nothing was sent.`,
+        );
+      if (roles.has(k.address))
+        throw new ApproveError(
+          409,
+          `--mint-key gives the token ${what} ${roles.get(k.address)} (${k.address}): a mint is made at an address of its own, never at a key somebody signs with. Nothing was sent.`,
+        );
+      if (elsewhere)
+        throw new ApproveError(
+          409,
+          `--mint-key gives the token ${what} the address ${k.address}, which ${path.basename(file)} names for something else: a mint is made at an address of its own. Nothing was sent.`,
+        );
+      if (typeof chain.account !== 'function')
+        throw new ApproveError(
+          409,
+          `--mint-key gives the token ${what} the address ${k.address}, and this connection cannot read the chain to check that nothing is there: nothing was sent.`,
+        );
+      if (await chain.account(k.address))
+        throw new ApproveError(
+          409,
+          `--mint-key gives the token ${what} the address ${k.address}, and an account is there already on ${cluster()} (anything at an address counts, SOL sent to it too): a mint is made at an address nothing holds yet. Nothing was sent. (If an earlier run of this setup made the token’s mint there, the file has lost its record of it: restore the file as approve last wrote it. Leaving --mint-key out would make the mint at a new address.)`,
+        );
+      keys.set(name, k);
+    }
+  }
+
+  /**
    * The owner a setup for `wallet` is built for, and its project, once every mint the spec names is held against the
    * chain (`checkMints`: its decimals and program) and so is the file's live section (`checkLive`): the wallet's own
    * project, or the project whose authority it is. A section that does not match is refused, and nothing is built on
    * it.
    */
   async function trust(wallet) {
+    await holdSupplied(wallet);
     try {
       const m = model(spec, { now: at });
       // the project a mint the spec calls the project's must name: the live one, else this wallet's own to be
@@ -427,6 +550,13 @@ export async function createApproval({
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
+          // A mint made at an address the owner chose: said with its address, which the code of the printout covers.
+          ...[...supplied]
+            .filter(([name]) => todo.has(`token:${name.slice('new:mint/'.length)}`))
+            .map(
+              ([name, k]) =>
+                `The mint of the token ${model(spec, { now: at }).tokens.get(name.slice('new:mint/'.length))?.symbol ?? name.slice('new:mint/'.length)} is made at ${k.address}, the address of the key file given with --mint-key: that key signs the transaction that makes the mint, and no other. Once the mint is there the key can do nothing more at that address on ${cluster()}; on another cluster the same file can still make an account there, so keep it as you keep a key until it is used wherever you mean to.`,
+            ),
           ...fileCorrections.map(
             line => `${line} Nothing is built on the file’s line, and the file is corrected when a step lands.`,
           ),
@@ -459,7 +589,10 @@ export async function createApproval({
       wallet: n.owner ?? null,
       // The accounts this session made new keys for (a token's mint, the collection, the tree): their addresses are
       // this session's own, new each time, so what is shown twice differs in them and in nothing else.
-      fresh: [...keys].map(([name, k]) => ({ name: name.replace(/^new:/, ''), address: k.address })),
+      // (an address the owner supplied a key for is theirs, the same each time: named in the lines above instead)
+      fresh: [...keys]
+        .filter(([name]) => !supplied.has(name))
+        .map(([name, k]) => ({ name: name.replace(/^new:/, ''), address: k.address })),
       ...(extra.refused ? { refused: extra.refused } : {}),
     };
   }
@@ -474,7 +607,8 @@ export async function createApproval({
      * any, is built on new keys.
      */
     close() {
-      for (const k of keys.values()) k.drop();
+      for (const k of keys.values()) k.drop?.();
+      for (const k of supplied.values()) k.drop?.();
       keys.clear();
       prepared = null;
     },
@@ -608,8 +742,15 @@ export async function createApproval({
       const message = compileMessage({ payer: wallet, blockhash, instructions: t.instructions });
       const { signers } = readTransaction(wireTransaction(message));
       const sigs = signers.map(s => {
-        const fresh = [...keys.values()].find(k => k.address === s);
-        return fresh ? fresh.sign(message) : new Uint8Array(64);
+        const [name, fresh] = [...keys].find(([, k]) => k.address === s) ?? [];
+        if (!fresh) return new Uint8Array(64);
+        // A key the owner supplied signs the making of its own token's mint, and no other transaction.
+        if (supplied.has(name) && !t.steps.some(step => step.id === `token:${name.slice('new:mint/'.length)}`))
+          throw new ApproveError(
+            409,
+            `A transaction that does not make the token “${name.slice('new:mint/'.length)}” names the address given with --mint-key (${s}) as a signer: the key file signs the making of its mint and nothing else. Nothing was sent.`,
+          );
+        return fresh.sign(message);
       });
       return wireTransaction(message, sigs);
     });
