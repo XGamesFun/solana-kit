@@ -17,7 +17,7 @@
 import { at, flows, lineToken, named, num, ticketOf, words } from './flows.mjs';
 import { prizeLine, prizeToken, serverRate, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
-import { exchanges, payouts } from './exchanges.mjs';
+import { converts, exchanges, payouts } from './exchanges.mjs';
 import { journeyOf } from './walk.mjs';
 
 /** A cancel's severity, by how likely it is: the scenario says it is (or says nothing), says it isn't, or only the oracle's timeout. */
@@ -591,7 +591,7 @@ export function challenge(m, warnTo, now, economy) {
     );
 
   // A conversion declared off chain with no rate is counted one for one: what follows from it rests on that guess.
-  for (const x of (m.offchain ?? []).filter(x => x.rate === undefined))
+  for (const x of (m.offchain ?? []).filter(x => x.rate === undefined && converts(m, x)))
     warn(
       'W-ASSUMPTION',
       'economy.offchain',
@@ -603,18 +603,21 @@ export function challenge(m, warnTo, now, economy) {
   // A result or reward decided off chain (a voucher server, a decider) may give more than the spec shows: a boost, a
   // ranking that pays. Declared in "offchain", it is followed like any route; undeclared, ask.
   const offChain = [...m.grants.filter(g => (g.vouchers ?? []).length), ...m.contests];
-  if (offChain.length && !(m.offchain ?? []).length)
+  if (offChain.length && !(m.offchain ?? []).length) {
+    // (the example names the spec's own grant, so the entry can be copied)
+    const example = m.grants.find(g => (g.vouchers ?? []).length)?.key ?? '<key>';
     warn(
       'W-ASSUMPTION',
       'economy.offchain',
-      `${words(offChain.map(named))} ${offChain.length === 1 ? 'is' : 'are'} decided off chain, and the spec declares nothing a server or the page does with what players hold or win ("offchain"). A boost, a ranking or a better reward the server grants for it is invisible to these checks, so a loop through it is not followed.`,
+      `${words(offChain.map(named))} ${offChain.length === 1 ? 'is' : 'are'} decided off chain, and the spec declares nothing a server or the page does with what players hold, win or do ("offchain"). A boost for a code typed in, a streak, a ranking or a better reward the server grants is invisible to these checks, so a loop through it is not followed and the person is not told of it.`,
       // (a yes or no the person can answer; what the server computes is the builder's to read, not the person's to recite)
-      'If you wrote the server and the page, read what each computes from what players hold or win, and say the answer to the person in one sentence; if they run their own, ask. Then declare each in "offchain" ({ "key", "takes", "gives", "rate" }) and check again.',
+      `If you wrote the server and the page, read what each computes, and say the answer to the person in one sentence; if they run their own, ask. Then declare each rule in "offchain" and check again. It holds what is on no chain too: a printed code that doubles what a claim pays is { "key": "boost-code", "takes": "a code", "gives": "grant:${example}", "rate": 2 }; a token spent for another is { "key", "takes", "gives", "rate" } with their keys.`,
       {
         severity: 'low',
-        ask: 'Does anything a player holds or wins get them more from your server or page (a boost, a better reward, a place on a board that pays): yes, and which, or no?',
+        ask: 'Does your server or page pay a player more for anything they hold, win or do (a token or item held, a code typed in, a streak, a place on a board): yes, and which, or no?',
       },
     );
+  }
 
   // A grant's funds (the SOL that pays each claim's rent) against the claims its audience makes: sized per claim, they
   // run out at a count of players.

@@ -442,8 +442,17 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   const signedFor = fl.routes.filter(r => r.kind === 'grant' && (r.part.vouchers ?? []).length);
   if (signedFor.length)
     trust.push(
-      `${words(signedFor.map(named))}: the chain pays a wallet each win (round) once, and keeps that by round and wallet together. The same win signed for a second wallet pays again, and a voucher that has run out may have been collected before it did. Before the server signs a win again (another wallet, a new voucher after the first ran out), it reads the chain for the first wallet (winPaid, from @xgamesfun/solana/results), or keeps each win on the first wallet it signed for.`,
+      `${words(signedFor.map(named))}: the chain pays a wallet each win (round) once, and keeps that by round and wallet together. The same win signed for a second wallet pays again, and a voucher that has run out may have been collected before it did. Before the server signs a win again (another wallet, a new voucher after the first ran out), it reads the chain for the first wallet (winPaid, from @xgamesfun/solana/results), or keeps each win on the first wallet it signed for. A read that fails is not “not paid”: the server signs nothing until it has the answer.`,
     );
+  // What the spec declares the server adds to a grant off chain (a code, a streak): said, with what it means for the
+  // grant's own numbers. The chain sees only the amount on the voucher.
+  for (const x of m.offchain ?? []) {
+    const g = String(x.gives).startsWith('grant:') ? m.grants.find(y => y.key === String(x.gives).slice(6)) : null;
+    if (!g) continue;
+    trust.push(
+      `${named(x)}: off chain, the server pays ${num(x.rate) > 0 ? `${num(x.rate)} times` : 'more of'} what ${named(g)} would pay, for ${x.takes}. The chain sees only the amount on each voucher, so the most one claim gives and every cap of ${named(g)} are sized for the larger amount, and players are told the rule where they earn.`,
+    );
+  }
   for (const f of m.farms) {
     const locks = (f.tiers ?? []).map(t => t.lock).filter(x => x && toSeconds(x) > 0);
     out.push(

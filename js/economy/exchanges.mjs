@@ -42,6 +42,15 @@ function farmYield(f, sim) {
 }
 
 /**
+ * Whether a declared off-chain rule turns one thing on chain into another (a token or an item taken, a token, an item
+ * or a farm's share given), so value is followed through it. A rule on what a grant pays ("grant:<key>"), or one that
+ * takes what is on no chain (a code, a streak), is said to the person, not followed.
+ */
+export const converts = (m, x) =>
+  !String(x.gives).startsWith('grant:') &&
+  (m.tokens.has(x.takes) || (String(x.takes).startsWith('item:') && m.item.has(String(x.takes).slice(5))));
+
+/**
  * The exchanges: [{ from, to, rate, route, where, says, cap }]: `rate` units of `to` for each unit of `from`; an item
  * as "item:<key>".
  */
@@ -104,6 +113,7 @@ export function exchanges(m, fl, sim) {
   }
   // What the spec declares a server or page does off chain: followed like any route.
   for (const x of m.offchain ?? []) {
+    if (!converts(m, x)) continue;
     const farm = x.gives.startsWith('farm:') ? m.farm.get(x.gives.slice(5)) : null;
     const y = farm ? farmYield(farm, sim) : null;
     const to = farm ? farm.rewardsToken : x.gives;

@@ -4,6 +4,23 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.26: a server's own rules declared and said, the design's questions in its JSON too, and a payout read that fails closed (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **A server's own rules.** `"offchain"` now holds a rule on what a grant pays, for something that is on no chain: a
+  printed code that doubles a claim is `{ "key": "boost-code", "takes": "a code", "gives": "grant:<key>", "rate": 2 }`.
+  `takes` may be plain words; `gives` may be `"grant:<key>"`, with `rate` the number of times. Such a rule is said in
+  the check's trust lines with what it means for the grant's amounts and caps; it is not followed as a conversion. The
+  question that asks for it is a yes or no that names a code and a streak, and its fix carries the entry to copy.
+- **The design's questions as data.** `xsolana_design`'s JSON now carries what its text says: each design's `needs`
+  and `removes`, and `askFirst` (whether to stop for the person's choice, the two designs that differ in a way out,
+  and what each other reward a server signs needs from them).
+- **A burn is the person's to ask for.** Under a burn want the design's text says it counts only if they asked for it
+  in their own words, and that one the builder added is a question first.
+- **A read that gates a payout fails closed.** The trust line and `winPaid`'s own notes say a read that fails is not
+  "not paid": the server signs nothing until it has the answer.
+
 ## 0.28.25: a signed reward's questions shown whichever route was designed, and what can't be claimed asked case by case (loot 0.28.0, unchanged)
 
 The tools alone.

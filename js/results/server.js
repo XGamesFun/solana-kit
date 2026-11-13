@@ -72,7 +72,8 @@ export async function holds({ rpc, spec, wallet, item = null, atLeast = 1, attri
  * have been collected before it did: a server asks this of the first wallet before it signs a win again (another
  * wallet, or a new voucher after the first one's expiry). `game`: the project's address; `grant`: the grant's number;
  * `rpc`: an RPC link or a `rpcClient`. It reads the grant as it is now: a grant written again (a new incarnation) has
- * paid nobody yet, and no voucher of the old one is taken.
+ * paid nobody yet, and no voucher of the old one is taken. It throws when the chain can't be read: let that stop the
+ * signing. A read that failed is not "not paid", and a server that treats it so pays twice.
  */
 export async function winPaid({ rpc, game, grant, wallet, round }) {
   if (!isAddress(wallet)) throw new Error('Name the wallet (its public address).');
