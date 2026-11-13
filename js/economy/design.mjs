@@ -379,6 +379,7 @@ const DRAW_BRIDGES = {
         if (!x.plan.entry) return false;
         for (const r of s.recipes.filter(r => r.key.startsWith(`${x.route}-buy-`))) r.in[0].to = 'burn';
         x.plan.burn = 'entry';
+        x.plan.removes = 'nobody can give a burned payment back, so a cancelled draw refunds only the entry';
         return true;
       },
     },
@@ -515,8 +516,10 @@ const perWord = n => (n === 1 ? 'one' : String(n));
  */
 /** What a reward a server signs needs from the person before its first spec: the numbers and the rule only they have. */
 const SERVER_NEEDS = Object.freeze([
-  'its caps, each with your pick, before the first spec: the most claims one player makes a day, the most for everyone together a day, and the most in all (the chain counts claims: a cap of N claims is N times the most one claim gives)',
-  'what happens to what a player earned and did not claim when a day turns or a voucher runs out: kept for them (until when), or lost; follow the balance your server keeps from the moment it signs',
+  'The most claims one player makes a day?',
+  'The most claims everyone together makes a day?',
+  'The most claims in all, ever? (the chain counts claims: a cap of N claims is N times the most one claim gives)',
+  'What happens to what a player earned and can’t claim (past a cap, once the prize runs out, when a day turns or a voucher runs out): kept for them (until when), or lost? Follow the balance your server keeps from the moment it signs.',
 ]);
 
 export const FAMILIES = {
@@ -1029,6 +1032,15 @@ function searchRoute(base, route, family, requirements, now) {
     c.findings.high * 0.5 -
     c.findings.medium * 0.1;
   candidates.sort((a, b) => score(b) - score(a));
+  // One order across the tools: where a design removes a way out (`plan.removes`: a payment burned as it is made), the
+  // best design that keeps the same want with the way out is listed just before it, whatever their scores. The person
+  // is asked with the version that keeps it first (the checker's question and the review's fix say the same).
+  const keeps = c => !c.plan.removes && !!c.plan.burn;
+  const removing = candidates.findIndex(c => c.plan.removes);
+  if (removing >= 0 && !candidates.slice(0, removing).some(keeps)) {
+    const keeping = candidates.findIndex(keeps);
+    if (keeping > removing) candidates.splice(removing, 0, ...candidates.splice(keeping, 1));
+  }
   // What can't hold together: the smallest sets of requirements the candidates give up (partly kept counts as given up).
   const key = c =>
     c.results
@@ -1101,8 +1113,21 @@ export function describeDesign(result, requirements, { top = 3 } = {}) {
       return `For “${r.route}”: no family covers it yet (a draw: a lottery's key; a sale: an item's; a reward: a grant's; staking: a farm's; a contest's). Draft it by hand and check it.`;
     return `For “${r.route}” (${FAMILY_WORDS[r.family]}):\n${describeRoute(r, reqs, { top, last: false })}`;
   });
-  const any = routes.some(r => !r.allKept && !r.unknown);
+  const any = routes.some(r => !r.unknown && (!r.allKept || wayOutChoice(r, top)));
   return `${parts.join('\n\n')}${any ? '\n\nPut these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose.' : ''}`;
+}
+
+/**
+ * Among the designs shown, the first that removes a way out and the one that keeps it: { removes, keeps } as their
+ * numbers in the list, or null. Which of the two is built is the person's choice, even when both keep every want.
+ */
+function wayOutChoice(result, top) {
+  const shown = result.candidates.slice(0, top);
+  const removes = shown.findIndex(c => c.plan.removes);
+  const keeps = shown.findIndex(c => !c.plan.removes && !!c.plan.burn);
+  return removes >= 0 && keeps >= 0
+    ? { removes: removes + 1, keeps: keeps + 1, why: shown[removes].plan.removes }
+    : null;
 }
 
 /** One route's designs in words: the requirements, the conflicts, the top designs. */
@@ -1111,7 +1136,13 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
   for (const r of requirements) lines.push(`- ${REQUIREMENTS[r.kind].says(r)}`);
   if (!result.candidates.length)
     return `${lines.join('\n')}\n\nNo design checks: none of the known ways builds this on the spec as it is (the tokens it names, the item, grant, farm, lottery or contest it is for). Fix the spec and run it again, or draft it by hand.`;
-  if (result.allKept) lines.push('', 'A design keeps every one of them:');
+  const wayOut = wayOutChoice(result, top);
+  if (result.allKept && wayOut)
+    lines.push(
+      '',
+      `More than one design keeps every one of them, and they differ in a way out: design ${wayOut.removes} removes one (${wayOut.why}), design ${wayOut.keeps} keeps it. Which one is the person’s choice, not yours: put both to them before anything is built, the one that keeps it first, each with its “Say” sentence and what it costs, and your pick.`,
+    );
+  else if (result.allKept) lines.push('', 'A design keeps every one of them:');
   else {
     lines.push(
       '',
@@ -1134,7 +1165,7 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
     }
     lines.push(
       '',
-      'The designs, best first (what the person asked for, then what plays best, then the cleanest, then the most secure):',
+      'The designs, best first (what the person asked for, then what plays best, then the cleanest, then the most secure; a design that removes a way out comes after the best one that keeps it):',
     );
   }
   result.candidates.slice(0, top).forEach((c, i) => {
@@ -1155,12 +1186,19 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
       after.push('the way back switched on after a cancel (the owner; if nobody does, a refund stays in entries)');
     if (after.length)
       lines.push(`   After ${c.plan.draw ? 'the draw' : 'it ends'}: ${[...new Set(after)].join('; ')}.`);
-    if (c.needs.length) lines.push(`   Needs from you: ${c.needs.join('; ')}.`);
+    if (c.plan.removes) lines.push(`   Removes a way out: ${c.plan.removes}.`);
+    // One need: a line. Several: one a line, so each is asked on its own and a dropped one shows.
+    if (c.needs.length === 1) lines.push(`   Needs from you: ${c.needs[0]}.`);
+    else if (c.needs.length)
+      lines.push(
+        `   Needs from you, ${c.needs.length} things. Each is its own question to the person, with your pick; one you answer yourself is still said to them on a line of its own:`,
+        ...c.needs.map((n, i) => `     ${i + 1}. ${n}`),
+      );
     lines.push(
       `   Plays: ${c.experience.approvals} approval${c.experience.approvals === 1 ? '' : 's'}; ${c.experience.tokens ? `${c.experience.tokens} token${c.experience.tokens === 1 ? '' : 's'} of its own to learn` : 'nothing new to learn'}${c.experience.waits ? '; a wait (a lock)' : ''}. Findings: ${c.findings.high} high, ${c.findings.medium} medium (xsolana_check on its spec gives each).`,
     );
   });
-  if (!result.allKept && last)
+  if ((!result.allKept || wayOut) && last)
     lines.push(
       '',
       'Put these options to the person, each with its “Say” sentence as written and your pick, and end your turn there: build none until they choose.',

@@ -48,6 +48,10 @@ voucher grant that says nothing as `bounds`, the weakest.
   nobody. For rewards worth farming, pay only players signed in with X.
 - **Make farming cost something.** Gate on holding a collectible the game sells or a locked stake (`gate`), pay only
   wallets a player proved (`proofRequest` / `verifyProof`), and keep prizes for results small.
+- **A proof taken out is followed to everything that read it.** When a wallet's proof is dropped (to save a prompt,
+  say), look past the payout at whatever else trusted "this wallet is this player's": a name shown beside a wallet, a
+  row on a board, the record of which account a wallet belongs to. A record the server now writes from the wallet a
+  request names lets any signed-in player put their own name on the winner's wallet.
 - **Bots play well.** Even a verified result pays a bot what it pays a good player.
 
 ## What the program guarantees

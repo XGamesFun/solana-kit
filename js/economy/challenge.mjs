@@ -608,10 +608,11 @@ export function challenge(m, warnTo, now, economy) {
       'W-ASSUMPTION',
       'economy.offchain',
       `${words(offChain.map(named))} ${offChain.length === 1 ? 'is' : 'are'} decided off chain, and the spec declares nothing a server or the page does with what players hold or win ("offchain"). A boost, a ranking or a better reward the server grants for it is invisible to these checks, so a loop through it is not followed.`,
-      'Ask, then declare each in "offchain" ({ "key", "takes", "gives", "rate" }) and check again.',
+      // (a yes or no the person can answer; what the server computes is the builder's to read, not the person's to recite)
+      'If you wrote the server and the page, read what each computes from what players hold or win, and say the answer to the person in one sentence; if they run their own, ask. Then declare each in "offchain" ({ "key", "takes", "gives", "rate" }) and check again.',
       {
         severity: 'low',
-        ask: 'Does your server or page turn anything players hold or win into an advantage (a boost, a better reward, a ranking that pays)? For each thing your server runs, what does it compute itself, and what does it only record from the page?',
+        ask: 'Does anything a player holds or wins get them more from your server or page (a boost, a better reward, a place on a board that pays): yes, and which, or no?',
       },
     );
 
@@ -860,7 +861,7 @@ export function challenge(m, warnTo, now, economy) {
         severity: 'low',
         ask: {
           deliver: `The chain knows only the winning wallet: who delivers the off-chain prize of ${names} to each winner, and how will they reach them?`,
-          server: `Who runs the results server that signs the vouchers of ${names}, and is it up for the whole run?`,
+          server: `Who runs the results server that signs the vouchers of ${names}: the game’s own server, or one someone else keeps for you? It has to be up for the whole run (${step.ifNobody}).`,
           decide: `Who holds the decider key of ${names}, what does it check before it signs, and will they be there before the result is due?`,
           'decide-authority': `Who names the result of ${names} with the authority key, and will they be there before the result is due?`,
         }[kind],
