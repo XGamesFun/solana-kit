@@ -27,7 +27,14 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
  * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
  */
-export function challenge(m, warn, now, economy) {
+export function challenge(m, warnTo, now, economy) {
+  // (every grant cap a question is about, so the caps nobody was asked about are asked once, together, at the end)
+  const askedCaps = new Set();
+  const warn = (code, where, message, fix, extra) => {
+    const cap = extra?.ask ? /^economy\.grants\.(.+)\.limits\.(\w+)$/.exec(where) : null;
+    if (cap) askedCaps.add(`${cap[1]}.${cap[2]}`);
+    return warnTo(code, where, message, fix, extra);
+  };
   const fl = flows(m, { now });
   // The owner's order is plays best, then clean, then secure: a bound the server keeps (a voucher server that decides or
   // replays who earns) is where such a limit lives when an on-chain cap tight enough to hold it would cost real players.
@@ -73,7 +80,8 @@ export function challenge(m, warn, now, economy) {
         burned
           ? {
               severity: BY_LIKELY[c.likely] === 'low' ? 'medium' : BY_LIKELY[c.likely],
-              ask: `${a.symbol} for ${named(route)} is bought with ${priced(origin.pays)} that is burned, and a cancelled round (${c.causes.join(', or ')}) can only refund ${a.symbol}: is that what players should get back, or should what they paid come back?`,
+              // (a want that removes a way out is asked with the version that keeps it, never as a yes or no)
+              ask: `${a.symbol} for ${named(route)} is bought with ${priced(origin.pays)} that is burned on the spot, and nobody can give a burned payment back: a cancelled round (${c.causes.join(', or ')}) then refunds only ${a.symbol}. The burn can wait for the outcome instead: ${named(route)} priced in ${sym(origin.pays[0].asset)} itself holds each payment until the outcome is final${route.kind === 'lottery' ? ' and burns it then' : ''}, and a cancel gives it back. Which do you want: the payment held until the outcome (the pick), or burned on entry with ${a.symbol} as the only refund?${route.fixed ? ` Choose before it is built: a round's terms are fixed at ${route.fixed.when}.` : ''}`,
             }
           : { severity: BY_LIKELY[c.likely] },
       );
@@ -782,6 +790,57 @@ export function challenge(m, warn, now, economy) {
         { severity: 'medium' },
       );
   }
+
+  // At a grant's edges (a day that turns, a cap, an empty pool, a voucher that runs out) the chain keeps only a claim a
+  // window refused (the route's endings); what a player earned in the game and has not claimed is the server's record
+  // alone. One question for every grant a server signs for.
+  const signedGrants = m.grants.filter(g => on(g) && (g.vouchers ?? []).length);
+  if (signedGrants.length)
+    warn(
+      'W-ASSUMPTION',
+      `economy.grants.${signedGrants[0].key}`,
+      `What a player has earned in the game and not yet claimed (${words(signedGrants.map(named))}) is on no chain: the server alone keeps it or drops it when a day's limit turns, a cap is reached, a pool is empty or a voucher runs out.`,
+      'Ask, then build that and say it on the page where the player earns: what carries over, what is lost and when.',
+      {
+        severity: 'low',
+        ask: `When a day turns, a cap is reached or a voucher runs out, what happens to what a player earned from ${words(signedGrants.map(named))} and did not claim in time: is it kept for them (until when), or lost? Players are told either way.`,
+      },
+    );
+  // A cap is the person's number as the scenario is: every cap of a signed grant that no question above was about, in
+  // claims and in what they give, once.
+  const unasked = signedGrants
+    .map(g => {
+      const l = g.limits ?? {};
+      const line = prizeLine(g.prize ?? g.gives);
+      const each = num(line?.amount);
+      const unit =
+        line?.gives === 'tokens' ? (prizeToken(line, m)?.symbol ?? sym(line.currency ?? m.currencyKey)) : null;
+      const worth = n => (unit && each ? ` (up to ${+(n * each).toFixed(9)} ${unit})` : '');
+      const caps = [
+        [
+          'perWalletEach',
+          l.perWalletEach?.count &&
+            `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}${worth(l.perWalletEach.count)}`,
+        ],
+        ['perWallet', l.perWallet && `${l.perWallet} a wallet in all${worth(l.perWallet)}`],
+        ['perPerson', l.perPerson && `${l.perPerson} a person in all${worth(l.perPerson)}`],
+        ['perDay', l.perDay && `${l.perDay} a day for everyone${worth(l.perDay)}`],
+        ['total', l.total && `${l.total} in all${worth(l.total)}`],
+      ].filter(([cap, says]) => says && !askedCaps.has(`${g.key}.${cap}`));
+      return caps.length ? `${named(g)}: ${caps.map(([, says]) => says).join(', ')}` : null;
+    })
+    .filter(Boolean);
+  if (unasked.length)
+    warn(
+      'W-ASSUMPTION',
+      `economy.grants.${signedGrants[0].key}.limits`,
+      `The chain's caps on what a server signs, in claims: ${unasked.join('; ')}. They are where an honest player stops and the most a leaked voucher key takes, and the spec can't say who chose them.`,
+      'Ask, and keep the caps the person gives; a cap picked for them is said as a pick, with what it means in their numbers.',
+      {
+        severity: 'low',
+        ask: `These caps decide where an honest player stops and the most a leaked voucher key could take. ${unasked.join('; ')}. Are these the numbers you want?`,
+      },
+    );
 
   // One question for each kind of step only a person or a server sends, naming every route that needs it.
   const manual = new Map();

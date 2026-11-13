@@ -45,7 +45,7 @@ export function endStates(m, { now, fl = flows(m, { now }) }) {
       ? Boolean(r.cancel) || (r.roll && r.kind !== 'recipe')
       : Boolean(extraWords(r, state, fl)) || r.backs?.length > 0;
   return fl.routes
-    .filter(r => r.price.length)
+    .filter(r => r.price.length || r.endings)
     .flatMap(r =>
       ['cancel', 'undo']
         .map(state => [state, r.states.find(x => x.state === state)])
@@ -56,7 +56,9 @@ export function endStates(m, { now, fl = flows(m, { now }) }) {
         )
         .concat(
           r.endings
-            ? [`${named(r)}, every way it ends: ${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`]
+            ? [
+                `${named(r)}, every way ${r.endsAs ?? 'it'} ends: ${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`,
+              ]
             : [],
         ),
     );
@@ -146,7 +148,8 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
         'Who sends what',
         `${later.map(x => `${x.short[0].toUpperCase()}${x.short.slice(1)}: ${WHO[x.by] === 'Owner' ? 'the project' : (WHO[x.by] ?? x.by).toLowerCase()}${x.pays === 'sender' ? ', paying its fee' : ''}, ${x.per}; if nobody does, ${x.ifNobody}`).join('. ')}.`,
       ]);
-    if (r.endings) rows.push(['Every way it ends', `${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`]);
+    if (r.endings)
+      rows.push([`Every way ${r.endsAs ?? 'it'} ends`, `${r.endings.map(e => `${e.ending}: ${e.then}`).join('. ')}.`]);
     if (r.fixed) rows.push([`Only before ${r.fixed.when}`, r.fixed.says]);
     route(`${named(r)}: ${r.title}`, rows);
   }
@@ -448,7 +451,8 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
     );
   }
   // Every way a round ends (each kept in its own words), and a schedule's runs.
-  for (const r of fl.routes.filter(x => x.endings))
+  // (a grant's, the ends of a claim, are told once, with what goes wrong: endStates)
+  for (const r of fl.routes.filter(x => x.endings && !x.endsAs))
     out.push(`Every way ${named(r)} ends: ${r.endings.map(e => `${e.ending.toLowerCase()}: ${e.then}`).join('; ')}.`);
   // What each end state still owes moves only when someone sends it: who may, what it costs them, and what happens if
   // nobody does ("refunded" or "paid" alone hides all three).

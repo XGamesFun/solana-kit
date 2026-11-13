@@ -6,7 +6,7 @@
 //
 // Lotteries, boxes (the shop's items with them), recipes and grants are modelled; the other kinds are the
 // walk-through's own words until they are.
-import { boxRolls, ORACLE_FEE, prizeLine, prizeToken, prizeWords, toSeconds, toTime } from './model.mjs';
+import { boxRolls, ORACLE_FEE, prizeLine, prizePool, prizeToken, prizeWords, toSeconds, toTime } from './model.mjs';
 import { DEFAULT_PER_DAY } from './simulate.mjs';
 
 const DAY = 86_400;
@@ -503,6 +503,59 @@ export function flows(m, { now }) {
     const limits = Object.entries(g.limits ?? {})
       .map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`)
       .join(', ');
+    // Every way a claim ends short of paying, at each edge the grant has (a window that turns, a cap for good, a prize
+    // that can't be given, a voucher that runs out, its end), and what the chain keeps for the player at each: a claim
+    // a window refused is still good once the window turns; nothing else carries over. What a player earned in the
+    // game and never claimed is not on the chain at all.
+    const l = g.limits ?? {};
+    const windows = [
+      l.perWalletEach?.count && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+      l.perDay && `${l.perDay} a day for everyone`,
+    ].filter(Boolean);
+    const forGood = [
+      l.perWallet && `${l.perWallet} a wallet`,
+      l.perPerson && `${l.perPerson} a person`,
+      l.total && `${l.total} for everyone`,
+    ].filter(Boolean);
+    const signed = Boolean(g.vouchers?.length);
+    const proof = signed ? 'voucher' : 'claim';
+    const endings = [
+      ...(windows.length
+        ? [
+            {
+              ending: `A claim past a window's limit (${windows.join(', ')})`,
+              then: `refused, and not lost: the same ${proof} sent again once the window turns still pays${signed ? ', until the voucher runs out' : ''}`,
+            },
+          ]
+        : []),
+      ...(forGood.length
+        ? [{ ending: `A claim past a limit in all (${forGood.join(', ')})`, then: 'refused for good' }]
+        : []),
+      // (a pool can run dry and a limited item or a stash's NFT can run out; a minted token can't)
+      ...(prizePool(prize) || prize?.gives === 'nft' || (prize?.gives === 'item' && m.item.get(prize.item)?.supply)
+        ? [
+            {
+              ending: `Its prize can’t be given (${prizePool(prize) ? 'its pool run dry' : 'none left'})`,
+              then: `refused, and it keeps its round: claimed again once there is something to give${signed ? ', while the voucher lasts' : ''}`,
+            },
+          ]
+        : []),
+      ...(signed
+        ? [
+            {
+              ending: 'A voucher runs out unclaimed',
+              then: 'the chain pays nothing for it; signing the win again is the server’s choice (after winPaid for the first wallet)',
+            },
+            {
+              ending: 'Earned in the game and never claimed',
+              then: 'the chain holds nothing for it: kept or dropped by the server alone, when a day turns as at any time',
+            },
+          ]
+        : []),
+      ...(l.until !== undefined
+        ? [{ ending: `After ${at(toTime(l.until, now))}`, then: 'no claim is taken, whatever was signed before' }]
+        : []),
+    ];
     routes.push({
       kind: 'grant',
       key: g.key,
@@ -516,6 +569,8 @@ export function flows(m, { now }) {
       ends: g.limits?.until !== undefined ? toTime(g.limits.until, now) : null,
       title: 'a grant',
       trust: g.vouchers?.length ? (g.trust ?? 'what it checks') : null,
+      // (a grant has no round: these are the ends of a claim)
+      ...(endings.length ? { endings, endsAs: 'a claim' } : {}),
       states: [
         {
           state: 'run',
