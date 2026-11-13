@@ -4,6 +4,21 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.23: the person's numbers asked with the design, and the questions in the order they weigh (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **Asked with the design, before the first spec.** For a reward a server signs, `xsolana_design` now lists under
+  "Needs from you" what only the person has: its caps (the most claims one player makes a day, everyone together a
+  day, and in all, each with the builder's pick), and what happens to what a player earned and did not claim when a
+  day turns or a voucher runs out. `xsolana_check` still asks for whatever a spec then leaves unsaid.
+- **The questions, heaviest first.** The "Ask the person" list is ordered by how much each question's finding weighs
+  (high, medium, low), and says to put the first ones first.
+- **One the builder answers itself still goes to the person**, as one plain sentence saying what was chosen, so they
+  can overrule it, checked to be true first.
+- The question for a payment burned on entry no longer names a pick of its own ("it keeps the refund"): which of the
+  two to recommend is the design's ranking against everything else the person asked for.
+
 ## 0.28.22: what carries over at a grant's edges, caps as the person's numbers, and a burn asked with the way that keeps the refund (loot 0.28.0, unchanged)
 
 The tools alone.
