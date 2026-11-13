@@ -183,6 +183,19 @@ export async function createApproval({
    */
   let renames = new Set(spec.live?.published ? changedParts(spec).renames : []);
   let renameNotes = [];
+  /**
+   * Where the chain says otherwise than the file of the live project's treasury or authority (`checkLive`), in words:
+   * its owner changed them, or handed the project on, outside these tools. Kept for the session once read (the
+   * session's own copy of the live section says the chain's from then on).
+   */
+  let fileCorrections = [];
+  /** Where the chain's treasury is not the one the spec names (`checkLive`), in words. */
+  let chainNotes = [];
+  /**
+   * What the chain says of the live project, read for the wallet connected now: { creator, treasury, authority };
+   * null before a wallet's read and for a project not made yet. Every setup this session builds is built on it.
+   */
+  let projectOnChain = null;
   let held = new Set();
   /** The tokens whose record already says the spec's new name, though the file's published spec says the old one. */
   let settled = new Set();
@@ -238,6 +251,15 @@ export async function createApproval({
     try {
       const m = model(spec, { now: at });
       const trusted = await checkLive({ live: live(), m, wallet, chain });
+      projectOnChain = trusted.treasury
+        ? { creator: trusted.creator, treasury: trusted.treasury, authority: trusted.authority }
+        : null;
+      if (trusted.corrected.length) fileCorrections = trusted.corrected;
+      chainNotes = trusted.notes;
+      // The session's copy of the live section says of the project's treasury and authority what the chain says, so
+      // what this session records is the chain's: the file says it once a step lands (or at once, with none to send).
+      if (trusted.treasury && (spec.live.treasury !== trusted.treasury || spec.live.authority !== trusted.authority))
+        spec = { ...spec, live: { ...spec.live, treasury: trusted.treasury, authority: trusted.authority } };
       // which names are written again is the chain's to say, read for the project's owner
       const read = await readRenames({
         live: live(),
@@ -258,9 +280,11 @@ export async function createApproval({
       throw Object.assign(
         new ApproveError(
           409,
-          e.notOwner
-            ? `${e.message} Nothing was sent. If the project is yours, sign with the key that owns it (its key file, or \`approve --browser\` when a browser wallet owns it): ${path.basename(file)} needs no change, and a new key can change nothing. If it is not yours (the file came from someone else with their live section in it), that section is theirs: only then is it removed, to set up a project of your own.`
-            : `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. (Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.)`,
+          e.settings
+            ? `${e.message} Nothing was sent.`
+            : e.notOwner
+              ? `${e.message} Nothing was sent. If the project is yours, sign with the key that owns it (its key file, or \`approve --browser\` when a browser wallet owns it): ${path.basename(file)} needs no change, and a new key can change nothing. If it is not yours (the file came from someone else with their live section in it), that section is theirs: only then is it removed, to set up a project of your own.`
+              : `${e.message} Nothing was sent. ${path.basename(file)}’s live section is not what the chain says: restore the file as approve wrote it. (Its live section is removed only to start a separate setup of one’s own, which leaves the live project as it is on chain.)`,
         ),
         { notOwner: Boolean(e.notOwner) },
       );
@@ -290,6 +314,7 @@ export async function createApproval({
     const hashes = slotHashes((await chain.account(SYSVAR_SLOT_HASHES).catch(() => null))?.data);
     const p = prepare(spec, {
       owner,
+      onChain: projectOnChain,
       keys: addresses,
       live: live() ?? {},
       now: at,
@@ -402,6 +427,10 @@ export async function createApproval({
         ...verdict.warnings.filter(w => !Object.hasOwn(LEGAL, w.code)).map(w => w.message),
         ...[
           settings,
+          ...fileCorrections.map(
+            line => `${line} Nothing is built on the file’s line, and the file is corrected when a step lands.`,
+          ),
+          ...chainNotes,
           ...renameNotes,
           unread(),
           remadeLists(),
@@ -504,8 +533,17 @@ export async function createApproval({
         done: false,
       };
     }
-    if (!p0.ok || !p0.transactions.length)
-      return { ...view(p0, names(), { project: trusted.project }), remaining: 0, done: p0.ok };
+    if (!p0.ok || !p0.transactions.length) {
+      // With nothing to send, no step will land to correct a file that said otherwise than the chain of the project's
+      // treasury or authority: it is written now, and the person is told with what the chain says of the treasury.
+      const said = p0.ok ? [...(await correctFile()), ...chainNotes] : [];
+      return {
+        ...view(p0, names(), { project: trusted.project }),
+        ...(said.length ? { chainSays: said } : {}),
+        remaining: 0,
+        done: p0.ok,
+      };
+    }
     const p = await build(trusted.owner);
     if (!p.transactions.length) {
       // Steps are planned and none builds: the lookup table's, which can't be made without a recent slot (the chain's
@@ -880,6 +918,19 @@ export async function createApproval({
     spec = final;
     only = changedParts(spec).only;
     return true;
+  }
+
+  /**
+   * Writes the file with the chain's treasury and authority where it said otherwise (the session's copy says them
+   * since the wallet's read): for a read that finds nothing to send. Returns the lines that say so.
+   */
+  async function correctFile() {
+    if (!fileCorrections.length) return [];
+    const lines = fileCorrections.map(line => `${line} The file now says the chain’s.`);
+    fileCorrections = [];
+    generation++;
+    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    return lines;
   }
 
   /** `record`, with the file written when it did: after a wallet's read found nothing left of a setup under way. */

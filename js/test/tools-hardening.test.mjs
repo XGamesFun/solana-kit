@@ -17,9 +17,10 @@ import { readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import { MEMO_PROGRAM } from '../chain/token2022.js';
 import * as loot from '../client/index.js';
 import { encodeBase58 } from '../chain/base58.js';
-import { parseCoreAsset } from '../chain/core.js';
+import { createCollectionInstruction, parseCoreAsset } from '../chain/core.js';
 import { check } from '../economy/check.mjs';
-import { plan } from '../economy/plan.mjs';
+import { model } from '../economy/model.mjs';
+import { plan, setupContext } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
@@ -237,45 +238,178 @@ describe('xsolana approve holds the file’s live section against the chain', ()
     },
   );
 
-  test('a live economy whose file names another treasury than the chain’s is refused', { skip }, async () => {
-    const w = freshWorld('hardening-change');
-    const owner = funded(w);
-    const file = specFile(example);
-    await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
-    const saved = JSON.parse(readFileSync(file, 'utf8'));
-    const attacker = freshKeypair().address;
-    writeFileSync(
-      file,
-      JSON.stringify(
-        { ...saved, boxes: [{ ...saved.boxes[0], price: 0.2 }], live: { ...saved.live, treasury: attacker } },
-        null,
-        2,
-      ),
+  test('a setup is built in a project another key made only on what the chain said of it', () => {
+    const m = model(example, { now: NOW });
+    const [maker, owner, signer, planted] = [1, 2, 3, 4].map(() => freshKeypair().address);
+    const live = { project: pda.project(maker, example.projectNumber ?? 0), treasury: planted, authority: planted };
+    // With nothing read from the chain, a project that is not at the owner's own address is refused, as before.
+    assert.throws(
+      () => setupContext(m, { owner, keys: {}, live }),
+      new RegExp(`names the project ${live.project}, which is not the project .* of the wallet ${owner}`),
     );
-    const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
-    await assert.rejects(
-      session.prepare(owner.address),
-      new RegExp(`treasury is ${attacker}; on chain it is ${owner.address}`),
+    // On what the approval read from the chain, it is the project at its maker's address, with the chain's treasury
+    // and authority: the file's lines of them are not built on.
+    const ctx = setupContext(m, {
+      owner,
+      keys: {},
+      live,
+      onChain: { creator: maker, treasury: owner, authority: signer },
+    });
+    assert.deepEqual([ctx.project, ctx.owner, ctx.treasury, ctx.authority], [live.project, owner, owner, signer]);
+    // A maker whose number does not make the address is refused too.
+    assert.throws(
+      () => setupContext(m, { owner, keys: {}, live, onChain: { creator: signer, treasury: owner, authority: owner } }),
+      new RegExp(`which is not the project .* of the wallet ${owner} \\(made by ${signer}\\)`),
     );
-    // A mint that is not the one the setup made (its minting not the project's) is refused too.
-    const other = w.newMint(owner.address);
-    writeFileSync(
-      file,
-      JSON.stringify(
-        {
-          ...saved,
-          boxes: [{ ...saved.boxes[0], price: 0.2 }],
-          live: { ...saved.live, mints: { ...saved.live.mints, arena: other } },
-        },
-        null,
-        2,
-      ),
-    );
-    await assert.rejects(
-      (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
-      /is minted by/,
-    );
+    // The authority is never the file's: with no chain read it is the spec's (here the owner's wallet). And a live
+    // section that names a treasury or an authority with no project names nothing.
+    const own = { project: pda.project(owner, example.projectNumber ?? 0), treasury: owner, authority: planted };
+    assert.equal(setupContext(m, { owner, keys: {}, live: own }).authority, owner);
+    for (const section of [
+      { treasury: planted, authority: planted },
+      { partial: true, landed: [], treasury: planted, authority: planted },
+    ]) {
+      const fresh = setupContext(m, { owner, keys: {}, live: section });
+      assert.deepEqual([fresh.treasury, fresh.authority], [owner, owner]);
+    }
   });
+
+  test(
+    'a planted authority or treasury in a file with no project is ignored: a new project’s keys are the spec’s',
+    { skip },
+    async () => {
+      // (the authority alone moves a pool's tokens, so a planted one would be handed the owner's seeds)
+      for (const [n, section] of [
+        ['a', { authority: 'planted' }],
+        ['b', { treasury: 'planted' }],
+        ['c', { authority: 'planted', treasury: 'planted' }],
+        ['d', { partial: true, landed: [], authority: 'planted', treasury: 'planted' }],
+      ]) {
+        const w = freshWorld(`hardening-planted-${n}`);
+        const owner = funded(w);
+        const attacker = freshKeypair().address;
+        const live = Object.fromEntries(Object.entries(section).map(([k, v]) => [k, v === 'planted' ? attacker : v]));
+        const spec = { ...structuredClone(example), live };
+        delete spec.treasury;
+        const file = specFile(spec);
+        const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
+        const shown = await session.stateFor(owner.address);
+        assert.equal(shown.refused, undefined, JSON.stringify(section));
+        assert.ok(!JSON.stringify(shown).includes(attacker), `the planted key is nowhere (${JSON.stringify(section)})`);
+        const batch = await session.prepare(owner.address);
+        assert.ok(!JSON.stringify(batch.details).includes(attacker));
+        await runAll(session, owner);
+        const project = w.read('Project', pda.project(owner.address, example.projectNumber ?? 0));
+        assert.deepEqual(
+          [project.owner, project.authority, project.treasury],
+          [owner.address, owner.address, owner.address],
+        );
+        const saved = JSON.parse(readFileSync(file, 'utf8')).live;
+        assert.deepEqual([saved.authority, saved.treasury], [owner.address, owner.address]);
+      }
+    },
+  );
+
+  test(
+    'a live economy whose file names a collection the project does not list is refused, the owner’s own too',
+    { skip },
+    async () => {
+      const w = freshWorld('hardening-collection');
+      const owner = funded(w);
+      const file = specFile(example);
+      await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      const project = w.read('Project', saved.live.project);
+      assert.deepEqual(project.collections, [saved.live.collection], 'the project lists the collection its setup made');
+      // Another collection whose update authority is the owner (anyone can make one that says so): its update
+      // authority says nothing of whose it is, and a rule that names "the project's collection" would read it.
+      const other = freshKeypair().address;
+      w.chain.send(owner.address, [
+        createCollectionInstruction({
+          collection: other,
+          creator: owner.address,
+          project: saved.live.project,
+          name: 'Another',
+          uri: '',
+        }),
+      ]);
+      writeFileSync(
+        file,
+        JSON.stringify(
+          { ...saved, boxes: [{ ...saved.boxes[0], price: 0.2 }], live: { ...saved.live, collection: other } },
+          null,
+          2,
+        ),
+      );
+      await assert.rejects(
+        (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
+        new RegExp(
+          `The collection ${other} the file names is not one of the collections of the project ${saved.live.project}`,
+        ),
+      );
+    },
+  );
+
+  test(
+    'a live economy whose file names another treasury than the chain’s is built on the chain’s',
+    { skip },
+    async () => {
+      const w = freshWorld('hardening-change');
+      const owner = funded(w);
+      const file = specFile(example);
+      await runAll(await createApproval({ file, chain: approvalChain(w), now: () => NOW }), owner);
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      const attacker = freshKeypair().address;
+      writeFileSync(
+        file,
+        JSON.stringify(
+          { ...saved, boxes: [{ ...saved.boxes[0], price: 0.2 }], live: { ...saved.live, treasury: attacker } },
+          null,
+          2,
+        ),
+      );
+      // The treasury is the chain's to say (its owner can change it there, or hand the project on, and no file is
+      // written): the file's line is not built on, the owner is told, and the file says the chain's once the change lands.
+      const session = await createApproval({ file, chain: approvalChain(w), now: () => NOW });
+      const shown = await session.stateFor(owner.address);
+      assert.equal(shown.refused, undefined);
+      assert.ok(
+        shown.warnings.includes(
+          `On chain the project’s treasury is ${owner.address} (the file said ${attacker}). Nothing is built on the file’s line, and the file is corrected when a step lands.`,
+        ),
+        shown.warnings.join('\n'),
+      );
+      assert.ok(!JSON.stringify(shown.steps).includes(attacker), 'no step names the planted treasury');
+      const batch = await session.prepare(owner.address);
+      assert.ok(!JSON.stringify(batch.details).includes(attacker), 'nothing to sign names it');
+      for (const wire of batch.transactions)
+        assert.ok(
+          !readMessage(readTransaction(fromBase64(wire)).message).keys.includes(attacker),
+          'no transaction names it as an account',
+        );
+      await runAll(session, owner);
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).live.treasury, owner.address, 'the file says the chain’s');
+      assert.equal(w.read('Project', saved.live.project).treasury, owner.address);
+      // A mint that is not the one the setup made (its minting not the project's) is refused.
+      const other = w.newMint(owner.address);
+      writeFileSync(
+        file,
+        JSON.stringify(
+          {
+            ...saved,
+            boxes: [{ ...saved.boxes[0], price: 0.2 }],
+            live: { ...saved.live, mints: { ...saved.live.mints, arena: other } },
+          },
+          null,
+          2,
+        ),
+      );
+      await assert.rejects(
+        (await createApproval({ file, chain: approvalChain(w), now: () => NOW })).prepare(owner.address),
+        /is minted by/,
+      );
+    },
+  );
 
   test(
     'no spec may name the address the plan stands in for the wallet, and only the connected wallet is “your wallet”',

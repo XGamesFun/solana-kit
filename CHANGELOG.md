@@ -4,6 +4,33 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.28: a project handed to a new owner is the new owner's to change, and nothing of a project's keys is taken from the file (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **`xsolana approve` after a handover.** A project's address is its creator's and the number they gave it, and a new
+  owner keeps it (the program's `update_project` with a new owner). The approval's check of the file's live section,
+  and the setup it builds, took the address from the owner signing now, so every change to a project handed on was
+  refused ("which is not project number 0 of its owner"). Both now take it from the creator the Project account
+  stores, read from the chain: the key that owns the project on chain changes it, and a key that is neither its owner
+  nor its authority is refused as before.
+- **The treasury is the chain's to say.** A file whose live section named another treasury or authority than the chain
+  was refused, which also refused a project whose owner had changed either with `update_project`. Nothing is built on
+  the file's lines of them now: the approval reads both from the chain and builds on those, says where the file said
+  otherwise, and the file says the chain's once a step lands (at once, when there is nothing to send). Where the
+  chain's treasury is not the one the spec names, that is said too.
+- **A spec whose authority is not the chain's is refused in words.** Who signs a step is decided by the spec's
+  `keys.authority`, and the chain takes only the authority it has: where the two differ (the authority was changed
+  on chain, or a project was handed on with its authority left behind), a step would wait for a signature nobody can
+  give. The approval now says so before anything is built, with what the chain has and how to set it.
+- **A planted treasury or authority no longer reaches a new project.** A live section that named a treasury with no
+  project beside it was built on: a file that came with `"live": { "treasury": "…" }` made that address the new
+  project's treasury. A live section's treasury and authority now count only with the project's address, and a
+  project not made yet takes both from the spec alone.
+- **The project's collection is one the project lists.** The check took any collection whose update authority was
+  the owner, and anyone can make a collection that says so. For a project that is made, the file's collection must
+  be one the Project account itself lists (so a project handed on keeps the collection its creator made for it).
+
 ## 0.28.27: saving a draft counts as building, and where a signed reward stops paying is the server's to stop (loot 0.28.0, unchanged)
 
 The tools alone.

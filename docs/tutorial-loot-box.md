@@ -11,7 +11,7 @@ You need Node 22 or later. With an AI coding agent you only type the sentence; t
 
 In Claude Code with the plugin installed (`/plugin marketplace add XGamesFun/solana-kit`, then
 `/plugin install xsolana@xgamesfun`), in Codex, or in any agent with the MCP server
-(`npx -y --package=@xgamesfun/solana@0.28.27 xsolana mcp`):
+(`npx -y --package=@xgamesfun/solana@0.28.28 xsolana mcp`):
 
 > A mystery crate for 0.1 SOL: a 1% legendary sword, a 9% epic shield, a 30% rare helmet, otherwise nothing. Most of
 > the money goes to the treasury.
@@ -59,7 +59,7 @@ An economy is one JSON file, `xsolana.json`. This one has three collectible item
 ## 3. Check it
 
 ```bash
-npx -y @xgamesfun/solana@0.28.27 check xsolana.json
+npx -y @xgamesfun/solana@0.28.28 check xsolana.json
 ```
 
 The checker refuses anything the program would refuse, before anything is signed. This spec is ready, with two
@@ -69,7 +69,7 @@ treated as gambling in some places (show the odds, and take advice before real m
 ## 4. Simulate it
 
 ```bash
-npx -y @xgamesfun/solana@0.28.27 simulate xsolana.json
+npx -y @xgamesfun/solana@0.28.28 simulate xsolana.json
 ```
 
 ```
@@ -89,7 +89,7 @@ the rent of the collectible they win.
 ## 5. Price it
 
 ```bash
-npx -y @xgamesfun/solana@0.28.27 cost xsolana.json
+npx -y @xgamesfun/solana@0.28.28 cost xsolana.json
 ```
 
 Going live takes 3 transactions and about 0.017 SOL, almost all of it rent for 10 accounts (the
@@ -98,7 +98,7 @@ project, the collection, the three items, the box, a lookup table and the token 
 ## 6. Review it the way a cheater would
 
 ```bash
-npx -y @xgamesfun/solana@0.28.27 review xsolana.json
+npx -y @xgamesfun/solana@0.28.28 review xsolana.json
 ```
 
 For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the
@@ -109,8 +109,8 @@ project, so keep it safe: the key file readable by you alone on devnet, a hardwa
 ## 7. Go live, signed on your own computer
 
 ```bash
-npx -y @xgamesfun/solana@0.28.27 keygen ~/.config/xsolana/loot-box.json
-npx -y @xgamesfun/solana@0.28.27 approve xsolana.json --keypair ~/.config/xsolana/loot-box.json
+npx -y @xgamesfun/solana@0.28.28 keygen ~/.config/xsolana/loot-box.json
+npx -y @xgamesfun/solana@0.28.28 approve xsolana.json --keypair ~/.config/xsolana/loot-box.json
 ```
 
 `keygen` makes a key file for the project and prints its address, never the key: send that address the devnet SOL

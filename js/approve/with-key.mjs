@@ -183,12 +183,14 @@ export async function approveWithKey({
       // (a key that is not the project's: said plainly, so nobody makes a new key or cuts the file to get past it)
       if (state.notOwner)
         out(
-          `This key file’s address is ${key.address}: it is not the project’s key. If the project is yours, find the key it went live with: don’t make a new one, and don’t change ${state.file} to get past this.`,
+          `This key file’s address is ${key.address}: it is not the project’s key. If the project is yours, find the key it went live with (or the key it was handed to since): don’t make a new one, and don’t change ${state.file} to get past this.`,
         );
       return { ok: false, sent: 0, done: false, code: null };
     }
     if (!state.remaining) {
       for (const line of state.unwritten ?? []) out(line);
+      // (what the chain says of the project's treasury and authority where the file or the spec said otherwise)
+      for (const line of state.chainSays ?? []) out(line);
       if (!state.done) {
         for (const w of state.warnings) out(w);
         out(`Nothing can be sent for ${state.file} as it is.`);

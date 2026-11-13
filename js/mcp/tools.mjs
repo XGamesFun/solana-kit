@@ -293,7 +293,7 @@ function liveChange(economy) {
 
 /** In words: the spec changes the project's own settings, which publishing never writes. */
 export const settingsNote = (settings, live) =>
-  `The spec changes the project’s ${settings.join(', ')}, and publishing never changes those: on chain the authority stays ${live.authority ?? 'as it was'} and the treasury ${live.treasury ?? 'as it was'}. Changing them takes the owner’s update_project, which loot does not send yet; until then, put them back as they were in the spec.`;
+  `The spec changes the project’s ${settings.join(', ')}, and publishing never changes those: the project keeps the ones it has on chain (by the file’s live section, the authority ${live.authority ?? 'as it was'} and the treasury ${live.treasury ?? 'as it was'}). Changing them takes the owner’s update_project, which loot does not send yet; until then, put them back as they were in the spec.`;
 
 export const tools = [
   {
@@ -770,7 +770,7 @@ export const tools = [
         `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
         ...(live
           ? [
-              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere). If there is no such file, a browser wallet owns it: use the --browser command below. Never make a new key for a live project (a new key can change nothing), and never remove the file’s live section because a key was refused. If you can’t tell, ask the person how it went live. The owner’s address needs about ${c.setup.totalSol} SOL of devnet SOL.`,
+              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. Never make a new key for a live project (a new key can change nothing), and never remove the file’s live section because a key was refused. If you can’t tell, ask the person how it went live. The owner’s address needs about ${c.setup.totalSol} SOL of devnet SOL.`,
             ]
           : [
               `1. A key file for this project, unless it has one: ${keygen}`,
