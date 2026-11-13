@@ -176,18 +176,19 @@ export async function approveWithKey({
   const key = await keyReader(keyFile);
   // A key file the owner supplies for a token's new mint (`--mint-key <token key>=<file>`): read as the owner's own
   // is (its user alone, outside any repository, a whole key), never printed, and dropped with it.
-  const mintKeys = {};
+  const mintKeys = new Map();
   const dropAll = () => {
-    for (const k of Object.values(mintKeys)) k.drop();
+    for (const k of mintKeys.values()) k.drop();
     key.drop();
   };
   let session;
   try {
-    for (const [token, given] of Object.entries(mintKeyFiles ?? {})) {
+    // (a Map, or an object's own names: a name like "__proto__" is a name here and nothing else)
+    for (const [token, given] of mintKeyFiles instanceof Map ? mintKeyFiles : Object.entries(mintKeyFiles ?? {})) {
       if (!existsSync(keyFilePath(given)))
         throw new KeyFileError(`--mint-key ${token}: ${keyFilePath(given)} does not exist.`);
       try {
-        mintKeys[token] = await keyReader(given);
+        mintKeys.set(token, await keyReader(given));
       } catch (e) {
         if (!(e instanceof KeyFileError)) throw e;
         throw new KeyFileError(`--mint-key ${token}: ${e.message}`);
@@ -197,7 +198,7 @@ export async function approveWithKey({
       file: path.resolve(file),
       chain,
       ...(now ? { now } : {}),
-      ...(Object.keys(mintKeys).length ? { mintKeys } : {}),
+      ...(mintKeys.size ? { mintKeys } : {}),
     });
   } catch (e) {
     dropAll();

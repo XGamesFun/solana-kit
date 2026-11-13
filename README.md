@@ -114,7 +114,9 @@ Each command names an exact version, so you always run the release you meant to.
 
 A token the setup makes gets a new address for its mint. To have the mint at an address you chose, give both `approve`
 commands the key file of that address: `--mint-key <the token's key in the spec>=<key file>`. The file signs the one
-transaction that makes the mint, is never printed, and can do nothing once the mint is made.
+transaction that makes the mint and is never printed. Once the mint is made it can do nothing more at that address on
+that cluster; on another cluster the same file can still make an account there, so keep it as you keep a key until it
+is used wherever you mean to.
 
 ### In your app
 

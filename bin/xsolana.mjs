@@ -121,7 +121,8 @@ const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
                         only by the key it went live with.
   --mint-key <token>=<keyfile>   with --keypair: make that token's new mint at the address of a key file you have
                         (an address you chose), not at a new one. Given once for each such token. The file signs the
-                        transaction that makes the mint and can do nothing after.
+                        transaction that makes the mint and no other. After that it can do nothing more at that
+                        address on that cluster; on another cluster it still can, so keep it safe until then.
   --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
                         when the person whose economy it is asks for that; they run it themselves.`;
 
@@ -246,7 +247,7 @@ async function main(argv) {
       if (keyFile !== undefined && page)
         throw new UsageError('--keypair and --browser are two ways to sign: give one.');
       // A key file for a token's new mint, so the mint is at an address the owner chose: <token key>=<key file>.
-      const mintKeyFiles = {};
+      const mintKeyFiles = new Map();
       for (const pair of lists.get('--mint-key') ?? []) {
         const eq = pair.indexOf('=');
         if (eq <= 0 || eq === pair.length - 1)
@@ -254,9 +255,9 @@ async function main(argv) {
             '--mint-key takes <token key>=<key file>: the token’s key in the spec, then the key file its mint is made at.',
           );
         const token = pair.slice(0, eq);
-        if (Object.hasOwn(mintKeyFiles, token))
+        if (mintKeyFiles.has(token))
           throw new UsageError(`--mint-key names the token “${token}” twice: give it one key file.`);
-        mintKeyFiles[token] = pair.slice(eq + 1);
+        mintKeyFiles.set(token, pair.slice(eq + 1));
       }
       if (flags.has('--mint-key') && keyFile === undefined) throw new UsageError('--mint-key goes with --keypair.');
       if (keyFile !== undefined) {

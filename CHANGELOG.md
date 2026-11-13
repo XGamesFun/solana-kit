@@ -12,14 +12,17 @@ The tools alone.
   its mint each time. Given the key file of an address the owner has (one they chose), the mint is made there: for a
   new setup, and for a token added to a project that is live. The flag is given once for each such token.
   - The file is read as the owner's key file is (its user alone can read it, outside any repository, a whole key). It
-    is never printed or copied, signs the one transaction that makes the mint, and can do nothing once the mint is
-    made.
+    is never printed or copied, and signs the one transaction that makes the mint: the session refuses to sign any
+    other with it. Once the mint is made it can do nothing more at that address on that cluster; on another cluster
+    the same file can still make an account there, so it is kept as a key is until it is used everywhere it is meant
+    to be.
   - The printout names the address, and its code stands for it: the same code at each showing, another without the
     flag.
   - Refused before anything is built: a token the spec does not have; a token whose mint the setup does not make; a
     mint that is live at another address; an address the chain already has an account at (SOL sent to it counts);
-    the same key for two tokens; the key that signs the approval. A mint an earlier run already made at that address
-    needs nothing more, and the flag is then ignored.
+    the same key for two tokens; the key that signs the approval, a key of the project on chain (its owner,
+    authority, treasury or creator), and an address the file names for anything else. A mint an earlier run already
+    made at that address needs nothing more, and the flag is then ignored.
 
 ## 0.28.28: a project handed to a new owner is the new owner's to change, and nothing of a project's keys is taken from the file (loot 0.28.0, unchanged)
 
