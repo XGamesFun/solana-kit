@@ -795,7 +795,10 @@ export function simulate(economy, { now = 0 } = {}) {
       creator.network += runs * NETWORK_FEE; // run_schedule is free of the program's fee; whoever sends it pays the network
       if (s.does === 'issue') {
         const amount = num(s.amount);
-        flowIn(destination(s.to ?? '').kind === 'farm' ? s.to : s.pool, `schedule:${s.key}`, runs * amount);
+        // (minted into a pool, in the pool's token, or straight into a farm's rewards, in the token it names)
+        const intoFarm = destination(s.to ?? '').kind === 'farm';
+        const issued = intoFarm ? (s.currency ?? m.currencyKey) : m.pool.get(s.pool)?.currency;
+        flowIn(intoFarm ? s.to : s.pool, `schedule:${s.key}`, runs * amount);
         const halving = s.halveEvery
           ? `, halving every ${s.halveEvery} runs (every ${round((s.halveEvery * every) / DAY, 2)} days)`
           : '';
@@ -813,8 +816,8 @@ export function simulate(economy, { now = 0 } = {}) {
           key: s.key,
           does: 'issue',
           perDay: round(runs * amount),
-          token: m.pool.get(s.pool)?.currency,
-          says: `mints ${round(runs * amount)} ${symbol(m.pool.get(s.pool)?.currency)} a day into ${s.pool}${halving}`,
+          token: issued,
+          says: `mints ${round(runs * amount)} ${symbol(issued)} a day into ${intoFarm ? `the rewards of ${s.to}` : s.pool}${halving}`,
           mintsInAll: Number.isFinite(totalEver) ? round(totalEver) : null,
         };
       }

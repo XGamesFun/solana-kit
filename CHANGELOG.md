@@ -4,6 +4,26 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.22: what carries over at a grant's edges, caps as the person's numbers, and a burn asked with the way that keeps the refund (loot 0.28.0, unchanged)
+
+The tools alone.
+
+- **Every way a claim ends.** A grant now has its endings, as a lottery and a contest have theirs: a claim past a
+  window's limit (refused, and not lost: the same voucher pays once the window turns, until it runs out), past a limit
+  in all (refused for good), a prize that can't be given (it keeps its round), a voucher that runs out, what was earned
+  in the game and never claimed (on no chain: the server's alone), and its end date. `xsolana_check` lists them with
+  what goes wrong, and `xsolana_explain` in the grant's table.
+- **What was earned and not claimed.** One question for every grant a server signs for: when a day turns, a cap is
+  reached or a voucher runs out, is what a player earned and did not claim kept for them, or lost?
+- **A cap is the person's number.** Every cap of a signed grant that no other question is about is asked once, in
+  claims and in what they give ("2000 a person in all (up to 24000000 BUBL)"): they are where an honest player stops
+  and the most a leaked voucher key takes.
+- **A want that removes a way out is asked with the version that keeps it.** The question for a payment burned on
+  entry now says the burn can wait for the outcome (the payment held, burned at the draw, given back by a cancel),
+  names that as the pick, and says when a round's terms are fixed. It was "is that what players should get back?".
+- Fixed: `xsolana_explain` and the simulation said "mints 1000 undefined a day into undefined" for a schedule that
+  mints straight into a farm's rewards.
+
 ## 0.28.21: a win signed twice, a craft the purchase carries, and questions that stay questions (loot 0.28.0, unchanged)
 
 The tools alone.

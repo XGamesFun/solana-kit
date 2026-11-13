@@ -143,7 +143,15 @@ test('follow the value, cancelled: a refund in the ticket token, not what was pa
   burn.recipes[0].in[0].to = 'burn';
   const [b] = check(burn, { now: NOW }).warnings.filter(x => x.code === 'W-VALUE' && x.message.includes('cancelled:'));
   assert.equal(b.severity, 'medium');
-  assert.match(b.ask, /burned, and a cancelled round .* can only refund ENTRY/);
+  // The question carries the version that keeps the burn and the refund both, and the pick; never a yes or no.
+  assert.match(
+    b.ask,
+    /burned on the spot, and nobody can give a burned payment back: a cancelled round .* then refunds only ENTRY/,
+  );
+  assert.match(
+    b.ask,
+    /The burn can wait for the outcome instead: “draw” priced in BUBL itself holds each payment until the outcome is final and burns it then, and a cancel gives it back\. Which do you want: the payment held until the outcome \(the pick\), or burned on entry with ENTRY as the only refund\? Choose before it is built: a round's terms are fixed at the first ticket\./,
+  );
 });
 
 test('follow the value, undone: a way back from the ticket token, open at all times', () => {
@@ -616,6 +624,58 @@ test('round 5: a fund against its audience, a contest’s every ending, who else
     (await runTool('xsolana_check', { spec: spec() }, { now: NOW })).text,
     /> A returning player's day, doing each thing once: buy tickets of “draw” \(1\), buy tickets of “draw2” \(1\), collect wins \(1\): about 3 wallet approvals/,
   );
+});
+
+test('a grant’s edges: what the chain keeps at each, what only the server keeps, and the caps nobody was asked about', async () => {
+  const asks = x =>
+    check(x, { now: NOW })
+      .warnings.filter(w => w.ask)
+      .map(w => w.ask);
+  // What a player earned and did not claim is on no chain: one question for every grant a server signs for.
+  const unclaimed = asks(spec()).filter(q => q.includes('did not claim in time'));
+  assert.equal(unclaimed.length, 1);
+  assert.match(
+    unclaimed[0],
+    /^When a day turns, a cap is reached or a voucher runs out, what happens to what a player earned from “Popped bubbles” and “Free entry” and did not claim in time: is it kept for them \(until when\), or lost\?/,
+  );
+  // A cap is the person's number: with no pace stated nothing else asks about one, so every cap is asked, once, in
+  // claims and in what they give (2000 claims of 12000 BUBL is 24 million BUBL).
+  const caps = asks(spec()).filter(q => q.startsWith('These caps decide'));
+  assert.equal(caps.length, 1);
+  assert.match(
+    caps[0],
+    /“Popped bubbles”: 2000 a person in all \(up to 24000000 BUBL\), 20000 a day for everyone \(up to 240000000 BUBL\), 100000 in all \(up to 1200000000 BUBL\); “Free entry”: 1 a wallet in all/,
+  );
+  assert.match(caps[0], /Are these the numbers you want\?$/);
+  // A cap a question of its own is about is not asked twice: here the wallet's day and everyone's day are, the total isn't.
+  const paced = spec();
+  Object.assign(paced.grants[0], {
+    serverLimit: { per: 'person', amount: 12000, claims: 1, every: '4m' },
+    limits: { perWalletEach: { count: 12, every: '1d' }, perDay: 150, total: 1500 },
+  });
+  const [rest] = asks(paced).filter(q => q.startsWith('These caps decide'));
+  assert.match(rest, /“Popped bubbles”: 1500 in all \(up to 18000000 BUBL\); “Free entry”/);
+  assert.doesNotMatch(rest, /12 a wallet every 1d|150 a day for everyone/);
+  // A game with no grant a server signs for is asked neither.
+  const open = spec();
+  for (const g of open.grants) delete g.vouchers;
+  assert.deepEqual(
+    asks(open).filter(q => q.includes('did not claim in time') || q.startsWith('These caps decide')),
+    [],
+  );
+  // Every way a claim ends, with what goes wrong: a window's refusal is not lost, a cap in all is, an empty pool keeps
+  // the round, a voucher that runs out and what was never claimed are the server's.
+  const { runTool } = await import('../mcp/server.mjs');
+  const told = (await runTool('xsolana_check', { spec: paced }, { now: NOW })).text;
+  assert.match(
+    told,
+    /- “Popped bubbles”, every way a claim ends: A claim past a window's limit \(12 a wallet every 1d, 150 a day for everyone\): refused, and not lost: the same voucher sent again once the window turns still pays, until the voucher runs out\. A claim past a limit in all \(1500 for everyone\): refused for good\. Its prize can’t be given \(its pool run dry\): refused, and it keeps its round: claimed again once there is something to give, while the voucher lasts\. A voucher runs out unclaimed: the chain pays nothing for it; signing the win again is the server’s choice \(after winPaid for the first wallet\)\. Earned in the game and never claimed: the chain holds nothing for it/,
+  );
+  // (once: the lines to tell don't repeat a grant's)
+  assert.equal(told.split('every way a claim ends').length - 1, 2, 'one line a grant');
+  assert.doesNotMatch(told, /> Every way a claim of/);
+  // A minted prize can't run out: no such ending.
+  assert.doesNotMatch(told, /“Free entry”, every way a claim ends:[^\n]*can’t be given/);
 });
 
 test('every cap against the pace the game allows: lifetime, a day’s, the server’s count against the chain’s', () => {
