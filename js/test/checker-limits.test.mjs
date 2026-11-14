@@ -265,3 +265,138 @@ test('an auction of a roll says so in its setup step, and a pool a pay schedule 
   assert.equal(r.ok, true, JSON.stringify(r.refusals));
   assert.ok(!r.warnings.some(w => w.code === 'W-POOL' && w.where === 'economy.pools.p'), 'the schedule takes from it');
 });
+
+test('a name every object inherits is not a field of the schema, and does not count as given', () => {
+  const spec = JSON.parse(readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url), 'utf8'));
+  assert.deepEqual(validate(spec), []);
+  // "constructor" and "__proto__" as keys of the file (JSON gives an object its own "__proto__" key): refused like
+  // any other name the schema does not list, where each passed before.
+  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const edited = JSON.parse(JSON.stringify(spec).replace(/^\{/, `{"${name}":{"anything":1},`));
+    assert.ok(Object.hasOwn(edited, name), name);
+    assert.deepEqual(
+      validate(edited).map(e => `${e.path} ${e.message}`),
+      [`economy.${name} is not a field this place takes`],
+      name,
+    );
+  }
+  // A field the schema requires is not given by a name the object inherits.
+  const schema = { type: 'object', required: ['constructor'], properties: { constructor: { type: 'string' } } };
+  assert.deepEqual(
+    validate({}, schema, schema, 'x').map(e => e.message),
+    ['needs "constructor"'],
+  );
+  assert.deepEqual(validate({ constructor: 'a' }, schema, schema, 'x'), []);
+});
+
+test('a seed phrase is found however it is written, and a 64-byte key in hex; ordinary writing and a hash are not', () => {
+  // (the well-known test phrase of BIP-39's own vectors: it opens nothing anyone uses)
+  const words = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
+  const found = text => findSecrets({ name: 'A game', note: text }).join();
+  for (const [how, text] of [
+    ['lower case', words.join(' ')],
+    ['Capitalised', words.map(w => w[0].toUpperCase() + w.slice(1)).join(' ')],
+    ['UPPER CASE', words.join(' ').toUpperCase()],
+    ['commas', words.join(', ')],
+    ['new lines', words.join('\n')],
+    ['numbered', words.map((w, i) => `${i + 1}. ${w}`).join(' ')],
+    ['numbered lines', words.map((w, i) => `${i + 1}) ${w}`).join('\n')],
+    ['inside a sentence', `Backup for the treasury wallet: ${words.join(' ')} (keep safe)`],
+    ['24 words', [...words, ...words].join(' ')],
+  ])
+    assert.equal(found(text), 'economy.note', how);
+  // a 64-byte key in hex, bare and with 0x
+  const hex = 'ab'.repeat(64);
+  assert.equal(found(hex), 'economy.note');
+  assert.equal(found(`key 0x${hex}`), 'economy.note');
+  // Not secrets: eleven such words, a description, a hash of 32 bytes in hex, an address, a longer run of hex.
+  for (const [what, text] of [
+    ['eleven words', words.slice(0, 11).join(' ')],
+    [
+      'a description',
+      'Win a legendary sword, a shield and a dragon egg by opening the golden chest in the forest at night',
+    ],
+    ['words broken by ordinary ones', `${words.slice(0, 8).join(' ')} and then ${words.slice(8).join(' ')}`],
+    ['a 32-byte hash', 'cd'.repeat(32)],
+    ['an address', '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T'],
+    ['hex that is not 64 bytes', 'ef'.repeat(80)],
+  ])
+    assert.equal(found(text), '', what);
+  // every example the package ships is clean
+  for (const name of ['coin-flip-arena', 'shelter-fair', 'stakers-draw', 'guild-missions', 'partner-vault'])
+    assert.deepEqual(
+      findSecrets(JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'))),
+      [],
+      name,
+    );
+});
+
+test('a spec the check passes can be planned: a recipe’s roll on a box that is gone, and a cooldown past what a raise holds, are refused', async () => {
+  const { check } = await import('../economy/check.mjs');
+  const { plan } = await import('../economy/plan.mjs');
+  const NOW = 1_790_000_000;
+  const ex = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
+  const said = spec => check(spec, { now: NOW }).refusals.map(x => `${x.code} ${x.where}`);
+  // A recipe that rolls a box on a collectible it keeps, the box taken out of the spec. The check passed it, and going
+  // live stopped with WrongRecord after four transactions had landed.
+  const heroes = ex('hero-trials');
+  assert.deepEqual(said(heroes), []);
+  const recipe = heroes.recipes.findIndex(r => (r.out ?? []).some(o => o.gives === 'roll' && o.on !== undefined));
+  const line = heroes.recipes[recipe].out.findIndex(o => o.gives === 'roll' && o.on !== undefined);
+  const gone = heroes.recipes[recipe].out[line].box;
+  heroes.boxes = heroes.boxes.filter(b => b.key !== gone);
+  const refused = check(heroes, { now: NOW }).refusals.filter(
+    x => x.code === 'E-RECIPE' && x.where.endsWith(`.out[${line}].box`),
+  );
+  assert.equal(refused.length, 1, JSON.stringify(said(heroes)));
+  assert.match(refused[0].message, new RegExp(`gives a roll of “${gone}”, which is no box`));
+  // A cooldown is a raise's amount, a signed number: 5,000 weeks passed the check and the plan threw on it.
+  const seasons = ex('halving-seasons');
+  const item = seasons.items.findIndex(it => it.life);
+  seasons.items[item].life.cooldown = '5000w';
+  assert.deepEqual(
+    said(seasons)
+      .filter(x => x.startsWith('E-TIME'))
+      .map(x => x.split('.').slice(-2).join('.')),
+    ['life.cooldown'],
+  );
+  seasons.items[item].life.cooldown = '3000w';
+  assert.deepEqual(said(seasons), []);
+  assert.doesNotThrow(() => plan(seasons, { now: NOW }));
+});
+
+test('a fixed supply covers everything going live puts in: pools, lotteries, farms and sealed schedules together', async () => {
+  const { check } = await import('../economy/check.mjs');
+  const NOW = 1_790_000_000;
+  const coin = () => JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
+  const said = spec =>
+    check(spec, { now: NOW }).refusals.map(x => `${x.code} ${x.where.split('.').slice(-1)[0]}: ${x.message}`);
+  assert.deepEqual(said(coin()), []);
+  // The example's pools take 40,000,000 of a supply of 100,000,000 and its sealed schedule 24,000,000 more.
+  const base = coin();
+  const ember = base.tokens.find(t => t.key === 'ember');
+  const pools = base.pools.filter(p => p.currency === 'ember').reduce((n, p) => n + (p.seed ?? 0), 0);
+  const sealed = base.schedules.find(sc => sc.sealed);
+  assert.ok(pools + sealed.fund <= ember.supply);
+  // The schedule's funds alone past what the pools leave: the check passed it, and going live stopped at the transfer
+  // that ran short, two transactions in.
+  for (const fund of [ember.supply - pools + 1, 240_000_000, 24_000_000_000]) {
+    const spec = coin();
+    spec.schedules.find(sc => sc.sealed).fund = fund;
+    spec.schedules.find(sc => sc.sealed).amount = fund / 12;
+    const refused = said(spec).filter(x => x.startsWith('E-TOKEN supply'));
+    assert.equal(refused.length, 1, `${fund}: ${JSON.stringify(said(spec))}`);
+    assert.match(refused[0], /Going live puts in more of “ember” than its whole supply of 100000000: .* come to \d+/);
+  }
+  // A smaller supply than the pools and the schedule take together, though more than the pools alone.
+  const small = coin();
+  small.tokens.find(t => t.key === 'ember').supply = pools + sealed.fund - 1;
+  assert.equal(said(small).filter(x => x.startsWith('E-TOKEN supply')).length, 1);
+  // Exactly the supply is taken: allowed.
+  const exact = coin();
+  exact.tokens.find(t => t.key === 'ember').supply = pools + sealed.fund;
+  assert.deepEqual(
+    said(exact).filter(x => x.startsWith('E-TOKEN supply')),
+    [],
+  );
+});

@@ -70,6 +70,16 @@ describe('xsolana (what the command line says)', () => {
     }
   });
 
+  test('version says the package’s own version, then the program’s it is built for', async () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    const r = await xsolana(['version']);
+    assert.equal(r.code, 0);
+    assert.match(
+      r.out,
+      new RegExp(`^@xgamesfun/solana ${pkg.version.replaceAll('.', '\\.')} · loot \\d+\\.\\d+\\.\\d+ · program `),
+    );
+  });
+
   test('the usage names version, --json and connect --local', async () => {
     const r = await xsolana(['help']);
     assert.equal(r.code, 0);

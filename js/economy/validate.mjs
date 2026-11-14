@@ -105,12 +105,14 @@ export function validate(value, schema = SCHEMA, root = schema, path = 'economy'
     if (schema.items) value.forEach((v, i) => errors.push(...validate(v, schema.items, root, `${path}[${i}]`)));
   }
   if (typeOf(value) === 'object') {
-    for (const key of schema.required ?? []) if (!(key in value)) add(`needs "${key}"`);
+    // Own keys only, here and below: `in` also answers for what every object inherits ("constructor", "__proto__"),
+    // which would pass a name the schema never listed and count an inherited one as given.
+    for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) add(`needs "${key}"`);
     for (const [key, v] of Object.entries(value)) {
       const where = `${path}.${key}`;
       if (schema.propertyNames?.pattern && !new RegExp(schema.propertyNames.pattern).test(key))
         errors.push({ path: where, message: 'is not a name this place takes' });
-      if (schema.properties && key in schema.properties)
+      if (schema.properties && Object.hasOwn(schema.properties, key))
         errors.push(...validate(v, schema.properties[key], root, where));
       else if (schema.additionalProperties === false)
         errors.push({ path: where, message: 'is not a field this place takes' });

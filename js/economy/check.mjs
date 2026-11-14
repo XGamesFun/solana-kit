@@ -711,7 +711,10 @@ function schemaFix(path) {
   return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and {"part": …} gives one with its fields.'}`;
 }
 
-export function check(economy, { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {}) {
+export function check(
+  economy,
+  { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null, simulator = simulate } = {},
+) {
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
@@ -828,17 +831,25 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     p?.gives === 'nft' ||
     p?.gives === 'roll' ||
     (p?.gives === 'item' && !m.item.get(p.item)?.soulbound && m.item.get(p.item)?.kind !== 'normal');
-  /** What one claim of grant `key` costs its funds, in SOL, as `simulate` counts it (null when it can't say). */
-  let fundsSim;
-  const grantClaimSol = key => {
-    if (fundsSim === undefined) {
+  /**
+   * The simulation at the spec's scenario, run once for the whole check (`simulator`: `simulate`, or a test's own).
+   * null when it cannot run, and then W-SIMULATION says so at the end, with what was therefore not checked: a
+   * simulation that stops is a fault in these tools, and a check that hid it would read as a clean spec.
+   */
+  let simRun;
+  const simulated = () => {
+    if (simRun === undefined) {
       try {
-        fundsSim = simulate(economy, { now });
-      } catch {
-        fundsSim = null;
+        simRun = { sim: simulator(economy, { now }) };
+      } catch (error) {
+        simRun = { sim: null, error };
       }
     }
-    const each = fundsSim?.grants?.find(x => x.key === key)?.fundsPerClaimSol;
+    return simRun.sim;
+  };
+  /** What one claim of grant `key` costs its funds, in SOL, as `simulate` counts it (null when it can't say). */
+  const grantClaimSol = key => {
+    const each = simulated()?.grants?.find(x => x.key === key)?.fundsPerClaimSol;
     return each > 0 ? each : null;
   };
   const units = (amount, token, where, what = 'This amount') => {
@@ -1091,16 +1102,26 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
           `“${t.key}” has a supply of 0.`,
           'Give it a supply above 0, or leave "supply" out for a token the game mints.',
         );
-      // A seed that is not an amount is refused with its pool, below.
-      const seeded = m.pools
-        .filter(p => p.currency === t.key)
-        .reduce((n, p) => n + (quietUnits(p.seed, tok) ?? 0n), 0n);
+      // Everything going live puts in from the owner's own account, which holds the whole supply and nothing more:
+      // the pools' seeds, a lottery's, a farm's, and a sealed schedule's funds from the wallet (cost.mjs counts the
+      // same four). More than the supply stops the setup at the transfer that runs short, after what came before it
+      // has landed. (An amount that is not one is refused with its own part, below.)
+      const of = key => (key ?? m.currencyKey) === t.key;
+      const puts = [
+        ...m.pools.filter(p => of(p.currency)).map(p => p.seed),
+        ...m.lotteries.filter(l => of(l.currency)).map(l => l.seed),
+        ...m.farms.filter(f => of(f.rewardsToken)).map(f => f.seed),
+        ...m.schedules
+          .filter(sc => sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet' && of(sc.currency))
+          .map(sc => sc.fund),
+      ];
+      const seeded = puts.reduce((n, amount) => n + (quietUnits(amount, tok) ?? 0n), 0n);
       if (supply !== null && seeded > supply)
         refuse(
           'E-TOKEN',
           `${where}.supply`,
-          `The pools of “${t.key}” are seeded with more than its whole supply of ${t.supply}.`,
-          'Seed them with less, or raise the supply.',
+          `Going live puts in more of “${t.key}” than its whole supply of ${t.supply}: the seeds of its pools, lotteries and farms and the funds of its sealed schedules come to ${Number(seeded) / 10 ** (tok?.decimals ?? 0)}.`,
+          'Put in less, or raise the supply.',
         );
     }
     const p = t.powers ?? {};
@@ -2165,7 +2186,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     perWalletWindow(it, where);
     // A collectible's life, each time in 4 bytes (a normal item's is dropped, warned of below).
     if (isCollectible(it) && it.life)
-      for (const k of ['readyAfter', 'lasts', 'cooldown']) fourByteSeconds(it.life[k], `${where}.life.${k}`);
+      // (a cooldown is written into each recipe as a raise, whose amount is a signed number: half as much fits)
+      for (const k of ['readyAfter', 'lasts', 'cooldown'])
+        fourByteSeconds(it.life[k], `${where}.life.${k}`, { signed: k === 'cooldown' });
     if (it.kind === 'normal' && (it.life || it.soulbound || it.burnable))
       warn(
         'W-ITEM',
@@ -3528,7 +3551,10 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     for (const [i, line] of outs.entries()) {
       if (line.gives !== 'roll') continue;
       const at = `${where}.out[${i}]`;
-      const b = m.box.get(line.box);
+      // A roll with no "on" was checked as a prize above, its box too. One on a collectible is checked only here: a
+      // box the spec does not have is refused (the recipe would be written to roll an address with no box at it, and
+      // the program refuses that after the transactions before it have landed).
+      const b = line.on === undefined ? m.box.get(line.box) : prizeBox(line.box, `${at}.box`, label(r), 'E-RECIPE');
       if (!b) continue;
       if (line.on === undefined && b.rollsOn)
         refuse(
@@ -5808,17 +5834,12 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   }
 
   // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
-  if (!refusals.length) challenge(m, warn, now, economy);
+  if (!refusals.length) challenge(m, warn, now, economy, simulated);
 
   // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
   // but pays out faster drains, and then skips or fails what it owes.
   if (!refusals.length) {
-    let sim;
-    try {
-      sim = simulate(economy, { now });
-    } catch {
-      sim = null;
-    }
+    const sim = simulated();
     for (const p of sim?.pools ?? []) {
       if (p.lasts !== 'runs dry' || !(p.lastsDays < sim.scenario.days)) continue;
       const sym = m.tokens.get(p.token)?.symbol ?? p.token;
@@ -5836,6 +5857,16 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     }
     for (const row of sim?.farms ?? []) farmRounding(m.farm.get(row.key), row, warn, m);
   }
+
+  // ---- W-SIMULATION: the simulation could not run, so what rests on it was not checked. Said, never passed over.
+  if (!refusals.length && simRun?.error)
+    warn(
+      'W-SIMULATION',
+      'economy',
+      `The simulation of this spec stopped on an error (${String(simRun.error?.message ?? simRun.error).slice(0, 200)}), so nothing that rests on its numbers was checked: whether a pool runs dry or a farm rounds a share to nothing at the scenario's rates, what a claim costs a grant's funds, and the rates the questions above would quote. That is a fault in these tools, not a finding about the spec, and this check is not a clean one.`,
+      'Run xsolana_simulate on the spec to see the error, and report it with the spec. Until it runs, work those numbers out by hand before going live.',
+      { severity: 'medium' },
+    );
 
   return result();
 }

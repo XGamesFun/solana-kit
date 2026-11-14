@@ -6,7 +6,7 @@ same source built for that address. loot has an address of its own on each clust
 voucher, a verdict) counts on the other. What follows speaks of devnet's, the address loot keeps there. 0.28.0 is 0.27.0 built for it: no instruction, argument, account or
 record changed. Every address the program derives follows from its own, so nothing set up under the address it had
 before (`9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, 0.27.0 and earlier) exists under this one: make fresh
-economies. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`).
+economies. It runs on devnet and on mainnet, each at its own address (`SECURITY.md`). **Not independently audited**.
 
 This page describes 0.28.0, the build its IDL comes from. What 0.27.0 added, and 0.28.0 keeps: **a record whose NFT
 is proven gone from the project closes** ([An NFT gone from the project](#an-nft-gone-from-the-project), receipt

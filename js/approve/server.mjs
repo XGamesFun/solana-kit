@@ -1387,7 +1387,7 @@ export async function approve({
   const origin = `http://127.0.0.1:${server.address().port}`;
   const link = `${origin}/?t=${token}`;
   const opened = `${origin}/?c=${code}`;
-  log(`Approve going live in your wallet (devnet): ${link}`);
+  log(`Approve going live in your wallet (${cluster()}): ${link}`);
   log(
     'Leave this running until the page says it is live. Ctrl+C stops it; running it again goes on from where it stopped.',
   );

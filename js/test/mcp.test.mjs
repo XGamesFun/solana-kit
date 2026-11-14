@@ -165,6 +165,21 @@ describe('the xsolana MCP server', () => {
     assert.equal(ok.structuredContent.ok, true);
     assert.ok(JSON.parse(readFileSync(path.join(cwd, 'xsolana.json'), 'utf8')).name);
     assert.ok(!ok.isError);
+    // no question open: the state says so, and the answer points at going live
+    assert.deepEqual([ok.structuredContent.state, ok.structuredContent.questions], ['saved', 0]);
+    assert.match(ok.content[0].text, /Next: xsolana_publish when the person says to put it live\./);
+    // a spec whose check has questions for the person is saved under a state of its own, and is not pointed at going live
+    const asking = JSON.parse(readFileSync(new URL('../../examples/paper-hands-farm.json', import.meta.url), 'utf8'));
+    const open = await client.callTool({ name: 'xsolana_save', arguments: { spec: asking, file: 'asking.json' } });
+    assert.equal(open.structuredContent.ok, true);
+    assert.equal(open.structuredContent.state, 'saved-questions-open');
+    assert.equal(open.structuredContent.questions, open.structuredContent.warnings.filter(w => w.ask).length);
+    assert.ok(open.structuredContent.questions > 0);
+    assert.match(
+      open.content[0].text,
+      /of its warnings are questions for the person .* before this file is built on or put live\./,
+    );
+    assert.doesNotMatch(open.content[0].text, /Next: xsolana_publish/);
     // a save that fails is a tool error, and still says why in structuredContent
     const bad = await client.callTool({
       name: 'xsolana_save',
@@ -208,6 +223,17 @@ describe('the MCP protocol', () => {
     for (const v of ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']) assert.equal(await init(v), v);
     assert.equal(await init('2099-01-01'), '2025-11-25');
     assert.equal(await init(undefined), '2025-11-25');
+  });
+
+  test('the server names the package’s own version, which is how a client tells a stale one', async () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    const { result } = await handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: PROTOCOLS[0], capabilities: {}, clientInfo: { name: 't', version: '0' } },
+    });
+    assert.deepEqual(result.serverInfo, { name: 'xsolana', version: pkg.version });
   });
 
   test('a request sent just before stdin closes is still answered', async () => {

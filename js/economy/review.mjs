@@ -702,6 +702,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ['W-ASSUMPTION', 'R-ASSUMPTION', 'medium'],
     ['W-STEPS', 'R-STEPS', 'low'],
     ['W-ENFORCED', 'R-ENFORCED', 'medium'],
+    ['W-SIMULATION', 'R-SIMULATION', 'medium'],
   ])
     for (const w of warned(code)) find(id, w.severity ?? severity, routeOf(w.where), w.message, w.fix);
 

@@ -331,3 +331,55 @@ test('a contest with no trust in the owner’s key: a decider key, kept only in 
   assert.equal(r.candidates[0].results[0].kept, 'partly');
   assert.deepEqual(r.candidates[0].spec.contests.find(c => c.key === 'duel').deciders, [VOUCHER]);
 });
+
+test('a requirement the search cannot read is said in words, before anything is tried', async () => {
+  const { requirementProblems } = await import('../economy/design.mjs');
+  const { tools } = await import('../mcp/tools.mjs');
+  const tool = tools.find(t => t.name === 'xsolana_design');
+  const ask = requirements => tool.handler({ example: 'coin-flip-arena', requirements }, {});
+  // What the schema lets through: a kind, and nothing of what the kind needs (this answered a TypeError).
+  const bare = await ask([{ kind: 'pay-in', token: 'sol' }]);
+  assert.equal(bare.isError, true);
+  assert.match(
+    bare.text,
+    /^Nothing was designed: Requirement 1 \(pay-in\) needs "currencies": a list of what people can pay with/,
+  );
+  // Each wrong requirement is named by its place and kind, all in one answer.
+  const several = requirementProblems([
+    { kind: 'bounded' },
+    { kind: 'free-entry', perPerson: 'two' },
+    { kind: 'pay-in', currencies: [{ token: 'sol', amount: 0 }] },
+    { kind: 'no-such-kind' },
+    { kind: 'burn', route: '' },
+    'burn',
+  ]);
+  assert.deepEqual(
+    several.map(x => x.slice(0, 36)),
+    [
+      'Requirement 1 (bounded) needs "total',
+      'Requirement 2 (free-entry) has a "pe',
+      'Requirement 3 (pay-in) has a "curren',
+      'Requirement 4 (no-such-kind) names n',
+      'Requirement 5 (burn) has a "route" t',
+      'Requirement 6 names no kind there is',
+    ],
+  );
+  // A name every object has is no kind, and no field.
+  assert.equal(requirementProblems([{ kind: 'constructor' }]).length, 1);
+  assert.equal(requirementProblems([]).length, 1);
+  // Requirements it can read pass, with and without what is optional.
+  assert.deepEqual(
+    requirementProblems([
+      { kind: 'pay-in', currencies: [{ token: 'sol', amount: 0.1 }], route: 'flip' },
+      { kind: 'free-entry' },
+      { kind: 'free-entry', perPerson: 2, spendable: false },
+      { kind: 'bounded', total: 100 },
+      { kind: 'equal-stakes' },
+    ]),
+    [],
+  );
+  // A cap on what staking pays, asked of a route that is no farm: an answer, where it threw.
+  const cap = await ask([{ kind: 'emission-cap', total: 1000 }]);
+  assert.match(cap.text, /It pays out at most 1000 in all\./);
+  assert.doesNotMatch(cap.text, /Cannot read properties/);
+});

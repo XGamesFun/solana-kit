@@ -223,6 +223,7 @@ export const REQUIREMENTS = {
     says: r => `It pays out at most ${r.total} in all.`,
     test: (c, r) => {
       const f = c.spec.farms.find(q => q.key === c.x.route);
+      if (!f) return { kept: false, why: 'this route is not a staking farm' };
       if (!f.rate)
         return num(f.seed) <= r.total
           ? { kept: true, why: `a vault of ${f.seed}, nothing more` }
@@ -1075,6 +1076,48 @@ function searchRoute(base, route, family, requirements, now) {
  * Requirements name their route (`route`); its family follows from where that key is in the spec (a lottery: a draw;
  * an item: a sale; a grant: a reward; a farm: staking; a contest), or from a requirement's own `family`.
  */
+/** What a requirement's own fields must be, by field: which kinds need it, how it reads when wrong, and its test. */
+const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+const FIELDS = {
+  currencies: {
+    needs: ['pay-in'],
+    says: 'a list of what people can pay with, each { "token": a token’s key, "amount": a number above 0 }',
+    ok: v =>
+      Array.isArray(v) &&
+      v.length > 0 &&
+      v.every(c => c && typeof c === 'object' && typeof c.token === 'string' && c.token && positive(c.amount)),
+  },
+  total: { needs: ['bounded', 'emission-cap'], says: 'a number above 0', ok: positive },
+  perPerson: { says: 'a whole number above 0', ok: v => positive(v) && Number.isInteger(v) },
+  claims: { says: 'a whole number above 0', ok: v => positive(v) && Number.isInteger(v) },
+  amount: { says: 'a number above 0', ok: positive },
+  spendable: { says: 'true or false', ok: v => typeof v === 'boolean' },
+  route: { says: 'the key of the part it is about', ok: v => typeof v === 'string' && v.length > 0 },
+};
+
+/**
+ * What is wrong with a list of requirements before any design is tried, each a sentence naming the requirement by
+ * its place and kind: a kind there is none of, a field a kind needs and lacks, a field of the wrong shape. Empty when
+ * `design` can read them all.
+ */
+export function requirementProblems(requirements) {
+  if (!Array.isArray(requirements) || !requirements.length)
+    return ['"requirements" is a list of at least one requirement, each { "kind": … }.'];
+  const out = [];
+  requirements.forEach((r, i) => {
+    const kind = r && typeof r === 'object' && !Array.isArray(r) ? r.kind : undefined;
+    const at = `Requirement ${i + 1}${typeof kind === 'string' ? ` (${kind})` : ''}`;
+    if (typeof kind !== 'string' || !Object.hasOwn(REQUIREMENTS, kind))
+      return out.push(`${at} names no kind there is: the kinds are ${Object.keys(REQUIREMENTS).join(', ')}.`);
+    for (const [field, rule] of Object.entries(FIELDS)) {
+      const given = Object.hasOwn(r, field) && r[field] !== undefined;
+      if (!given && rule.needs?.includes(kind)) out.push(`${at} needs "${field}": ${rule.says}.`);
+      else if (given && !rule.ok(r[field])) out.push(`${at} has a "${field}" that is not ${rule.says}.`);
+    }
+  });
+  return out;
+}
+
 export function design(base, requirements, { now = Math.floor(Date.now() / 1000) } = {}) {
   const first = requirements.find(r => r.route)?.route ?? base.lotteries?.[0]?.key;
   const order = [...new Set(requirements.map(r => r.route ?? first))];

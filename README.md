@@ -38,8 +38,8 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 ## How it works
 
 1. **Describe it.** In a sentence to your agent, or as a spec file (`xsolana.json`).
-2. **Check it.** `check` refuses anything the program would refuse; `simulate` shows where the money goes, day by
-   day; `cost` prices going live and each player action; `review` shows what a cheater could get.
+2. **Check it.** `check` refuses what it knows the program would refuse (should it miss something, `approve` stops
+   in words and says what landed); `simulate` shows where the money goes, day by day; `cost` prices going live and each player action; `review` shows what a cheater could get.
 3. **Put it live.** `approve` lists every transaction with what it pays and trusts, ends with a code, and sends
    nothing; run again with that code, it sends exactly what it listed. A key file on your own computer signs
    (`keygen` makes one for the project). Nothing here asks for a seed phrase or for the key of a wallet you already
@@ -77,7 +77,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.31 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.28.32 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -88,26 +88,26 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.28.31 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.28.32 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.28.31 token <its mint address>
+npx -y @xgamesfun/solana@0.28.32 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.28.31 check xsolana.json
-npx -y @xgamesfun/solana@0.28.31 simulate xsolana.json
-npx -y @xgamesfun/solana@0.28.31 cost xsolana.json
+npx -y @xgamesfun/solana@0.28.32 check xsolana.json
+npx -y @xgamesfun/solana@0.28.32 simulate xsolana.json
+npx -y @xgamesfun/solana@0.28.32 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.28.31 explain xsolana.json
-npx -y @xgamesfun/solana@0.28.31 review xsolana.json
+npx -y @xgamesfun/solana@0.28.32 explain xsolana.json
+npx -y @xgamesfun/solana@0.28.32 review xsolana.json
 
 # go live: a key file for the project (it prints the address to send SOL to, never the key)…
-npx -y @xgamesfun/solana@0.28.31 keygen ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.28.32 keygen ~/.config/xsolana/my-game.json
 # …then everything going live would send, and a code; nothing is sent
-npx -y @xgamesfun/solana@0.28.31 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.28.32 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # …and with that code, exactly what it listed is sent
-npx -y @xgamesfun/solana@0.28.31 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.28.32 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.

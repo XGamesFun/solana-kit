@@ -28,7 +28,7 @@ import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tellLines } from '../economy/walk.mjs';
-import { design, describeDesign, designAsks, REQUIREMENTS } from '../economy/design.mjs';
+import { design, describeDesign, designAsks, requirementProblems, REQUIREMENTS } from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -605,6 +605,9 @@ export const tools = [
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
       const top = input.top ?? 3;
+      // A requirement the search cannot read is said in words before anything is tried: the schema names only the kind.
+      const wrong = requirementProblems(input.requirements);
+      if (wrong.length) return { isError: true, text: `Nothing was designed: ${wrong.join(' ')}${footer()}` };
       const r = design(economy, input.requirements, { now: nowOf(ctx) });
       if (!r.candidates.length)
         return {
@@ -633,7 +636,7 @@ export const tools = [
   {
     name: 'xsolana_save',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: `Save a spec into the project (default ${DEFAULT_FILE}), only if it checks. Saving is building, a draft too: a choice xsolana_design left to the person, and each question xsolana_check or xsolana_design has for them, is put to them before this, not after. A file that is already live keeps its program numbers and its live section. Never put a key in it: the checker refuses one.`,
+    description: `Save a spec into the project (default ${DEFAULT_FILE}), only if it checks. Saving is building, a draft too: a choice xsolana_design left to the person, and each question xsolana_check or xsolana_design has for them, is put to them before this, not after. A file that is already live keeps its program numbers and its live section. Never put a key in it: the checker refuses the forms it knows (a key in base58, in hex or as a keypair file’s bytes, a seed phrase, a keyed RPC link), and no check finds every way to write one.`,
     inputSchema: {
       type: 'object',
       properties: { spec: SOURCE.spec, file: SOURCE.file },
@@ -702,11 +705,21 @@ export const tools = [
         };
       }
       await writeFile(file, `${JSON.stringify(spec, null, 2)}\n`);
+      // A warning that carries a question for the person is open until they have answered it: the file is saved, and
+      // the answer names that state in place of pointing at going live.
+      const open = verdict.warnings.filter(w => w.ask).length;
+      const next = open
+        ? ` ${open === 1 ? 'One of its warnings is a question' : `${open} of its warnings are questions`} for the person (xsolana_check words each): put ${open === 1 ? 'it' : 'them'} to the person and save again with what they chose before this file is built on or put live.`
+        : spec.live
+          ? ' It is live: xsolana_publish publishes only what changed.'
+          : ' Next: xsolana_publish when the person says to put it live.';
       return {
         ok: true,
         file: rel,
+        state: open ? 'saved-questions-open' : 'saved',
+        questions: open,
         warnings: verdict.warnings,
-        text: `Saved ${rel} (${plural(verdict.warnings.length, 'warning')}).${dropped}${spec.live ? ' It is live: xsolana_publish publishes only what changed.' : ' Next: xsolana_publish when the person says to put it live.'}${footer()}`,
+        text: `Saved ${rel} (${plural(verdict.warnings.length, 'warning')}).${dropped}${next}${footer()}`,
       };
     },
   },
@@ -770,7 +783,7 @@ export const tools = [
         `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
         ...(live
           ? [
-              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. Never make a new key for a live project (a new key can change nothing), and never remove the file’s live section because a key was refused. If you can’t tell, ask the person how it went live. The owner’s address needs about ${c.setup.totalSol} SOL of devnet SOL.`,
+              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. Never make a new key for a live project (a new key can change nothing), and never remove the file’s live section because a key was refused. If you can’t tell, ask the person how it went live. The owner’s address needs about ${c.setup.totalSol} SOL${realMoney() ? ' (this economy is on mainnet, so it is real SOL)' : ' of devnet SOL'}.`,
             ]
           : [
               `1. A key file for this project, unless it has one: ${keygen}`,
