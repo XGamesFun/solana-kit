@@ -4,6 +4,36 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.28.31: a player's step leaves room for what their wallet adds to it (loot 0.28.0, unchanged)
+
+The tools alone. A wallet may add to a transaction before it signs it. Phantom adds a compute unit limit and price
+and checks of its own (instructions of the Lighthouse program, one for each account it watches): 306 and 333 bytes in
+two legacy transactions it signed on mainnet on 2026-11-13, with seven and eight checks. A transaction with no room
+for them it cannot check, and it shows its user "This dApp could be malicious" in place of what the transaction does.
+`js/play` sent a step as a legacy transaction whenever it fit the network's 1,232 bytes, however little it left.
+
+- **`js/play` leaves room in a step the player's wallet signs, where the project's table allows**
+  (`WALLET_ADDS_BYTES`, 400 bytes). A step that fits a legacy transaction with less to spare now goes as a v0
+  transaction with the project's standing lookup table, when that is the smaller of the two: the same one prompt,
+  nothing more to pay, and an account loaded from the table takes one byte in place of 32. How much room that gives
+  is what the table holds of the step's accounts: a table that holds few leaves it tight still. A step that leaves the
+  room is sent as before. So is one the table does not make smaller, and no table is ever made for the room's sake.
+- The tables are read again just before such a step is sent, so a step that always went as a legacy transaction does
+  not come to rest on a table its owner retired since the page loaded. A wallet that says it signs no v0 transaction
+  (Wallet Standard's `supportedTransactionVersions`, now carried on the signer as `versions`) gets a legacy one as
+  before.
+- Not covered: a step that needs a lookup table of its own (its table steps are filled to the limit, as before), and
+  steps the play client itself joins into one transaction when they fit.
+- A transaction a key of the page's own signs (a box's settle from its throwaway key) and a sponsored step are sent
+  as before: nothing is added to the first, and the second leads with its own compute budget and has two signers.
+- `compileFitting` and `sendFitting` (`js/chain/lookup.js`) take `room` (and `sendFitting` `fresh`); with none they
+  do what they did.
+
+Not known from this release: whether Phantom adds its checks to a v0 transaction that loads from a table as it does
+to a legacy one. Its own guide names lookup tables as the way to make room. A page that puts two steps into one
+transaction itself should still send them apart when the two together pass about 830 bytes and the project's table
+holds few of their accounts.
+
 ## 0.28.30: a file's word for a collection or a mint made before its project is not built on, and a long step name no longer locks a setup out (loot 0.28.0, unchanged)
 
 The tools alone. A spec file's live section is written by agents, by hand and by teammates, and the approval holds it

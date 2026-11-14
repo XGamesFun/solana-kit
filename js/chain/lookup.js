@@ -1,7 +1,8 @@
 // Address lookup tables, and sending a transaction whatever its size. A legacy transaction holds at most 1,232 bytes,
 // about 35 accounts with room for their instructions; loot's program accepts more (a settle can lock up to 64 accounts).
 // A v0 transaction names each account it loads from a lookup table with one byte instead of 32. `sendFitting` sends
-// legacy when it fits; otherwise the payer makes a table of the transaction's accounts first (its own transactions,
+// legacy when it fits (and, asked to keep room for what a wallet adds, v0 with a project's standing tables when a
+// legacy one would leave less: `WALLET_ADDS_BYTES`); otherwise the payer makes a table of the transaction's accounts first (its own transactions,
 // each legacy), waits one slot for it to be usable, and sends the transaction as v0 with the table, deactivating the
 // table in that same transaction (a compressed NFT's prove_leaf goes alone, after the table, only when even that
 // doesn't fit: `sendPlan`). Once its deactivation slot has left the recent slot hashes (about 513 slots: on devnet about two minutes)
@@ -156,14 +157,32 @@ const sizeOf = input => {
 };
 
 /**
+ * The bytes kept free in a transaction a player's wallet signs, for what the wallet adds to it before it signs.
+ * Phantom adds a compute unit limit and price (52 bytes) and checks of its own (instructions of the Lighthouse
+ * program, one for each account it watches): 306 and 333 bytes in two legacy transactions it signed on mainnet on
+ * 2026-11-13, with seven and eight checks. A transaction with no room for them it cannot check, and it shows its user
+ * "This dApp could be malicious" in place of what the transaction does.
+ */
+export const WALLET_ADDS_BYTES = 400;
+
+/**
  * The message for `instructions` from `payer`: legacy when it fits, else v0 loading what it can from `tables`
  * ([{ address, addresses }]). null when neither fits.
+ * `room`: bytes to keep free for what the signer adds (`WALLET_ADDS_BYTES` for a player's wallet). A legacy message
+ * that fits and leaves less goes as v0 with `tables` when that is the smaller of the two, whether or not that reaches
+ * the room: the tables give what they hold, and no more. With no table that makes it smaller it stays legacy, as it
+ * would with no `room`.
  */
-export function compileFitting({ payer, blockhash, instructions, tables = [] }) {
+export function compileFitting({ payer, blockhash, instructions, tables = [], room = 0 }) {
   const legacy = { payer, blockhash, instructions };
-  if (sizeOf(legacy) <= MAX_TRANSACTION_BYTES) return compileMessage(legacy);
+  const size = sizeOf(legacy);
+  // (anything that is no number above 0 asks for no room)
+  const keep = room > 0 && Number.isFinite(room) ? room : 0;
+  if (size <= MAX_TRANSACTION_BYTES - keep) return compileMessage(legacy);
   const v0 = { ...legacy, version: 0, lookupTables: tables };
-  return tables.length && sizeOf(v0) <= MAX_TRANSACTION_BYTES ? compileMessage(v0) : null;
+  const loaded = tables.length ? sizeOf(v0) : Infinity;
+  if (loaded <= MAX_TRANSACTION_BYTES && loaded < size) return compileMessage(v0);
+  return size <= MAX_TRANSACTION_BYTES ? compileMessage(legacy) : null;
 }
 
 /**
@@ -283,7 +302,11 @@ async function freshSlot(rpc, payer) {
  * account, call('getSlot')). `standing`: tables already made ([{ address, addresses }], a project's, active), tried
  * first: one v0 transaction with them when they hold enough. `table: false` sends no lookup table of its own (a throwaway
  * key holds no rent for one); `first`:
- * addresses a table holds first (`planTable`). Throws a
+ * addresses a table holds first (`planTable`). `room`: bytes to keep free for what the signer adds (`compileFitting`):
+ * a transaction that fits a legacy one and leaves less goes as v0 with the `standing` tables when they make it
+ * smaller, and never makes a table of its own for that. `fresh`: reads the standing tables again (async, the same
+ * shape); asked just before a transaction is sent as v0 for the room's sake only, so one that always went as a
+ * legacy transaction never rests on a table that was retired since the page first read it. Throws a
  * plain sentence when it can't be sent. Returns { signature (the last transaction's), table (its address, or null),
  * steps (the signatures of the transactions before it) }.
  */
@@ -296,6 +319,8 @@ export async function sendFitting({
   alone = () => false,
   first = [],
   standing = [],
+  room = 0,
+  fresh = null,
   sleep = pause,
 }) {
   const sendOne = async build => {
@@ -312,11 +337,16 @@ export async function sendFitting({
     throw new Error(
       `This transaction is too large to send even as a v0 one with a lookup table: it names ${tableAccounts(instructions).length + 1} accounts or more (a transaction locks at most 64), or its instructions are too long.`,
     );
-  if (plan.legacy) return { signature: await plain(instructions), table: null, steps: [] };
   // Standing tables (a project's, made at go-live; each still active) that hold enough of its accounts: one v0
-  // transaction with them, and no table of its own.
-  const fits = standing.length && compileFitting({ payer, blockhash, instructions, tables: standing });
-  if (fits && fits[0] === 0x80)
+  // transaction with them, and no table of its own. Also for a transaction that fits a legacy one with less than
+  // `room` to spare, when they make it smaller.
+  const loads = tables =>
+    tables.length && compileFitting({ payer, blockhash, instructions, tables, room })?.[0] === 0x80;
+  // For the room's sake only (the transaction fits a legacy one): with the tables as the chain holds them now.
+  if (plan.legacy && loads(standing) && fresh) standing = await fresh();
+  if (plan.legacy && !loads(standing)) return { signature: await plain(instructions), table: null, steps: [] };
+  const fits = loads(standing);
+  if (fits)
     return {
       signature: await sendOne(bh =>
         compileMessage({ payer, blockhash: bh, instructions, version: 0, lookupTables: standing }),

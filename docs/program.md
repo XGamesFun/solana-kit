@@ -1756,6 +1756,13 @@ sends those as v0 from it, one prompt. A transaction its table doesn't cover goe
 makes first, then deactivates and closes, getting its rent back. A compressed proof longer than 4 nodes
 needs a table.
 
+A player's wallet may add to a transaction before it signs it: Phantom adds a compute unit limit and price and checks
+of its own, 306 and 333 bytes in two transactions measured on mainnet, and shows its user a warning in place of what
+the transaction does when they do not fit. So js/play leaves 400 bytes free in a step the player's wallet signs,
+where the standing table allows: one that fits a legacy transaction with less to spare goes as v0 from the table when
+that is the smaller, the same one prompt, and gains what the table holds of its accounts. Two steps a page puts into one transaction itself get no more help than that: past about 830 bytes
+with few of their accounts in the table, send them apart.
+
 ## Costs
 
 **Rent** is `(bytes + 128) × 5,080` lamports on devnet and mainnet; query `getMinimumBalanceForRentExemption` for the

@@ -54,6 +54,7 @@ import {
   tablesOf,
   tableStep,
   transactionLocks,
+  WALLET_ADDS_BYTES,
   LOOKUP_TABLE_PROGRAM,
 } from '../chain/lookup.js';
 import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
@@ -106,6 +107,10 @@ export function walletStandardSigner(wallet, account, chain = loot.walletChain()
   const messages = wallet.features?.['solana:signMessage'];
   return {
     address: account.address,
+    // The kinds of transaction the wallet says it signs ('legacy', 0, …): `send` hands it a v0 one for room's sake
+    // only when it names 0. A wallet that says nothing is taken to sign both, as every send too big for a legacy
+    // transaction always took it to.
+    versions: Array.from(feature.supportedTransactionVersions ?? ['legacy', 0]),
     async signTransaction(wire) {
       const [out] = await feature.signTransaction({ account, transaction: wire, chain });
       return out.signedTransaction;
@@ -725,7 +730,9 @@ export function solanaApp({
   /**
    * Build, have the wallet sign, send and confirm. Extra signers (fresh keys) sign first. Returns the signature.
    * `keepWrapped`: leave the player's wrapped-SOL account open (a bid's: what is topped comes back there).
-   * Its size is checked before the wallet signs (`sendFitting`): a transaction too big for a legacy one goes as one v0
+   * Its size is checked before the wallet signs (`sendFitting`): one that fits a legacy transaction and leaves the
+   * wallet less than `WALLET_ADDS_BYTES` for the checks it adds goes as v0 with the project's standing tables, when
+   * they make it smaller (the same one prompt); a transaction too big for a legacy one goes as one v0
    * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
    * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
    * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
@@ -747,6 +754,12 @@ export function solanaApp({
     })();
     return standingTables;
   }
+
+  /**
+   * The room kept in a step the player's wallet signs, for what the wallet adds before it signs (`WALLET_ADDS_BYTES`);
+   * none for a wallet that says it signs no v0 transaction (`wallet.versions`), which gets a legacy one as before.
+   */
+  const walletRoom = () => (wallet?.versions && !wallet.versions.includes(0) ? 0 : WALLET_ADDS_BYTES);
 
   async function send(instructions, extra = [], { keepWrapped = false } = {}) {
     if (!wallet?.address) throw new Error('Connect a wallet first.');
@@ -781,6 +794,9 @@ export function solanaApp({
         alone: isProveLeaf,
         first: [project],
         standing: await standing(),
+        room: walletRoom(),
+        // read again just before a step goes as v0 for the room's sake: a table retired since is passed by
+        fresh: () => ((standingTables = null), standing()),
       }).catch(inWords)
     ).signature;
   }
@@ -894,6 +910,7 @@ export function solanaApp({
             blockhash: latest.blockhash,
             instructions: await unwrapAfter(loot.withLeafCloses(l)),
             tables,
+            room: walletRoom(),
           }),
         );
       const wires = messages.filter(Boolean).map(m => wireTransaction(m));

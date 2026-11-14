@@ -17,16 +17,18 @@ import {
   LOOKUP_TABLE_PROGRAM,
   planTable,
   readTable,
+  sendFitting,
   slotHashes,
   tableAccounts,
   tableStep,
   TABLE_COOLDOWN_SLOTS,
+  WALLET_ADDS_BYTES,
 } from '../chain/lookup.js';
 import { computeUnitLimit, meta, transferLamports } from '../chain/programs.js';
 import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
-import { readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
+import { MAX_TRANSACTION_BYTES, readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
-import { solanaApp } from '../play/index.js';
+import { solanaApp, walletStandardSigner } from '../play/index.js';
 import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
 
 const skip = cannotRun() ?? false;
@@ -50,6 +52,107 @@ describe('lookup tables, planned (js/chain/lookup.js)', () => {
       null,
       'no table given: nothing fits',
     );
+  });
+
+  test('room for what a wallet adds: a legacy transaction that leaves less goes as v0 with a table that makes it smaller', () => {
+    const kind = m => (m === null ? null : m[0] === 0x80 ? 'v0' : 'legacy');
+    const room = WALLET_ADDS_BYTES;
+    const fit = (instructions, more = {}) => compileFitting({ payer, blockhash: BLOCKHASH, instructions, ...more });
+    // A table of the accounts `wide` names, and one of accounts no transaction here names.
+    const holds = [{ address: key(700), addresses: Array.from({ length: 30 }, (_, i) => key(i)) }];
+    const strange = [{ address: key(701), addresses: Array.from({ length: 30 }, (_, i) => key(300 + i)) }];
+    const small = [wide(payer, 10)];
+    const tight = [wide(payer, 22)];
+    assert.ok(transactionSize(fit(small)) <= MAX_TRANSACTION_BYTES - room, 'small leaves the room');
+    const size = transactionSize(fit(tight));
+    assert.ok(size > MAX_TRANSACTION_BYTES - room && size <= MAX_TRANSACTION_BYTES, 'tight fits, with less to spare');
+    // With no room asked, as ever: legacy whenever it fits, tables or not.
+    assert.equal(kind(fit(tight, { tables: holds })), 'legacy');
+    // With room: what leaves it stays legacy; what does not goes with the table, smaller, the room free again.
+    assert.equal(kind(fit(small, { tables: holds, room })), 'legacy');
+    const loaded = fit(tight, { tables: holds, room });
+    assert.equal(kind(loaded), 'v0');
+    assert.ok(transactionSize(loaded) <= MAX_TRANSACTION_BYTES - room, `${transactionSize(loaded)} bytes of ${size}`);
+    assert.deepEqual(
+      readMessage(loaded).instructions.map(i => i.data.length),
+      readMessage(fit(tight)).instructions.map(i => i.data.length),
+      'the same instructions',
+    );
+    // No table, or one that holds none of its accounts (v0 with it would be the bigger): legacy, as with no room.
+    assert.equal(kind(fit(tight, { room })), 'legacy');
+    assert.equal(kind(fit(tight, { tables: strange, room })), 'legacy');
+    // The line itself: a transaction of exactly the limit less the room stays legacy, one byte more goes with the table.
+    const sized = data => [{ ...wide(payer, 20), data: new Uint8Array(data) }];
+    const at = 40 + (MAX_TRANSACTION_BYTES - room - transactionSize(fit(sized(40))));
+    assert.equal(transactionSize(fit(sized(at))), MAX_TRANSACTION_BYTES - room);
+    assert.equal(kind(fit(sized(at), { tables: holds, room })), 'legacy');
+    assert.equal(kind(fit(sized(at + 1), { tables: holds, room })), 'v0');
+    // A table that holds only some of its accounts: v0 still, the smaller of the two, though the room is not reached.
+    const some = [{ address: key(703), addresses: Array.from({ length: 3 }, (_, i) => key(i)) }];
+    const little = fit(tight, { tables: some, room });
+    assert.equal(kind(little), 'v0');
+    assert.ok(transactionSize(little) < size && transactionSize(little) > MAX_TRANSACTION_BYTES - room);
+    // The room a wallet's own instructions take, as measured; and a room that is no number above 0 is none.
+    assert.equal(WALLET_ADDS_BYTES, 400);
+    for (const none of [0, -100, NaN, undefined, null, '400x'])
+      assert.deepEqual(fit(tight, { tables: holds, room: none }), fit(tight, { tables: holds }), String(none));
+    assert.equal(fit([wide(payer, 40)], { room: -100 }), null, 'never a message past the limit');
+    // Too big for a legacy transaction: v0 with the table or nothing, room or not.
+    assert.equal(
+      kind(
+        fit([wide(payer, 40)], {
+          tables: [{ address: key(702), addresses: Array.from({ length: 40 }, (_, i) => key(i)) }],
+          room,
+        }),
+      ),
+      'v0',
+    );
+    assert.equal(fit([wide(payer, 40)], { room }), null);
+  });
+
+  test('sendFitting with room: one v0 transaction with the standing tables, never a table of its own for the room’s sake', async () => {
+    const sent = [];
+    const rpc = {
+      latestBlockhash: async () => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 1 }),
+      send: async wire => (sent.push(readTransaction(wire).message), `sig${sent.length}`),
+      confirm: async () => {},
+    };
+    const sign = async message => wireTransaction(message, [new Uint8Array(64)]);
+    const standing = [{ address: key(700), addresses: Array.from({ length: 30 }, (_, i) => key(i)) }];
+    const go = (instructions, more) => sendFitting({ rpc, payer, instructions, sign, ...more });
+    const versions = () => sent.splice(0).map(m => readMessage(m).version);
+    const tight = [wide(payer, 22)];
+    assert.deepEqual(await go(tight, { standing, room: WALLET_ADDS_BYTES }), {
+      signature: 'sig1',
+      table: null,
+      steps: [],
+    });
+    assert.deepEqual(versions(), [0]);
+    // No room asked (a key of the page's own signs: nothing is added), no standing table, or a small transaction: legacy.
+    await go(tight, { standing });
+    await go(tight, { room: WALLET_ADDS_BYTES });
+    await go([wide(payer, 10)], { standing, room: WALLET_ADDS_BYTES });
+    assert.deepEqual(versions(), ['legacy', 'legacy', 'legacy'], 'one transaction each: no table made');
+    // `fresh`: the tables are read again just before a transaction goes as v0 for the room's sake only, and never else.
+    let reads = 0;
+    const fresh = tables => async () => (reads++, tables);
+    await go(tight, { standing, room: WALLET_ADDS_BYTES, fresh: fresh([]) });
+    assert.deepEqual([versions(), reads], [['legacy'], 1], 'the table is gone: legacy, as it always went');
+    await go(tight, { standing, room: WALLET_ADDS_BYTES, fresh: fresh(standing) });
+    assert.deepEqual([versions(), reads], [[0], 2], 'still there: v0');
+    await go([wide(payer, 10)], { standing, room: WALLET_ADDS_BYTES, fresh: fresh([]) });
+    await go(tight, { standing, fresh: fresh([]) });
+    await go(tight, { room: WALLET_ADDS_BYTES, fresh: fresh([]) });
+    assert.deepEqual(
+      [versions(), reads],
+      [['legacy', 'legacy', 'legacy'], 2],
+      'not asked where no table would be used',
+    );
+    // A transaction too big for a legacy one goes with the tables it was given: they are not read again for it.
+    const big = [wide(payer, 40)];
+    const all = [{ address: key(704), addresses: Array.from({ length: 40 }, (_, i) => key(i)) }];
+    await go(big, { standing: all, room: WALLET_ADDS_BYTES, fresh: fresh([]) });
+    assert.deepEqual([versions(), reads], [[0], 2]);
   });
 
   test('a table of 55 accounts is made in two steps that each fit, and the transaction fits as v0 with it, deactivating it', () => {
@@ -129,7 +232,7 @@ const asWallet = (kp, signed) => ({
 });
 
 /** A box that rolls, all but always on three NFTs a stash holds, each named, and pays four holders' shares, and a player's app. */
-function bigBox(seed, { standing = null } = {}) {
+function bigBox(seed, { standing = null, versions = null } = {}) {
   const w = world({ seed });
   w.upsert({ Item: { id: 1, args: collectible('Relic') } });
   const relics = [0, 1, 2].map(() => w.make(1, w.authority));
@@ -201,14 +304,31 @@ function bigBox(seed, { standing = null } = {}) {
   }
   const signed = [];
   const sent = [];
+  let retired = false;
   const rpc = {
     ...w.chain.rpc,
     async send(wire) {
       sent.push(readTransaction(wire).message);
       return w.chain.rpc.send(wire);
     },
+    // 'retired': the project's owner deactivates the table right after the page first read it, and it cools down
+    // before the page sends anything: what a page left open across that would hold.
+    async accounts(addresses, ...rest) {
+      const read = await w.chain.rpc.accounts(addresses, ...rest);
+      const table = spec.live.tables?.[0];
+      if (standing === 'retired' && !retired && addresses.includes(table)) {
+        retired = true;
+        w.chain.send(w.creator, [deactivateTableIx({ table, authority: w.creator })]);
+        w.chain.nextSlot(Number(TABLE_COOLDOWN_SLOTS) + 5);
+        // (the simulator fills SlotHashes when it is read: as a cluster would hold it now)
+        await w.chain.rpc.accounts([SYSVAR_SLOT_HASHES]);
+      }
+      return read;
+    },
   };
-  const app = solanaApp({ spec, rpc, wallet: asWallet(kp, signed), now: () => w.chain.now() });
+  // `versions`: what the wallet says it signs (a Wallet Standard wallet's supportedTransactionVersions).
+  const wallet = { ...asWallet(kp, signed), ...(versions ? { versions } : {}) };
+  const app = solanaApp({ spec, rpc, wallet, now: () => w.chain.now() });
   return { w, app, kp, me: kp.address, relics, holders, signed, sent };
 }
 
@@ -295,8 +415,14 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
       assert.ok(relics.every(a => parseCoreAsset(w.chain.get(a).data).owner === me));
       assert.deepEqual(
         sent.map(m => readMessage(m).version),
-        ['legacy', 0, 'legacy'],
+        [0, 0, 'legacy'],
         'the open, the settle with the standing table, the burner’s lamports back',
+      );
+      // The open fits a legacy transaction, with less to spare than a wallet's own checks take: it goes with the
+      // standing table too, and the room is free again.
+      assert.ok(
+        transactionSize(sent[0]) <= MAX_TRANSACTION_BYTES - WALLET_ADDS_BYTES,
+        `${transactionSize(sent[0])} bytes`,
       );
       assert.equal(signed.length, 2, 'two prompts: the open and the settle; no table of its own');
       const off = bigBox('lookup-standing-off', { standing: 'deactivated' });
@@ -306,6 +432,29 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
         ['legacy', 'legacy', 'legacy'],
         'in parts, as with none',
       );
+      // A table retired after the page read it: the open is read against the chain again before it is sent, so it
+      // goes as the legacy transaction it always was, and lands; nothing rests on the table that is gone.
+      const gone = bigBox('lookup-standing-retired', { standing: 'retired' });
+      const landed = await gone.app.openBox('chest', {
+        listing: (await gone.app.boxes()).find(l => l.key === 'chest'),
+      });
+      assert.equal(gone.w.chain.get(landed.order), null, 'settled');
+      assert.deepEqual(
+        gone.sent.map(m => readMessage(m).version),
+        ['legacy', 'legacy', 'legacy'],
+        'as with none',
+      );
+      // A wallet that says it signs no v0 transaction: the open goes legacy, as before this rule (the settle, too big
+      // for a legacy transaction, still goes with the table, as it always did).
+      const old = bigBox('lookup-standing-legacy-wallet', { standing: 'active', versions: ['legacy'] });
+      await old.app.openBox('chest', { listing: (await old.app.boxes()).find(l => l.key === 'chest') });
+      assert.deepEqual(
+        old.sent.map(m => readMessage(m).version),
+        ['legacy', 0, 'legacy'],
+      );
+      // The same open with no table to load from: legacy, as it always went, with less than the room to spare.
+      const alone = transactionSize(off.sent[0]);
+      assert.ok(alone > MAX_TRANSACTION_BYTES - WALLET_ADDS_BYTES && alone <= MAX_TRANSACTION_BYTES, `${alone} bytes`);
     },
   );
 
@@ -365,6 +514,23 @@ describe('js/play sends what doesn’t fit a legacy transaction as v0', () => {
     assert.notEqual(readMessage(settle).keys[0], me, 'the burner paid it');
     assert.equal(units(settle), 1_400_000, 'it moves an NFT');
   });
+});
+
+test('a Wallet Standard signer carries the kinds of transaction its wallet says it signs', () => {
+  const account = { address: key(1) };
+  const wallet = versions => ({
+    name: 'A wallet',
+    features: {
+      'solana:signTransaction': {
+        ...(versions ? { supportedTransactionVersions: versions } : {}),
+        signTransaction: async () => [{ signedTransaction: new Uint8Array() }],
+      },
+    },
+  });
+  const says = versions => walletStandardSigner(wallet(versions), account, 'solana:devnet').versions;
+  assert.deepEqual(says(new Set(['legacy', 0, 1])), ['legacy', 0, 1]);
+  assert.deepEqual(says(['legacy']), ['legacy']);
+  assert.deepEqual(says(null), ['legacy', 0], 'a wallet that says nothing is taken to sign both, as before');
 });
 
 test('a throwaway key’s transaction too big for a legacy one is refused in words, not sent', async () => {
