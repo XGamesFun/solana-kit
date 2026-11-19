@@ -2036,6 +2036,10 @@
         "authority": {
           "$ref": "#/$defs/address"
         },
+        "issuer": {
+          "$ref": "#/$defs/address",
+          "description": "The project's issuer on chain, as the approval read it (the default address: none). Written by the tools."
+        },
         "at": {
           "type": "string",
           "maxLength": 40,

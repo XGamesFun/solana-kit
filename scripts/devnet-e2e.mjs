@@ -10,7 +10,7 @@
 //
 //   node scripts/devnet-e2e.mjs --keypair <funder keypair file> [--keep <dir>] [--only <scenario>[,<scenario>...]]
 //
-// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, farm, weighted, exchanges, gone.
+// Scenarios: flip, examples, auction, farms, stash, packs, compressed, lottery, persons, farm, weighted, exchanges, gone.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -30,6 +30,7 @@ import { checkCluster, notMainnet, rpcClient } from '../js/chain/rpc.js';
 import { compileMessage, readTransaction, wireTransaction } from '../js/chain/tx.js';
 import * as loot from '../js/client/index.js';
 import { solanaApp } from '../js/play/index.js';
+import { newKey, newRound, signLink, signVoucher } from '../js/results/index.js';
 import { seizingAssetIx, seizingCollectionIx, takeBackIx } from '../js/test/gone-chain.mjs';
 
 const arg = n => process.argv[process.argv.indexOf(`--${n}`) + 1];
@@ -634,6 +635,89 @@ if (want('lottery')) {
   console.log(
     `lottery: every part paid and the round closed; wrapped SOL won: ${players.map((k, i) => `${k.address} ${pot[i]}`).join(', ')}`,
   );
+}
+// Persons: a daily login bonus that gives a free ticket and links the wallet, and a lottery that limits each person's
+// tickets in a round, whichever of their wallets buys. The issuer is the grant's voucher key: one key on the server.
+if (want('persons')) {
+  const server = await newKey();
+  const live = await goLive('daily-draw', {
+    version: 2,
+    network: 'devnet',
+    name: 'Daily draw',
+    prompt: 'Log in for a free ticket a day; at most three tickets a person in a round, however many wallets.',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    keys: { issuer: server.address },
+    lotteries: [{ key: 'draw', name: 'Daily draw', price: 0.001, places: [100], pot: 0, every: '1d', perPerson: 3 }],
+    grants: [
+      {
+        key: 'login',
+        name: 'Login bonus',
+        prize: { gives: 'ticket', lottery: 'draw' },
+        vouchers: [server.address],
+        trust: 'decides',
+        limits: { perPersonEach: { count: 1, every: '1d' } },
+      },
+    ],
+  });
+  const project = live.live.project;
+  const [alice, bob, carol] = [freshKeypair(), freshKeypair(), freshKeypair()];
+  for (const k of [alice, bob, carol]) await send([funder], [transferLamports(funder.address, k.address, 30_000_000n)]);
+  const [a, b, c] = [alice, bob, carol].map(k => solanaApp({ spec: live, rpc, wallet: asWallet(k) }));
+  const now = Math.floor(Date.now() / 1000);
+  const person = Array.from(crypto.getRandomValues(new Uint8Array(32)), x => x.toString(16).padStart(2, '0')).join('');
+  const grantId = live.grants[0].id;
+  const { incarnation } = loot.decode('Grant', (await rpc.account(loot.pda.grant(project, grantId))).data);
+  const voucher = k =>
+    signVoucher({
+      signer: server,
+      game: project,
+      grant: grantId,
+      incarnation,
+      wallet: k.address,
+      round: newRound(),
+      now,
+      personHash: person,
+    });
+  console.log(
+    `persons: the login bonus links Alice and gives her a ticket: ${await a.claimGrant('login', { voucher: await voucher(alice) })}`,
+  );
+  const link = loot.decode('Link', (await rpc.account(loot.pda.link(project, alice.address))).data);
+  if (Array.from(link.person, x => x.toString(16).padStart(2, '0')).join('') !== person)
+    throw new Error('Alice is not linked to her person.');
+  await a.claimGrant('login', { voucher: await voucher(alice) }).then(
+    () => {
+      throw new Error('A second login bonus the same day was paid.');
+    },
+    e =>
+      console.log(
+        `persons: a second bonus the same day is refused (${String(e.message).match(/OverWindow/)?.[0] ?? e.message})`,
+      ),
+  );
+  b.link(await signLink({ signer: server, game: project, wallet: bob.address, person, now }));
+  const listing = async app => (await app.lotteries()).find(x => x.key === 'draw');
+  console.log(
+    `persons: Bob, the same person, links and buys 2 in one step: ${await b.buyTickets('draw', 2, { listing: await listing(b) })}`,
+  );
+  await a.buyTickets('draw', 2, { listing: await listing(a) }).then(
+    () => {
+      throw new Error('A person bought past their limit with another wallet.');
+    },
+    e => console.log(`persons: Alice can't buy 2 more (${String(e.message).match(/OverWindow/)?.[0] ?? e.message})`),
+  );
+  console.log(`persons: Alice buys the last 1: ${await a.buyTickets('draw', 1, { listing: await listing(a) })}`);
+  await c.buyTickets('draw', 1, { listing: await listing(c) }).then(
+    () => {
+      throw new Error('A wallet linked to nobody bought.');
+    },
+    e => console.log(`persons: Carol, linked to nobody, is refused (${String(e.message).slice(0, 60)}…)`),
+  );
+  const lottery = loot.pda.lottery(project, live.lotteries[0].id);
+  const round = loot.decodeRound(
+    (await rpc.account(loot.currentRound(lottery, loot.decode('Lottery', (await rpc.account(lottery)).data)))).data,
+  );
+  console.log(`persons: the round holds ${round.sold} tickets (1 free, 3 paid)`);
+  if (round.sold !== 4n) throw new Error(`The round holds ${round.sold} tickets, not 4.`);
 }
 // 9. A token farm: a fresh player stakes SOL, earns SPARK minted as it grows (a rate is per whole staked token: 0.01 SOL
 // earns 1,000 SPARK a day), harvests it, then takes the stake out.

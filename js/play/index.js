@@ -288,17 +288,19 @@ export function solanaApp({
   const personFor = async limit => {
     const on = limit && (Number(limit.total) || Number(limit.per_window));
     if (!on || !limit.by_person) return { person: null, ixs: [] };
-    if (pendingLink) {
-      const v = pendingLink;
-      pendingLink = null;
-      return { person: v.person, ixs: linkIxs(v) };
-    }
+    // The chain's link, when it says what the voucher given says (or no voucher is waiting): the voucher has landed.
     const linked = await readMaybe('Link', loot.pda.link(project, wallet.address));
-    if (!linked)
-      throw new Error(
-        'This counts each person, and this wallet is linked to none yet: pass the link voucher the project’s server signs (`link`) first.',
-      );
-    return { person: Uint8Array.from(linked.person), ixs: [] };
+    const hex = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+    const pending = pendingLink && Number(pendingLink.expires) > now() ? pendingLink : null;
+    if (linked && (!pending || hex(Uint8Array.from(linked.person)) === pending.person)) {
+      pendingLink = null;
+      return { person: Uint8Array.from(linked.person), ixs: [] };
+    }
+    // A voucher waiting goes with this step; it stays until the chain has it, so a step that fails keeps it.
+    if (pending) return { person: pending.person, ixs: linkIxs(pending) };
+    throw new Error(
+      'This counts each person, and this wallet is linked to none yet: pass the link voucher the project’s server signs (`link`) first.',
+    );
   };
   /** The key of the token a lottery's tickets are paid in: the spec's `ticketCurrency`, or the token of its mint. */
   const ticketCurrencyOf = (l, lottery) =>
@@ -4878,8 +4880,18 @@ export function solanaApp({
      * that counts by person (a purchase, a ticket, a craft, a claim) links it in the same transaction.
      */
     link(voucher) {
+      if (voucher.wallet && voucher.wallet !== wallet.address)
+        throw new Error(`This link voucher is for ${voucher.wallet}, not this wallet (${wallet.address}).`);
+      const person =
+        typeof voucher.person === 'string'
+          ? voucher.person.toLowerCase()
+          : Array.from(voucher.person ?? [], x => x.toString(16).padStart(2, '0')).join('');
+      if (!/^[0-9a-f]{64}$/.test(person) || /^0+$/.test(person))
+        throw new Error('A link voucher names a person: 32 bytes, not all zeros.');
+      if (!(Number(voucher.expires) > now()))
+        throw new Error('This link voucher has expired: ask the server for a new one.');
       const signature = typeof voucher.signature === 'string' ? decodeBase58(voucher.signature) : voucher.signature;
-      pendingLink = { ...voucher, signature };
+      pendingLink = { ...voucher, person, signature };
     },
 
     async claimGrant(grantKey, options = {}) {
@@ -4918,7 +4930,9 @@ export function solanaApp({
       // gave one), else none (refused).
       const { issuer } = await projectNow();
       const byPerson = Boolean(grant.limits.wallet.by_person);
-      const named = voucher?.personHash ?? listPerson;
+      // Who is who is the issuer's word: the person a voucher of the issuer's names, or the list's; else the link's.
+      const some = p => Boolean(p) && !/^0+$/.test(typeof p === 'string' ? p : Array.from(p).join(''));
+      const named = voucher ? voucher.publicKey === issuer && some(voucher.personHash) : some(listPerson);
       const linked =
         byPerson && !named ? await personFor({ ...grant.limits.wallet, total: 1 }) : { person: null, ixs: [] };
       const pool = grant.gives.Tokens?.from.Pool?.[0];

@@ -183,6 +183,8 @@ export function changedParts(economy) {
   }
   // The first compressed prize opens the project's tree.
   if (!economy.live.tree && compressedTree(model(economy))) only.add('tree');
+  // Another issuer: the owner's update_project names it (plan.mjs, the issuer's step).
+  if ((economy.keys?.issuer ?? null) !== (published.keys?.issuer ?? null)) only.add('issuer');
   // A traits root set again replaces the last.
   for (const t of economy.traits ?? [])
     if (!(published.traits ?? []).some(x => x.collection === t.collection && x.root === t.root))

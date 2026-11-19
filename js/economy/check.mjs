@@ -5405,6 +5405,13 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         'Add a "prize": { "gives": "item", "item": key }, { "gives": "tokens", … }, { "gives": "nft", … } or { "gives": "roll", "box": key }.',
       );
     const gives = prizeCheck(g.prize ?? g.gives, `${where}.${g.prize ? 'prize' : 'gives'}`, label(g), 'E-GRANT') ?? {};
+    if (g.limits?.tokens != null && gives.gives && gives.gives !== 'tokens')
+      refuse(
+        'E-GRANT',
+        `${where}.limits.tokens`,
+        `${label(g)} caps the tokens it gives, but gives ${gives.gives === 'item' ? 'an item' : `a ${gives.gives}`}: the cap counts tokens only (BadLimits).`,
+        'Remove "tokens", or bound the grant with "total" and "perDay".',
+      );
     const vouchers = g.vouchers ?? [];
     const keys = g.keys ?? [];
     const l = g.limits ?? {};

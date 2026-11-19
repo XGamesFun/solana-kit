@@ -56,6 +56,7 @@ export async function checkLive({ live, m, wallet, chain }) {
   let creator = wallet;
   let treasury;
   let authority;
+  let issuer;
   let listed = null;
   const corrected = [];
   const notes = [];
@@ -107,6 +108,7 @@ export async function checkLive({ live, m, wallet, chain }) {
     creator = state.creator;
     treasury = state.treasury;
     authority = state.authority;
+    issuer = state.issuer;
   }
 
   for (const [key, address] of setupMints) {
@@ -217,7 +219,7 @@ export async function checkLive({ live, m, wallet, chain }) {
     if (creator !== project)
       throw new LiveMismatch(`The file names the tree ${made.tree}, which is not a tree of the project ${project}.`);
   }
-  return { owner, project, creator, ...(treasury ? { treasury, authority } : {}), corrected, notes };
+  return { owner, project, creator, ...(treasury ? { treasury, authority, issuer } : {}), corrected, notes };
 }
 
 /**

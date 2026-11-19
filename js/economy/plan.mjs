@@ -915,6 +915,18 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
     });
   }
 
+  // A live project whose issuer the spec changes (the chain's, read by the approval into `live.issuer`): the owner sets it.
+  const NOBODY_KEY = '11111111111111111111111111111111';
+  if (!fresh && live?.project && (m.issuer ?? NOBODY_KEY) !== (live.issuer ?? NOBODY_KEY))
+    add({
+      id: `issuer:${m.issuer ?? 'none'}`,
+      part: 'issuer',
+      says: m.issuer
+        ? `Name ${m.issuer} the project’s issuer: the key that says which person a wallet belongs to`
+        : 'Name no issuer: no wallet is linked to a person from now on',
+      build: ctx => [loot.updateProjectIx({ owner: ctx.owner, project: ctx.project, issuer: m.issuer ?? NOBODY_KEY })],
+    });
+
   // The tree compressed prizes are minted into: made empty by the owner, then opened with the project as its creator.
   if (tree && !live?.tree)
     add({
