@@ -33,10 +33,10 @@ const BUNDLE = 7; // sold: two rolls of the forge
 const GRANT = 9;
 const onHero = { of: { Item: [HERO] }, key: '', test: 'Any' };
 const limits = {
-  wallet: { total: 1, per_window: 0, window: 0 },
-  per_person: 0,
+  wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+  tokens: 0n,
   per_key: 0,
-  all: { total: 0, per_window: 0, window: 0 },
+  all: { total: 0, per_window: 0, window: 0, by_person: false },
   window: { opens_at: 0n, closes_at: 0n },
 };
 const recipeArgs = (inputs, outputs) => ({ active: true, inputs, outputs, needs: [], keeps: [], raises: [] });

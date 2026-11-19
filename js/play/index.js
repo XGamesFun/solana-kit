@@ -270,6 +270,36 @@ export function solanaApp({
     const a = await client.account(address);
     return a?.owner === loot.lootProgram() ? loot.decode(name, a.data) : null;
   };
+  /** The link voucher the project's issuer gave this wallet (`link`), sent with the next step that counts by person. */
+  let pendingLink = null;
+  /** The Ed25519 check of a link voucher and `link_wallet`, for this wallet. */
+  const linkIxs = v => [
+    loot.ed25519Ix({
+      publicKey: v.publicKey,
+      signature: v.signature,
+      message: loot.linkBytes({ project, wallet: wallet.address, person: v.person, expires: v.expires }),
+    }),
+    loot.linkWalletIx({ project, wallet: wallet.address, person: v.person, expires: v.expires }),
+  ];
+  /**
+   * The person a limit (`limit`, a `PerWallet`) counts this wallet as, and the steps that link it first: none for a
+   * limit by wallet; the link voucher given (`link`), sent in the same transaction; or the link the wallet has.
+   */
+  const personFor = async limit => {
+    const on = limit && (Number(limit.total) || Number(limit.per_window));
+    if (!on || !limit.by_person) return { person: null, ixs: [] };
+    if (pendingLink) {
+      const v = pendingLink;
+      pendingLink = null;
+      return { person: v.person, ixs: linkIxs(v) };
+    }
+    const linked = await readMaybe('Link', loot.pda.link(project, wallet.address));
+    if (!linked)
+      throw new Error(
+        'This counts each person, and this wallet is linked to none yet: pass the link voucher the project’s server signs (`link`) first.',
+      );
+    return { person: Uint8Array.from(linked.person), ixs: [] };
+  };
   /** The key of the token a lottery's tickets are paid in: the spec's `ticketCurrency`, or the token of its mint. */
   const ticketCurrencyOf = (l, lottery) =>
     l.ticketCurrency ?? [...tokens.keys()].find(k => mintOf(k) === lottery.terms.mint) ?? currencyKey;
@@ -1630,10 +1660,12 @@ export function solanaApp({
     const nonce = freshNonce();
     const choosesHolder = box.shares.some(s => s.to.Chosen && s.to.Chosen.item != null);
     const holders = await holdersOf(loot.chosenShares(box.shares, chosenRecipient));
+    const linked = await personFor(box.per_wallet);
     const ix = loot.buyIx({
       player: wallet.address,
       project,
       box,
+      person: linked.person,
       maxPrice: bound,
       count,
       treasury: g.treasury,
@@ -1667,6 +1699,7 @@ export function solanaApp({
     const instructions = withSolWrap(wallet.address, mint, bound, [
       computeUnitLimit(rollsMade || gives.length > 2 ? 1_400_000 : 600_000),
       ...given.before.filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM),
+      ...linked.ixs,
       ix,
     ]);
     if (orNull && gives.length > 1) {
@@ -1744,6 +1777,8 @@ export function solanaApp({
     // A purchase of more opens than one order takes (`loot.opensAnOrder`: what one oracle answer draws, and an order's
     // rent and fee within 0.01 SOL) is several orders, each its own answer, all in this one transaction: one prompt.
     const each = loot.opensAnOrder(box, { items });
+    // A limit by person: the person, and the steps that link the wallet first when it is linked in this one.
+    const linked = await personFor(box.per_wallet);
     const orders = [];
     for (let left = count, k = 0n; left > 0; left -= each, k++) {
       const n = Math.min(each, left);
@@ -1760,6 +1795,7 @@ export function solanaApp({
           player: wallet.address,
           project,
           box,
+          person: linked.person,
           nonce: nonce + k,
           maxPrice: (bound / BigInt(count)) * BigInt(n),
           count: n,
@@ -1777,6 +1813,7 @@ export function solanaApp({
     const before = [
       ...proving,
       createAssociatedTokenAccountIdempotent(wallet.address, wallet.address, mint, programOf(mint)),
+      ...linked.ixs,
     ];
     // (A compressed NFT's proof brings its own compute limit, the transaction's only one.)
     let solPrize = false;
@@ -3333,11 +3370,14 @@ export function solanaApp({
       const holders = choosesHolder && chosenRecipient ? await holdersOf([{ to: { Holder: [chosenRecipient] } }]) : {};
       // A payment mint with a transfer hook: its accounts ride along.
       const extra = await hookTail([mint]);
+      const linked = await personFor(lottery.per_wallet);
+      before.push(...linked.ixs);
       const ix = loot.buyTicketsIx({
         player: wallet.address,
         project,
         id: l.id,
         lottery,
+        person: linked.person,
         round,
         mint,
         count: BigInt(count),
@@ -3925,11 +3965,13 @@ export function solanaApp({
         counts[id] = (counts[id] ?? 0) + 1;
         return [loot.pda.itemAsset(loot.pda.item(project, id), Number(items[id].issued) + counts[id])];
       });
-      const before = [...proving, ...given.before].filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM);
+      const linked = await personFor(recipe.per_wallet);
+      const before = [...proving, ...given.before, ...linked.ixs].filter(x => x.programId !== COMPUTE_BUDGET_PROGRAM);
       let instructions = [
         computeUnitLimit(rolls ? 1_400_000 : 1_000_000),
         ...before,
         loot.craftIx({
+          person: linked.person,
           player: wallet.address,
           project,
           collection: collections[0],
@@ -4830,6 +4872,16 @@ export function solanaApp({
      * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
      * lists and `collect` asks for and settles.
      */
+    /**
+     * Takes the link voucher the project's issuer signed for this wallet: { person (32 bytes or 64 hex characters),
+     * expires, publicKey (the issuer's), signature } over `loot.linkBytes`. Nothing is sent now: the wallet's next step
+     * that counts by person (a purchase, a ticket, a craft, a claim) links it in the same transaction.
+     */
+    link(voucher) {
+      const signature = typeof voucher.signature === 'string' ? decodeBase58(voucher.signature) : voucher.signature;
+      pendingLink = { ...voucher, signature };
+    },
+
     async claimGrant(grantKey, options = {}) {
       only(options, ['voucher', 'proof', 'personHash', 'round', 'amount', 'shown', 'listProof'], 'claimGrant');
       let {
@@ -4856,10 +4908,23 @@ export function solanaApp({
       const paidRounds = loot.readListAccount(roundsShard);
       // What its prize needs: a pool's mint, the item, an NFT's kind (a compressed one proven first).
       const prized = await prizeInputs([grant.gives]);
+      // Tickets a grant gives go into its lottery's current round, read now.
+      const lotteries = grant.gives.Ticket
+        ? {
+            [grant.gives.Ticket.lottery]: await read('Lottery', loot.pda.lottery(project, grant.gives.Ticket.lottery)),
+          }
+        : {};
+      // A grant counted by person: the person the voucher names, else the wallet's link (sent first when the server
+      // gave one), else none (refused).
+      const { issuer } = await projectNow();
+      const byPerson = Boolean(grant.limits.wallet.by_person);
+      const named = voucher?.personHash ?? listPerson;
+      const linked =
+        byPerson && !named ? await personFor({ ...grant.limits.wallet, total: 1 }) : { person: null, ixs: [] };
       const pool = grant.gives.Tokens?.from.Pool?.[0];
       const poolMint = pool !== undefined ? prized.poolMints[pool] : null;
       const item = prized.items[grant.gives.Item?.[0] ?? grant.gives.Compressed?.item] ?? null;
-      const instructions = [...prized.before];
+      const instructions = [...prized.before, ...linked.ixs];
       let proof = [];
       const keys = gspec.keys ?? [];
       if (voucher) {
@@ -4943,6 +5008,9 @@ export function solanaApp({
           listProof: gateProof,
           programs,
           voucherKey: voucher?.publicKey,
+          lotteries,
+          issuer,
+          linkedPerson: linked.person,
         }),
       );
       // A claim's records and prizes can pass the 200,000 compute units a transaction has by default.

@@ -136,10 +136,10 @@ test(
     const host = await newKey();
     const nobody = '11111111111111111111111111111111';
     const limits = {
-      wallet: { total: 5, per_window: 0, window: 0 },
-      per_person: 0,
+      wallet: { total: 5, per_window: 0, window: 0, by_person: false },
+      tokens: 0n,
       per_key: 0,
-      all: { total: 0, per_window: 0, window: 0 },
+      all: { total: 0, per_window: 0, window: 0, by_person: false },
       window: { opens_at: 0n, closes_at: 0n },
     };
     w.upsert({

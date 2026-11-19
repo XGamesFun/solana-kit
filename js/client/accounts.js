@@ -38,6 +38,8 @@ export const TAGS = Object.freeze({
   Listing: 23,
   Profile: 24,
   Grant: 27,
+  // A wallet's link to its person (`pda.link`).
+  Link: 28,
   // A table, and a stash: a table of NFTs (21 was a stash's own before 0.22).
   Table: 25,
   // A list of records: a wallet's counts, a grant's claims or rounds, a contest's entries.
@@ -56,6 +58,17 @@ export const accountKind = data => (data?.length ? (BY_TAG[data[0]] ?? null) : n
  * tag 16), and a contest's entry. The client reads them with the same Borsh codec as any account.
  */
 const RECORDS = [
+  // A wallet's link to its person (`link.rs`): the person, and when the issuer's voucher that wrote it expires.
+  {
+    name: 'Link',
+    type: {
+      kind: 'struct',
+      fields: [
+        { name: 'person', type: { array: ['u8', 32] } },
+        { name: 'expires', type: 'i64' },
+      ],
+    },
+  },
   {
     name: 'Round',
     type: { kind: 'enum', variants: ['Open', 'Drawing', 'Drawn', 'Cancelled'].map(name => ({ name })) },
@@ -154,7 +167,11 @@ const RECORDS = [
 const IDLX = {
   ...IDL,
   types: [...IDL.types, ...RECORDS],
-  accounts: [...IDL.accounts, { name: 'LotteryRound', discriminator: [TAGS.LotteryRound] }],
+  accounts: [
+    ...IDL.accounts,
+    { name: 'LotteryRound', discriminator: [TAGS.LotteryRound] },
+    { name: 'Link', discriminator: [TAGS.Link] },
+  ],
 };
 
 /** A loot account of the named kind (one the IDL describes, or a `LotteryRound`). Throws when the data is not one. */

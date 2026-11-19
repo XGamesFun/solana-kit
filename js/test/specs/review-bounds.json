@@ -2,6 +2,9 @@
   "version": 2,
   "network": "devnet",
   "name": "Ruin Run",
+  "keys": {
+    "issuer": "9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"
+  },
   "prompt": "When a player discovers one of the rare relics (Bronze Relic, Silver Relic, Gold Relic) on a run, they earn that relic as an NFT, one of each per player. They can stake their relic NFTs in a farm that pays out a token, Shards, over time; rarer relics earn more.",
   "currency": "shard",
   "tokens": [
@@ -55,7 +58,6 @@
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 500
       },
@@ -72,7 +74,6 @@
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 300
       },
@@ -89,7 +90,6 @@
       },
       "vouchers": ["9u6NVoFvsdCaMe2uw4n6wUSzQSh13qAuRGcjwoT5EiqL"],
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 100
       },

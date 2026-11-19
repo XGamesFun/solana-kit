@@ -52,7 +52,7 @@ export const ACCOUNT_BYTES = Object.freeze({
 });
 
 /** A project's bytes with `collections` collections, as the program sizes the account. */
-export const projectBytes = (collections = 0) => 153 + 32 * collections;
+export const projectBytes = (collections = 0) => 185 + 32 * collections;
 
 /** The most accounts the oracle's answer to a roll carries (`MAX_CALLBACK_ACCOUNTS`). */
 export const MAX_CALLBACK_ACCOUNTS = 21;
@@ -164,6 +164,8 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     asked_at: 0n,
     first_asked_at: 0n,
     counted: 0,
+    // The person its count is for, when its box's limit counts by person.
+    person: new Uint8Array(32),
     subject: lootBox.subject ? ZERO : null,
     held: false,
     fate,

@@ -475,6 +475,8 @@ export function model(economy, { now = 0 } = {}) {
     now,
     name: e.name ?? 'Project',
     authority: e.keys?.authority ?? 'owner',
+    /** The key that vouches which person a wallet belongs to (`keys.issuer`), or null: then no limit counts by person. */
+    issuer: e.keys?.issuer ?? null,
     /** The wallet whose account for the currency is the treasury, when it isn't the owner's ("wallet:<address>"). */
     treasuryWallet: typeof e.treasury === 'string' && e.treasury.startsWith('wallet:') ? e.treasury.slice(7) : null,
     tokens,
@@ -594,6 +596,7 @@ export function stashNfts(s) {
 export function prizeLine(p) {
   if (!p || typeof p !== 'object') return null;
   if (p.gives) return p;
+  if (p.ticket) return { gives: 'ticket', lottery: p.ticket, count: p.count ?? 1 };
   if (p.item) return { gives: 'item', item: p.item };
   if (p.roll) return { gives: 'roll', box: p.roll };
   if (p.pool) return { gives: 'tokens', amount: p.amount, from: `pool:${p.pool}` };
@@ -993,12 +996,36 @@ export const gateOf = (gate, m) => {
   return { Holds: [ruleOf(gate, m)] };
 };
 
-/** The program's `PerWallet` for a part's "perWallet" (in all) and "perWalletEach" ({ count, every }). */
-export const perWalletOf = part => ({
-  total: part?.perWallet ?? 0,
-  per_window: part?.perWalletEach?.count ?? 0,
-  window: part?.perWalletEach ? toSeconds(part.perWalletEach.every ?? '1d') : 0,
-});
+/** Whether a part limits each person ("perPerson", "perPersonEach") rather than each wallet. */
+export const byPerson = part => part?.perPerson != null || part?.perPersonEach != null;
+
+/**
+ * The program's `PerWallet` for a part's limit on each player: by wallet, "perWallet" (in all) and "perWalletEach"
+ * ({ count, every }); or by person, "perPerson" and "perPersonEach": every wallet the project's issuer linked to one
+ * person counts together, and a wallet with no link is refused.
+ */
+export const perWalletOf = part => {
+  const person = byPerson(part);
+  const each = person ? part.perPersonEach : part?.perWalletEach;
+  return {
+    total: (person ? part.perPerson : part?.perWallet) ?? 0,
+    per_window: each?.count ?? 0,
+    window: each ? toSeconds(each.every ?? '1d') : 0,
+    by_person: person,
+  };
+};
+
+/**
+ * A lottery's `PerWallet`: "perWallet" (or by person "perPerson") tickets in each round, or "perWalletEach" (or
+ * "perPersonEach") tickets in each window of time ({ count, every }: 40 an hour).
+ */
+export const lotteryLimitOf = l => {
+  const person = byPerson(l);
+  const each = person ? l.perPersonEach : l?.perWalletEach;
+  return each
+    ? { total: 0, per_window: each.count ?? 0, window: toSeconds(each.every ?? '1h'), by_person: person }
+    : { total: 0, per_window: (person ? l.perPerson : l?.perWallet) ?? 0, window: 0, by_person: person };
+};
 
 /** The program's `Window` for a part's "opens" and "closes" (times; 0 leaves a side open). */
 export const windowOf = (part, now) => ({

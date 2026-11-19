@@ -66,6 +66,7 @@ import {
   paysFromOf,
   outcomeParts,
   perWalletOf,
+  lotteryLimitOf,
   placeOf,
   lifeLines,
   prizeLine,
@@ -346,6 +347,9 @@ export function prizeArgs(p, m) {
   if (line.gives === 'raffled') return 'Raffled';
   if (line.gives === 'nft') return { Nft: { stash: m.stash.get(line.stash)?.id ?? 0, nft: line.nft } };
   if (line.gives === 'roll') return { Roll: [m.box.get(line.box)?.id ?? 0] };
+  // Free tickets in a lottery's current round (a grant's prize only).
+  if (line.gives === 'ticket')
+    return { Ticket: { lottery: m.lottery.get(line.lottery)?.id ?? 0, count: line.count ?? 1 } };
   const pool = prizePool(line);
   const from = pool ? { Pool: [m.pool.get(pool)?.index ?? 0] } : { Mint: [`@mint:${line.currency ?? m.currencyKey}`] };
   return { Tokens: { from, amount: amount(line.amount, prizeToken(line, m)) } };
@@ -408,7 +412,7 @@ export function lotteryArgs(l, m) {
     },
     every: BigInt(every),
     gate: gateOf(l.gate, m),
-    per_wallet: l.perWallet ?? 0,
+    per_wallet: lotteryLimitOf(l),
   };
 }
 
@@ -652,10 +656,11 @@ export function grantArgs(g, m) {
     open: !(g.vouchers ?? []).length && !list.length && !keys.length,
     limits: {
       wallet: perWalletOf(l),
-      per_person: l.perPerson ?? 0,
       per_key: l.perKey ?? 0,
+      // The tokens it gives in all, whatever the claims and keys: what a leaked voucher key can drain at most.
+      tokens: l.tokens !== undefined ? amount(l.tokens, prizeToken(prizeLine(g.prize ?? g.gives), m)) : 0n,
       // Every wallet's claims together: in all, and a day (a window of 86,400 seconds, from the unix epoch).
-      all: { total: l.total ?? 0, per_window: l.perDay ?? 0, window: l.perDay ? 86_400 : 0 },
+      all: { total: l.total ?? 0, per_window: l.perDay ?? 0, window: l.perDay ? 86_400 : 0, by_person: false },
       window: windowOf({ opens: l.opens, closes: l.until }, m.now),
     },
     active: g.active !== false,
@@ -904,6 +909,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
           treasury: ctx.treasury,
           authority: ctx.authority,
         }),
+        // The key that vouches which person a wallet belongs to, for limits that count by person.
+        ...(m.issuer ? [loot.updateProjectIx({ owner: ctx.owner, project: ctx.project, issuer: m.issuer })] : []),
       ],
     });
   }
@@ -1720,6 +1727,7 @@ export const recordBytesOf = (kind, body) => {
       incarnation: 0n,
       ...placeholders(args),
       counted: { count: 0, window: 0, in_window: 0 },
+      given: 0n,
     }),
   }[kind];
   return encodedSize(kind, base());

@@ -4,6 +4,31 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.0: persons, tickets a grant gives, a cap on a grant's tokens (loot 0.29.0)
+
+Built for loot 0.29.0, on devnet since slot 524,103,129. Mainnet runs 0.28.0 until it is upgraded; this release
+waits for that, since one IDL serves both clusters.
+
+- **Persons.** A spec names an issuer, `keys.issuer`: the server key that says which person a wallet belongs to (the
+  grants' voucher key may be it, so one key does both). The setup sets it on the project (`update_project`'s `issuer`).
+  Any part limits each person in place of each wallet with `perPerson` (in all) and `perPersonEach`
+  ({ count, every }): items, boxes, recipes, lotteries and grants. Every wallet linked to one person counts together,
+  and a wallet linked to nobody is refused. The checker refuses a limit per person without an issuer, and a part that
+  names both kinds (`E-PERSON`).
+- **Links.** A server signs who a wallet is with `signLink` (`@xgamesfun/solana/results`: ten minutes by default, a
+  day at most), and the page passes it to `js/play`'s `link`: the wallet's next step that counts by person carries
+  it, in the same transaction. A claim of the issuer's own voucher that names a person links the wallet itself. The
+  client builds `link_wallet` (`linkWalletIx`, `linkBytes`), finds a person's counts (`pda.persons`) and a link
+  (`pda.link`, `decode('Link', …)`), and every builder that counts takes the person (`person`).
+- **A grant's person limit has a window,** and a claim's person is the issuer's word: the one its voucher names, or
+  the wallet's link. A daily login bonus is an open grant with `"perPersonEach": { "count": 1, "every": "1d" }`.
+- **Tickets a grant gives:** `{ "gives": "ticket", "lottery": key, "count": n }`, a grant's only. One claim puts the
+  free tickets in the lottery's round, opening it if nobody has bought in: the login bonus is one claim, with no
+  entry token and no recipe. A lottery limits each wallet's (or person's) tickets per round with `perWallet`, or per
+  window of time with `perWalletEach` (40 an hour).
+- **A cap on what a grant gives:** `limits.tokens`, for a grant of tokens.
+- Sizes: a project is 185 bytes (`issuer`), an order 33 bytes larger (the person it counted for).
+
 ## 0.28.31: a player's step leaves room for what their wallet adds to it (loot 0.28.0, unchanged)
 
 The tools alone. A wallet may add to a transaction before it signs it. Phantom adds a compute unit limit and price

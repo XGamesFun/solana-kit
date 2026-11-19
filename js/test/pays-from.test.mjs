@@ -185,7 +185,7 @@ test(
       every: 3600n,
       draws_at: BigInt(w.chain.now() + 3600),
       gate: null,
-      per_wallet: 0,
+      per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
     });
     w.upsert({ Lottery: { id, args: args(0) } });
     assert.equal(w.read('Lottery', address).pots, 1, 'its write opened pot 0');
@@ -300,7 +300,7 @@ test(
       every: 0n,
       draws_at: BigInt(w.chain.now() + 3600),
       gate: null,
-      per_wallet: 0,
+      per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
       ...more,
     });
     // The program takes a pool (the project's choice, as for a share), and refuses a share the buyer chooses. A no-loss

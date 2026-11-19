@@ -323,7 +323,7 @@ test('parts owed in common: a share once drawn, the pot’s, a pool’s prize ba
 test('every claim is signed by its winning wallet, whatever proves it; anyone may pay its fees', () => {
   const project = pda.platform();
   const other = pda.identity();
-  const limits = { per_person: 0, per_key: 0 };
+  const limits = { per_key: 0 };
   const fixed = {
     incarnation: 1n,
     limits,

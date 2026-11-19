@@ -442,7 +442,7 @@ function chestWorld(seed) {
     { entry: 1, boost: { rule: { of: { Item: [3] }, key: '', test: 'Any' }, effect: { Flat: [510_000] } } },
   ];
   w.upsert({ Box: { id: 1, args: boxArgs(0n, [itemDrop(1, 99), itemDrop(2, 1)], { odds, active: false }) } });
-  const never = { total: 0, per_window: 0, window: 0 };
+  const never = { total: 0, per_window: 0, window: 0, by_person: false };
   w.upsert({
     Grant: {
       id: 1,
@@ -450,7 +450,7 @@ function chestWorld(seed) {
         gives: { Roll: [1] },
         vouchers: [NOBODY, NOBODY, NOBODY],
         list_root: new Uint8Array(32),
-        limits: { wallet: never, per_person: 0, per_key: 0, all: never, window: { opens_at: 0n, closes_at: 0n } },
+        limits: { wallet: never, per_key: 0, tokens: 0n, all: never, window: { opens_at: 0n, closes_at: 0n } },
         active: true,
         gate: null,
         open: true,

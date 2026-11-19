@@ -190,6 +190,7 @@ test('a burn that a cancel must refund, and a free entry that is not money: what
     version: 2,
     network: 'devnet',
     name: 'Prize Day',
+    keys: { issuer: VOUCHER },
     currency: 'bubl',
     tokens: [
       { key: 'sol', source: 'sol' },
@@ -203,7 +204,7 @@ test('a burn that a cancel must refund, and a free entry that is not money: what
         name: 'Free entry',
         vouchers: [VOUCHER],
         trust: 'decides',
-        limits: { perPerson: 1, perWallet: 1 },
+        limits: { perPerson: 1 },
       },
     ],
     lotteries: [

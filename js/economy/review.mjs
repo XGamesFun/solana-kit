@@ -190,7 +190,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const enforced = [
       l.perWallet && `${l.perWallet} per wallet`,
       l.perWalletEach?.count && `${l.perWalletEach.count} per wallet every ${l.perWalletEach.every ?? '1d'}`,
-      l.perPerson && `${l.perPerson} per person (counted only for a voucher that names one)`,
+      l.perPerson &&
+        `${l.perPerson} per person (every wallet the issuer linked to them; a claim that names nobody is refused)`,
       l.perKey && `${l.perKey} per key`,
       l.perDay && `${l.perDay} a day, all wallets together`,
       l.total && `${l.total} in all`,
@@ -240,7 +241,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
           ? `${l.perKey} per code, ${fmt(keys.length * l.perKey)} with every code; ${cap}`
           : `a shared code pays every wallet that uses it; ${cap}`
         : l.perPerson
-          ? `${l.perPerson} per person when the server names a real one (an X account); a voucher with no person counts nobody, and then free wallets claim ${perWallet} each, ${cap}`
+          ? `${l.perPerson} per person, as the issuer says who is who (a person hash of an outside sign-in such as X, linking each wallet once); a claim that names nobody is refused, ${cap}`
           : `${perWallet}, and wallets are free: ${cap}`;
     const how = {
       decides: 'Playing for real (a bot that plays well): ',

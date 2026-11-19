@@ -52,7 +52,7 @@ test(
           every: BigInt(DAY),
           draws_at: BigInt(w.chain.now() + DAY),
           gate: null,
-          per_wallet: 0,
+          per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
           nft_ticket: { rule, then: 'Burn' },
           min_sold: 3n,
         },

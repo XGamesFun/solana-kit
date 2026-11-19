@@ -38,6 +38,7 @@ import {
   drawsOf,
   lifeLines,
   prizeLine,
+  byPerson,
   prizePool,
   prizeToken,
   rollsOf,
@@ -1271,6 +1272,30 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       );
       return null;
     }
+    if (line.gives === 'ticket') {
+      const l = (economy.lotteries ?? []).find(x => x.key === line.lottery);
+      if (code !== 'E-GRANT')
+        refuse(
+          code,
+          at,
+          `${what} gives tickets in a lottery: only a grant gives tickets (a claim puts them in the round).`,
+          'Give tickets from a grant, or give something else here.',
+        );
+      else if (!l)
+        refuse(
+          code,
+          `${at}.lottery`,
+          `${what} gives tickets in “${line.lottery}”, which is no lottery here.`,
+          'Name one of "lotteries".',
+        );
+      else if (l.ticketNft)
+        refuse(
+          code,
+          `${at}.lottery`,
+          `${what} gives tickets in ${label(l)}, whose ticket is an NFT: a grant's tickets go only into a lottery that sells for tokens (BadTicket).`,
+          'Give tickets in a lottery priced in a token.',
+        );
+    }
     if (line.split && (code !== 'E-CONTEST' || line.gives !== 'tokens'))
       refuse(
         code,
@@ -1401,7 +1426,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
           `${what} gives an NFT drawn from a lottery's own stash: only a lottery's place does (BadPrize).`,
           'Give an NFT of a stash through a box\'s roll ("gives": "stash"), or raffle them in a lottery.',
         );
-    } else
+    } else if (line.gives !== 'ticket')
       refuse(
         code,
         `${at}.gives`,
@@ -5334,6 +5359,32 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   }
 
   // ---- grants (grant.rs)
+  // Limits per person: every wallet the project's issuer linked to one person counts together, so the issuer is named,
+  // and a part counts wallets or persons, not both.
+  const limited = [
+    ...['items', 'boxes', 'recipes', 'lotteries'].flatMap(list =>
+      (economy[list] ?? []).map((p, i) => [p, `economy.${list}[${i}]`, p]),
+    ),
+    ...(economy.grants ?? []).map((g, i) => [g.limits, `economy.grants[${i}].limits`, g]),
+  ];
+  for (const [part, where, owner] of limited) {
+    if (!byPerson(part)) continue;
+    if (!economy.keys?.issuer)
+      refuse(
+        'E-PERSON',
+        where,
+        `${label(owner)} limits each person, and the economy names no issuer: no wallet could be linked to a person, so every one would be refused (NotLinked).`,
+        'Add "keys": { "issuer": "<the server key that signs who is who>" } (the grants’ voucher key may be it), or limit each wallet ("perWallet").',
+      );
+    if (part.perWallet != null || part.perWalletEach != null)
+      refuse(
+        'E-PERSON',
+        where,
+        `${label(owner)} names both a limit per wallet and one per person: a limit counts wallets or persons, not both.`,
+        'Keep "perPerson" / "perPersonEach" (a person with every wallet of theirs), or "perWallet" / "perWalletEach".',
+      );
+  }
+
   for (const g of m.grants) {
     const where = `economy.grants.${g.key}`;
     const old = g.gives ?? {};
@@ -5390,13 +5441,6 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         );
     }
     // A grant with no voucher key, no key list and no list is open: any wallet claims it, within its limits (grant.rs).
-    if (open && showsNft(g.gate) && l.perPerson)
-      warn(
-        'W-GRANT',
-        `${where}.limits.perPerson`,
-        `${label(g)} is open: "perPerson" counts only vouchers that name a person, so here it limits nothing (the wallet limits count each collectible shown).`,
-        'Remove "perPerson".',
-      );
     if (open && !l.perWallet && !l.perWalletEach?.count)
       warn(
         'W-GRANT',

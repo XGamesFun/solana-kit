@@ -102,6 +102,7 @@ test('a voucher grant with no trust said is read as bounds, and says so', () => 
 
 test('a voucher grant that counts no person: each free wallet claims again', () => {
   const noPerson = edit(spec('review-decides'), s => s.grants.forEach(g => delete g.limits.perPerson));
+  noPerson.grants.forEach(g => (g.limits.perWallet = 1));
   assert.ok(ids(review(noPerson, { now: NOW }), 'medium').includes('R-GRANT-PERSON grant:discover-gold'));
   assert.ok(!ids(review(spec('review-decides'), { now: NOW })).some(x => x.startsWith('R-GRANT-PERSON')));
   // One claim in all: nothing for a second wallet to take.
@@ -123,10 +124,11 @@ const pooled = trust => ({
       name: 'Winner',
       prize: { gives: 'tokens', amount: 50, from: 'pool:prizes' },
       vouchers: [VOUCHER],
-      limits: { perWallet: 1, perPerson: 1, perDay: 10, total: 100 },
+      limits: { perPerson: 1, perDay: 10, total: 100 },
       ...(trust ? { trust } : {}),
     },
   ],
+  keys: { issuer: VOUCHER },
 });
 
 test('entry fees paid out on a bounded result are high; on a decided one, nothing', () => {
@@ -141,6 +143,7 @@ test('an open grant that pays something anyone can sell is high; gated, medium',
   const open = edit(pooled(null), s => {
     delete s.grants[0].vouchers;
     delete s.grants[0].limits.perPerson;
+    s.grants[0].limits.perWallet = 1;
   });
   const r = review(open, { now: NOW });
   assert.ok(ids(r, 'high').includes('R-GRANT-OPEN grant:winner'), ids(r).join());

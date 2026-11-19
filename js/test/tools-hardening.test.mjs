@@ -101,10 +101,10 @@ describe('a prize’s roll is made at prizeRollNonce of the nonce its route name
     w.upsert({ Item: { id: 1, args: collectible('Gem') } });
     w.upsert({ Box: { id: 5, args: boxArgs(0n, [itemDrop(1)], { active: false }) } });
     const limits = {
-      wallet: { total: 1, per_window: 0, window: 0 },
-      per_person: 0,
+      wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+      tokens: 0n,
       per_key: 0,
-      all: { total: 0, per_window: 0, window: 0 },
+      all: { total: 0, per_window: 0, window: 0, by_person: false },
       window: { opens_at: 0n, closes_at: 0n },
     };
     w.upsert({

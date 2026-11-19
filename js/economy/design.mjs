@@ -559,7 +559,7 @@ export const FAMILIES = {
             g = {
               key: want.grant ?? `${route}-free-entry`,
               name: 'Free entry',
-              limits: { perPerson: want.perPerson ?? 1, perWallet: want.perPerson ?? 1 },
+              limits: { perPerson: want.perPerson ?? 1 },
             };
             s.grants.push(g);
           }
@@ -750,7 +750,10 @@ export const FAMILIES = {
           plain: x => `${perWord(x.per)} claim a person, counted by the account your server names`,
           build: (s, x) => {
             if (!['bounds', 'decides'].includes(x.plan.proof)) return false;
-            x.grant(s).limits = { ...x.limits(s), perPerson: x.per, perWallet: x.per };
+            const { perWallet: _w, perWalletEach: _e, ...rest } = x.limits(s);
+            x.grant(s).limits = { ...rest, perPerson: x.per };
+            // Who is who is the issuer's word: the server key that signs the vouchers says it too.
+            if (x.keys[0] && !s.keys?.issuer) s.keys = { ...(s.keys ?? {}), issuer: x.keys[0] };
             x.plan.cap = 'person';
             return true;
           },

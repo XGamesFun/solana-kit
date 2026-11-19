@@ -9,8 +9,8 @@
 #
 # The outside programs are mainnet's builds, where loot runs for real money. loot.so is the build release.json
 # pins (its sha256 and bytes are release.json's sbfSha256 and sbfBytes, and `--check` says so when they part): devnet's,
-# at its address there (0.28.0 since slot 521,074,836). loot_mainnet.so is the same source built for mainnet's address
-# (release.json's `mainnet`), as mainnet runs it since slot 468,156,581: the tests on mainnet's address run it. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
+# at its address there (0.29.0 since slot 524,103,129). loot_mainnet.so is the same source built for mainnet's address
+# (release.json's `mainnet`), not deployed to mainnet yet (mainnet runs 0.28.0 until it is: no slot): the tests on mainnet's address run it. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
 # loot program's source, committed here as a binary. Token-2022 calls it on every transfer of a mint that names it; it
 # counts transfers in an account it owns, refuses a transfer of 13, and marks the count if any account arrives signed.
 #
@@ -29,7 +29,7 @@ bubblegum.so                     BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY ma
 mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  mainnet upgradeable fd55664396a9589330bed7e9e0c6b579781744d53f4602d2f0cfb2eacb69fcc5 2179480 339792668 -
 mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
 vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
-loot.so                          xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet  devnet  upgradeable ac8b09ed2c3a3f7daa2dfab55d2f6dea19fa43e4c98b44a82da2a68a7bc8ebbe 1794616 521074836 -
-loot_mainnet.so                  xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy  mainnet upgradeable f78e4f0ef38b5f1673936044263293e91172b4bac92c741cc7bb9567617bbdf6 1794616 468156581 -
+loot.so                          xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet  devnet  upgradeable 6f3e66ccf660681a317a1d69e79d692d0b685e9c288928922403c50fba887e13 1820160 524103129 -
+loot_mainnet.so                  xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy  mainnet upgradeable b4870c1322b42823244a201ca4e49d8684e95221a6caab471e61bdd16cf79e68 1820160 - -
 mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
 test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -

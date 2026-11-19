@@ -125,10 +125,10 @@ test('a code’s voucher pays its wallet on the program, once', { skip }, async 
   const key = await codeKey(code);
   const nobody = '11111111111111111111111111111111';
   const limits = {
-    wallet: { total: 5, per_window: 0, window: 0 },
-    per_person: 0,
+    wallet: { total: 5, per_window: 0, window: 0, by_person: false },
+    tokens: 0n,
     per_key: 0,
-    all: { total: 0, per_window: 0, window: 0 },
+    all: { total: 0, per_window: 0, window: 0, by_person: false },
     window: { opens_at: 0n, closes_at: 0n },
   };
   w.upsert({
@@ -197,10 +197,10 @@ test(
           vouchers: [host.address, nobody, nobody],
           list_root: new Uint8Array(32),
           limits: {
-            wallet: { total: 0, per_window: 0, window: 0 },
-            per_person: 0,
+            wallet: { total: 0, per_window: 0, window: 0, by_person: false },
+            tokens: 0n,
             per_key: 0,
-            all: { total: 0, per_window: 0, window: 0 },
+            all: { total: 0, per_window: 0, window: 0, by_person: false },
             window: { opens_at: 0n, closes_at: 0n },
           },
           active: true,

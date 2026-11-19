@@ -88,7 +88,7 @@ test("an open grant gated by an NFT counts the NFT by a badge's key, never a per
     shard_bits: 8,
     open: true,
     gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } },
-    limits: { per_person: 1, per_key: 0 },
+    limits: { per_key: 0 },
     gives: { Item: [1] },
   };
   const address = loot.pda.grant(project, 1);
@@ -122,7 +122,7 @@ test(
           every: 0n,
           draws_at: BigInt(w.chain.now() + 60),
           gate: null,
-          per_wallet: 0,
+          per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
         },
       },
     });
