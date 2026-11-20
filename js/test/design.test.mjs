@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { design, describeDesign, designAsks } from '../economy/design.mjs';
+import { check } from '../economy/check.mjs';
 
 const NOW = Date.parse('2026-11-12T00:00:00Z') / 1000;
 const VOUCHER = 'HUQP6e86RqbkpPoKaAddwpe8bn81jVMqeTZbrrXm5VpD';
@@ -185,7 +186,7 @@ test('a burn: the design that keeps a way out is listed before the one that remo
   assert.ok(each.candidates.findIndex(c => c.plan.removes) > 0);
 });
 
-test('a burn that a cancel must refund, and a free entry that is not money: what has to give', () => {
+test('a burn that a cancel must refund, and a free entry that is not money: a ticket the grant places keeps them all', () => {
   const base = {
     version: 2,
     network: 'devnet',
@@ -227,13 +228,12 @@ test('a burn that a cancel must refund, and a free entry that is not money: what
     { kind: 'one-draw', route: 'draw' },
   ];
   const r = design(base, reqs, { now: NOW });
-  assert.equal(r.allKept, false);
-  const choices = r.conflicts.map(c => c.giveUp.join('+')).sort();
-  assert.deepEqual(choices, ['free-entry', 'one-draw', 'refund-as-paid']);
-  // Giving up a spendable free entry, the best keeps the burn at settlement and refunds what was paid.
-  const settle = r.conflicts.find(c => c.giveUp.join() === 'free-entry').best;
-  assert.deepEqual(settle.bridges.slice(0, 2), ['direct', 'at-settle']);
-  assert.equal(settle.spec.lotteries[0].rest, 'burn');
+  assert.equal(r.allKept, true);
+  const best = r.candidates[0];
+  assert.deepEqual(best.bridges, ['direct', 'at-settle', 'as-is', 'ticket']);
+  assert.deepEqual(best.spec.grants[0].prize, { gives: 'ticket', lottery: 'draw', count: 1 });
+  assert.equal(best.spec.lotteries[0].rest, 'burn');
+  assert.equal(check(best.spec, { now: NOW }).ok, true);
   // The free entry's grant is what a requirement is about: it is not listed again as a reward with no design.
   assert.doesNotMatch(describeDesign(r, reqs), /Also in this spec/);
 });

@@ -73,7 +73,7 @@ export const REQUIREMENTS = {
       `Everyone can claim ${r.perPerson ?? 1} free entr${(r.perPerson ?? 1) === 1 ? 'y' : 'ies'}${r.spendable === false ? ', which is good only as an entry (it can’t be spent or turned into money)' : ''}.`,
     test: (c, r) => {
       if (!c.plan.free) return { kept: false, why: 'no free entry' };
-      if (r.spendable !== false) return { kept: true, why: c.plan.freeWords };
+      if (r.spendable !== false || c.plan.free.ticket) return { kept: true, why: c.plan.freeWords };
       const a = c.fl.assets.get(c.plan.free.asset);
       if (a?.money)
         return {
@@ -451,6 +451,21 @@ const DRAW_BRIDGES = {
       plain: () => 'there is no free entry',
       // (a grant the person named for free entries, with no prize yet, goes)
       build: (s, x) => ((s.grants = s.grants.filter(g => g.key !== x.freeKey || g.prize || g.gives)), true),
+    },
+    {
+      id: 'ticket',
+      says: 'a grant puts a ticket in the draw itself, one a person: nothing to hold, spend or sell',
+      plain: () => 'the free entry is a ticket in the draw, placed by a claim: it is good for nothing else',
+      build: (s, x) => {
+        if (!x.wantsFree) return false;
+        const draw = s.lotteries.find(l => l.key === x.plan.draw);
+        // A grant's tickets go only into a lottery that sells for tokens.
+        if (!draw || draw.ticketNft) return false;
+        x.freeGrant(s).prize = { gives: 'ticket', lottery: draw.key, count: 1 };
+        x.plan.free = { ticket: true };
+        x.plan.freeWords = 'a grant puts a free ticket in the draw';
+        return true;
+      },
     },
     {
       id: 'grant-ticket',
