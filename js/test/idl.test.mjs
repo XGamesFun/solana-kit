@@ -44,6 +44,7 @@ test('one builder for every instruction', () => {
     harvest: 'harvestIx',
     hold: 'holdIx',
     init_platform: 'initPlatformIx',
+    link_wallet: 'linkWalletIx',
     move_tokens: 'moveTokensIx',
     open_auction: 'openAuctionIx',
     open_box: 'openBoxIx',

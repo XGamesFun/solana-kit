@@ -19,10 +19,10 @@ const t = (name, fn) => test(name, { skip }, fn);
 const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';
 const limits = {
-  wallet: { total: 1, per_window: 0, window: 0 },
-  per_person: 0,
+  wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+  tokens: 0n,
   per_key: 0,
-  all: { total: 0, per_window: 0, window: 0 },
+  all: { total: 0, per_window: 0, window: 0, by_person: false },
   window: { opens_at: 0n, closes_at: 0n },
 };
 const grantArgs = gives => ({

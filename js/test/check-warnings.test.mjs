@@ -323,7 +323,7 @@ test('parts owed in common: a share once drawn, the pot’s, a pool’s prize ba
 test('every claim is signed by its winning wallet, whatever proves it; anyone may pay its fees', () => {
   const project = pda.platform();
   const other = pda.identity();
-  const limits = { per_person: 0, per_key: 0 };
+  const limits = { per_key: 0 };
   const fixed = {
     incarnation: 1n,
     limits,
@@ -713,4 +713,46 @@ test('a free box is the project’s to limit: warned with no limit per wallet, q
     ),
   );
   assert.ok(limited.ok && !limited.warned.includes(where), limited.warned.join());
+});
+
+test('a simulation that cannot run is said, once, and is asked for once a check', async () => {
+  const { simulate } = await import('../economy/simulate.mjs');
+  for (const name of ['paper-hands-farm', 'event-badges', 'stakers-draw']) {
+    const spec = example(name);
+    const clean = check(spec, { now: NOW });
+    assert.equal(clean.ok, true, name);
+    assert.ok(!clean.warnings.some(w => w.code === 'W-SIMULATION'), name);
+    // The same spec with a simulation that stops: the check still answers, and says what it could not check.
+    const stopped = check(spec, {
+      now: NOW,
+      simulator: () => {
+        throw new TypeError("Cannot read properties of undefined (reading 'rate')");
+      },
+    });
+    assert.equal(stopped.ok, true, name);
+    const said = stopped.warnings.filter(w => w.code === 'W-SIMULATION');
+    assert.equal(said.length, 1, name);
+    assert.match(said[0].message, /stopped on an error \(Cannot read properties of undefined \(reading 'rate'\)\)/);
+    assert.match(said[0].message, /this check is not a clean one/);
+    assert.equal(said[0].severity, 'medium');
+    // Every other warning it gave without the simulation is one the clean check gives too: nothing was made up.
+    const known = new Set(clean.warnings.map(w => `${w.code} ${w.where}`));
+    for (const w of stopped.warnings.filter(w => w.code !== 'W-SIMULATION'))
+      assert.ok(known.has(`${w.code} ${w.where}`), `${name}: ${w.code} ${w.where}`);
+    // One run serves the whole check.
+    let runs = 0;
+    check(spec, { now: NOW, simulator: (...args) => (runs++, simulate(...args)) });
+    assert.equal(runs, 1, name);
+  }
+  // A spec that is refused says its refusals, not this.
+  const refused = structuredClone(example('paper-hands-farm'));
+  refused.farms[0].stakes = 'no-such-token';
+  const out = check(refused, {
+    now: NOW,
+    simulator: () => {
+      throw new Error('stopped');
+    },
+  });
+  assert.equal(out.ok, false);
+  assert.ok(!out.warnings.some(w => w.code === 'W-SIMULATION'));
 });

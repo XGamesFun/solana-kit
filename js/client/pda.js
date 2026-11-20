@@ -1,7 +1,7 @@
 // Every address the loot program derives, with the seeds the program uses. Each takes base58
 // addresses and numbers and returns a base58 address. Browser-safe.
 import { addressBytes } from '../chain/base58.js';
-import { intLE, utf8, uintLE } from '../chain/bytes.js';
+import { fromHex, intLE, utf8, uintLE } from '../chain/bytes.js';
 import { associatedTokenAddress, findProgramAddress, MPL_CORE_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { lootProgram } from './cluster.js';
 
@@ -36,6 +36,12 @@ const u16 = n => uintLE(n, 2);
 const u32 = n => uintLE(n, 4);
 const u64 = n => uintLE(n, 8);
 const i64 = n => intLE(n, 8);
+/** A person: 32 bytes, or 64 hex characters (the hash a project's issuer makes of an account it knows). */
+const person32 = p => {
+  const b = p instanceof Uint8Array ? p : typeof p === 'string' && /^[0-9a-f]{64}$/i.test(p) ? fromHex(p) : null;
+  if (!b || b.length !== 32) throw new TypeError('a person is 32 bytes, or 64 hex characters');
+  return b;
+};
 
 /** The PDA of these seeds under the loot program, with its bump. */
 export const lootAddress = (seeds, program = lootProgram()) => findProgramAddress(seeds, program);
@@ -110,6 +116,10 @@ export const pda = {
   /** A wallet's counts in a project: how many times it bought from each box, crafted each recipe or held tickets in
    * a lottery's round that limits it (`decodeCounts`). */
   counts: (project, wallet) => at(seed('counts'), key(project), key(wallet)),
+  /** A person's counts in a project, for a limit that counts by person: every wallet linked to them counts here. */
+  persons: (project, person) => at(seed('persons'), key(project), person32(person)),
+  /** A wallet's link to the person the project's issuer says it belongs to (`decode('Link', …).person`). */
+  link: (project, wallet) => at(seed('link'), key(project), key(wallet)),
   /** Shard `shard` of a grant's limit records: what each wallet, person, badge and voucher key claimed. */
   claims: (grant, incarnation, shard) => at(seed('claims'), key(grant), u64(incarnation), u8(shard)),
   /** Shard `shard` of the rounds a grant paid. */

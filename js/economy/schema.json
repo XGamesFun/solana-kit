@@ -27,7 +27,7 @@
     "keys": {
       "type": "object",
       "additionalProperties": false,
-      "description": "A game has two keys. The owner (the creator's wallet) signs the setup and every mechanic. The authority signs what only the game knows: who won, who cleared the level.",
+      "description": "A game has two keys. The owner (the creator's wallet) signs the setup and every mechanic. The authority signs what only the game knows: who won, who cleared the level. An issuer (`issuer`) vouches which person a wallet belongs to, for limits per person.",
       "properties": {
         "authority": {
           "anyOf": [
@@ -40,6 +40,10 @@
           ],
           "default": "owner",
           "description": "\"owner\": the creator's wallet is both keys. Or the public address of another plain wallet (a server's key, the local keeper). Never a private key."
+        },
+        "issuer": {
+          "$ref": "#/$defs/address",
+          "description": "The public key that vouches which person a wallet belongs to (a server's: the results server's, or the grants' own voucher key, so one key does both). Needed by any limit per person: a voucher it signs that names a person links the claiming wallet, and `link_wallet` links one in its first transaction. Never a private key."
         }
       }
     },
@@ -639,6 +643,15 @@
         "perWalletEach": {
           "$ref": "#/$defs/perWalletEach"
         },
+        "perPerson": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one person may buy (or craft) in all, every wallet the project's issuer (`keys.issuer`) linked to them counted together; a wallet with no link is refused. In place of `perWallet`: a limit counts wallets or persons, not both."
+        },
+        "perPersonEach": {
+          "$ref": "#/$defs/perPersonEach"
+        },
         "collection": {
           "$ref": "#/$defs/address",
           "description": "A collectible's collection: one of `collections`. Default: the one the setup makes."
@@ -962,6 +975,15 @@
         },
         "perWalletEach": {
           "$ref": "#/$defs/perWalletEach"
+        },
+        "perPerson": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one person may buy (or craft) in all, every wallet the project's issuer (`keys.issuer`) linked to them counted together; a wallet with no link is refused. In place of `perWallet`: a limit counts wallets or persons, not both."
+        },
+        "perPersonEach": {
+          "$ref": "#/$defs/perPersonEach"
         },
         "rollsOn": {
           "$ref": "#/$defs/rule",
@@ -1300,6 +1322,15 @@
         },
         "perWalletEach": {
           "$ref": "#/$defs/perWalletEach"
+        },
+        "perPerson": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "How many one person may buy (or craft) in all, every wallet the project's issuer (`keys.issuer`) linked to them counted together; a wallet with no link is refused. In place of `perWallet`: a limit counts wallets or persons, not both."
+        },
+        "perPersonEach": {
+          "$ref": "#/$defs/perPersonEach"
         }
       }
     },
@@ -1532,7 +1563,21 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 4294967295,
-          "description": "The most tickets one wallet holds in a round (0 or absent: no limit)."
+          "description": "The most tickets one wallet buys in a round (0 or absent: no limit)."
+        },
+        "perWalletEach": {
+          "$ref": "#/$defs/perWalletEach",
+          "description": "Tickets one wallet buys in each window of time instead of each round: `{ \"count\": 40, \"every\": \"1h\" }`."
+        },
+        "perPerson": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "The most tickets one person buys in a round, every wallet the project's issuer linked to them together; a wallet with no link can't buy. In place of `perWallet`. Tickets a grant gives don't count."
+        },
+        "perPersonEach": {
+          "$ref": "#/$defs/perPersonEach",
+          "description": "Tickets one person buys in each window of time, every wallet of theirs together."
         },
         "ticketNft": {
           "$ref": "#/$defs/nftPrice",
@@ -1990,6 +2035,10 @@
         },
         "authority": {
           "$ref": "#/$defs/address"
+        },
+        "issuer": {
+          "$ref": "#/$defs/address",
+          "description": "The project's issuer on chain, as the approval read it (the default address: none). Written by the tools."
         },
         "at": {
           "type": "string",
@@ -2508,7 +2557,8 @@
             "perPerson": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 4294967295
+              "maximum": 4294967295,
+              "description": "Claims one person may make in all: the person the voucher or list names, or else the one the wallet's link names (`keys.issuer`). A claim that names nobody is refused. In place of `perWallet`: a grant counts wallets or persons, not both."
             },
             "perDay": {
               "type": "integer",
@@ -2519,6 +2569,10 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 4294967295
+            },
+            "tokens": {
+              "$ref": "#/$defs/amount",
+              "description": "For tokens: the most it gives in all, whatever the claims, amounts and voucher keys: what a leaked key can drain at most. A round past it is held back."
             },
             "until": {
               "$ref": "#/$defs/time"
@@ -2531,6 +2585,10 @@
             },
             "perWalletEach": {
               "$ref": "#/$defs/perWalletEach"
+            },
+            "perPersonEach": {
+              "$ref": "#/$defs/perPersonEach",
+              "description": "Claims one person may make in each window: `{ \"count\": 1, \"every\": \"1d\" }` is a daily login bonus, whichever of their wallets claims."
             },
             "opens": {
               "$ref": "#/$defs/time"
@@ -2670,6 +2728,23 @@
       "additionalProperties": false,
       "required": ["count"],
       "description": "How many one wallet may do in each window of time: `{ \"count\": 1, \"every\": \"1d\" }` is once a day (windows counted from the Unix epoch, a UTC day for \"1d\").",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "every": {
+          "$ref": "#/$defs/duration",
+          "default": "1d"
+        }
+      }
+    },
+    "perPersonEach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count"],
+      "description": "How many one person may do in each window of time, every wallet the project's issuer linked to them together: `{ \"count\": 1, \"every\": \"1d\" }` is once a day (windows counted from the Unix epoch, a UTC day for \"1d\").",
       "properties": {
         "count": {
           "type": "integer",
@@ -2828,10 +2903,10 @@
       "type": "object",
       "required": ["gives"],
       "additionalProperties": false,
-      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`).",
+      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`). ticket (a grant's only): `count` free tickets (default 1) in the current round of `lottery`, one claim, no token; they count in its sales and draw, and a cancel gives nothing back for them.",
       "properties": {
         "gives": {
-          "enum": ["item", "tokens", "nft", "roll", "raffled"]
+          "enum": ["item", "tokens", "nft", "roll", "raffled", "ticket"]
         },
         "item": {
           "$ref": "#/$defs/key"
@@ -2874,6 +2949,16 @@
         "collection": {
           "$ref": "#/$defs/address",
           "description": "For a held nft (a raffle's): the Core collection it is in. Default: the game's own."
+        },
+        "lottery": {
+          "$ref": "#/$defs/key",
+          "description": "For ticket: the lottery."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "For ticket: how many, default 1."
         }
       }
     },

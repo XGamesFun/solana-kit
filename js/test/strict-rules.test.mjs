@@ -25,10 +25,10 @@ const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
 const refused = spec => check(spec, { now: NOW }).refusals;
 const box = (w, id) => w.read('LootBox', pda.box(w.project, id));
 const never = {
-  wallet: { total: 0, per_window: 0, window: 0 },
-  per_person: 0,
+  wallet: { total: 0, per_window: 0, window: 0, by_person: false },
+  tokens: 0n,
   per_key: 0,
-  all: { total: 0, per_window: 0, window: 0 },
+  all: { total: 0, per_window: 0, window: 0, by_person: false },
   window: { opens_at: 0n, closes_at: 0n },
 };
 const fails = (fn, name) => assert.throws(fn, e => (e.logs ?? []).join(' ').includes(name) || e.message.includes(name));
@@ -760,7 +760,7 @@ test('a stranger’s pull is refused when a named stash NFT is gone; its winner 
         },
         every: 0n,
         gate: null,
-        per_wallet: 0,
+        per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
       },
     },
   });
@@ -870,7 +870,7 @@ test('a raise with no cap works, again and again', { skip }, () => {
         keeps: [],
         raises: [{ place: 0, shift: { key: 'level', by: 1, most: 0, from_now: false } }],
         window: { opens_at: 0n, closes_at: 0n },
-        per_wallet: { total: 0, per_window: 0, window: 0 },
+        per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
       },
     },
   });

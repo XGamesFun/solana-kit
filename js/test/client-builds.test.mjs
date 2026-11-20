@@ -25,7 +25,7 @@ test("a lottery share that burns is burned at the round's close, the rest in the
         every: 3600n,
         draws_at: BigInt(w.chain.now() + 3600),
         gate: null,
-        per_wallet: 0,
+        per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
       },
     },
   });
@@ -51,10 +51,10 @@ test('an open grant with voucher keys and an NFT gate counts the NFT shown', { s
   const badge = w.make(27, w.player);
   w.pool(1, w.mint, 100n);
   const limits = {
-    wallet: { total: 1, per_window: 0, window: 0 },
-    per_person: 0,
+    wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+    tokens: 0n,
     per_key: 0,
-    all: { total: 0, per_window: 0, window: 0 },
+    all: { total: 0, per_window: 0, window: 0, by_person: false },
     window: { opens_at: 0n, closes_at: 0n },
   };
   w.upsert({

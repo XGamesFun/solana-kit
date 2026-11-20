@@ -51,10 +51,10 @@ test(
     };
     w.upsert({ Box: { id: CHEST, args: chest } });
     const limits = {
-      wallet: { total: 1, per_window: 0, window: 0 },
-      per_person: 0,
+      wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+      tokens: 0n,
       per_key: 0,
-      all: { total: 0, per_window: 0, window: 0 },
+      all: { total: 0, per_window: 0, window: 0, by_person: false },
       window: { opens_at: 0n, closes_at: 0n },
     };
     w.upsert({
@@ -145,10 +145,10 @@ test('a player claims grants that give an NFT and a collectible at once, through
     loot.stashIx({ signer: w.authority, project: w.project, id: 1, asset: trophy, collection: w.collection }),
   ]);
   const limits = {
-    wallet: { total: 1, per_window: 0, window: 0 },
-    per_person: 0,
+    wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+    tokens: 0n,
     per_key: 0,
-    all: { total: 0, per_window: 0, window: 0 },
+    all: { total: 0, per_window: 0, window: 0, by_person: false },
     window: { opens_at: 0n, closes_at: 0n },
   };
   const open = gives => ({

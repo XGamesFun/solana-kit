@@ -457,6 +457,22 @@ export const namedRollNonce = (box, asset, named) => {
 const limits = perWallet => Boolean(perWallet && (Number(perWallet.total) || Number(perWallet.per_window)));
 
 /**
+ * The counts a limit (`perWallet`, a `PerWallet`) counts `player` in, and the link it reads: none when it limits nothing;
+ * the wallet's own counts; or, for a limit by person, the counts of `person` (the wallet's link's person, read with
+ * `decode('Link', …)`) and the wallet's link. A wallet with no link can't pass a limit by person: link it first
+ * (`linkWalletIx` in the same transaction, or a claim of the issuer's voucher).
+ */
+export function limitAccounts(project, player, perWallet, person) {
+  if (!limits(perWallet)) return { counts: null, link: null };
+  if (!perWallet.by_person) return { counts: pda.counts(project, player), link: null };
+  if (!person)
+    throw new Error(
+      'This limit counts by person: pass the person the wallet is linked to (`person`), after linking it (linkWalletIx)',
+    );
+  return { counts: pda.persons(project, person), link: pda.link(project, player) };
+}
+
+/**
  * The accounts of an NFT the player shows, for a gate or for odds: right after the instruction's other accounts.
  * `shown` is a Core asset the project has authority over (its address), one it has no authority over (`{ asset }`: then
  * its Sheet's address), a Token Metadata NFT (`{ mint, owner }`: its mint, its metadata, the owner's token account of
@@ -579,7 +595,16 @@ export function prizeMetas({
   projectMint,
   programs,
   lottery,
+  lotteries = {},
 }) {
+  if (prize.Ticket) {
+    // Free tickets in a lottery's current round (a grant's prize): the lottery, then that round's record.
+    const { lottery: id } = prize.Ticket;
+    const l = lotteries[id];
+    if (!l) throw new Error(`a prize of tickets in lottery ${id} needs the lottery (lotteries: its decoded Lottery)`);
+    const address = pda.lottery(project, id);
+    return [meta(address, false, true), meta(currentRound(address, l), false, true)];
+  }
   if (prize.Tokens) {
     const { from } = prize.Tokens;
     // A pool never opened (its mint given as null) gives nothing: any mint stands in for its place, the project's.
@@ -796,11 +821,12 @@ export const updateProjectIx = ({
   paused = null,
   treasury = null,
   collections = null,
+  issuer = null,
   newOwner = null,
 }) =>
   lootIx(
     'update_project',
-    { update: { authority, treasury, paused, collections } },
+    { update: { authority, treasury, paused, collections, issuer } },
     { owner, project, new_owner: newOwner, new_authority: authority, new_treasury: treasury },
     { remaining: (collections ?? []).map(c => meta(c, false, false)) },
   );
@@ -833,7 +859,12 @@ export function recordAddress(project, def) {
 }
 
 const NO_WINDOW = { opens_at: 0n, closes_at: 0n };
-const NO_LIMIT = { total: 0, per_window: 0, window: 0 };
+const NO_LIMIT = { total: 0, per_window: 0, window: 0, by_person: false };
+/** A `PerWallet` with what is left out filled in: a lottery's number is its tickets a round. */
+const limitOf = limit =>
+  typeof limit === 'number' || typeof limit === 'bigint'
+    ? { ...NO_LIMIT, per_window: Number(limit) }
+    : { ...NO_LIMIT, ...(limit ?? {}) };
 /**
  * `def` with optional fields filled in (no window, no limit for each wallet, no key root, a fall on its own clock).
  */
@@ -869,7 +900,7 @@ export function withDefaults(def) {
   }
   if (kind === 'Box' || kind === 'Recipe') {
     args.window ??= NO_WINDOW;
-    args.per_wallet ??= NO_LIMIT;
+    args.per_wallet = limitOf(args.per_wallet);
   }
   if (kind === 'Recipe') {
     // A raise moves a number on a kept collectible (`place`) as a box's fate does (`Shift`); a need tests one (`Test`).
@@ -917,12 +948,23 @@ export function withDefaults(def) {
         : { bps: p, prize: null, when_short: 'InOrder', times: 1 },
     );
     terms.shares = stored(terms.shares ?? []);
-    return { [kind]: { ...body, args: { terms, every: every ?? 0n, gate: gate ?? null, per_wallet: perWallet ?? 0 } } };
+    return {
+      [kind]: { ...body, args: { terms, every: every ?? 0n, gate: gate ?? null, per_wallet: limitOf(perWallet) } },
+    };
   }
   if (kind === 'Grant') {
     args.key_root ??= new Uint8Array(32);
     args.open ??= false;
     args.shard_bits ??= 0;
+    if (args.limits)
+      args.limits = {
+        per_key: 0,
+        tokens: 0n,
+        window: NO_WINDOW,
+        ...args.limits,
+        wallet: limitOf(args.limits.wallet),
+        all: limitOf(args.limits.all),
+      };
   }
   return { [kind]: { ...body, args } };
 }
@@ -1098,6 +1140,7 @@ export function openBoxIx({
   playerToken,
   programs,
   extra = [],
+  person = null,
 }) {
   const mint = box.currency;
   poolMints = boxPoolMints(box, poolMints);
@@ -1141,7 +1184,7 @@ export function openBoxIx({
       player_token: playerToken ?? ata(player, mint, tokenProgram),
       vault: vault(project, mint, tokenProgram),
       chosen,
-      counts: limits(box.per_wallet) ? pda.counts(project, player) : null,
+      ...limitAccounts(project, player, box.per_wallet, person),
       ...on.accounts,
     },
     {
@@ -1187,6 +1230,7 @@ export function buyIx({
   playerToken,
   programs,
   extra = [],
+  person = null,
 }) {
   const mint = box.currency;
   const tokenProgram = tokenProgramOf(programs, mint);
@@ -1228,7 +1272,7 @@ export function buyIx({
       treasury,
       treasury_token: ata(treasury, mint, tokenProgram),
       chosen,
-      counts: limits(box.per_wallet) ? pda.counts(project, player) : null,
+      ...limitAccounts(project, player, box.per_wallet, person),
     },
     {
       remaining: [
@@ -1676,7 +1720,12 @@ export function refundIx({ signer, orderAddress, order, subject, programs, extra
       mint: order.mint,
       vault: vault(project, order.mint, tokenProgram),
       player_token: ata(order.player, order.mint, tokenProgram),
-      counts: order.counted != null ? pda.counts(project, order.player) : null,
+      counts:
+        order.counted == null
+          ? null
+          : order.person
+            ? pda.persons(project, Uint8Array.from(order.person))
+            : pda.counts(project, order.player),
       // Required while the order counts draws in its box (`reserved`); an order read without the field names it too.
       loot_box: order.reserved == null || BigInt(order.reserved) > 0n ? order.loot_box : null,
       ...on.accounts,
@@ -2252,6 +2301,7 @@ export function buyTicketsIx({
   playerToken,
   programs,
   extra = [],
+  person = null,
 }) {
   const address = pda.lottery(project, id);
   const key = currentRound(address, lottery);
@@ -2274,7 +2324,7 @@ export function buyTicketsIx({
       payment_vault: pda.roundTokens(key, mint),
       mint,
       chosen,
-      counts: Number(lottery.per_wallet) ? pda.counts(project, player) : null,
+      ...limitAccounts(project, player, lottery.per_wallet, person),
       associated_token_program: choices.length ? ASSOCIATED_TOKEN_PROGRAM : null,
     },
     {
@@ -3773,6 +3823,7 @@ export function craftIx({
   boxes = {},
   lootAccounts = [],
   extra = [],
+  person = null,
 }) {
   const remaining = [];
   const given = [...assets];
@@ -3922,11 +3973,10 @@ export function craftIx({
     }
   }
   const address = pda.recipe(project, id);
-  const counts = limits(recipe.per_wallet) ? pda.counts(project, player) : null;
   return lootIx(
     'craft',
     { version: recipe.version, times, nonce },
-    { player, project, recipe: address, counts },
+    { player, project, recipe: address, ...limitAccounts(project, player, recipe.per_wallet, person) },
     { remaining: [...remaining, ...tailOf(extra)] },
   );
 }

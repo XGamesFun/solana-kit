@@ -26,6 +26,8 @@ import IDL from './idl/loot.js';
 export const VOUCHER_DOMAIN = 'loot-grant-v5';
 export const LIST_DOMAIN = 'loot-list-v3';
 export const KEY_DOMAIN = 'loot-key-v1';
+/** What the bytes a project's issuer signs to link a wallet to a person start with (`linkBytes`). */
+export const LINK_DOMAIN = 'loot-link-v1';
 /** What a voucher key signs: the prefix (13 bytes), then the sha256 of the voucher's body. */
 export const VOUCHER_BYTES = 45;
 /** A grant claim's compute limit: its rounds' records and prizes can pass the 200,000 a transaction has by default. */
@@ -129,6 +131,37 @@ export function readVoucher(body) {
 }
 
 /** A voucher key's leaf under a grant's `key_root`. */
+/**
+ * The bytes the project's issuer signs to link `wallet` to `person` (a 32-byte hash it makes of an account it knows,
+ * an X id) until `expires` (unix seconds): `"loot-link-v1" | sha256(program | project | wallet | person | expires)`.
+ * Checked by the Ed25519 precompile right before `link_wallet` (`linkWalletIx`).
+ */
+export const linkBytes = ({ program = lootProgram(), project, wallet, person, expires }) =>
+  concat(
+    utf8(LINK_DOMAIN),
+    sha256(
+      concat(
+        bytes32(program, 'program'),
+        bytes32(project, 'project'),
+        bytes32(wallet, 'wallet'),
+        bytes32(person, 'person'),
+        i64LE(expires),
+      ),
+    ),
+  );
+
+/**
+ * `link_wallet`: links the signing `wallet` (which pays the link's rent) to `person`, once the project's issuer signed
+ * `linkBytes` (its `ed25519Ix`, right before this instruction). Send both in the same transaction as the wallet's
+ * first action that counts by person: no step of its own.
+ */
+export const linkWalletIx = ({ project, wallet, person, expires }) =>
+  lootIx(
+    'link_wallet',
+    { person: bytes32(person, 'person'), expires: toBigInt(expires) },
+    { project, wallet, link: pda.link(project, wallet) },
+  );
+
 export const keyLeaf = key => sha256(concat(utf8(KEY_DOMAIN), bytes32(key, 'key')));
 
 /** A list entry's round as the leaf names it: a number (a spec's `round`) in the first 8 of 16 bytes; 0 is zeros. */
@@ -323,6 +356,9 @@ export function claimGrantIx({
   programs,
   voucherKey,
   nonce,
+  lotteries = {},
+  issuer = null,
+  linkedPerson = null,
   extra = [],
 }) {
   if (!signer) throw new Error('A claim needs its signer: whoever sends it');
@@ -339,7 +375,20 @@ export function claimGrantIx({
   // gated by one shows (a badge), a voucher key's; each shard of the grant's claims once, by shard number.
   const bits = Number(grant.shard_bits ?? 0);
   const keys = [limitKey('wallet', wallet)];
-  if (person.some(b => b !== 0) && Number(grant.limits?.per_person ?? 0) > 0) keys.push(limitKey('person', person));
+  // Counted by person: the person the voucher or list names, or else the one the wallet's link names
+  // (`linkedPerson`); the program refuses a claim that names nobody (`NotLinked`).
+  // Who is who is the issuer's word: the person a voucher of the project's `issuer` or the owner's list names counts;
+  // another voucher key's counts for nothing, and then the wallet's link names it (`linkedPerson`).
+  const byPerson = Boolean(grant.limits?.wallet?.by_person);
+  const named0 = person.some(b => b !== 0);
+  // The wallet's link: read for a claim whose person is the link's, written by a voucher of the issuer's that names one.
+  const links = Boolean(issuer && voucherKey && issuer === voucherKey && named0);
+  const fromList = !voucherKey && listed && named0;
+  if (byPerson) {
+    const who = links || fromList ? person : linkedPerson ? bytes32(linkedPerson, 'person') : null;
+    if (!who) throw new Error('This grant counts by person: the issuer’s voucher names one, or the wallet is linked');
+    keys.push(limitKey('person', who));
+  }
   const badge = typeof shown === 'string' ? shown : (shown?.asset ?? shown?.mint ?? shown?.compressed);
   if (!named && grant.open && grant.gate?.Holds && badge) keys.push(limitKey('badge', badge));
   if (voucherKey && Number(grant.limits?.per_key ?? 0) > 0) keys.push(limitKey('code', voucherKey));
@@ -365,7 +414,8 @@ export function claimGrantIx({
     seen.add(hex);
     return true;
   });
-  const prizes = owed.flatMap((r, made) =>
+  // Tickets: every round's in one entry, the lottery and its round named once.
+  const prizes = (gives.Ticket ? owed.slice(0, 1) : owed).flatMap((r, made) =>
     prizeMetas({
       project,
       prize: r.amount > 0n && gives.Tokens ? { Tokens: { ...gives.Tokens, amount: r.amount } } : gives,
@@ -376,6 +426,7 @@ export function claimGrantIx({
       items: itemId !== undefined ? { [itemId]: item } : {},
       nft,
       made,
+      lotteries,
     }),
   );
   proofs ??= listed && !voucherKey ? [proof] : proof.length ? [proof] : [];
@@ -394,6 +445,7 @@ export function claimGrantIx({
       signer,
       wallet,
       rounds: named ? pda.rounds(address, grant.incarnation, shardOf(keys[0], bits)) : null,
+      link: byPerson || links ? pda.link(project, wallet) : null,
       token_program: undefined,
       token_2022_program: undefined,
       associated_token_program: ASSOCIATED_TOKEN_PROGRAM,

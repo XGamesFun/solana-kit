@@ -92,20 +92,20 @@ test('a recipe that moves a staked piece’s lock takes it only from the farm it
   assert.ok(check(loose, { now }).ok);
 });
 
-test('an open grant behind an NFT counts the NFT as a person, so it limits no person', () => {
+test('an open grant behind an NFT counts each person by their linked wallets, and needs the issuer', () => {
   const grant = {
     key: 'drop',
     name: 'Drop',
     gives: { item: 'badge' },
     gate: { item: 'badge' },
-    limits: { perWallet: 1, perPerson: 1 },
+    limits: { perPerson: 1 },
   };
-  // The program allows it; it limits nothing, which the checker says.
-  const said = check({ ...spec, grants: [grant] }, { now });
-  assert.ok(
-    said.ok && said.warnings.some(x => x.code === 'W-GRANT' && /perPerson/.test(x.where)),
-    said.refusals.map(x => x.message).join('\n'),
-  );
+  // A person is whoever the issuer linked the wallet to: the economy names the issuer.
+  const missing = check({ ...spec, grants: [grant] }, { now });
+  assert.ok(missing.refusals.some(x => x.code === 'E-PERSON'));
+  const issuer = 'DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68';
+  const said = check({ ...spec, keys: { ...(spec.keys ?? {}), issuer }, grants: [grant] }, { now });
+  assert.ok(said.ok, said.refusals.map(x => x.message).join('\n'));
   const fine = check({ ...spec, grants: [{ ...grant, limits: { perWallet: 1 } }] }, { now });
   assert.ok(!fine.refusals.some(x => x.code === 'E-GRANT'), fine.refusals.map(x => x.message).join('\n'));
 });

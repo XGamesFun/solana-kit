@@ -2,6 +2,9 @@
   "version": 2,
   "network": "devnet",
   "name": "Ruin Run",
+  "keys": {
+    "issuer": "DrGXd6Nr6VeDL2BXJXpfSvE7N6Y6NFqPJMLfXUiC7i68"
+  },
   "prompt": "When a player discovers Bronze Relic, Silver Relic or Gold Relic they earn that relic as an NFT, and can stake their relic NFTs in a farm that pays Shards over time. Bigger relic earn more. Devnet only.",
   "currency": "shards",
   "tokens": [
@@ -71,7 +74,6 @@
       },
       "active": true,
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 25,
         "total": 500
@@ -91,7 +93,6 @@
       },
       "active": true,
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 25,
         "total": 500
@@ -111,7 +112,6 @@
       },
       "active": true,
       "limits": {
-        "perWallet": 1,
         "perPerson": 1,
         "perDay": 25,
         "total": 500

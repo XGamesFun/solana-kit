@@ -42,8 +42,10 @@ voucher grant that says nothing as `bounds`, the weakest.
 - **A wallet is free.** Any limit per wallet (`perWallet`, a gate's one claim per collectible shown) limits wallets,
   never a person. What bounds a reward is its totals: `perDay` and `total` are the most it can ever pay, whatever
   happens to a key or how many wallets come.
-- **Count people through vouchers.** `perPerson` counts the person the voucher names (a person hash), which only the
-  server chooses: the player can't pick or change it, and an open grant has none. So it is exactly as good as the
+- **Count people through the issuer.** `perPerson` counts the person the project's issuer (`keys.issuer`, the server's
+  key) names: in a voucher it signs, or in the wallet's link, written once by that voucher or by `link_wallet` (the
+  server's `signLink`). Another voucher key's person counts for nothing, and a wallet linked to nobody is refused; the
+  player can't pick or change it. Boxes, recipes and lotteries take `perPerson` too. So it is exactly as good as the
   server's choice: a real outside identity (an X account) counts people; a wallet, or a voucher with no person, counts
   nobody. For rewards worth farming, pay only players signed in with X.
 - **Make farming cost something.** Gate on holding a collectible the game sells or a locked stake (`gate`), pay only

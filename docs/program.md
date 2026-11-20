@@ -1,17 +1,16 @@
 # The loot program: how it behaves
 
-**Version 0.28.0**. On **devnet**: program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, since slot 521,074,836
-(2026-11-11). On **mainnet**: program ID `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, since slot 468,156,581 (2026-11-11), the
-same source built for that address. loot has an address of its own on each cluster, so nothing signed for one (a
-voucher, a verdict) counts on the other. What follows speaks of devnet's, the address loot keeps there. 0.28.0 is 0.27.0 built for it: no instruction, argument, account or
-record changed. Every address the program derives follows from its own, so nothing set up under the address it had
-before (`9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, 0.27.0 and earlier) exists under this one: make fresh
-economies. Nothing runs on mainnet. **Not independently audited** (`SECURITY.md`).
+**Version 0.29.0**. On **devnet**: program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, since slot 524,113,825
+(2026-11-19). On **mainnet**: program ID `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, since slot 471,855,650
+(2026-11-20), the same source built for that address. loot has an address of its own on each cluster, so nothing
+signed for one (a voucher, a verdict, a link) counts on the other. What follows speaks of devnet's, the address loot
+keeps there. Records written under 0.28.0 don't load under 0.29.0's layouts: make fresh economies. **Not independently
+audited**.
 
-This page describes 0.28.0, the build its IDL comes from. What 0.27.0 added, and 0.28.0 keeps: **a record whose NFT
-is proven gone from the project closes** ([An NFT gone from the project](#an-nft-gone-from-the-project), receipt
-`NftGone`), and **the weight that leaves a farm gives its share of the rounding back** to the project
-([Farms](#farms), `Farm::free_share`).
+This page describes 0.29.0, the build its IDL comes from. What 0.29.0 added: **persons** (a project's issuer links
+wallets to one person, and any limit can count by person: [Persons and links](#persons-and-links)), **tickets a grant
+gives** ([Tickets a grant gives](#tickets-a-grant-gives)), a lottery's limit per round or per window, and a cap on the
+tokens a grant gives in all (`tokens`).
 
 0.26's rule: **the program restricts a project only where it
 must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that
@@ -1528,8 +1527,11 @@ collectible counts the collectible too (a badge), so moving it claims nothing mo
 hands out the voucher; the winner's page sends the claim. So a grant pays only wallets that can sign (a person, or a
 program that signs by CPI such as a Squads vault), not an exchange deposit address.
 
-**Limits** (`{ all, wallet, per_person, per_key, window }`): by all wallets together (`all`, a `PerWallet`: in all and
-per window, 86,400 seconds a UTC day), per wallet (`wallet`, the same), per person, per key, and a time window
+**Limits** (`{ all, wallet, per_key, tokens, window }`): by all wallets together (`all`, a `PerWallet`: in all and
+per window, 86,400 seconds a UTC day), per wallet (`wallet`, the same) or, with `wallet.by_person`, per person (the
+person a voucher of the project's issuer or the list names, else the wallet's link; a claim naming nobody is refused,
+`NotLinked`), per key, the tokens it gives in all (`tokens`, a grant of tokens only, counted in `Grant.given`), and a
+time window
 (`OverTotal`, `OverWindow`, `OverWallet`, `OverPerson`, `OverKey`). What the grant has given is `Grant.counted`
 (`{ count, window, in_window }`). Each limit record (28 bytes) is keyed `sha256(kind | subject)[..16]` (`limitKey`: a wallet, a person, a
 badge, a key) in the grant's claims, `["claims", grant, incarnation, shard]`; one claim touches at most four shards.
@@ -1841,3 +1843,22 @@ where token moves cost less: `pay` with 4 shares 41,065, a collectible's settle 
 A pNFT stake takes about 191,000 CU and a compressed proof and stake about 162,000, past the 200,000 default only
 narrowly: set a higher limit. A grant claim whose receipt held 256 rounds used 142,439 (0.20). Third-party transfer hooks can
 need more, or refuse.
+
+## Persons and links
+
+A project names an **issuer** (`Project.issuer`, `update_project`'s `issuer`): a server key that says which person a
+wallet belongs to (a 32-byte hash it makes of an account it knows, an X id). A wallet's **link**,
+`["link", project, wallet]` (`pda.link`, 41 bytes: the person and when the voucher that wrote it expires), is written
+by a claim of a voucher the issuer signed that names a person (the claim passes the link), or by `link_wallet` after
+the issuer's Ed25519 check of `"loot-link-v1" | sha256(program | project | wallet | person | expires)` (`linkBytes`,
+`linkWalletIx`; the server signs it with `signLink`, the page sends it with its next step through js/play's `link`).
+Only a voucher that expires later moves a link (`StaleLink`). Any limit (`PerWallet`) can count by person
+(`by_person`): a box's, a recipe's, a lottery's (window 0 is its round) and a grant's. The instruction then takes the
+wallet's link and the person's counts, `["persons", project, person]` (`pda.persons`), and refuses a wallet with no
+link (`NotLinked`). Persons are public.
+
+## Tickets a grant gives
+
+`Prize::Ticket { lottery, count }` (a grant's only): a claim puts `count` free tickets for each round it pays into the
+lottery's current round, in one entry, opening the round when nobody bought into it. Its accounts are the lottery and
+its current round. A free entry counts in the sale and the draw, and a cancel gives nothing back for it.

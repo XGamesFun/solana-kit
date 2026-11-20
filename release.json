@@ -1,13 +1,13 @@
 {
-  "version": "0.28.0",
+  "version": "0.29.0",
   "programId": "xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet",
-  "sbfBytes": 1794616,
-  "sbfSha256": "ac8b09ed2c3a3f7daa2dfab55d2f6dea19fa43e4c98b44a82da2a68a7bc8ebbe",
-  "idlSha256": "ef3b8043d62c606e850df75773b4535cdb08206216e17aca653111a77403abd7",
-  "clientSha256": "7b59fc1d07d592bad702509794d67f6f4150cb66710ad903def227e1c96e83c0",
+  "sbfBytes": 1820384,
+  "sbfSha256": "97125d9b85b91f9deead6f1ee8b44c87f8849df39fc838798bf0008a2276feb8",
+  "idlSha256": "87a066071769e202e1024db7ee8d885e7639138916494a77121ddc54ae3351f7",
+  "clientSha256": "27084d8f364b11c79435c5a607f1a90d58fd7495b7d463500dfd981c4e19e1aa",
   "mainnet": {
     "programId": "xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy",
-    "sbfBytes": 1794616,
-    "sbfSha256": "f78e4f0ef38b5f1673936044263293e91172b4bac92c741cc7bb9567617bbdf6"
+    "sbfBytes": 1820384,
+    "sbfSha256": "d75d910c3dd0419f0a80e698673a2fa7728d4f02f74713fe8d92dd724178c04b"
   }
 }

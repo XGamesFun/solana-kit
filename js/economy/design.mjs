@@ -73,7 +73,7 @@ export const REQUIREMENTS = {
       `Everyone can claim ${r.perPerson ?? 1} free entr${(r.perPerson ?? 1) === 1 ? 'y' : 'ies'}${r.spendable === false ? ', which is good only as an entry (it can’t be spent or turned into money)' : ''}.`,
     test: (c, r) => {
       if (!c.plan.free) return { kept: false, why: 'no free entry' };
-      if (r.spendable !== false) return { kept: true, why: c.plan.freeWords };
+      if (r.spendable !== false || c.plan.free.ticket) return { kept: true, why: c.plan.freeWords };
       const a = c.fl.assets.get(c.plan.free.asset);
       if (a?.money)
         return {
@@ -223,6 +223,7 @@ export const REQUIREMENTS = {
     says: r => `It pays out at most ${r.total} in all.`,
     test: (c, r) => {
       const f = c.spec.farms.find(q => q.key === c.x.route);
+      if (!f) return { kept: false, why: 'this route is not a staking farm' };
       if (!f.rate)
         return num(f.seed) <= r.total
           ? { kept: true, why: `a vault of ${f.seed}, nothing more` }
@@ -453,6 +454,21 @@ const DRAW_BRIDGES = {
       build: (s, x) => ((s.grants = s.grants.filter(g => g.key !== x.freeKey || g.prize || g.gives)), true),
     },
     {
+      id: 'ticket',
+      says: 'a grant puts a ticket in the draw itself, one a person: nothing to hold, spend or sell',
+      plain: () => 'the free entry is a ticket in the draw, placed by a claim: it is good for nothing else',
+      build: (s, x) => {
+        if (!x.wantsFree) return false;
+        const draw = s.lotteries.find(l => l.key === x.plan.draw);
+        // A grant's tickets go only into a lottery that sells for tokens.
+        if (!draw || draw.ticketNft) return false;
+        x.freeGrant(s).prize = { gives: 'ticket', lottery: draw.key, count: 1 };
+        x.plan.free = { ticket: true };
+        x.plan.freeWords = 'a grant puts a free ticket in the draw';
+        return true;
+      },
+    },
+    {
       id: 'grant-ticket',
       says: 'a grant gives what the draw takes, one a person',
       plain: x =>
@@ -559,7 +575,7 @@ export const FAMILIES = {
             g = {
               key: want.grant ?? `${route}-free-entry`,
               name: 'Free entry',
-              limits: { perPerson: want.perPerson ?? 1, perWallet: want.perPerson ?? 1 },
+              limits: { perPerson: want.perPerson ?? 1 },
             };
             s.grants.push(g);
           }
@@ -750,7 +766,10 @@ export const FAMILIES = {
           plain: x => `${perWord(x.per)} claim a person, counted by the account your server names`,
           build: (s, x) => {
             if (!['bounds', 'decides'].includes(x.plan.proof)) return false;
-            x.grant(s).limits = { ...x.limits(s), perPerson: x.per, perWallet: x.per };
+            const { perWallet: _w, perWalletEach: _e, ...rest } = x.limits(s);
+            x.grant(s).limits = { ...rest, perPerson: x.per };
+            // Who is who is the issuer's word: the server key that signs the vouchers says it too.
+            if (x.keys[0] && !s.keys?.issuer) s.keys = { ...(s.keys ?? {}), issuer: x.keys[0] };
             x.plan.cap = 'person';
             return true;
           },
@@ -1075,6 +1094,48 @@ function searchRoute(base, route, family, requirements, now) {
  * Requirements name their route (`route`); its family follows from where that key is in the spec (a lottery: a draw;
  * an item: a sale; a grant: a reward; a farm: staking; a contest), or from a requirement's own `family`.
  */
+/** What a requirement's own fields must be, by field: which kinds need it, how it reads when wrong, and its test. */
+const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+const FIELDS = {
+  currencies: {
+    needs: ['pay-in'],
+    says: 'a list of what people can pay with, each { "token": a token’s key, "amount": a number above 0 }',
+    ok: v =>
+      Array.isArray(v) &&
+      v.length > 0 &&
+      v.every(c => c && typeof c === 'object' && typeof c.token === 'string' && c.token && positive(c.amount)),
+  },
+  total: { needs: ['bounded', 'emission-cap'], says: 'a number above 0', ok: positive },
+  perPerson: { says: 'a whole number above 0', ok: v => positive(v) && Number.isInteger(v) },
+  claims: { says: 'a whole number above 0', ok: v => positive(v) && Number.isInteger(v) },
+  amount: { says: 'a number above 0', ok: positive },
+  spendable: { says: 'true or false', ok: v => typeof v === 'boolean' },
+  route: { says: 'the key of the part it is about', ok: v => typeof v === 'string' && v.length > 0 },
+};
+
+/**
+ * What is wrong with a list of requirements before any design is tried, each a sentence naming the requirement by
+ * its place and kind: a kind there is none of, a field a kind needs and lacks, a field of the wrong shape. Empty when
+ * `design` can read them all.
+ */
+export function requirementProblems(requirements) {
+  if (!Array.isArray(requirements) || !requirements.length)
+    return ['"requirements" is a list of at least one requirement, each { "kind": … }.'];
+  const out = [];
+  requirements.forEach((r, i) => {
+    const kind = r && typeof r === 'object' && !Array.isArray(r) ? r.kind : undefined;
+    const at = `Requirement ${i + 1}${typeof kind === 'string' ? ` (${kind})` : ''}`;
+    if (typeof kind !== 'string' || !Object.hasOwn(REQUIREMENTS, kind))
+      return out.push(`${at} names no kind there is: the kinds are ${Object.keys(REQUIREMENTS).join(', ')}.`);
+    for (const [field, rule] of Object.entries(FIELDS)) {
+      const given = Object.hasOwn(r, field) && r[field] !== undefined;
+      if (!given && rule.needs?.includes(kind)) out.push(`${at} needs "${field}": ${rule.says}.`);
+      else if (given && !rule.ok(r[field])) out.push(`${at} has a "${field}" that is not ${rule.says}.`);
+    }
+  });
+  return out;
+}
+
 export function design(base, requirements, { now = Math.floor(Date.now() / 1000) } = {}) {
   const first = requirements.find(r => r.route)?.route ?? base.lotteries?.[0]?.key;
   const order = [...new Set(requirements.map(r => r.route ?? first))];

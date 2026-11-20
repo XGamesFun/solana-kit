@@ -25,6 +25,7 @@ const spec = () => ({
   version: 2,
   network: 'devnet',
   name: 'Prize Day',
+  keys: { issuer: VOUCHER },
   currency: 'bubl',
   tokens: [
     { key: 'sol', source: 'sol' },
@@ -48,7 +49,7 @@ const spec = () => ({
       prize: { gives: 'tokens', amount: 1, from: 'mint', currency: 'entry' },
       vouchers: [VOUCHER],
       trust: 'decides',
-      limits: { perPerson: 1, perWallet: 1, perDay: 5000, total: 10000 },
+      limits: { perPerson: 1, perDay: 5000, total: 10000 },
     },
   ],
   recipes: [
@@ -654,7 +655,7 @@ test('where a signed reward stops paying, the chain stops and the game does not:
   );
   assert.match(
     written,
-    /\n> A reward stops paying on the chain, not in the game\. The chain refuses every claim of “Popped bubbles” past 2000 a person in all or 100000 in all \(for good\) and while “taps” is empty; of “Free entry” past 1 a wallet in all, 1 a person in all or 10000 in all \(for good\)\. Nothing on the chain stops the server counting what a player earns after that, or signing a voucher for it, and none of it can be claimed \(a pool you refill pays again, while a voucher lasts\)\./,
+    /\n> A reward stops paying on the chain, not in the game\. The chain refuses every claim of “Popped bubbles” past 2000 a person in all or 100000 in all \(for good\) and while “taps” is empty; of “Free entry” past 1 a person in all or 10000 in all \(for good\)\. Nothing on the chain stops the server counting what a player earns after that, or signing a voucher for it, and none of it can be claimed \(a pool you refill pays again, while a voucher lasts\)\./,
   );
   assert.match(
     written,
@@ -764,7 +765,7 @@ test('a grant’s edges: what the chain keeps at each, what only the server keep
   assert.equal(caps.length, 1);
   assert.match(
     caps[0],
-    /“Popped bubbles”: 2000 a person in all \(up to 24000000 BUBL\), 20000 a day for everyone \(up to 240000000 BUBL\), 100000 in all \(up to 1200000000 BUBL\); “Free entry”: 1 a wallet in all/,
+    /“Popped bubbles”: 2000 a person in all \(up to 24000000 BUBL\), 20000 a day for everyone \(up to 240000000 BUBL\), 100000 in all \(up to 1200000000 BUBL\); “Free entry”: 1 a person in all/,
   );
   assert.match(caps[0], /Are these the numbers you want\?$/);
   // A cap a question of its own is about is not asked twice: here the wallet's day and everyone's day are, the total isn't.

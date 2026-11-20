@@ -27,7 +27,12 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
  * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
  */
-export function challenge(m, warnTo, now, economy) {
+/**
+ * `simulation`: the caller's own run of the simulation (check.mjs: run once for the whole check, and said once when it
+ * cannot run); without one it is run here, and a run that fails gives no numbers.
+ */
+export function challenge(m, warnTo, now, economy, simulation = null) {
+  const simulated = () => (simulation ? simulation() : simulateOrNull(economy, now));
   // (every grant cap a question is about, so the caps nobody was asked about are asked once, together, at the end)
   const askedCaps = new Set();
   const warn = (code, where, message, fix, extra) => {
@@ -153,7 +158,7 @@ export function challenge(m, warnTo, now, economy) {
   // Loops across routes: every route as an exchange from what it takes to what it gives (exchanges.mjs), and every
   // cycle that comes back with more than it started, caps or not: a boost bought with its farm's rewards, a prize that
   // buys more chances at itself, recipes whose rates multiply above 1.
-  sim ??= simulateOrNull(economy, now);
+  sim ??= simulated();
   const edges = exchanges(m, fl, sim, now);
   const label = key => (key.startsWith('item:') ? named(m.item.get(key.slice(5)) ?? { key: key.slice(5) }) : sym(key));
   const seen = new Set();
@@ -327,7 +332,7 @@ export function challenge(m, warnTo, now, economy) {
     );
     const farms = m.farms.filter(f => f.rewards === key && f.rate?.minted && num(f.rate.perDay) > 0);
     if (!grants.length && !farms.length) continue;
-    sim ??= simulateOrNull(economy, now);
+    sim ??= simulated();
     const amountOf = g => num(prizeLine(g.prize ?? g.gives).amount);
     // A grant whose server declares what it signs ("serverLimit") is counted at that rate: what the economy really
     // pays. Its chain caps are only what a leaked voucher key could take, said beside it.
@@ -395,7 +400,7 @@ export function challenge(m, warnTo, now, economy) {
   const { worth } = fl;
   const money = sym(m.currencyKey);
   for (const f of m.farms) {
-    sim ??= simulateOrNull(economy, now);
+    sim ??= simulated();
     const row = sim?.farms?.find(x => x.key === f.key);
     const days = f.runs ? toSeconds(f.runs) / 86_400 : num(sim?.scenario?.days);
     if (!row) continue;
@@ -622,7 +627,7 @@ export function challenge(m, warnTo, now, economy) {
   // A grant's funds (the SOL that pays each claim's rent) against the claims its audience makes: sized per claim, they
   // run out at a count of players.
   for (const g of m.grants.filter(g => on(g) && num(g.fund) > 0)) {
-    sim ??= simulateOrNull(economy, now);
+    sim ??= simulated();
     const each = num(sim?.grants?.find(x => x.key === g.key)?.fundsPerClaimSol);
     if (!each) continue;
     const covers = Math.floor(num(g.fund) / each);

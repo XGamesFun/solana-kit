@@ -4,6 +4,71 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.0: persons, tickets a grant gives, a cap on a grant's tokens (loot 0.29.0)
+
+Built for loot 0.29.0, on devnet since slot 524,113,825 and on mainnet since slot 471,855,650 (2026-11-20). It carries 0.28.32's fixes, below, which were never published
+on their own.
+
+- **Persons.** A spec names an issuer, `keys.issuer`: the server key that says which person a wallet belongs to (the
+  grants' voucher key may be it, so one key does both). The setup sets it on the project (`update_project`'s `issuer`).
+  Any part limits each person in place of each wallet with `perPerson` (in all) and `perPersonEach`
+  ({ count, every }): items, boxes, recipes, lotteries and grants. Every wallet linked to one person counts together,
+  and a wallet linked to nobody is refused. The checker refuses a limit per person without an issuer, and a part that
+  names both kinds (`E-PERSON`).
+- **Links.** A server signs who a wallet is with `signLink` (`@xgamesfun/solana/results`: ten minutes by default, a
+  day at most), and the page passes it to `js/play`'s `link`: the wallet's next step that counts by person carries
+  it, in the same transaction. A claim of the issuer's own voucher that names a person links the wallet itself. The
+  client builds `link_wallet` (`linkWalletIx`, `linkBytes`), finds a person's counts (`pda.persons`) and a link
+  (`pda.link`, `decode('Link', …)`), and every builder that counts takes the person (`person`).
+- **A grant's person limit has a window,** and a claim's person is the issuer's word: the one its voucher names, or
+  the wallet's link. A daily login bonus is an open grant with `"perPersonEach": { "count": 1, "every": "1d" }`.
+- **Tickets a grant gives:** `{ "gives": "ticket", "lottery": key, "count": n }`, a grant's only. One claim puts the
+  free tickets in the lottery's round, opening it if nobody has bought in: the login bonus is one claim, with no
+  entry token and no recipe. A lottery limits each wallet's (or person's) tickets per round with `perWallet`, or per
+  window of time with `perWalletEach` (40 an hour).
+- **A cap on what a grant gives:** `limits.tokens`, for a grant of tokens.
+- **Warnings, in plainer words.** `W-HOLD-UP` on an auction names how the highest bidder blocks higher bids: closing
+  their account of a token whose new accounts start frozen, or turning plain transfers into it off (confidential
+  transfers). `W-SHARED-SOURCE` says that a box that stops selling while an outcome is out counts only its own rolls:
+  a buyer who empties a common outcome's source by another route has every roll on it refunded and pays only for the
+  others, so give the box sources of its own.
+- **A draw that settles the round before asks for the most heap.** A lottery paid from a pot first moves in what the
+  round before left it, which reads both rounds; with many thousands of places that outgrows the default heap, so
+  `js/play`'s draw adds `RequestHeapFrame` (256 KiB) when it does.
+- Sizes: a project is 185 bytes (`issuer`), an order 33 bytes larger (the person it counted for).
+
+## 0.28.32: what the tools say is what holds, and a check that could not look says so (loot 0.28.0, unchanged)
+
+The tools alone. An outside read of 0.28.30 found places where the tools said more than was true, or passed in
+silence. Each was reproduced first and has a test that fails without its fix.
+
+- **A spec the check passed could stop part way through going live.** Three cases, each run against the real program:
+  a recipe that rolls a box on a collectible it keeps, with that box no longer in the spec (four transactions landed,
+  then `WrongRecord`, and no way on); an item's cooldown past what a raise holds, a signed 4-byte number (the plan
+  threw); and a fixed supply smaller than what going live puts in, which was compared with the pools' seeds alone,
+  not with a lottery's seed, a farm's and a sealed schedule's funds beside them (the setup stopped at the transfer
+  that ran short). All three are refused by the check now. 1,116 random edits of the examples then gave none that
+  passed the check and stopped after a transaction had landed.
+- **A simulation that cannot run is said.** The check ran the simulation up to three times and took an error in it
+  for "nothing to report", so the warnings that rest on its numbers were missing from a check that read as clean. It
+  runs once a check now, and `W-SIMULATION` says when it stopped and what was therefore not looked at.
+- **`xsolana_design` answered a bare `TypeError`** for a requirement that had its kind and not what the kind needs
+  (`pay-in` with no `currencies`), and for a cap on staking asked of a route that is no farm. A requirement it cannot
+  read is now named by its place and kind, with what it needs.
+- **Seed phrases and keys the check missed.** A seed phrase was found only as 12 to 24 lower-case words and nothing
+  else. It is now found by its words (the word list of BIP-39) however it is written: capitalised, with commas, as a
+  numbered list, inside a sentence. A 64-byte key in hex is found too. The save tool no longer says the checker
+  refuses "a key": it names the forms it knows, and that no check finds every way to write one.
+- **The schema took a name every object inherits.** `"constructor"` or `"__proto__"` as a field of a spec passed where
+  any other unknown field is refused.
+- **`xsolana version` and the MCP server's `serverInfo` gave the program's version**, 0.28.0 for every release. They
+  give the package's own now, so a stale server can be told.
+- **`xsolana_save` pointed at going live with questions open.** A spec whose check has questions for the person is
+  saved under a state of its own (`saved-questions-open`), and the answer says to put them to the person first.
+- **Statements that were no longer true.** `SECURITY.md` and `docs/program.md` said nothing runs on mainnet; the
+  approval page's log line said "(devnet)" on any cluster; a live economy on mainnet was told its owner needs
+  "devnet SOL". `SECURITY.md` also says now that the mainnet upgrade authority is a single key today.
+
 ## 0.28.31: a player's step leaves room for what their wallet adds to it (loot 0.28.0, unchanged)
 
 The tools alone. A wallet may add to a transaction before it signs it. Phantom adds a compute unit limit and price

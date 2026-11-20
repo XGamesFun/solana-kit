@@ -1016,7 +1016,7 @@ describe('mechanics that run by themselves', () => {
       every: 3600n,
       draws_at: BigInt(w.chain.now() + 3600),
       gate: null,
-      per_wallet: 5,
+      per_wallet: { total: 0, per_window: 5, window: 0, by_person: false },
     };
     w.upsert({ Lottery: { id: 2, args } });
     const address = pda.lottery(w.project, 2);
@@ -1465,10 +1465,10 @@ describe('grants', () => {
     w.upsert({ Item: { id: 7, args: collectible('Starter Pet') } });
     const signer = keyFromSeed(new Uint8Array(32).fill(9));
     const limits = {
-      wallet: { total: 1, per_window: 0, window: 0 },
-      per_person: 1,
+      wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+      tokens: 0n,
       per_key: 0,
-      all: { total: 100, per_window: 100, window: 86_400 },
+      all: { total: 100, per_window: 100, window: 86_400, by_person: false },
       window: { opens_at: 0n, closes_at: 0n },
     };
     const nobody = '11111111111111111111111111111111';
@@ -1602,10 +1602,10 @@ describe('grants', () => {
       list_root: new Uint8Array(32),
       key_root: new Uint8Array(32),
       limits: {
-        wallet: { total: 1, per_window: 0, window: 0 },
-        per_person: 0,
+        wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+        tokens: 0n,
         per_key: 0,
-        all: { total: 0, per_window: 0, window: 0 },
+        all: { total: 0, per_window: 0, window: 0, by_person: false },
         window: { opens_at: 0n, closes_at: 0n },
       },
       active: true,

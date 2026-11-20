@@ -400,8 +400,21 @@ export async function createApproval({
       chainNotes = trusted.notes;
       // The session's copy of the live section says of the project's treasury and authority what the chain says, so
       // what this session records is the chain's: the file says it once a step lands (or at once, with none to send).
-      if (trusted.treasury && (spec.live.treasury !== trusted.treasury || spec.live.authority !== trusted.authority))
-        spec = { ...spec, live: { ...spec.live, treasury: trusted.treasury, authority: trusted.authority } };
+      // The project's issuer too (none is left out): a spec naming another one plans its update (`plan.mjs`).
+      const issuer =
+        trusted.issuer && trusted.issuer !== '11111111111111111111111111111111' ? trusted.issuer : undefined;
+      if (
+        trusted.treasury &&
+        (spec.live.treasury !== trusted.treasury ||
+          spec.live.authority !== trusted.authority ||
+          spec.live.issuer !== issuer)
+      ) {
+        const { issuer: _was, ...rest } = spec.live;
+        spec = {
+          ...spec,
+          live: { ...rest, treasury: trusted.treasury, authority: trusted.authority, ...(issuer ? { issuer } : {}) },
+        };
+      }
       // which names are written again is the chain's to say, read for the project's owner
       const read = await readRenames({
         live: live(),
@@ -886,6 +899,14 @@ export async function createApproval({
     };
   }
 
+  /** The issuer the landed steps `ids` name: the issuer's own step (`issuer:<key>`), or the project's, which sets the
+   * spec's. Nothing when neither landed, or it names none (the chain's read at the next approval says so). */
+  function issuerBy(ids) {
+    const step = [...ids].find(id => id.startsWith('issuer:'));
+    const named = step ? step.slice(7) : ids.has('project') ? (spec.keys?.issuer ?? 'none') : null;
+    return named === null || named === 'none' ? {} : { issuer: named };
+  }
+
   /** What a transaction's steps make, from the context it was built with: recorded when it lands. */
   function madeBy(transaction, ctx) {
     const ids = new Set(transaction.steps.map(s => s.id));
@@ -894,6 +915,7 @@ export async function createApproval({
     );
     return {
       ...(ids.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
+      ...issuerBy(ids),
       ...(ids.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(ids.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
       ...(ids.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
@@ -1016,6 +1038,7 @@ export async function createApproval({
       ...was,
       program: lootProgram(),
       ...(made.has('project') ? { project: ctx.project, treasury: ctx.treasury, authority: ctx.authority } : {}),
+      ...issuerBy(made),
       ...(made.has('collection') && ctx.collection ? { collection: ctx.collection } : {}),
       ...(made.has('tree') && ctx.tree ? { tree: ctx.tree } : {}),
       ...(made.has('table') && ctx.slot != null ? { tables: [tableAddress(ctx.owner, ctx.slot)[0]] } : {}),
@@ -1387,7 +1410,7 @@ export async function approve({
   const origin = `http://127.0.0.1:${server.address().port}`;
   const link = `${origin}/?t=${token}`;
   const opened = `${origin}/?c=${code}`;
-  log(`Approve going live in your wallet (devnet): ${link}`);
+  log(`Approve going live in your wallet (${cluster()}): ${link}`);
   log(
     'Leave this running until the page says it is live. Ctrl+C stops it; running it again goes on from where it stopped.',
   );

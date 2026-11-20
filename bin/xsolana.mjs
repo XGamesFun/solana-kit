@@ -314,8 +314,11 @@ async function main(argv) {
     }
     case 'version':
     case '--version': {
-      const { VERSION, PROGRAM_INFO } = await import('../js/mcp/tools.mjs');
-      console.log(`@xgamesfun/solana · loot ${VERSION} · program ${PROGRAM_INFO.program} · ${PROGRAM_INFO.cluster}`);
+      // The package's own version first (what `npx @xgamesfun/solana@<version>` names), then the program's it is built for.
+      const { PACKAGE_VERSION, VERSION, PROGRAM_INFO } = await import('../js/mcp/tools.mjs');
+      console.log(
+        `@xgamesfun/solana ${PACKAGE_VERSION} · loot ${VERSION} · program ${PROGRAM_INFO.program} · ${PROGRAM_INFO.cluster}`,
+      );
       break;
     }
     case undefined:

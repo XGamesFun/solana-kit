@@ -57,7 +57,7 @@ test(
         id: 1,
         args: boxArgs(PRICE, [drop([{ Item: [1] }, minted])], {
           slots: [{ count: 3, only: [], distinct: false }],
-          per_wallet: { total: 2, per_window: 0, window: 0 },
+          per_wallet: { total: 2, per_window: 0, window: 0, by_person: false },
         }),
       },
     });

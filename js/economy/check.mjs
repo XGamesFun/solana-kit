@@ -38,6 +38,7 @@ import {
   drawsOf,
   lifeLines,
   prizeLine,
+  byPerson,
   prizePool,
   prizeToken,
   rollsOf,
@@ -711,7 +712,10 @@ function schemaFix(path) {
   return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and {"part": …} gives one with its fields.'}`;
 }
 
-export function check(economy, { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null } = {}) {
+export function check(
+  economy,
+  { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null, simulator = simulate } = {},
+) {
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
@@ -828,17 +832,25 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     p?.gives === 'nft' ||
     p?.gives === 'roll' ||
     (p?.gives === 'item' && !m.item.get(p.item)?.soulbound && m.item.get(p.item)?.kind !== 'normal');
-  /** What one claim of grant `key` costs its funds, in SOL, as `simulate` counts it (null when it can't say). */
-  let fundsSim;
-  const grantClaimSol = key => {
-    if (fundsSim === undefined) {
+  /**
+   * The simulation at the spec's scenario, run once for the whole check (`simulator`: `simulate`, or a test's own).
+   * null when it cannot run, and then W-SIMULATION says so at the end, with what was therefore not checked: a
+   * simulation that stops is a fault in these tools, and a check that hid it would read as a clean spec.
+   */
+  let simRun;
+  const simulated = () => {
+    if (simRun === undefined) {
       try {
-        fundsSim = simulate(economy, { now });
-      } catch {
-        fundsSim = null;
+        simRun = { sim: simulator(economy, { now }) };
+      } catch (error) {
+        simRun = { sim: null, error };
       }
     }
-    const each = fundsSim?.grants?.find(x => x.key === key)?.fundsPerClaimSol;
+    return simRun.sim;
+  };
+  /** What one claim of grant `key` costs its funds, in SOL, as `simulate` counts it (null when it can't say). */
+  const grantClaimSol = key => {
+    const each = simulated()?.grants?.find(x => x.key === key)?.fundsPerClaimSol;
     return each > 0 ? each : null;
   };
   const units = (amount, token, where, what = 'This amount') => {
@@ -1091,16 +1103,26 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
           `“${t.key}” has a supply of 0.`,
           'Give it a supply above 0, or leave "supply" out for a token the game mints.',
         );
-      // A seed that is not an amount is refused with its pool, below.
-      const seeded = m.pools
-        .filter(p => p.currency === t.key)
-        .reduce((n, p) => n + (quietUnits(p.seed, tok) ?? 0n), 0n);
+      // Everything going live puts in from the owner's own account, which holds the whole supply and nothing more:
+      // the pools' seeds, a lottery's, a farm's, and a sealed schedule's funds from the wallet (cost.mjs counts the
+      // same four). More than the supply stops the setup at the transfer that runs short, after what came before it
+      // has landed. (An amount that is not one is refused with its own part, below.)
+      const of = key => (key ?? m.currencyKey) === t.key;
+      const puts = [
+        ...m.pools.filter(p => of(p.currency)).map(p => p.seed),
+        ...m.lotteries.filter(l => of(l.currency)).map(l => l.seed),
+        ...m.farms.filter(f => of(f.rewardsToken)).map(f => f.seed),
+        ...m.schedules
+          .filter(sc => sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet' && of(sc.currency))
+          .map(sc => sc.fund),
+      ];
+      const seeded = puts.reduce((n, amount) => n + (quietUnits(amount, tok) ?? 0n), 0n);
       if (supply !== null && seeded > supply)
         refuse(
           'E-TOKEN',
           `${where}.supply`,
-          `The pools of “${t.key}” are seeded with more than its whole supply of ${t.supply}.`,
-          'Seed them with less, or raise the supply.',
+          `Going live puts in more of “${t.key}” than its whole supply of ${t.supply}: the seeds of its pools, lotteries and farms and the funds of its sealed schedules come to ${Number(seeded) / 10 ** (tok?.decimals ?? 0)}.`,
+          'Put in less, or raise the supply.',
         );
     }
     const p = t.powers ?? {};
@@ -1271,6 +1293,30 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       );
       return null;
     }
+    if (line.gives === 'ticket') {
+      const l = (economy.lotteries ?? []).find(x => x.key === line.lottery);
+      if (code !== 'E-GRANT')
+        refuse(
+          code,
+          at,
+          `${what} gives tickets in a lottery: only a grant gives tickets (a claim puts them in the round).`,
+          'Give tickets from a grant, or give something else here.',
+        );
+      else if (!l)
+        refuse(
+          code,
+          `${at}.lottery`,
+          `${what} gives tickets in “${line.lottery}”, which is no lottery here.`,
+          'Name one of "lotteries".',
+        );
+      else if (l.ticketNft)
+        refuse(
+          code,
+          `${at}.lottery`,
+          `${what} gives tickets in ${label(l)}, whose ticket is an NFT: a grant's tickets go only into a lottery that sells for tokens (BadTicket).`,
+          'Give tickets in a lottery priced in a token.',
+        );
+    }
     if (line.split && (code !== 'E-CONTEST' || line.gives !== 'tokens'))
       refuse(
         code,
@@ -1401,7 +1447,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
           `${what} gives an NFT drawn from a lottery's own stash: only a lottery's place does (BadPrize).`,
           'Give an NFT of a stash through a box\'s roll ("gives": "stash"), or raffle them in a lottery.',
         );
-    } else
+    } else if (line.gives !== 'ticket')
       refuse(
         code,
         `${at}.gives`,
@@ -1427,8 +1473,7 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       p.nonTransferable && 'it cannot be transferred at all',
     ].filter(Boolean);
     const does = {
-      auction:
-        'the highest bidder can close their own account of it so that every higher bid fails (a topped bid is sent back to that account), and win at their price. Tell the seller and every bidder.',
+      auction: `the highest bidder can ${[frozen && 'close their own account of it', p.confidentialTransfers && 'turn plain transfers into their own account of it off', !frozen && !p.confidentialTransfers && 'refuse it'].filter(Boolean).join(', or ')} so that every higher bid fails (a topped bid is sent back to that account in the same step as the higher bid), and win at their price. Tell the seller and every bidder.`,
       lottery:
         'a player who turns plain transfers into their own account off (or closes it) holds up only their own part, but the round cannot close meanwhile and its rent waits: keep spare SOL in the lottery ("roundRent") so no buyer fronts it. A pot or pool in a token that could not reach the round gives that round nothing.',
       contest:
@@ -2165,7 +2210,9 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     perWalletWindow(it, where);
     // A collectible's life, each time in 4 bytes (a normal item's is dropped, warned of below).
     if (isCollectible(it) && it.life)
-      for (const k of ['readyAfter', 'lasts', 'cooldown']) fourByteSeconds(it.life[k], `${where}.life.${k}`);
+      // (a cooldown is written into each recipe as a raise, whose amount is a signed number: half as much fits)
+      for (const k of ['readyAfter', 'lasts', 'cooldown'])
+        fourByteSeconds(it.life[k], `${where}.life.${k}`, { signed: k === 'cooldown' });
     if (it.kind === 'normal' && (it.life || it.soulbound || it.burnable))
       warn(
         'W-ITEM',
@@ -3172,8 +3219,8 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
       warn(
         'W-SHARED-SOURCE',
         `${where}.outcomes`,
-        `${label(b)} draws from ${[...new Set(sharedSources.map(([kind, key]) => `the ${kind} “${key}”`))].join(', ')}, which another route also takes from. ${stopsSales(b) ? 'A buyer can open the box, empty that source by the other route before the answers land, and be refunded every miss' : b.whenOut === 'giveNothing' ? 'Anyone emptying that source makes this box’s rolls miss, and a miss gives nothing' : 'Anyone emptying that source moves this box’s odds to what is left'}.`,
-        'Give the box sources of its own; cap a fresh item’s supply at what its table holds.',
+        `${label(b)} draws from ${[...new Set(sharedSources.map(([kind, key]) => `the ${kind} “${key}”`))].join(', ')}, which another route also takes from. ${stopsSales(b) ? 'Stopping sales while an outcome is out ("stopSales") counts only this box’s own rolls: a roll already paid whose outcome another route empties before its answer lands is refunded in full. So a buyer can open the box and, in the same transaction, empty a common outcome’s source by the other route: every roll that lands on that outcome is refunded, and they pay only for the rolls that land on another one, such as the rare one' : b.whenOut === 'giveNothing' ? 'Anyone emptying that source makes this box’s rolls miss, and a miss gives nothing' : 'Anyone emptying that source moves this box’s odds to what is left'}.`,
+        'Give the box sources of its own (an item, pool or stash nothing else sells or gives); cap a fresh item’s supply at what its table holds. "giveNothing" ends the refund but makes a miss give nothing; "drawLeft" draws among what is left.',
       );
     if (b.whenOut === 'drawLeft' && boxRolls(b, m)) {
       // The rarest outcome that gives something, against the likeliest outcome that can run out.
@@ -3528,7 +3575,10 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     for (const [i, line] of outs.entries()) {
       if (line.gives !== 'roll') continue;
       const at = `${where}.out[${i}]`;
-      const b = m.box.get(line.box);
+      // A roll with no "on" was checked as a prize above, its box too. One on a collectible is checked only here: a
+      // box the spec does not have is refused (the recipe would be written to roll an address with no box at it, and
+      // the program refuses that after the transactions before it have landed).
+      const b = line.on === undefined ? m.box.get(line.box) : prizeBox(line.box, `${at}.box`, label(r), 'E-RECIPE');
       if (!b) continue;
       if (line.on === undefined && b.rollsOn)
         refuse(
@@ -5334,6 +5384,32 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   }
 
   // ---- grants (grant.rs)
+  // Limits per person: every wallet the project's issuer linked to one person counts together, so the issuer is named,
+  // and a part counts wallets or persons, not both.
+  const limited = [
+    ...['items', 'boxes', 'recipes', 'lotteries'].flatMap(list =>
+      (economy[list] ?? []).map((p, i) => [p, `economy.${list}[${i}]`, p]),
+    ),
+    ...(economy.grants ?? []).map((g, i) => [g.limits, `economy.grants[${i}].limits`, g]),
+  ];
+  for (const [part, where, owner] of limited) {
+    if (!byPerson(part)) continue;
+    if (!economy.keys?.issuer)
+      refuse(
+        'E-PERSON',
+        where,
+        `${label(owner)} limits each person, and the economy names no issuer: no wallet could be linked to a person, so every one would be refused (NotLinked).`,
+        'Add "keys": { "issuer": "<the server key that signs who is who>" } (the grants’ voucher key may be it), or limit each wallet ("perWallet").',
+      );
+    if (part.perWallet != null || part.perWalletEach != null)
+      refuse(
+        'E-PERSON',
+        where,
+        `${label(owner)} names both a limit per wallet and one per person: a limit counts wallets or persons, not both.`,
+        'Keep "perPerson" / "perPersonEach" (a person with every wallet of theirs), or "perWallet" / "perWalletEach".',
+      );
+  }
+
   for (const g of m.grants) {
     const where = `economy.grants.${g.key}`;
     const old = g.gives ?? {};
@@ -5354,6 +5430,13 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         'Add a "prize": { "gives": "item", "item": key }, { "gives": "tokens", … }, { "gives": "nft", … } or { "gives": "roll", "box": key }.',
       );
     const gives = prizeCheck(g.prize ?? g.gives, `${where}.${g.prize ? 'prize' : 'gives'}`, label(g), 'E-GRANT') ?? {};
+    if (g.limits?.tokens != null && gives.gives && gives.gives !== 'tokens')
+      refuse(
+        'E-GRANT',
+        `${where}.limits.tokens`,
+        `${label(g)} caps the tokens it gives, but gives ${gives.gives === 'item' ? 'an item' : `a ${gives.gives}`}: the cap counts tokens only (BadLimits).`,
+        'Remove "tokens", or bound the grant with "total" and "perDay".',
+      );
     const vouchers = g.vouchers ?? [];
     const keys = g.keys ?? [];
     const l = g.limits ?? {};
@@ -5390,13 +5473,6 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
         );
     }
     // A grant with no voucher key, no key list and no list is open: any wallet claims it, within its limits (grant.rs).
-    if (open && showsNft(g.gate) && l.perPerson)
-      warn(
-        'W-GRANT',
-        `${where}.limits.perPerson`,
-        `${label(g)} is open: "perPerson" counts only vouchers that name a person, so here it limits nothing (the wallet limits count each collectible shown).`,
-        'Remove "perPerson".',
-      );
     if (open && !l.perWallet && !l.perWalletEach?.count)
       warn(
         'W-GRANT',
@@ -5808,17 +5884,12 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
   }
 
   // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
-  if (!refusals.length) challenge(m, warn, now, economy);
+  if (!refusals.length) challenge(m, warn, now, economy, simulated);
 
   // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
   // but pays out faster drains, and then skips or fails what it owes.
   if (!refusals.length) {
-    let sim;
-    try {
-      sim = simulate(economy, { now });
-    } catch {
-      sim = null;
-    }
+    const sim = simulated();
     for (const p of sim?.pools ?? []) {
       if (p.lasts !== 'runs dry' || !(p.lastsDays < sim.scenario.days)) continue;
       const sym = m.tokens.get(p.token)?.symbol ?? p.token;
@@ -5836,6 +5907,16 @@ export function check(economy, { now = Math.floor(Date.now() / 1000), project = 
     }
     for (const row of sim?.farms ?? []) farmRounding(m.farm.get(row.key), row, warn, m);
   }
+
+  // ---- W-SIMULATION: the simulation could not run, so what rests on it was not checked. Said, never passed over.
+  if (!refusals.length && simRun?.error)
+    warn(
+      'W-SIMULATION',
+      'economy',
+      `The simulation of this spec stopped on an error (${String(simRun.error?.message ?? simRun.error).slice(0, 200)}), so nothing that rests on its numbers was checked: whether a pool runs dry or a farm rounds a share to nothing at the scenario's rates, what a claim costs a grant's funds, and the rates the questions above would quote. That is a fault in these tools, not a finding about the spec, and this check is not a clean one.`,
+      'Run xsolana_simulate on the spec to see the error, and report it with the spec. Until it runs, work those numbers out by hand before going live.',
+      { severity: 'medium' },
+    );
 
   return result();
 }

@@ -20,7 +20,7 @@
 //   await giveaways.report({ server, game, giveaway, session, endedAt, winners: [{ wallet, place }], grant })
 import { decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { toHex } from '../chain/bytes.js';
-import { pda, voucherBytes } from '../client/index.js';
+import { linkBytes, pda, voucherBytes } from '../client/index.js';
 import { canonicalJson, drawText, entryText, lockText, resultBytes, rosterHash } from './wire.js';
 import { cluster as onCluster } from '../client/cluster.js';
 
@@ -230,6 +230,32 @@ export async function signVoucher({
     expires,
     personHash: personHash ?? '0'.repeat(64),
     amount: String(BigInt(amount)),
+  };
+}
+
+/**
+ * A link voucher the project's issuer key (`signer`, `keys.issuer`) signs: that `wallet` belongs to `person` (32 bytes, or
+ * 64 hex characters: a keyed hash the server makes of an account it knows, an X id; never the account itself), for
+ * limits that count by person. The wallet sends it with its next step that counts by person (js/play `link`), in the
+ * same transaction. It lives `seconds` from `now` (the cluster's clock): 10 minutes by default and at most a day, since
+ * any voucher still alive can link the wallet again, a move the issuer made since undone. Returns { wallet, person,
+ * expires, publicKey, signature }, plain JSON.
+ */
+export async function signLink({ signer, game, wallet, person, now, seconds = 600 }) {
+  if (!(Number(seconds) > 0) || Number(seconds) > 86_400)
+    throw new RangeError('A link voucher lives some seconds from now, a day at most (`seconds`).');
+  const expires = Math.floor(typeof now === 'bigint' ? Number(now) : now) + Number(seconds);
+  if (!Number.isSafeInteger(expires))
+    throw new RangeError("A link voucher needs the cluster's clock (`now`, unix seconds).");
+  const hex = typeof person === 'string' ? person.toLowerCase() : toHex(person);
+  if (!/^[0-9a-f]{64}$/.test(hex) || /^0+$/.test(hex)) throw new RangeError('A person is 32 bytes, not all zeros.');
+  const message = linkBytes({ project: game, wallet, person: hex, expires });
+  return {
+    wallet,
+    person: hex,
+    expires,
+    publicKey: signer.address,
+    signature: encodeBase58(await signer.sign(message)),
   };
 }
 

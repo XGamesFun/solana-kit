@@ -299,13 +299,18 @@ function prizeWords(gives, m) {
 const times = n => `${n} claim${Number(n) === 1 ? '' : 's'}`;
 const when = seconds => new Date(Number(seconds) * 1000).toISOString().replace('.000Z', 'Z');
 
+/** Who a limit counts: each wallet, or each person (every wallet the project's issuer linked to them). */
+const who = limit => (limit?.by_person ? 'person (every wallet of theirs)' : 'wallet');
+
 /** A grant's prize and its limits: what each claim takes from the project, and how many claims there can be. */
 function grantTerms(args, names) {
   const l = args.limits ?? {};
   const limits = [
-    l.wallet?.total ? `each wallet ${times(l.wallet.total)} in all` : null,
-    l.wallet?.per_window ? `each wallet ${times(l.wallet.per_window)} every ${l.wallet.window} seconds` : null,
-    l.per_person ? `each person ${times(l.per_person)}` : null,
+    l.wallet?.total ? `each ${who(l.wallet)} ${times(l.wallet.total)} in all` : null,
+    l.wallet?.per_window
+      ? `each ${who(l.wallet)} ${times(l.wallet.per_window)} every ${l.wallet.window} seconds`
+      : null,
+    BigInt(l.tokens ?? 0) ? `${l.tokens} base units of tokens in all` : null,
     l.per_key ? `each voucher key ${times(l.per_key)}` : null,
     l.all?.per_window
       ? `${times(l.all.per_window)} ${Number(l.all.window) === 86_400 ? 'a day' : `every ${l.all.window} seconds`}`

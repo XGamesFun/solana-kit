@@ -61,7 +61,7 @@ test('tickets are bought only on the terms shown: a price raised since is refuse
     every: 0n,
     draws_at: BigInt(drawsAt),
     gate: null,
-    per_wallet: 0,
+    per_wallet: { total: 0, per_window: 0, window: 0, by_person: false },
     min_sold: 0n,
   };
   w.chain.send(w.creator, [loot.upsertIx({ owner: w.creator, project: w.project, def: { Lottery: { id: 1, args } } })]);
@@ -105,10 +105,10 @@ test(
     const { w, appOf } = fixture('guard-voucher');
     const host = await newKey();
     const limits = {
-      wallet: { total: 5, per_window: 0, window: 0 },
-      per_person: 0,
+      wallet: { total: 5, per_window: 0, window: 0, by_person: false },
+      tokens: 0n,
       per_key: 0,
-      all: { total: 0, per_window: 0, window: 0 },
+      all: { total: 0, per_window: 0, window: 0, by_person: false },
       window: { opens_at: 0n, closes_at: 0n },
     };
     w.upsert({

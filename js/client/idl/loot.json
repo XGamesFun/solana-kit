@@ -2,7 +2,7 @@
   "address": "xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet",
   "metadata": {
     "name": "loot",
-    "version": "0.28.0",
+    "version": "0.29.0",
     "spec": "0.1.0",
     "description": "Economy for Anything: one program every coin of a project passes through",
     "repository": "https://github.com/gamesfun/loot"
@@ -487,9 +487,14 @@
         {
           "name": "counts",
           "docs": [
-            "wallet buys. Made at their first count, its rent theirs."
+            "wallet buys; by person, the person's, `[\"persons\", project, person]`. Made at their first",
+            "count, its rent theirs."
           ],
           "writable": true,
+          "optional": true
+        },
+        {
+          "name": "link",
           "optional": true
         },
         {
@@ -628,9 +633,14 @@
         {
           "name": "counts",
           "docs": [
-            "tickets one wallet holds in a round. Made at their first count, its rent theirs."
+            "tickets one wallet buys; by person, the person's, `[\"persons\", project, person]`. Made at",
+            "their first count, its rent theirs."
           ],
           "writable": true,
+          "optional": true
+        },
+        {
+          "name": "link",
           "optional": true
         },
         {
@@ -994,6 +1004,14 @@
         },
         {
           "name": "instructions"
+        },
+        {
+          "name": "link",
+          "docs": [
+            "written for a voucher of the project's issuer that names one."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "fee",
@@ -1604,9 +1622,14 @@
         {
           "name": "counts",
           "docs": [
-            "wallet crafts. Made at their first count, its rent theirs."
+            "wallet crafts; by person, the person's, `[\"persons\", project, person]`. Made at their first",
+            "count, its rent theirs."
           ],
           "writable": true,
+          "optional": true
+        },
+        {
+          "name": "link",
           "optional": true
         },
         {
@@ -2730,6 +2753,56 @@
       ]
     },
     {
+      "name": "link_wallet",
+      "docs": [
+        "Links the signing wallet to `person`, as the project's issuer vouched before `expires` in the",
+        "Ed25519 check right before: sent in the same transaction as the wallet's first action that",
+        "counts by person (`link.rs`)."
+      ],
+      "discriminator": [
+        56
+      ],
+      "accounts": [
+        {
+          "name": "project"
+        },
+        {
+          "name": "wallet",
+          "docs": [
+            "The wallet linked: it signs, and pays its link's rent."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "link",
+          "writable": true
+        },
+        {
+          "name": "instructions"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "person",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "expires",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "move_tokens",
       "docs": [
         "The authority moves the project's tokens: out of a pool, out of what a farm holds free, or",
@@ -3333,9 +3406,14 @@
         {
           "name": "counts",
           "docs": [
-            "wallet buys. Made at their first count, its rent theirs."
+            "wallet buys; by person, the person's, `[\"persons\", project, person]`. Made at their first",
+            "count, its rent theirs."
           ],
           "writable": true,
+          "optional": true
+        },
+        {
+          "name": "link",
           "optional": true
         }
       ],
@@ -4976,7 +5054,8 @@
         {
           "name": "counts",
           "docs": [
-            "the box's limit: the refund gives the count back (checked below)."
+            "the box's limit (by person, the person's, `[\"persons\", project, person]`): the refund gives",
+            "the count back (checked below)."
           ],
           "writable": true,
           "optional": true
@@ -8853,6 +8932,19 @@
         67,
         191
       ]
+    },
+    {
+      "name": "WalletLinked",
+      "discriminator": [
+        117,
+        31,
+        117,
+        13,
+        216,
+        212,
+        63,
+        33
+      ]
     }
   ],
   "errors": [
@@ -9164,7 +9256,7 @@
     {
       "code": 6061,
       "name": "OverPerson",
-      "msg": "This person has claimed this grant as often as they may"
+      "msg": "This person has claimed this grant as often as they may, or the grant counts by person and the claim names none"
     },
     {
       "code": 6062,
@@ -9570,6 +9662,31 @@
       "code": 6142,
       "name": "WrongEnds",
       "msg": "A farm whose seats can stop earning takes its record of ends, and no other farm does"
+    },
+    {
+      "code": 6143,
+      "name": "NotLinked",
+      "msg": "This counts by person: the wallet needs a link to its person (`link_wallet`, or a claim of a voucher the project's issuer signed), passed at its address"
+    },
+    {
+      "code": 6144,
+      "name": "NotIssuer",
+      "msg": "A link voucher is signed by the project's issuer, names this project and wallet and has not expired; a project with no issuer links nobody"
+    },
+    {
+      "code": 6145,
+      "name": "OverTokens",
+      "msg": "This grant has given all the tokens it may"
+    },
+    {
+      "code": 6146,
+      "name": "BadTicket",
+      "msg": "A grant's ticket goes into a lottery of the same project that sells tickets for tokens, not NFTs, with a round on sale"
+    },
+    {
+      "code": 6147,
+      "name": "StaleLink",
+      "msg": "The issuer vouched for this wallet's link later than this voucher: only a newer voucher moves it"
     }
   ],
   "types": [
@@ -12058,6 +12175,13 @@
             }
           },
           {
+            "name": "given",
+            "docs": [
+              "The tokens this grant incarnation has given, by `limits.tokens`. Edits never reset it."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "active",
             "docs": [
               "The owner's switch."
@@ -12873,7 +12997,8 @@
     {
       "name": "Limits",
       "docs": [
-        "Counts of claims, not amounts: each round paid is one. 0 switches a limit off."
+        "Counts of claims, not amounts: each round paid is one; and the tokens given. 0 switches a limit",
+        "off."
       ],
       "type": {
         "kind": "struct",
@@ -12892,7 +13017,8 @@
           {
             "name": "wallet",
             "docs": [
-              "Claims one wallet may make, in all and in each window."
+              "Claims one wallet may make, in all and in each window; by person (`by_person`), one person",
+              "with every wallet of theirs (a daily login bonus)."
             ],
             "type": {
               "defined": {
@@ -12901,18 +13027,18 @@
             }
           },
           {
-            "name": "per_person",
-            "docs": [
-              "Claims one person may make: counted only for vouchers that name one (`person_hash`)."
-            ],
-            "type": "u32"
-          },
-          {
             "name": "per_key",
             "docs": [
               "Claims one voucher key may sign: a promo code's key once."
             ],
             "type": "u32"
+          },
+          {
+            "name": "tokens",
+            "docs": [
+              "The tokens it gives in all, whatever each claim names: what a leaked key can drain at most."
+            ],
+            "type": "u64"
           },
           {
             "name": "window",
@@ -13494,9 +13620,16 @@
           {
             "name": "per_wallet",
             "docs": [
-              "The most tickets one wallet holds in a round (`counter.rs`), read at each purchase. 0: no limit."
+              "The most tickets one wallet buys (`counter.rs`), read at each purchase: in each round when its",
+              "window is 0, otherwise in each window of time (an hour, a day); and in all its rounds. By",
+              "person, every wallet linked to one counts together (`link.rs`). Tickets a grant gives",
+              "(`Prize::Ticket`) don't count."
             ],
-            "type": "u32"
+            "type": {
+              "defined": {
+                "name": "PerWallet"
+              }
+            }
           },
           {
             "name": "pots",
@@ -13553,9 +13686,13 @@
           {
             "name": "per_wallet",
             "docs": [
-              "The most tickets one wallet holds in a round (0: no limit)."
+              "The most tickets one wallet (or person) buys: in each round with a window of 0."
             ],
-            "type": "u32"
+            "type": {
+              "defined": {
+                "name": "PerWallet"
+              }
+            }
           }
         ]
       }
@@ -14453,6 +14590,20 @@
             }
           },
           {
+            "name": "person",
+            "docs": [
+              "The person it counted for, when the box's limit counts by person (`link.rs`)."
+            ],
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
             "name": "subject",
             "docs": [
               "The NFT the roll is on (only a box that rolls on an NFT has one), and whether the project holds",
@@ -15040,6 +15191,14 @@
               "The window, in seconds, counted from the unix epoch: 86,400 is a UTC day."
             ],
             "type": "u32"
+          },
+          {
+            "name": "by_person",
+            "docs": [
+              "It counts by person, not by wallet: the person the wallet is linked to (`link.rs`), whichever",
+              "of their wallets acts. A wallet with no link is refused (`NotLinked`)."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -15213,6 +15372,19 @@
           },
           {
             "name": "Raffled"
+          },
+          {
+            "name": "Ticket",
+            "fields": [
+              {
+                "name": "lottery",
+                "type": "u32"
+              },
+              {
+                "name": "count",
+                "type": "u32"
+              }
+            ]
           }
         ]
       }
@@ -15420,6 +15592,15 @@
             "type": "u64"
           },
           {
+            "name": "issuer",
+            "docs": [
+              "Vouches for which person a wallet belongs to (`link.rs`): a key on the project's server, the",
+              "one its grants' vouchers are signed with if the owner likes. The default address: nobody, so",
+              "no wallet is linked and a limit by person refuses every wallet."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "collections",
             "docs": [
               "The Core collections the project has authority over: its items",
@@ -15489,6 +15670,16 @@
                 "vec": "pubkey"
               }
             }
+          },
+          {
+            "name": "issuer",
+            "docs": [
+              "The key that vouches for which person a wallet belongs to (`Project::issuer`); the default",
+              "address for nobody. Links already written stay."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
           }
         ]
       }
@@ -15521,6 +15712,10 @@
           {
             "name": "paused",
             "type": "bool"
+          },
+          {
+            "name": "issuer",
+            "type": "pubkey"
           }
         ]
       }
@@ -16956,7 +17151,8 @@
           {
             "name": "received",
             "docs": [
-              "Payment actually received by escrow after any external transfer fee."
+              "Payment actually received by escrow after any external transfer fee: 0 for tickets a grant",
+              "gave (`Prize::Ticket`)."
             ],
             "type": "u64"
           },
@@ -17368,6 +17564,35 @@
       }
     },
     {
+      "name": "WalletLinked",
+      "docs": [
+        "The project's issuer linked a wallet to a person (`link.rs`): by `link_wallet`, or by a claim of",
+        "a voucher it signed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "person",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "WhenOut",
       "docs": [
         "What a box does once an entry it lists can't be given (an item sold out, a pool short of its",
@@ -17647,6 +17872,15 @@
       "value": "[108, 101, 97, 102]"
     },
     {
+      "name": "LINK_SEED",
+      "docs": [
+        "`[\"link\", project, wallet]`: the person the project's issuer says a wallet belongs to",
+        "(`instructions/link.rs`)."
+      ],
+      "type": "bytes",
+      "value": "[108, 105, 110, 107]"
+    },
+    {
       "name": "LISTING_SEED",
       "docs": [
         "`[\"listing\", project, asset]`: an NFT up for sale or for rent (`instructions/listing.rs`), which",
@@ -17726,6 +17960,15 @@
       ],
       "type": "bytes",
       "value": "[111, 114, 100, 101, 114]"
+    },
+    {
+      "name": "PERSONS_SEED",
+      "docs": [
+        "`[\"persons\", project, person]`: the same counts for a person, for a limit that counts by person",
+        "(`instructions/counter.rs`)."
+      ],
+      "type": "bytes",
+      "value": "[112, 101, 114, 115, 111, 110, 115]"
     },
     {
       "name": "PLATFORM_SEED",

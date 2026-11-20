@@ -2,17 +2,18 @@
 
 ## Status
 
-| Piece                             | Version                                                                                                                   | Where                                                                           | Review                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| The loot program                  | 0.28.0: `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet` on devnet, `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy` on mainnet | devnet since slot 521,074,836, mainnet since slot 468,156,581 (both 2026-11-11) | Internal reviews only. **Not independently audited** |
-| These tools (`@xgamesfun/solana`) | 0.28.31                                                                                                                   | npm                                                                             | Internal reviews only                                |
+| Piece                             | Version                                                                                                                   | Where                                                                                   | Review                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| The loot program                  | 0.29.0: `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet` on devnet, `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy` on mainnet | devnet since slot 524,113,825 (2026-11-19), mainnet since slot 471,855,650 (2026-11-20) | Internal reviews only. **Not independently audited** |
+| These tools (`@xgamesfun/solana`) | 0.29.0                                                                                                                    | npm                                                                                     | Internal reviews only                                |
 
-`release.json` pins the exact program binary, IDL and client this package is built for. Nothing runs on mainnet.
-Mainnet waits for an independent audit of the exact code to be deployed.
+`release.json` pins the exact program binary, IDL and client this package is built for. The program runs on devnet
+and on mainnet (the table above). **It has not been independently audited**: an economy on mainnet holds real money
+under code no outside auditor has reviewed.
 
 The program is upgradeable. Its upgrade authority only upgrades the program (and makes the first platform admin); the
-platform admin signs only the platform's fees and its suspend switch. On mainnet the upgrade authority is to be a
-multisig. On devnet an upgrade has so far meant a new account layout: no account carries over from an older version,
+platform admin signs only the platform's fees and its suspend switch. On mainnet the upgrade authority is a single
+key today (`xgameskCXpkhv5Kg6iq1GTR1pdWoXA3EMdvktt2gqJr`), not yet the multisig it is to be. On devnet an upgrade has so far meant a new account layout: no account carries over from an older version,
 so an economy made on one version is made again on the next.
 
 The program and these tools are provided as is, without warranty: see [DISCLAIMER.md](DISCLAIMER.md).

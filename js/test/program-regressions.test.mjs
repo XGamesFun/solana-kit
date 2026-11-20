@@ -126,7 +126,7 @@ test('an open grant gated by an NFT counts a compressed NFT shown, as it does an
     shard_bits: 8,
     open: true,
     gate: { Holds: { of: { Collection: [project] }, key: '', test: { Any: {} } } },
-    limits: { per_person: 0, per_key: 0 },
+    limits: { per_key: 0 },
     gives: { Item: [1] },
   };
   // The badge's record is in its own shard of the grant's claims, beside the wallet's.

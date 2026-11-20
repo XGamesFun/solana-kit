@@ -119,10 +119,10 @@ t('a stash takes what the project’s keys put in, and a box gives one of its NF
 t('a grant gives a roll of a box', () => {
   const { w, nfts } = stocked('prizes-grant');
   const limits = {
-    wallet: { total: 1, per_window: 0, window: 0 },
-    per_person: 0,
+    wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+    tokens: 0n,
     per_key: 0,
-    all: { total: 0, per_window: 0, window: 0 },
+    all: { total: 0, per_window: 0, window: 0, by_person: false },
     window: { opens_at: 0n, closes_at: 0n },
   };
   w.upsert({
@@ -321,10 +321,10 @@ t('an auction sells a roll of a box', () => {
 t('a specific NFT and a collectible are given at once, by a grant’s claim and by a lottery’s place', () => {
   const { w, nfts } = stocked('prizes-direct');
   const limits = {
-    wallet: { total: 1, per_window: 0, window: 0 },
-    per_person: 0,
+    wallet: { total: 1, per_window: 0, window: 0, by_person: false },
+    tokens: 0n,
     per_key: 0,
-    all: { total: 0, per_window: 0, window: 0 },
+    all: { total: 0, per_window: 0, window: 0, by_person: false },
     window: { opens_at: 0n, closes_at: 0n },
   };
   const grantArgs = gives => ({
