@@ -10,7 +10,7 @@
 # The outside programs are mainnet's builds, where loot runs for real money. loot.so is the build release.json
 # pins (its sha256 and bytes are release.json's sbfSha256 and sbfBytes, and `--check` says so when they part): devnet's,
 # at its address there (0.29.0 since slot 524,113,825). loot_mainnet.so is the same source built for mainnet's address
-# (release.json's `mainnet`), not deployed to mainnet yet (mainnet runs 0.28.0 until it is: no slot): the tests on mainnet's address run it. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
+# (release.json's `mainnet`), at its address there (0.29.0 since slot 471,855,650): the tests on mainnet's address run it. test_hook.so (cluster `-`, loader `local`) is never deployed: a 27-line pinocchio program built alongside the
 # loot program's source, committed here as a binary. Token-2022 calls it on every transfer of a mint that names it; it
 # counts transfers in an account it owns, refuses a transfer of 13, and marks the count if any account arrives signed.
 #
@@ -30,6 +30,6 @@ mpl_account_compression.so       mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW  ma
 mpl_noop.so                      mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3  mainnet upgradeable 10d275edf5a3181eb4ac187c07d37efd0279c7a6fe0cb222b1ac97804bc14b8b 19152 339787184 -
 vrf.so                           Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz  mainnet upgradeable 32b21724a5f62919f5a8983b17b6bf98305a6da4838c25ac4e999f8b4c7a94fd 318760 457592029 -
 loot.so                          xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet  devnet  upgradeable 97125d9b85b91f9deead6f1ee8b44c87f8849df39fc838798bf0008a2276feb8 1820384 524113825 -
-loot_mainnet.so                  xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy  mainnet upgradeable d75d910c3dd0419f0a80e698673a2fa7728d4f02f74713fe8d92dd724178c04b 1820384 - -
+loot_mainnet.so                  xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy  mainnet upgradeable d75d910c3dd0419f0a80e698673a2fa7728d4f02f74713fe8d92dd724178c04b 1820384 471855650 -
 mainnet/queue.json               Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh mainnet account     302da5f0c8a0c399ef432ccb62274a04d88ce951b05c7ed81131c2a7ecba62f9 40232 463000799 -
 test_hook.so                     Hook111111111111111111111111111111111111111  -       local       56adbedbd86532267d0a13f56b1ec7970fb176b176fdf1df3bfe0b57663738c7 8752 - -

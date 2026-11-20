@@ -1,17 +1,16 @@
 # The loot program: how it behaves
 
-**Version 0.28.0**. On **devnet**: program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, since slot 521,074,836
-(2026-11-11). On **mainnet**: program ID `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, since slot 468,156,581 (2026-11-11), the
-same source built for that address. loot has an address of its own on each cluster, so nothing signed for one (a
-voucher, a verdict) counts on the other. What follows speaks of devnet's, the address loot keeps there. 0.28.0 is 0.27.0 built for it: no instruction, argument, account or
-record changed. Every address the program derives follows from its own, so nothing set up under the address it had
-before (`9cwqM1TXytPnFZsLfmUyv2dg4uW6Ch9C6UJVPns7NFQ`, 0.27.0 and earlier) exists under this one: make fresh
-economies. It runs on devnet and on mainnet, each at its own address (`SECURITY.md`). **Not independently audited**.
+**Version 0.29.0**. On **devnet**: program ID `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet`, since slot 524,113,825
+(2026-11-19). On **mainnet**: program ID `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy`, since slot 471,855,650
+(2026-11-20), the same source built for that address. loot has an address of its own on each cluster, so nothing
+signed for one (a voucher, a verdict, a link) counts on the other. What follows speaks of devnet's, the address loot
+keeps there. Records written under 0.28.0 don't load under 0.29.0's layouts: make fresh economies. **Not independently
+audited**.
 
-This page describes 0.28.0, the build its IDL comes from. What 0.27.0 added, and 0.28.0 keeps: **a record whose NFT
-is proven gone from the project closes** ([An NFT gone from the project](#an-nft-gone-from-the-project), receipt
-`NftGone`), and **the weight that leaves a farm gives its share of the rounding back** to the project
-([Farms](#farms), `Farm::free_share`).
+This page describes 0.29.0, the build its IDL comes from. What 0.29.0 added: **persons** (a project's issuer links
+wallets to one person, and any limit can count by person: [Persons and links](#persons-and-links)), **tickets a grant
+gives** ([Tickets a grant gives](#tickets-a-grant-gives)), a lottery's limit per round or per window, and a cap on the
+tokens a grant gives in all (`tokens`).
 
 0.26's rule: **the program restricts a project only where it
 must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that

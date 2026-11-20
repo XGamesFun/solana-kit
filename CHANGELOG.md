@@ -6,8 +6,7 @@ tools see them.
 
 ## 0.29.0: persons, tickets a grant gives, a cap on a grant's tokens (loot 0.29.0)
 
-Built for loot 0.29.0, on devnet since slot 524,113,825. Mainnet runs 0.28.0 until it is upgraded; this release
-waits for that, since one IDL serves both clusters. It carries 0.28.32's fixes, below, which were never published
+Built for loot 0.29.0, on devnet since slot 524,113,825 and on mainnet since slot 471,855,650 (2026-11-20). It carries 0.28.32's fixes, below, which were never published
 on their own.
 
 - **Persons.** A spec names an issuer, `keys.issuer`: the server key that says which person a wallet belongs to (the
