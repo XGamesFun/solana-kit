@@ -38,8 +38,8 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 ## How it works
 
 1. **Describe it.** In a sentence to your agent, or as a spec file (`xsolana.json`).
-2. **Check it.** `check` refuses anything the program would refuse; `simulate` shows where the money goes, day by
-   day; `cost` prices going live and each player action; `review` shows what a cheater could get.
+2. **Check it.** `check` refuses what it knows the program would refuse (should it miss something, `approve` stops
+   in words and says what landed); `simulate` shows where the money goes, day by day; `cost` prices going live and each player action; `review` shows what a cheater could get.
 3. **Put it live.** `approve` lists every transaction with what it pays and trusts, ends with a code, and sends
    nothing; run again with that code, it sends exactly what it listed. A key file on your own computer signs
    (`keygen` makes one for the project). Nothing here asks for a seed phrase or for the key of a wallet you already

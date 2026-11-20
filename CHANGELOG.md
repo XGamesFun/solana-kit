@@ -7,7 +7,8 @@ tools see them.
 ## 0.29.0: persons, tickets a grant gives, a cap on a grant's tokens (loot 0.29.0)
 
 Built for loot 0.29.0, on devnet since slot 524,113,825. Mainnet runs 0.28.0 until it is upgraded; this release
-waits for that, since one IDL serves both clusters.
+waits for that, since one IDL serves both clusters. It carries 0.28.32's fixes, below, which were never published
+on their own.
 
 - **Persons.** A spec names an issuer, `keys.issuer`: the server key that says which person a wallet belongs to (the
   grants' voucher key may be it, so one key does both). The setup sets it on the project (`update_project`'s `issuer`).
@@ -28,6 +29,38 @@ waits for that, since one IDL serves both clusters.
   window of time with `perWalletEach` (40 an hour).
 - **A cap on what a grant gives:** `limits.tokens`, for a grant of tokens.
 - Sizes: a project is 185 bytes (`issuer`), an order 33 bytes larger (the person it counted for).
+
+## 0.28.32: what the tools say is what holds, and a check that could not look says so (loot 0.28.0, unchanged)
+
+The tools alone. An outside read of 0.28.30 found places where the tools said more than was true, or passed in
+silence. Each was reproduced first and has a test that fails without its fix.
+
+- **A spec the check passed could stop part way through going live.** Three cases, each run against the real program:
+  a recipe that rolls a box on a collectible it keeps, with that box no longer in the spec (four transactions landed,
+  then `WrongRecord`, and no way on); an item's cooldown past what a raise holds, a signed 4-byte number (the plan
+  threw); and a fixed supply smaller than what going live puts in, which was compared with the pools' seeds alone,
+  not with a lottery's seed, a farm's and a sealed schedule's funds beside them (the setup stopped at the transfer
+  that ran short). All three are refused by the check now. 1,116 random edits of the examples then gave none that
+  passed the check and stopped after a transaction had landed.
+- **A simulation that cannot run is said.** The check ran the simulation up to three times and took an error in it
+  for "nothing to report", so the warnings that rest on its numbers were missing from a check that read as clean. It
+  runs once a check now, and `W-SIMULATION` says when it stopped and what was therefore not looked at.
+- **`xsolana_design` answered a bare `TypeError`** for a requirement that had its kind and not what the kind needs
+  (`pay-in` with no `currencies`), and for a cap on staking asked of a route that is no farm. A requirement it cannot
+  read is now named by its place and kind, with what it needs.
+- **Seed phrases and keys the check missed.** A seed phrase was found only as 12 to 24 lower-case words and nothing
+  else. It is now found by its words (the word list of BIP-39) however it is written: capitalised, with commas, as a
+  numbered list, inside a sentence. A 64-byte key in hex is found too. The save tool no longer says the checker
+  refuses "a key": it names the forms it knows, and that no check finds every way to write one.
+- **The schema took a name every object inherits.** `"constructor"` or `"__proto__"` as a field of a spec passed where
+  any other unknown field is refused.
+- **`xsolana version` and the MCP server's `serverInfo` gave the program's version**, 0.28.0 for every release. They
+  give the package's own now, so a stale server can be told.
+- **`xsolana_save` pointed at going live with questions open.** A spec whose check has questions for the person is
+  saved under a state of its own (`saved-questions-open`), and the answer says to put them to the person first.
+- **Statements that were no longer true.** `SECURITY.md` and `docs/program.md` said nothing runs on mainnet; the
+  approval page's log line said "(devnet)" on any cluster; a live economy on mainnet was told its owner needs
+  "devnet SOL". `SECURITY.md` also says now that the mainnet upgrade authority is a single key today.
 
 ## 0.28.31: a player's step leaves room for what their wallet adds to it (loot 0.28.0, unchanged)
 

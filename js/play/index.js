@@ -201,7 +201,8 @@ function onCluster(client) {
  * The player's side of a live economy. `rpc` may be given instead of `rpcUrl` (any object with the client's rpc
  * methods: accounts, account, latestBlockhash, send, confirm, programAccounts, and call(method, params), the raw JSON
  * RPC request the devnet check, the slot and the compressed-NFT reads go through). `now` is the clock auctions are read
- * by (Unix seconds). Devnet only (`devnetOnly`): mainnet waits for an audit. `keyStore`: where a settle key that can't
+ * by (Unix seconds). The RPC must be of the cluster this build is for (`onCluster`: devnet, or mainnet for an economy
+ * whose file says so); another cluster's is refused. `keyStore`: where a settle key that can't
  * be made again from the wallet's signature is kept, encrypted (`browserStore()` in a browser; null keeps keys in memory
  * only).
  */
