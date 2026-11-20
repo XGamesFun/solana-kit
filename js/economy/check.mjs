@@ -1473,8 +1473,7 @@ export function check(
       p.nonTransferable && 'it cannot be transferred at all',
     ].filter(Boolean);
     const does = {
-      auction:
-        'the highest bidder can close their own account of it so that every higher bid fails (a topped bid is sent back to that account), and win at their price. Tell the seller and every bidder.',
+      auction: `the highest bidder can ${[frozen && 'close their own account of it', p.confidentialTransfers && 'turn plain transfers into their own account of it off', !frozen && !p.confidentialTransfers && 'refuse it'].filter(Boolean).join(', or ')} so that every higher bid fails (a topped bid is sent back to that account in the same step as the higher bid), and win at their price. Tell the seller and every bidder.`,
       lottery:
         'a player who turns plain transfers into their own account off (or closes it) holds up only their own part, but the round cannot close meanwhile and its rent waits: keep spare SOL in the lottery ("roundRent") so no buyer fronts it. A pot or pool in a token that could not reach the round gives that round nothing.',
       contest:
@@ -3220,8 +3219,8 @@ export function check(
       warn(
         'W-SHARED-SOURCE',
         `${where}.outcomes`,
-        `${label(b)} draws from ${[...new Set(sharedSources.map(([kind, key]) => `the ${kind} “${key}”`))].join(', ')}, which another route also takes from. ${stopsSales(b) ? 'A buyer can open the box, empty that source by the other route before the answers land, and be refunded every miss' : b.whenOut === 'giveNothing' ? 'Anyone emptying that source makes this box’s rolls miss, and a miss gives nothing' : 'Anyone emptying that source moves this box’s odds to what is left'}.`,
-        'Give the box sources of its own; cap a fresh item’s supply at what its table holds.',
+        `${label(b)} draws from ${[...new Set(sharedSources.map(([kind, key]) => `the ${kind} “${key}”`))].join(', ')}, which another route also takes from. ${stopsSales(b) ? 'Stopping sales while an outcome is out ("stopSales") counts only this box’s own rolls: a roll already paid whose outcome another route empties before its answer lands is refunded in full. So a buyer can open the box and, in the same transaction, empty a common outcome’s source by the other route: every roll that lands on that outcome is refunded, and they pay only for the rolls that land on another one, such as the rare one' : b.whenOut === 'giveNothing' ? 'Anyone emptying that source makes this box’s rolls miss, and a miss gives nothing' : 'Anyone emptying that source moves this box’s odds to what is left'}.`,
+        'Give the box sources of its own (an item, pool or stash nothing else sells or gives); cap a fresh item’s supply at what its table holds. "giveNothing" ends the refund but makes a miss give nothing; "drawLeft" draws among what is left.',
       );
     if (b.whenOut === 'drawLeft' && boxRolls(b, m)) {
       // The rarest outcome that gives something, against the likeliest outcome that can run out.

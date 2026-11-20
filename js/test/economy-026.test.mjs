@@ -321,7 +321,7 @@ describe('each warning, in the words a founder reads', () => {
         },
       ],
     });
-    assert.match(said(spec, 'W-SHARED-SOURCE').message, /be refunded every miss/);
+    assert.match(said(spec, 'W-SHARED-SOURCE').message, /every roll that lands on that outcome is refunded/);
   });
 
   test('an auction with no extension', () => {

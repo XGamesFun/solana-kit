@@ -28,6 +28,14 @@ on their own.
   entry token and no recipe. A lottery limits each wallet's (or person's) tickets per round with `perWallet`, or per
   window of time with `perWalletEach` (40 an hour).
 - **A cap on what a grant gives:** `limits.tokens`, for a grant of tokens.
+- **Warnings, in plainer words.** `W-HOLD-UP` on an auction names how the highest bidder blocks higher bids: closing
+  their account of a token whose new accounts start frozen, or turning plain transfers into it off (confidential
+  transfers). `W-SHARED-SOURCE` says that a box that stops selling while an outcome is out counts only its own rolls:
+  a buyer who empties a common outcome's source by another route has every roll on it refunded and pays only for the
+  others, so give the box sources of its own.
+- **A draw that settles the round before asks for the most heap.** A lottery paid from a pot first moves in what the
+  round before left it, which reads both rounds; with many thousands of places that outgrows the default heap, so
+  `js/play`'s draw adds `RequestHeapFrame` (256 KiB) when it does.
 - Sizes: a project is 185 bytes (`issuer`), an order 33 bytes larger (the person it counted for).
 
 ## 0.28.32: what the tools say is what holds, and a check that could not look says so (loot 0.28.0, unchanged)

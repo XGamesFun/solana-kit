@@ -2655,8 +2655,11 @@ export function solanaApp({
       throw new Error(
         `The round of “${l.name ?? l.key}” before this one still waits for the oracle’s answer, and this round is paid from the same pot: its draw waits until that answer lands, or that round is cancelled (anyone may ask again after ${loot.STALE_SECONDS} seconds).`,
       );
+    // Settling the round before loads both rounds' records, each with a bit for every place it gives: with many
+    // places that outgrows the default 32 KiB heap, so such a draw asks for the most.
     return [
       computeUnitLimit(600_000),
+      ...(owing ? [requestHeapFrame(loot.LARGE_SETTLE_HEAP)] : []),
       loot.drawLotteryIx({
         payer: signer,
         project,
