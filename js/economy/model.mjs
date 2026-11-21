@@ -908,7 +908,7 @@ export const placeOf = p =>
     ? { percent: p.percent ?? 0, prize: prizeLine(p.prize), times: p.times ?? 1, whenShort: p.whenShort }
     : { percent: p, prize: null, times: 1 };
 
-/** "pool:house" → { kind: 'pool', key: 'house' }; "burn" → { kind: 'burn' }. */
+/** "pool:prizes" → { kind: 'pool', key: 'prizes' }; "burn" → { kind: 'burn' }. */
 export function destination(to) {
   if (to === 'burn') return { kind: 'burn' };
   if (to === 'treasury') return { kind: 'treasury' };

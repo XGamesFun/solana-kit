@@ -1707,7 +1707,7 @@
         },
         "stake": {
           "$ref": "#/$defs/amount",
-          "description": "Every entry puts in exactly this, once per player and side (an equal-stakes wager)."
+          "description": "Every entry puts in exactly this, once per player and side (a match for equal stakes)."
         },
         "prize": {
           "$ref": "#/$defs/prize",

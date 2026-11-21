@@ -42,14 +42,24 @@ export const REMOTE_INSTRUCTIONS = [
   WHERE,
 ].join(' ');
 
-/** A tool as tools/list shows it; on a hosted server, without the `file` argument it can't take. */
+/**
+ * A tool as tools/list shows it; on a hosted server, without the `file` argument it can't take. Its title, what a
+ * client shows a person in place of the name, goes where both ages of the protocol look for it: on the tool and in
+ * its annotations.
+ */
 function listed(t, remote) {
   let inputSchema = t.inputSchema;
   if (remote && inputSchema.properties?.file) {
     const { file: _file, ...properties } = inputSchema.properties;
     inputSchema = { ...inputSchema, properties };
   }
-  return { name: t.name, description: t.description, inputSchema, annotations: t.annotations };
+  return {
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    inputSchema,
+    annotations: { title: t.title, ...t.annotations },
+  };
 }
 
 /**

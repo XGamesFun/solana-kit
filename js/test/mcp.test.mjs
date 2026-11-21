@@ -50,6 +50,8 @@ describe('the xsolana MCP server', () => {
     for (const t of tools) {
       for (const h of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'])
         assert.equal(typeof t.annotations?.[h], 'boolean', `${t.name} ${h}`);
+      // A title a person can read, on the tool and in its annotations (a directory shows it in place of the name).
+      assert.ok(t.title?.length > 3 && t.title === t.annotations?.title, `${t.name} has a title`);
       assert.equal(t.inputSchema.type, 'object');
     }
     assert.ok(client.getInstructions()?.includes('never write Anchor'));
