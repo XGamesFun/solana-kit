@@ -1,6 +1,9 @@
-# solana-kit
+# xsolana: Solana loot boxes, NFT staking and game economies without a smart contract
 
 **Build loot boxes, shops, lotteries, auctions, NFT staking and rewards on Solana without writing a smart contract.**
+
+`xsolana` is the toolkit in this repository (`@xgamesfun/solana` on npm), and **loot** is the Solana program it drives.
+It is not [`@solana/kit`](https://github.com/anza-xyz/kit), the Solana JavaScript SDK.
 
 [![npm](https://img.shields.io/npm/v/@xgamesfun/solana?color=b9f26c&label=npm)](https://www.npmjs.com/package/@xgamesfun/solana)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
@@ -192,6 +195,19 @@ build what the spec can describe, which is a lot, but not everything.
 
 **Can players with no SOL play?** Yes, if you sponsor their fees from your own server
 (`@xgamesfun/solana/sponsor`). They still pay any price themselves.
+
+**Does it run on Solana mainnet?** Yes. An economy runs on devnet, where nothing is real money, unless its file says
+`"network": "mainnet"`, where everything is. The program has not been independently audited, so build and try an
+economy on devnet first, and read [DISCLAIMER.md](DISCLAIMER.md) before real money.
+
+**How do I add a Solana economy to a web game I already made?** Use [xcore](https://github.com/XGamesFun/xcore)
+(`@xgamesfun/xcore`): `xcore loot add ./my-game` says where the game's `xsolana.json` goes and copies the page client
+beside it, and `xcore publish` hosts the game on xgames.fun with player sign-in, saves, leaderboards and multiplayer
+rooms. It takes plain HTML/JS, Vite, Next.js static exports, and Godot and Unity web exports.
+
+**Is this `@solana/kit`?** No. `@solana/kit` is the Solana JavaScript SDK, for sending transactions and reading
+accounts. This is `xsolana` (`@xgamesfun/solana`): a spec, a checker and a client for economies on one shared program.
+Its client needs no Solana SDK.
 
 ## Learn more
 
