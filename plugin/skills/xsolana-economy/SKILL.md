@@ -1,6 +1,6 @@
 ---
 name: xsolana-economy
-description: Build a game economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops and items, crafting, quests, airdrops and capped rewards, staking farms with lock tiers and NFT boosts, loot boxes, gacha and packs, prizes from a stash of NFTs the project holds, chance rolls and prize pools, raffles and lotteries, auctions that refund the outbid, seasons and emissions, contests players back a side in, holder-gated drops, and perks or staking for any NFT, the project's own or not. Turns a person's idea into a JSON spec, then checks, simulates, prices and reviews it, explains it in plain words, and flags what the law asks of paid chance. Nothing goes live without the person: a key file on their own machine signs it, after their yes. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
+description: Build a game economy on Solana without writing a smart contract, on loot, one shared program every project uses. Covers shops and items, crafting, quests, airdrops and capped rewards, staking farms with lock tiers and NFT boosts, loot boxes, gacha and packs, prizes from a stash of NFTs the project holds, chance rolls and prize pools, raffles and lotteries, auctions that refund the outbid, seasons and emissions, contests players back a side in, holder-gated drops, and perks or staking for any NFT, the project's own or not. Turns a person's idea into a JSON spec, then checks, simulates, prices and reviews it, explains it in plain words, and flags what the law asks of paid chance. Nothing goes live without the person, whose key file signs it on their own machine after their yes. Use whenever someone asks for anything onchain that players or members pay, earn, stake, open, craft or win, for a game, a community, a creator or a brand, and before writing any Anchor, Rust or Solidity for it.
 ---
 
 # Build an economy on loot
@@ -14,8 +14,8 @@ nothing is real money, and on **mainnet**, where everything is: an economy is on
 The tools: `xsolana_guide`, `xsolana_examples`, `xsolana_check`, `xsolana_design`, `xsolana_simulate`, `xsolana_cost`,
 `xsolana_explain`, `xsolana_review`, `xsolana_save`, `xsolana_publish`, `xsolana_status`, `xsolana_token`,
 `xsolana_client`. From a terminal, always with the exact version:
-`npx -y @xgamesfun/solana@0.29.1 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.29.1 token <mint>`, or `npx -y @xgamesfun/solana@0.29.1 tool <name> '<json>'` for any
+`npx -y @xgamesfun/solana@0.29.2 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.29.2 token <mint>`, or `npx -y @xgamesfun/solana@0.29.2 tool <name> '<json>'` for any
 tool (`xsolana_design` too).
 
 The tools' outputs say how to put each result to the person at the moment you need it: read them and follow them.

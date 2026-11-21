@@ -25,6 +25,7 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 | `js/test/`                | the tests; `fixtures/` pins the programs they run by hash (`npm run fixtures` downloads them)                                      |
 | `skills/`                 | the skill; `scripts/sync-skills.mjs` copies it to `plugin/skills`, `.claude/skills`, `.agents/skills`                              |
 | `plugin/`                 | one plugin folder for both harnesses: `.claude-plugin/plugin.json` + `.mcp.json` (Claude Code), `plugin.json` + `mcp.json` (Codex) |
+| `claude-directory/`       | the plugin as Anthropic's directory lists it: the skill and a connection to the hosted server, no local process                    |
 | `examples/`               | whole economies that check and go live in the tests; `ideas.json`, 112 real economies rated against loot                           |
 | `evals/`                  | fresh-session evals: prompts, a runner for `claude -p` and `codex exec`, a scorer, live devnet runs                                |
 

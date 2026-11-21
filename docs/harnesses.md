@@ -11,7 +11,7 @@ each harness's own format, from one source.
 | Skill                     | `plugin/skills/xsolana-economy/`                                                                          | the same folder                                                                           |
 | Marketplace               | `.claude-plugin/marketplace.json`                                                                         | `.agents/plugins/marketplace.json`                                                        |
 | Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                       | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
-| Without the plugin        | `npx -y @xgamesfun/solana@0.29.1 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
+| Without the plugin        | `npx -y @xgamesfun/solana@0.29.2 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
 | Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                 | `AGENTS.md`                                                                               |
 
 The marketplace is named `xgamesfun` in both marketplace files, so the plugin is `xsolana@xgamesfun` whichever
@@ -35,15 +35,24 @@ its text names no harness. `xsolana connect` knows Claude Code and Codex only. F
   mounts `mcpHttp` (exported as `@xgamesfun/solana/mcp/http`); `xsolana mcp --http` serves it on 127.0.0.1, answering
   only pages on localhost. xgames.fun hosts it at `https://xgames.fun/mcp` (games.fun `creator-studio/app/mcp/route.ts`, its pin moved with each release), which `server.json` names under `remotes`.
 
+## The edition Anthropic's directory lists
+
+Anthropic's directory (claude.ai/directory) takes a plugin whose MCP server runs on the user's machine only from an
+organization it has verified. `claude-directory/` is the edition it lists until then: the same skill, and in place of
+the local server a connection to the hosted one (`.mcp.json`: `https://xgames.fun/mcp`, the eleven read-only tools).
+It carries no Codex files. In the directory's portal the plugin's path is `claude-directory`; `plugin/` stays what
+this repository's own marketplace installs.
+
 ## Releasing a version
 
 Keep these in step:
 
-- `version` in `package.json`, `plugin/.claude-plugin/plugin.json`, `plugin/plugin.json`, `release.json` and
-  `server.json` (twice: the server's and its npm package's; `npm test` fails when they differ);
+- `version` in `package.json`, `plugin/.claude-plugin/plugin.json`, `plugin/plugin.json`,
+  `claude-directory/.claude-plugin/plugin.json`, `release.json` and `server.json` (twice: the server's and its npm
+  package's; `npm test` fails when they differ);
 - the `--package=@xgamesfun/solana@<version>` pin in `plugin/.mcp.json` and `plugin/mcp.json`, and every
-  `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file and the skill (`npm test` fails on a pin that
-  isn't `package.json`'s version);
+  `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file, `claude-directory/README.md` and the skill
+  (`npm test` fails on a pin that isn't `package.json`'s version);
 - `release.json` (`node scripts/release-manifest.mjs`, after a program build and `node scripts/sync-idl.mjs`);
 - the skill's copies (`node scripts/sync-skills.mjs` after editing `skills/`);
 - the hosted results server (xgames.fun's `creator-studio`), which refuses any program build but the one it is pinned to
