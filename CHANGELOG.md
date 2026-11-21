@@ -4,6 +4,29 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.1: the listings say what this is, a toolkit for building game economies; every tool has a title (loot 0.29.0, unchanged)
+
+The tools alone.
+
+- **One line leads every listing** (the MCP Registry, npm, both plugin manifests, the marketplace, the skill): a toolkit
+  for building game economies on Solana, which designs, checks, simulates and reviews a spec. The registry's description
+  no longer says the server will "launch" an economy: no tool signs or sends, and the plugin's line says who does (the
+  owner, with a key file on their own machine, after reading what will be sent).
+- **Every tool has a title** a person can read, on the tool and in its annotations: a directory shows it in place of the
+  name, and Anthropic's asks for one. `xsolana_publish`'s is "The steps to go live (sends nothing)". No tool is renamed.
+- **The game's words, where the meaning is the same.** `simulate` and `explain` say "the game keeps 38% of each price"
+  where they said "the house keeps"; the guide says "the game's own bankroll", "a 50/50 roll", "a contest players back
+  a side in" and "a 1v1 match for equal stakes". Every warning about the law is as it was, and so is every phrase
+  people type ("coin flip", "bet on a side"): a request in those words still finds its part.
+- **`plugin/README.md`**: what the plugin installs, runs, fetches, sends and writes, which Anthropic's directory reads
+  from the plugin's own folder.
+- **README**: the title leads with xsolana and says it is not `@solana/kit`; questions on mainnet, on a web game someone
+  already made (xcore), and on what this is not (a gambling platform, an exchange, a wallet, a holder of funds or
+  keys); links to the how-tos on xgames.fun.
+
+Known and not fixed here: the tools print the player fee as 0.002 SOL for a mainnet spec too (`FEES.player` is one
+constant), while mainnet's platform account holds 0.0005 SOL (read 2026-11-21).
+
 ## 0.29.0: persons, tickets a grant gives, a cap on a grant's tokens (loot 0.29.0)
 
 Built for loot 0.29.0, on devnet since slot 524,113,825 and on mainnet since slot 471,855,650 (2026-11-20). It carries 0.28.32's fixes, below, which were never published
