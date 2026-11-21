@@ -12,9 +12,6 @@
   "privacyPolicyUrl": "https://xgames.fun/privacy",
   "termsOfServiceUrl": "https://xgames.fun/terms",
   "icon": "./.claude-plugin/icon.png",
-  "network": {
-    "hosts": ["xgames.fun", "registry.npmjs.org", "api.devnet.solana.com"]
-  },
   "license": "Apache-2.0",
   "keywords": [
     "solana",

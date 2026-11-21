@@ -173,6 +173,15 @@ describe('the xsolana MCP server', () => {
     const root = new URL('../../', import.meta.url);
     const { mcpServers } = JSON.parse(readFileSync(new URL('claude-directory/.mcp.json', root), 'utf8'));
     assert.deepEqual(mcpServers, { xsolana: { type: 'http', url: 'https://xgames.fun/mcp' } });
+    // From an organization it has not verified, the directory also refuses a manifest field outside its lists: what
+    // Claude Code reads, and the listing's own fields (the icon and the four links). Its portal refused `network`.
+    const manifest = JSON.parse(readFileSync(new URL('claude-directory/.claude-plugin/plugin.json', root), 'utf8'));
+    const takes = ['name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords'];
+    const listing = ['icon', 'documentationUrl', 'supportUrl', 'privacyPolicyUrl', 'termsOfServiceUrl'];
+    assert.deepEqual(
+      Object.keys(manifest).filter(key => !takes.includes(key) && !listing.includes(key)),
+      [],
+    );
   });
 
   test('save writes only a spec that checks, and refuses a key', async () => {
