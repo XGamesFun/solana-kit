@@ -211,6 +211,11 @@ Its client needs no Solana SDK.
 
 ## Learn more
 
+- How-tos on xgames.fun, each a whole build with what the tools print:
+  [a loot box or gacha](https://xgames.fun/solana/loot-box),
+  [NFT staking for any collection](https://xgames.fun/solana/nft-staking),
+  [an NFT raffle or a lottery](https://xgames.fun/solana/raffle) and
+  [Solana in a browser game](https://xgames.fun/solana/web-game)
 - [Loot box tutorial](docs/tutorial-loot-box.md): one sentence to going live, step by step
 - [Examples](examples): whole economies that are checked and put live in the tests
 - [How the program works](docs/program.md): who signs, every instruction, fees, limits, receipts
