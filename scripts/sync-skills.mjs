@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-// Copies skills/ into the places each harness reads them: the plugin (plugin/skills, for Claude Code and Codex), and
-// this repository's own .claude/skills and .agents/skills (an agent working in this checkout). Byte for byte; extra
-// files there are removed. `--check` exits 1 when a copy differs. Each skill needs front matter whose `name` is its
-// folder's and a `description` of at most 1,024 characters (the Agent Skills standard).
+// Copies skills/ into the places each harness reads them: the plugin (plugin/skills, for Claude Code and Codex), its
+// edition for Anthropic's directory (claude-directory/skills), and this repository's own .claude/skills and
+// .agents/skills (an agent working in this checkout). Byte for byte; extra files there are removed. `--check` exits 1
+// when a copy differs. Each skill needs front matter whose `name` is its folder's and a `description` of at most 1,024
+// characters (the Agent Skills standard) that is a plain YAML scalar: a `: ` or a ` #` inside it is read as a mapping or
+// a comment by a strict parser, which then drops the whole skill (the `skills` installer did, with 0.29.1's).
 import { cp, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = path.join(root, 'skills');
-const MIRRORS = ['plugin/skills', '.claude/skills', '.agents/skills'].map(p => path.join(root, p));
+const MIRRORS = ['plugin/skills', 'claude-directory/skills', '.claude/skills', '.agents/skills'].map(p =>
+  path.join(root, p),
+);
 const check = process.argv.includes('--check');
 
 async function files(dir, base = dir) {
@@ -32,6 +36,8 @@ for (const skill of await readdir(SOURCE)) {
   if (name !== skill) problems.push(`${skill}: front matter name is "${name}", not the folder's`);
   if (!description || description.length > 1024)
     problems.push(`${skill}: description must be 1 to 1,024 characters (it is ${description.length})`);
+  if (!/^(["']).*\1$/.test(description) && /: | #/.test(description))
+    problems.push(`${skill}: description has ": " or " #" in it, which strict YAML reads as a mapping or a comment`);
 }
 const want = await files(SOURCE);
 for (const mirror of MIRRORS) {

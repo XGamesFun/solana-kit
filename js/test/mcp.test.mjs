@@ -114,6 +114,7 @@ describe('the xsolana MCP server', () => {
       'evals/run.mjs',
       'plugin/.mcp.json',
       'plugin/mcp.json',
+      'claude-directory/README.md',
     ];
     for (const file of files) {
       const text = readFileSync(new URL(file, root), 'utf8');
@@ -145,7 +146,12 @@ describe('the xsolana MCP server', () => {
       idl.metadata.version.split('.').slice(0, 2).join('.'),
       'the package is its program’s major.minor',
     );
-    for (const file of ['plugin/plugin.json', 'plugin/.claude-plugin/plugin.json', 'server.json']) {
+    for (const file of [
+      'plugin/plugin.json',
+      'plugin/.claude-plugin/plugin.json',
+      'claude-directory/.claude-plugin/plugin.json',
+      'server.json',
+    ]) {
       assert.equal(
         JSON.parse(readFileSync(new URL(file, root), 'utf8')).version,
         version,
@@ -159,6 +165,14 @@ describe('the xsolana MCP server', () => {
       server.packages.map(p => [p.identifier, p.version]),
       [[name, version]],
     );
+  });
+
+  // Anthropic's directory takes a server that runs on the user's machine only from a verified organization: the edition
+  // it lists (claude-directory/) connects to the hosted server and starts nothing.
+  test('the directory edition of the plugin names only a remote server', () => {
+    const root = new URL('../../', import.meta.url);
+    const { mcpServers } = JSON.parse(readFileSync(new URL('claude-directory/.mcp.json', root), 'utf8'));
+    assert.deepEqual(mcpServers, { xsolana: { type: 'http', url: 'https://xgames.fun/mcp' } });
   });
 
   test('save writes only a spec that checks, and refuses a key', async () => {

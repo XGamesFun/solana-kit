@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "xsolana": {
+      "type": "http",
+      "url": "https://xgames.fun/mcp"
+    }
+  }
+}

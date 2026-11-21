@@ -4,6 +4,21 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.2: the skill's description parses again; an edition of the plugin for Anthropic's directory (loot 0.29.0, unchanged)
+
+The tools alone.
+
+- **Fixed: the skill's front matter.** 0.29.1's `description` had a `: ` in it ("without the person: a key file"),
+  which strict YAML reads as a mapping. Claude Code loaded it, but the `skills` installer skipped the skill ("No valid
+  skills found") and other strict readers would too. The sentence no longer has one, and `scripts/sync-skills.mjs`
+  (so `npm run check`) refuses a description with `: ` or ` #` in it unless the whole value is quoted.
+- **`claude-directory/`**: the plugin as Anthropic's directory lists it. The directory takes a server that runs on the
+  user's machine only from an organization it has verified, so this edition has the same skill and, in place of the
+  local server, a connection to the hosted one (`https://xgames.fun/mcp`). `plugin/` is unchanged and stays what this
+  repository's marketplace installs.
+- **The plugin's listing** (`plugin/` and `claude-directory/`): an icon, the listing's links, the hosts it reaches
+  (`network.hosts`), and a one-line install in its README.
+
 ## 0.29.1: the listings say what this is, a toolkit for building game economies; every tool has a title (loot 0.29.0, unchanged)
 
 The tools alone.
