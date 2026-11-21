@@ -3,12 +3,24 @@
 // and the setup plan all read a spec through this. Pure.
 import { gateList } from '../client/grant.js';
 import { treeSize } from '../client/ix.js';
+import { networkOf } from '../client/cluster.js';
 
 // ---------------------------------------------------------------- the program's numbers
 // Each is the loot program's own unless it says otherwise.
 
-/** The two flat fees, in lamports, as the platform sets them by default; the program caps each at 0.01 SOL. */
-export const FEES = Object.freeze({ player: 2_000_000n, project: 10_000n });
+/**
+ * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`, read from the chain
+ * on 2026-11-21: devnet EZJiX7BY…, mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
+ * the tools quote these and the program charges what the account holds. The program caps each at 0.01 SOL.
+ */
+export const FEES_ON = Object.freeze({
+  devnet: Object.freeze({ player: 2_000_000n, project: 10_000n }),
+  mainnet: Object.freeze({ player: 500_000n, project: 10_000n }),
+});
+/** Devnet's fees, the platform's defaults: what the tests' own platform sets. */
+export const FEES = FEES_ON.devnet;
+/** The fees on the cluster an economy is on: the `network` its file names, devnet when it names none. */
+export const feesOf = economy => FEES_ON[networkOf(economy)] ?? FEES;
 /**
  * What MagicBlock's VRF oracle queue (Cuj97ggr…, ephemeral-vrf-sdk 0.17.2 consts.rs DEFAULT_QUEUE) takes for each
  * random number asked of it: VRF_LAMPORTS_COST = 500,000 lamports, 0.0005 SOL (magicblock-labs/ephemeral-vrf,
@@ -473,6 +485,8 @@ export function model(economy, { now = 0 } = {}) {
   });
   const m = {
     now,
+    /** The fees on the economy's cluster (`feesOf`). */
+    fees: feesOf(e),
     name: e.name ?? 'Project',
     authority: e.keys?.authority ?? 'owner',
     /** The key that vouches which person a wallet belongs to (`keys.issuer`), or null: then no limit counts by person. */

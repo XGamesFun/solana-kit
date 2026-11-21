@@ -5,7 +5,7 @@ into short lines, in this order, every number kept. Describe what is in the spec
 and the spec differ (a limit, an amount, a key not set yet), change one of them before you answer. Use the tools' numbers; round them sensibly; name currencies by symbol.
 
 1. **What each play costs and is worth.** Lead with the tools' "in all" number: "A cast costs about 0.0234 SOL in
-   all (0.02 SOL, the 0.002 SOL player fee, the oracle and the network, and the Perch's rent when one is caught), and
+   all (0.02 SOL, the player fee, the oracle and the network, and the Perch's rent when one is caught), and
    gives back 0.01 SOL in prizes on average (50%), plus a Perch 3 casts in 10." For a box of items, the odds; for a
    lottery, where its places are paid from (its pot, which gifts and what earlier rounds left fill, or each round's own
    ticket money, which nothing from outside can change), what that reaches and what each place wins; for a farm, a day of rewards per unit staked and what the
@@ -166,7 +166,7 @@ Don'ts:
   has no authority over): marketplaces show them, anyone can read them, and the person's other mechanics can use
   them. They grow only when a seat is refreshed or the NFT leaves: the page refreshes (`app.refresh`). A boost that reads a level the farm's own growth writes counts each level from when it is written, so a seat refreshed often earns more than one refreshed rarely: have the page or a keeper refresh seats (anyone may, for free).
 - **Grants pay their claims' rent from their own funds** (`fund`, in SOL, held in the grant): the player pays the
-  0.002 SOL player fee and the network fee to claim, once, even when the prize is a roll. A first claim of a token
+  player fee (0.002 SOL on devnet, 0.0005 SOL on mainnet) and the network fee to claim, once, even when the prize is a roll. A first claim of a token
   prize also opens the winner's account from the funds:
   `xsolana_simulate` gives the funds a claim needs. When the funds run out, claims still land: whoever pays for the claim
   (the winner, who always signs it, or anyone paying its fees for them) pays the rest. Only the winner can claim.

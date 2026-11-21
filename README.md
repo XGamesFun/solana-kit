@@ -81,7 +81,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.2 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.3 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -92,26 +92,26 @@ are in [docs/harnesses.md](docs/harnesses.md).
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.29.2 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.29.3 examples shop with loot boxes
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.29.2 token <its mint address>
+npx -y @xgamesfun/solana@0.29.3 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.29.2 check xsolana.json
-npx -y @xgamesfun/solana@0.29.2 simulate xsolana.json
-npx -y @xgamesfun/solana@0.29.2 cost xsolana.json
+npx -y @xgamesfun/solana@0.29.3 check xsolana.json
+npx -y @xgamesfun/solana@0.29.3 simulate xsolana.json
+npx -y @xgamesfun/solana@0.29.3 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.29.2 explain xsolana.json
-npx -y @xgamesfun/solana@0.29.2 review xsolana.json
+npx -y @xgamesfun/solana@0.29.3 explain xsolana.json
+npx -y @xgamesfun/solana@0.29.3 review xsolana.json
 
 # go live: a key file for the project (it prints the address to send SOL to, never the key)…
-npx -y @xgamesfun/solana@0.29.2 keygen ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.3 keygen ~/.config/xsolana/my-game.json
 # …then everything going live would send, and a code; nothing is sent
-npx -y @xgamesfun/solana@0.29.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.3 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # …and with that code, exactly what it listed is sent
-npx -y @xgamesfun/solana@0.29.2 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.29.3 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists them all.
@@ -168,7 +168,8 @@ Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction
 - **The chain can't see your game.** Wins and scores are vouched for by your server; checking that a player really did
   it is your job. `review` shows what a cheater gets on each route.
 - **Nothing runs by itself.** Draws, settles and schedule runs are sent by someone, usually your app.
-- **Fees:** 0.002 SOL per player action and 0.00001 SOL per project action, plus rent. `cost` gives the totals.
+- **Fees:** per player action 0.002 SOL on devnet and 0.0005 SOL on mainnet, and 0.00001 SOL per project action,
+  plus rent. `cost` gives the totals for the economy's own network.
 
 The full list, with the details behind each, is in [Before you use it](docs/before-you-use.md). Some things aren't
 built yet: read the [known limits](docs/program.md#known-limits) before promising players something unusual.

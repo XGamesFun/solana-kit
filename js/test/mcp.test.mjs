@@ -101,9 +101,12 @@ describe('the xsolana MCP server', () => {
   });
 
   // Every npx line a person or an agent is handed names this exact version.
+  // The directory edition is pinned to its own manifest's version: the release it was last submitted with
+  // (scripts/sync-skills.mjs).
   test('every npx command in the tools, the skill and the docs is pinned to this package’s version', () => {
     const root = new URL('../../', import.meta.url);
-    const { version } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
+    const { version: pkgVersion } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
+    const directory = JSON.parse(readFileSync(new URL('claude-directory/.claude-plugin/plugin.json', root), 'utf8'));
     const files = [
       'README.md',
       'docs/harnesses.md',
@@ -117,6 +120,7 @@ describe('the xsolana MCP server', () => {
       'claude-directory/README.md',
     ];
     for (const file of files) {
+      const version = file.startsWith('claude-directory/') ? directory.version : pkgVersion;
       const text = readFileSync(new URL(file, root), 'utf8');
       for (const line of text.split('\n').filter(l => /npx/.test(l))) {
         for (const [, pin] of line.matchAll(/(?:npx (?:-y )?|--package=)@xgamesfun\/solana(@[^\s`'",\]]*)?/g)) {
@@ -146,12 +150,15 @@ describe('the xsolana MCP server', () => {
       idl.metadata.version.split('.').slice(0, 2).join('.'),
       'the package is its program’s major.minor',
     );
-    for (const file of [
-      'plugin/plugin.json',
-      'plugin/.claude-plugin/plugin.json',
-      'claude-directory/.claude-plugin/plugin.json',
-      'server.json',
-    ]) {
+    // The directory edition names this version, or the earlier release of this minor it was submitted with.
+    const directory = JSON.parse(readFileSync(new URL('claude-directory/.claude-plugin/plugin.json', root), 'utf8'));
+    const [major, minor, patch] = version.split('.').map(Number);
+    const [dMajor, dMinor, dPatch] = directory.version.split('.').map(Number);
+    assert.ok(
+      dMajor === major && dMinor === minor && dPatch <= patch,
+      `claude-directory names ${directory.version}, not this version or an earlier one of ${major}.${minor}`,
+    );
+    for (const file of ['plugin/plugin.json', 'plugin/.claude-plugin/plugin.json', 'server.json']) {
       assert.equal(
         JSON.parse(readFileSync(new URL(file, root), 'utf8')).version,
         version,

@@ -20,7 +20,6 @@ import {
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
-  FEES,
   LAMPORTS_PER_SOL,
   ORACLE_FEE,
   RENT_PER_BYTE,
@@ -58,8 +57,10 @@ const MANY_WALLETS = 100;
 /** Bids a day on an auction the scenario doesn't name (`auction:<key>`); a grant it doesn't name is claimed by nobody. */
 const DEFAULT_BIDS = 10;
 const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
-const PLAYER_FEE = sol(FEES.player);
-const PROJECT_FEE = sol(FEES.project);
+// The platform's two fees on the economy's cluster, in SOL: set by `simulate` as it starts, for everything it calls.
+// It is synchronous, so one run never sees another's.
+let PLAYER_FEE = 0;
+let PROJECT_FEE = 0;
 const NETWORK_FEE = sol(SIGNATURE_FEE);
 /** MagicBlock's oracle, per random number: a box's open (the player), a lottery's draw, a `roll` (model.mjs ORACLE_FEE). */
 const ORACLE = sol(ORACLE_FEE);
@@ -206,6 +207,8 @@ export function salePrices(part, perDay, days, fallStartsAfter = 0, budget = wal
 
 export function simulate(economy, { now = 0 } = {}) {
   const m = model(economy, { now });
+  PLAYER_FEE = sol(m.fees.player);
+  PROJECT_FEE = sol(m.fees.project);
   const game = m.currencyKey;
   // The scenario's days, or 30, or as long as the longest farm runs when that is longer.
   const days = m.scenario.days ?? Math.max(30, ...m.farms.map(f => Math.ceil((toSeconds(f.runs) || 0) / DAY)));
