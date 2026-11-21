@@ -40,8 +40,10 @@ its text names no harness. `xsolana connect` knows Claude Code and Codex only. F
 Anthropic's directory (claude.ai/directory) takes a plugin whose MCP server runs on the user's machine only from an
 organization it has verified. `claude-directory/` is the edition it lists until then: the same skill, and in place of
 the local server a connection to the hosted one (`.mcp.json`: `https://xgames.fun/mcp`, the eleven read-only tools).
-It carries no Codex files. In the directory's portal the plugin's path is `claude-directory`; `plugin/` stays what
-this repository's own marketplace installs.
+It carries no Codex files, and its manifest has only the fields Claude Code reads and the listing's own (the icon and
+the four links): from an organization it has not verified, the directory's portal refuses any other, `network`
+included. In the portal the plugin's path is `claude-directory`; `plugin/` stays what this repository's own
+marketplace installs.
 
 ## Releasing a version
 
