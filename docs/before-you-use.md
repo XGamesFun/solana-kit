@@ -55,8 +55,8 @@ version; this is the whole of it.
 - **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls wait. An
   order still unanswered after 7 days can be refunded. Once a roll has waited 10 minutes, a buyer who sees a late
   answer coming can take a refund instead.
-- **Fees and rent.** The platform sets two flat fees: by default 0.002 SOL a player action and 0.00001 SOL a project
-  action. Each is capped at 0.01 SOL, and a raise waits 7 days. Accounts cost rent: going live, and each settle that
+- **Fees and rent.** The platform sets two flat fees: a player action 0.002 SOL on devnet and 0.0005 SOL on mainnet
+  (the default is 0.002), and a project action 0.00001 SOL. Each is capped at 0.01 SOL, and a raise waits 7 days. Accounts cost rent: going live, and each settle that
   opens or mints something. `xsolana cost` gives the totals. The platform can suspend purchases, but it never stops
   payouts, refunds or unstakes (the one exception is a recipe that charges).
 - **Some things aren't built,** and some limits are kept by design. Read

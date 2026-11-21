@@ -29,7 +29,7 @@ import {
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
-  FEES,
+  feesOf,
   LAMPORTS_PER_SOL,
   ORACLE_FEE,
   RENT_PER_BYTE,
@@ -71,7 +71,7 @@ export function setupCost(plan, economy) {
   const rentLamports = accounts.reduce((n, a) => n + BigInt(a.lamports), 0n);
   const metadataLamports = accounts.reduce((n, a) => n + BigInt(a.fee ?? 0), 0n);
   const charged = plan.transactions.flatMap(t => t.steps).filter(s => !NO_FEE_STEP.test(s.id));
-  const feeLamports = BigInt(charged.length) * FEES.project;
+  const feeLamports = BigInt(charged.length) * feesOf(economy).project;
   // The network's fee: 5,000 lamports a signature, and each transaction's own priority fee (its unit limit times the
   // unit price the plan sets: 2 lamports; none for a transaction listed without its instructions).
   const networkLamports = plan.transactions.reduce(
@@ -139,6 +139,7 @@ export function setupCost(plan, economy) {
  */
 export function actionCosts(economy, { now } = NO_OPTIONS) {
   const m = model(economy);
+  const FEES = m.fees;
   // A player's real cost of one action, from the simulation (simulate.mjs realCostOf): the number to quote.
   const sim = simulate(economy, { now });
   const real = new Map([
@@ -497,7 +498,11 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
     ok: true,
     setup: setupCost(plan, economy),
     actions: actionCosts(economy, { now }),
-    fees: { playerSol: sol(FEES.player), projectSol: sol(FEES.project), oracleSol: sol(ORACLE_FEE) },
+    fees: {
+      playerSol: sol(feesOf(economy).player),
+      projectSol: sol(feesOf(economy).project),
+      oracleSol: sol(ORACLE_FEE),
+    },
   };
 }
 

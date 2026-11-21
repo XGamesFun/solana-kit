@@ -2,7 +2,10 @@
 // simulate it, price it, explain it, save it and say how it is put live: signed by a key file on the person's own
 // machine, once they have read what would be sent and said yes.
 // Each tool is { name, title, description, inputSchema, annotations, handler(input, ctx) → { text, ...data } }; the server
-// (server.mjs) and the terminal (`xsolana tool`) run them the same way. No tool signs, holds a key or talks to a wallet.
+// (server.mjs) and the terminal (`xsolana tool`) run them the same way. A tool the hosted server has (REMOTE_TOOLS) also
+// has `hosted`: the description that server lists, which says what the tool does and returns and nothing else (no word
+// to the agent, no other tool's name), as directories ask of a hosted server; the advice in `description` goes in that
+// server's instructions (server.mjs REMOTE_INSTRUCTIONS) instead. No tool signs, holds a key or talks to a wallet.
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -183,7 +186,7 @@ const SOURCE = {
   },
   example: {
     type: 'string',
-    description: 'A worked example by name, from xsolana_examples (stud-farm, nft-raffle, …).',
+    description: 'A worked example by name (stud-farm, nft-raffle, …).',
   },
 };
 
@@ -300,6 +303,8 @@ export const tools = [
     name: 'xsolana_guide',
     title: 'What an economy can be made of',
     annotations: READ,
+    hosted:
+      'What an economy on loot can be made of: shops, loot boxes and packs, gacha, lotteries and raffles, auctions (the highest bid wins, the outbid refunded at once), staking and farms, crafting and merging, seasons and emissions, contests players back a side in, quests and airdrops, holder-gated drops, and NFTs of other collections used in a game. loot is one shared Solana program (on devnet, and on mainnet when the spec says "network": "mainnet"; not independently audited): an economy is a JSON spec, not a new smart contract. With no `part`, returns a short index of every part and topic. With a part, returns its fields from the schema, who acts at play time and its nested shapes; with a topic (writing, cheating, asks, cannot), how to write a spec, designing against bots, asks that look impossible, or what loot cannot do and the nearest versions it can.',
     description:
       'Read this first whenever someone wants a web3 economy, game economy, token economy, NFT mechanic or onchain reward system: a shop, loot boxes or packs, gacha, a lottery or raffle, an auction (highest bid wins, the outbid refunded at once), staking or a farm, crafting or merging, seasons and emissions, a contest players back a side in, quests and airdrops, holder-gated drops, using NFTs of any other collection in a game. loot is ONE shared Solana program (on devnet, and on mainnet when the spec says "network": "mainnet"; not independently audited): the economy is a JSON spec, not a new smart contract, so never write Anchor/Rust for what it covers. With no `part`, returns a short index: the loop, and every part and topic with when to fetch it. Then fetch the one you need: `part` gives that part’s fields from the schema, who acts at play time and its nested shapes; a topic (writing, cheating, asks, cannot) gives how to write a spec, designing against bots, asks that look impossible, or what loot cannot do with the nearest versions.',
     inputSchema: {
@@ -336,6 +341,8 @@ export const tools = [
     name: 'xsolana_examples',
     title: 'Find a worked economy to start from',
     annotations: READ,
+    hosted:
+      'Worked economies to start from. With `query` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of 112 real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With `name`, returns that example’s whole spec. With neither, lists every example.',
     description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
     inputSchema: {
       type: 'object',
@@ -405,6 +412,8 @@ export const tools = [
     name: 'xsolana_check',
     title: 'Check an economy spec',
     annotations: READ,
+    hosted:
+      'Checks an economy spec. Returns its refusals, each with a code, what it means and its fix, which keep a spec from going live; and its warnings, what the person behind the economy needs to know: chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off (with its date in words), a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds. The program refuses only what it must, so much of what a project sets up is accepted with a warning. Also returns how many wallet approvals each action takes. Takes the spec inline (`spec`) or a worked example by name.',
     description:
       'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so each warning goes to the person. Run it after every change, and check before you describe: before telling the person how value moves (a burn, a free token, a swap, a refund, a payment held or not), check one draft with that mechanism once and read what it says (one draft, not every variant). Quote every count of approvals from it. Give the spec inline (`spec`), a file, or an example.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
@@ -474,13 +483,15 @@ export const tools = [
     name: 'xsolana_simulate',
     title: 'Simulate where the money goes',
     annotations: READ,
+    hosted:
+      'The quick simulation: expected values from the spec, computed at once. Returns what each box, ticket and craft gives back against its price, what the game keeps, each pool’s money in and out per day and whether it runs dry, settles or grows, farm rewards per unit staked, and what players, the treasury and the platform get each day, at the fees of the economy’s own network; a box’s chances with its odds rules at their most, what a box that gives nothing for a miss misses as its outcomes run out, what a ticket weighs in a lottery weighed by time, and what places get from a pool that starts short. `scenario` overrides the spec’s own ({"perDay": {"box:flip": 1000}, "days": 30, "staked": {"<farm>": 1000}}).',
     description:
       'The quick simulation (expected values from the spec, instant): what each box, ticket and craft gives back against its price, what the game keeps, each pool’s money in and out per day and whether it runs dry, settles or grows, farm rewards per unit staked, what players, the treasury and the platform get each day; a box’s chances with its odds rules at their most, what a box that gives nothing for a miss misses as its outcomes run out, what a ticket weighs in a lottery weighed by time, and what places get from a pool that starts short. `scenario` overrides the spec’s own ({"perDay": {"box:flip": 1000}, "days": 30, "staked": {"<farm>": 1000}}). Quote its numbers; never your own arithmetic.',
     inputSchema: {
       type: 'object',
       properties: {
         ...SOURCE,
-        scenario: { type: 'object', description: 'What to assume instead of the spec’s scenario.' },
+        scenario: { type: 'object', description: 'What to assume in place of the spec’s scenario.' },
         json: { type: 'boolean', description: 'Also return every row.' },
       },
       additionalProperties: false,
@@ -514,6 +525,8 @@ export const tools = [
     name: 'xsolana_cost',
     title: 'Price going live and each action',
     annotations: READ,
+    hosted:
+      'What going live costs (each account’s rent, the program’s fees, network fees, the seeds, the transactions it takes) and what each action costs whoever signs it while it runs, at the fees of the economy’s own network. It prices only: nothing is sent.',
     description:
       'What going live costs (each account’s rent, the program’s fees, network fees, the seeds, the transactions it takes) and what each action costs whoever signs it while it runs.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
@@ -543,6 +556,8 @@ export const tools = [
     name: 'xsolana_explain',
     title: 'Explain an economy in plain words',
     annotations: READ,
+    hosted:
+      'The economy in plain words: what players do and what it costs and is worth, how the pools fill and drain, what runs by itself, what the authority must sign, what going live costs, and what is flagged for the law.',
     description:
       'The economy in plain words for the person: what players do and what it costs and is worth, how the pools fill and drain, what runs by itself, what the authority must sign, what going live costs, and what is flagged for the law. Tell them the essentials in a few lines, from this text.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
@@ -556,6 +571,8 @@ export const tools = [
     name: 'xsolana_review',
     title: 'Review an economy as a cheater would',
     annotations: READ,
+    hosted:
+      'Reviews an economy the way a cheater reads it, before it goes live (a review, not a validity check). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then, for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Takes the spec inline (`spec`) or a worked example by name. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
     description:
       'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Give the spec inline (`spec`), a file, or an example. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
@@ -588,6 +605,8 @@ export const tools = [
     name: 'xsolana_design',
     title: 'From what a person wants to the specs that do it',
     annotations: READ,
+    hosted:
+      'From what a person wants to the specs that do it, when no single part does it all or the wants pull against each other. Each want is a requirement naming its route (the key of the lottery, item, grant, farm or contest it is about; its family follows from that): a draw ("pay-in" {currencies: [{token, amount}]}, "burn", "refund-as-paid", "free-entry" {grant, perPerson, spendable}, "one-approval", "one-draw", "one-token", "first-reward-no-sol"); a sale of an item ("pay-in", "fixed-price", "instant", "fair-scarce" {perPerson, list}, "one-approval"); a reward, a grant ("per-person" {claims}, "no-server", "bot-proof", "bounded" {total}, "first-reward-no-sol"; a server’s voucher keys as "serverKeys" on any of them); staking, a farm ("emission-cap" {total}, "predictable", "no-lock", "whale-fair"; "perDay" and "days" on any of them); a contest ("no-owner-trust", "equal-stakes" {amount}, "refund-if-no-result"; decider keys as "serverKeys"). Takes the spec as it stands, with each route’s skeleton. For each route it builds every combination of known bridges (an entry token each currency buys, crafted in the purchase; a payment held to the draw; a fixed-price listing in each currency; an allowlist; a deciding voucher server; a fixed or shared rate, minted or from a vault, with an end or a halving; a decider key), checks each, tests every requirement on it, and answers the designs best first (what the person asked for, then how it plays, then how clean, then how secure), with what each keeps (✓), keeps in part (~) and gives up (✗), a sentence for the person and what each needs from them; when none keeps them all, what has to give. Each design’s spec is in `designs`.',
     description:
       'From what the person wants to the specs that do it, when no single part does it all or their wants pull against each other. Write each want as a requirement naming its route (the key of the lottery, item, grant, farm or contest it is about; its family follows from that): a draw ("pay-in" {currencies: [{token, amount}]}, "burn", "refund-as-paid", "free-entry" {grant, perPerson, spendable}, "one-approval", "one-draw", "one-token", "first-reward-no-sol"); a sale of an item ("pay-in", "fixed-price", "instant", "fair-scarce" {perPerson, list}, "one-approval"); a reward, a grant ("per-person" {claims}, "no-server", "bot-proof", "bounded" {total}, "first-reward-no-sol"; a server\'s voucher keys as "serverKeys" on any of them); staking, a farm ("emission-cap" {total}, "predictable", "no-lock", "whale-fair"; "perDay" and "days" on any of them); a contest ("no-owner-trust", "equal-stakes" {amount}, "refund-if-no-result"; decider keys as "serverKeys"). Pass the spec as it stands, with each route\'s skeleton. For each route it builds every combination of known bridges (an entry token each currency buys, crafted in the purchase; a payment held to the draw; a fixed-price listing in each currency; an allowlist; a deciding voucher server; a fixed or shared rate, minted or from a vault, with an end or a halving; a decider key), checks each, tests every requirement on it, and answers the designs best first (what the person asked for, then how it plays, then how clean, then how secure), with what each keeps (✓), keeps in part (~) and gives up (✗), a "Say" sentence for the person and what each needs from them; when none keeps them all, what has to give. Read the requirements back to the person, put the choice to them with your pick, then build the one they choose (its spec is in `designs`) and run xsolana_check on it. A spec saved before they choose is already built, a draft too: save none until they have.',
 
@@ -826,6 +845,8 @@ export const tools = [
     name: 'xsolana_status',
     title: 'Read a live economy from the chain',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    hosted:
+      'A live economy as it is on chain: the project, every pool’s balance, every record the spec names (found or missing). Reads the economy’s own network.',
     description:
       'A live economy as it is on chain: the project, every pool’s balance, every record the spec names (found or missing). Reads the economy’s own cluster: devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL, which must then name a mainnet RPC.',
     inputSchema: { type: 'object', properties: { spec: SOURCE.spec, file: SOURCE.file }, additionalProperties: false },
@@ -908,6 +929,8 @@ export const tools = [
     name: 'xsolana_token',
     title: 'Read a token made elsewhere',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    hosted:
+      'A token made elsewhere, as the chain has it: given its mint’s address, returns its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers`: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Reads devnet: the mint and its name record only, not the link the record names.',
     description:
       'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads devnet (or XSOLANA_RPC_URL): the mint and its name record only, never the link the record names.',
     inputSchema: {
@@ -1050,6 +1073,8 @@ export const tools = [
     name: 'xsolana_client',
     title: 'The program and its calls, for an app',
     annotations: READ,
+    hosted:
+      'How an app (a game, a site, a bot) uses a live economy: the program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own wallet (open a box, buy, stake, craft, enter, claim).',
     description:
       'How an app (a game, a site, a bot) uses a live economy: the program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own wallet (open a box, buy, stake, craft, enter, claim). Use this instead of writing chain code from memory.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

@@ -9,6 +9,7 @@ import { example, hows, limits, search } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { CANNOT, guideText, HOW } from '../economy/guide.mjs';
 import { simulate } from '../economy/simulate.mjs';
+import { feesOf } from '../economy/model.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 
 const NOW = 1_790_000_000;
@@ -147,23 +148,23 @@ test('a referral share reads as the buyer’s choice, and a list grant that repe
 test('each player action has one “in all” cost: the price, the fee, the oracle, the network and lasting rent', () => {
   const spec = example('coin-flip-arena').spec;
   const flip = cost(spec, { now: NOW }).actions.find(a => a.part === 'box:flip');
-  // 0.1 SOL, the 0.002 player fee, 0.0008 to the oracle, two signatures (the open and the settle).
-  assert.equal(flip.inAllSol, 0.10281);
+  // 0.1 SOL, the player fee of the economy's network, 0.0008 to the oracle, two signatures (the open and the settle).
+  const inAll = +(0.1 + Number(feesOf(spec).player) / 1e9 + 0.0008 + 0.00001).toFixed(9);
+  assert.equal(flip.inAllSol, inAll);
   assert.ok(flip.holdSol > flip.inAllSol, 'the escrow is held while the order is open');
-  assert.match(flip.inAll, /about 0\.10281 SOL in all/);
+  assert.ok(flip.inAll.includes(`about ${inAll} SOL in all`), flip.inAll);
   // A shop collectible is bought in one signature (`buy`), and its rent never comes back: it is in the number.
-  const shop = simulate(
-    {
-      version: 2,
-      network: 'devnet',
-      name: 'Shop',
-      currency: 'sol',
-      tokens: [{ key: 'sol', source: 'sol' }],
-      items: [{ key: 'hat', name: 'Hat', price: 0.003 }],
-    },
-    { now: NOW },
-  ).items[0];
-  assert.equal(shop.realCost.totalSol, 0.008105); // 0.003 + 0.002 fee + 0.000005 network + 0.0031 rent
+  const shopSpec = {
+    version: 2,
+    network: 'devnet',
+    name: 'Shop',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    items: [{ key: 'hat', name: 'Hat', price: 0.003 }],
+  };
+  const shop = simulate(shopSpec, { now: NOW }).items[0];
+  // 0.003 + the player fee (0.002 on devnet) + 0.000005 network + 0.0031 rent
+  assert.equal(shop.realCost.totalSol, +(0.003 + Number(feesOf(shopSpec).player) / 1e9 + 0.000005 + 0.0031).toFixed(9));
 });
 
 test('a change to a live economy doesn’t pay its seeds or grant funds again', () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Copies skills/ into the places each harness reads them: the plugin (plugin/skills, for Claude Code and Codex), its
-// edition for Anthropic's directory (claude-directory/skills), and this repository's own .claude/skills and
+// edition for Anthropic's directory (claude-directory/skills, while its manifest names this version), and this repository's own .claude/skills and
 // .agents/skills (an agent working in this checkout). Byte for byte; extra files there are removed. `--check` exits 1
 // when a copy differs. Each skill needs front matter whose `name` is its folder's and a `description` of at most 1,024
 // characters (the Agent Skills standard) that is a plain YAML scalar: a `: ` or a ` #` inside it is read as a mapping or
@@ -11,9 +11,19 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = path.join(root, 'skills');
-const MIRRORS = ['plugin/skills', 'claude-directory/skills', '.claude/skills', '.agents/skills'].map(p =>
-  path.join(root, p),
-);
+// The directory edition moves only with its own manifest's version: a version of it is reviewed by Anthropic before it
+// is listed, so it stays as it was submitted (an earlier release's skill, which still runs) until its manifest names
+// this package's version again. Then it is a copy like the others.
+const pkgVersion = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')).version;
+const directoryVersion = JSON.parse(
+  await readFile(path.join(root, 'claude-directory/.claude-plugin/plugin.json'), 'utf8'),
+).version;
+const MIRRORS = [
+  'plugin/skills',
+  ...(directoryVersion === pkgVersion ? ['claude-directory/skills'] : []),
+  '.claude/skills',
+  '.agents/skills',
+].map(p => path.join(root, p));
 const check = process.argv.includes('--check');
 
 async function files(dir, base = dir) {

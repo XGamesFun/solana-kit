@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
+import { feesOf } from '../economy/model.mjs';
 
 const NOW = 1_000_000_000;
 const exampleSpec = name => JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
@@ -105,7 +106,13 @@ test('a ticket’s “in all” counts its entry’s bytes, which never come bac
   ).lotteries[0].realCost;
   // An entry of 40 bytes in the round (its buyer and its tickets' end), at 5,080 lamports a byte.
   assert.equal(plain.rentSol, 0.0002032);
-  assert.equal(plain.totalSol, 0.0122082, 'the price, the player fee, the network and the entry');
+  // The player fee is the economy's network's: 0.002 SOL on devnet.
+  const fee = Number(feesOf(solSpec({})).player) / 1e9;
+  assert.equal(
+    plain.totalSol,
+    +(0.01 + fee + 0.000005 + 0.0002032).toFixed(9),
+    'the price, the player fee, the network and the entry',
+  );
   const noLoss = sim(
     solSpec({
       lotteries: [
@@ -124,7 +131,11 @@ test('a ticket’s “in all” counts its entry’s bytes, which never come bac
     }),
   ).lotteries[0].realCost;
   assert.equal(noLoss.priceBack, true);
-  assert.equal(noLoss.totalSol, 0.0022082, 'only the player fee, the network and the entry leave for good');
+  assert.equal(
+    noLoss.totalSol,
+    +(fee + 0.000005 + 0.0002032).toFixed(9),
+    'only the player fee, the network and the entry leave for good',
+  );
   assert.ok(noLoss.holdSol > 0.5);
   const text = explain(
     sim(
@@ -162,7 +173,7 @@ test('a ticket’s “in all” counts its entry’s bytes, which never come bac
   );
   assert.match(
     text,
-    /about 0\.002208 SOL in all \(the player fee, the network, the purchase’s entry in the round, which never comes back\); the wallet needs about [\d.]+ SOL when it signs, and the rest comes back/,
+    /about [\d.]+ SOL in all \(the player fee, the network, the purchase’s entry in the round, which never comes back\); the wallet needs about [\d.]+ SOL when it signs, and the rest comes back/,
   );
 });
 

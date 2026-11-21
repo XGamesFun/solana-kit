@@ -4,6 +4,23 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.3: mainnet's fee quoted as mainnet charges it; the hosted server's tools say only what they do (loot 0.29.0, unchanged)
+
+The tools alone.
+
+- **Fixed: the player fee on mainnet.** The tools quoted one player fee, devnet's 0.002 SOL, for every economy. The
+  mainnet platform charges 0.0005 SOL (since 2026-11-15), so `cost`, `simulate`, `check` and `explain` quoted a
+  mainnet player's every action 0.0015 SOL high. Each now quotes the fees of the economy's own network
+  (`model.mjs` `FEES_ON` and `feesOf`, as each platform account held them on 2026-11-21); the guide gives both. The
+  program always charged what its platform account holds: only the quotes were wrong.
+- **The hosted server's tool descriptions say what each tool does and returns, and nothing else**: no word to the
+  agent and no other tool named, as directories ask of a hosted server (each tool's `hosted` in `js/mcp/tools.mjs`; a
+  test holds it). The advice those descriptions carried (quote the numbers, put a design's choice to the person, fix
+  every high finding…) is in the hosted server's instructions. The local server's descriptions are unchanged.
+- **`claude-directory/` moves only when it is submitted again**: a release leaves it at the version its manifest
+  names, and `sync-skills` copies the skill into it only while that is this version (`docs/harnesses.md`). It stays at
+  0.29.2, as submitted on 2026-11-21; its tools are the hosted server's, so they are this version's.
+
 ## 0.29.2: the skill's description parses again; an edition of the plugin for Anthropic's directory (loot 0.29.0, unchanged)
 
 The tools alone.

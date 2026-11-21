@@ -57,6 +57,26 @@ describe('the hosted xsolana MCP server', () => {
     for (const t of tools) assert.ok(!('file' in (t.inputSchema.properties ?? {})), `${t.name} takes no file`);
   });
 
+  // What a directory asks of a hosted server's tools: each description says what the tool does and returns, with no
+  // word to the agent, no other tool named and nothing hidden. The advice the local descriptions carry is in the
+  // server's instructions instead.
+  test('describes each tool by what it does: no word to the agent, no other tool named, nothing hidden', async () => {
+    const { tools } = await client.listTools();
+    const toTheAgent =
+      /\b(you|your|never|always|should|call (this|again)|quote|tell|use this|use it|read this|instead|run it)\b/i;
+    for (const t of tools) {
+      const params = Object.entries(t.inputSchema.properties ?? {}).map(([k, p]) => [`${t.name}.${k}`, p.description]);
+      for (const [where, d] of [[t.name, t.description], ...params]) {
+        if (!d) continue;
+        assert.ok(!/xsolana_/.test(d), `${where} names a tool: “${d.match(/xsolana_\w+/)?.[0]}”`);
+        assert.ok(!toTheAgent.test(d), `${where} speaks to the agent: “${d.match(toTheAgent)?.[0]}”`);
+        assert.ok(!/[\u200b-\u200f\u2060\ufeff]/.test(d), `${where} has an invisible character`);
+      }
+    }
+    for (const advice of ['never your own arithmetic', 'fix every high finding', 'put the choice to them'])
+      assert.ok(REMOTE_INSTRUCTIONS.includes(advice), `the instructions say “${advice}”`);
+  });
+
   test('its instructions say to pass the spec whole and how it goes live: a key file, and no page unless asked', () => {
     assert.equal(client.getInstructions(), REMOTE_INSTRUCTIONS);
     assert.match(REMOTE_INSTRUCTIONS, /pass it whole as "spec"/);

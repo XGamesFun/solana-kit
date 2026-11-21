@@ -17,7 +17,7 @@ import { utf8 } from '../chain/bytes.js';
 import { METADATA_LIMITS } from '../chain/metadata.js';
 import { sha256 } from '../chain/sha256.js';
 import {
-  FEES,
+  feesOf,
   rent as rentOf,
   LIMITS,
   ANSWER_HOLDS,
@@ -1953,12 +1953,12 @@ export function check(
   const feeNote = (price, tok, where, what) => {
     if (!tok?.wsol || price === null) return;
     if (price === 0n) return;
-    const ratio = Number(FEES.player) / Number(price);
+    const ratio = Number(feesOf(economy).player) / Number(price);
     if (ratio >= 0.01)
       warn(
         'W-FEE',
         where,
-        `Every ${what} also pays the platform’s player fee of ${fromUnits(FEES.player, 9)} SOL: ${(ratio * 100).toFixed(1)}% on top of its ${fromUnits(price, 9)} SOL price.`,
+        `Every ${what} also pays the platform’s player fee of ${fromUnits(feesOf(economy).player, 9)} SOL: ${(ratio * 100).toFixed(1)}% on top of its ${fromUnits(price, 9)} SOL price.`,
         'Fine for a game; a higher price makes the fee a smaller part of it.',
       );
   };
@@ -4156,7 +4156,7 @@ export function check(
       warn(
         'W-LOTTERY',
         `${where}.price`,
-        `${label(l)}’s tickets are free: a buyer pays only the player fee (${fromUnits(FEES.player, 9)} SOL)${l.perWallet ? '' : ', and with no "perWallet" one wallet can hold most of the tickets'}. Its pot is only what is paid into it.`,
+        `${label(l)}’s tickets are free: a buyer pays only the player fee (${fromUnits(feesOf(economy).player, 9)} SOL)${l.perWallet ? '' : ', and with no "perWallet" one wallet can hold most of the tickets'}. Its pot is only what is paid into it.`,
         'Give a ticket a "price" if it should cost something, or set "perWallet".',
       );
     units(l.seed, potToken, `${where}.seed`, `${label(l)}’s seed`);

@@ -11,7 +11,7 @@ each harness's own format, from one source.
 | Skill                     | `plugin/skills/xsolana-economy/`                                                                          | the same folder                                                                           |
 | Marketplace               | `.claude-plugin/marketplace.json`                                                                         | `.agents/plugins/marketplace.json`                                                        |
 | Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                       | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
-| Without the plugin        | `npx -y @xgamesfun/solana@0.29.2 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
+| Without the plugin        | `npx -y @xgamesfun/solana@0.29.3 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
 | Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                 | `AGENTS.md`                                                                               |
 
 The marketplace is named `xgamesfun` in both marketplace files, so the plugin is `xsolana@xgamesfun` whichever
@@ -45,16 +45,22 @@ the four links): from an organization it has not verified, the directory's porta
 included. In the portal the plugin's path is `claude-directory`; `plugin/` stays what this repository's own
 marketplace installs.
 
+The edition moves only when it is submitted again, since each version of it is reviewed before it is listed: a release
+leaves it at the version its manifest names (the skill of that release, which keeps working), and `sync-skills` copies
+the skill into it only while that manifest names `package.json`'s version. To move it, set that version in its manifest
+and its README's pins, run `npm run sync-skills`, then validate it in the portal again. Its tools are the hosted
+server's, so they move with xgames.fun whatever its version.
+
 ## Releasing a version
 
 Keep these in step:
 
-- `version` in `package.json`, `plugin/.claude-plugin/plugin.json`, `plugin/plugin.json`,
-  `claude-directory/.claude-plugin/plugin.json`, `release.json` and `server.json` (twice: the server's and its npm
-  package's; `npm test` fails when they differ);
+- `version` in `package.json`, `plugin/.claude-plugin/plugin.json`, `plugin/plugin.json`, `release.json` and
+  `server.json` (twice: the server's and its npm package's; `npm test` fails when they differ), and in
+  `claude-directory/.claude-plugin/plugin.json` only when that edition is submitted again (above);
 - the `--package=@xgamesfun/solana@<version>` pin in `plugin/.mcp.json` and `plugin/mcp.json`, and every
-  `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file, `claude-directory/README.md` and the skill
-  (`npm test` fails on a pin that isn't `package.json`'s version);
+  `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file and the skill (`npm test` fails on a pin that
+  isn't `package.json`'s version; in `claude-directory/README.md`, on one that isn't its manifest's);
 - `release.json` (`node scripts/release-manifest.mjs`, after a program build and `node scripts/sync-idl.mjs`);
 - the skill's copies (`node scripts/sync-skills.mjs` after editing `skills/`);
 - the hosted results server (xgames.fun's `creator-studio`), which refuses any program build but the one it is pinned to

@@ -30,6 +30,13 @@ const LIVE =
 export const INSTRUCTIONS = [ABOUT, ORDER, LIVE, WHERE].join(' ');
 
 /**
+ * How to use what each tool returns: on the local server each tool's own description says it; the hosted one lists
+ * descriptions that say only what a tool does (tools.mjs `hosted`), so its instructions carry this instead.
+ */
+const USING =
+  'Using what the tools return: tell the person every warning xsolana_check gives, quote its counts of approvals, and before describing how value moves (a burn, a free token, a swap, a refund, a payment held or not) check one draft with that mechanism once and read what it says. Quote the numbers of xsolana_simulate, xsolana_cost and xsolana_explain, never your own arithmetic; from xsolana_explain, tell the essentials in a few lines. When xsolana_examples finds part of an ask impossible, call it again with that part’s words: the answer is a nearest version to offer, not a dead end. From xsolana_review, fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. From xsolana_design, read the requirements back to the person, put the choice to them with your pick, then build the one they choose and run xsolana_check on it. Use xsolana_token rather than asking the person to look a mint up, and xsolana_client rather than writing chain code from memory.';
+
+/**
  * What a hosted server (js/mcp/http.mjs) tells the agent: the same work, with the spec passed whole in every call,
  * and going live on the person's own computer, since a hosted server can neither write their files nor sign there.
  * It has no xsolana_publish, so the key-file rule is said here in full.
@@ -37,15 +44,16 @@ export const INSTRUCTIONS = [ABOUT, ORDER, LIVE, WHERE].join(' ');
 export const REMOTE_INSTRUCTIONS = [
   ABOUT,
   ORDER,
+  USING,
   'This hosted server reads no files: write the spec and pass it whole as "spec" to every tool.',
   `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address SOL: devnet SOL for an economy on devnet, real SOL for one whose file says "network": "mainnet"), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner for good (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
   WHERE,
 ].join(' ');
 
 /**
- * A tool as tools/list shows it; on a hosted server, without the `file` argument it can't take. Its title, what a
- * client shows a person in place of the name, goes where both ages of the protocol look for it: on the tool and in
- * its annotations.
+ * A tool as tools/list shows it; on a hosted server, with the description that says only what it does (tools.mjs
+ * `hosted`) and without the `file` argument it can't take. Its title, what a client shows a person in place of the
+ * name, goes where both ages of the protocol look for it: on the tool and in its annotations.
  */
 function listed(t, remote) {
   let inputSchema = t.inputSchema;
@@ -56,7 +64,7 @@ function listed(t, remote) {
   return {
     name: t.name,
     title: t.title,
-    description: t.description,
+    description: remote && t.hosted ? t.hosted : t.description,
     inputSchema,
     annotations: { title: t.title, ...t.annotations },
   };
