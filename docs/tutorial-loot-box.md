@@ -74,7 +74,7 @@ npx -y @xgamesfun/solana@0.29.0 simulate xsolana.json
 
 ```
 Box “Mystery crate”: costs 0.1 SOL (about 0.10405 SOL in all …), gives back 0.062 SOL on average (62%);
-the house keeps 38% of each price.
+the game keeps 38% of each price.
   1%: sword (worth 2)
   9%: shield (worth 0.3)
   30%: helmet (worth 0.05)

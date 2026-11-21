@@ -232,7 +232,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const src = m.box.get(b.key);
     const edge =
       b.houseEdgePercent !== null
-        ? `; the house keeps ${num(b.houseEdgePercent)}%`
+        ? `; the game keeps ${num(b.houseEdgePercent)}%`
         : b.unpriced.length
           ? `, plus what ${b.unpriced.join(', ')} ${b.unpriced.length === 1 ? 'is' : 'are'} worth`
           : '';

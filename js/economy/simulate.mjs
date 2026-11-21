@@ -1595,7 +1595,7 @@ export function explain(sim, economy) {
     } a day (anything not named: ${unnamedWords(sim)}), over ${sim.scenario.days} days.`,
   );
   for (const b of sim.boxes) {
-    const edge = b.houseEdgePercent !== null ? `; the house keeps ${n(b.houseEdgePercent)}% of each price` : '';
+    const edge = b.houseEdgePercent !== null ? `; the game keeps ${n(b.houseEdgePercent)}% of each price` : '';
     const also = Object.entries(b.alsoPays).map(([t, v]) => `${n(v)} ${sym(t)}`);
     const back =
       b.returnPercent !== null

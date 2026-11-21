@@ -1,6 +1,7 @@
-# xsolana: Solana loot boxes, NFT staking and game economies without a smart contract
+# xsolana: a toolkit for building game economies on Solana, with no smart contract to write
 
-**Build loot boxes, shops, lotteries, auctions, NFT staking and rewards on Solana without writing a smart contract.**
+**Design, check, simulate and review a game's economy on Solana: shops, items, crafting, rewards, NFT staking, loot
+boxes, raffles and auctions, as a JSON spec. No smart contract to write.**
 
 `xsolana` is the toolkit in this repository (`@xgamesfun/solana` on npm), and **loot** is the Solana program it drives.
 It is not [`@solana/kit`](https://github.com/anza-xyz/kit), the Solana JavaScript SDK.
@@ -204,6 +205,15 @@ economy on devnet first, and read [DISCLAIMER.md](DISCLAIMER.md) before real mon
 (`@xgamesfun/xcore`): `xcore loot add ./my-game` says where the game's `xsolana.json` goes and copies the page client
 beside it, and `xcore publish` hosts the game on xgames.fun with player sign-in, saves, leaderboards and multiplayer
 rooms. It takes plain HTML/JS, Vite, Next.js static exports, and Godot and Unity web exports.
+
+**Is this a gambling platform, an exchange or a wallet?** No. It is a building tool: it designs, checks, simulates and
+reviews the economy of a game or a community, and nothing is played, traded or held here. Parts that pay by chance (a
+loot box, a raffle) are game mechanics; where one pays real money, `check` says what the law asks of it and tells you
+to take advice before mainnet.
+
+**Does it hold my funds or my keys?** No. Nothing an agent calls here signs or sends anything, and the hosted server
+only reads what you pass it and the public chain. An economy goes live with a command run on your own computer, signed
+by a key file you made for the project, after you have read exactly what will be sent.
 
 **Is this `@solana/kit`?** No. `@solana/kit` is the Solana JavaScript SDK, for sending transactions and reading
 accounts. This is `xsolana` (`@xgamesfun/solana`): a spec, a checker and a client for economies on one shared program.

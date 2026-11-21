@@ -2,7 +2,7 @@
   "name": "@xgamesfun/solana",
   "version": "0.29.0",
   "mcpName": "io.github.XGamesFun/solana-kit",
-  "description": "Loot boxes, gacha, shops, lotteries, auctions, NFT staking, crafting and rewards on Solana without writing a smart contract: one shared program, its JS client, a CLI, and an MCP server and skill so Claude Code, Codex or any AI agent can design, check, simulate and launch an economy.",
+  "description": "A toolkit for building game economies on Solana: design, check, simulate and review shops, items, crafting, rewards, NFT staking, loot boxes and auctions as a JSON spec, with no smart contract to write. One shared program, its JS client, a CLI, and an MCP server and skill for Claude Code, Codex or any AI agent.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
