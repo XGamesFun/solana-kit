@@ -4,6 +4,7 @@
 import { gateList } from '../client/grant.js';
 import { treeSize } from '../client/ix.js';
 import { networkOf } from '../client/cluster.js';
+import { SCHEMA } from './validate.mjs';
 
 // ---------------------------------------------------------------- the program's numbers
 // Each is the loot program's own unless it says otherwise.
@@ -176,6 +177,75 @@ export function toBps(percent) {
 }
 
 const UNIT = { s: 1, m: 60, h: 3600, d: 86_400, w: 604_800 };
+
+/** Seconds as the shortest exact duration the spec could have written: 604800 → "1w", 90 → "90s" ("1.5m" is not exact). */
+export const durationText = seconds => {
+  for (const [unit, size] of [...Object.entries(UNIT)].reverse())
+    if (seconds > 0 && seconds % size === 0) return `${seconds / size}${unit}`;
+  return `${seconds}s`;
+};
+
+/** Whether a schema node can reach a duration, memoized by node (the schema is a fixed graph, cycles included). */
+const reaches = new Map();
+const refOf = ref =>
+  ref
+    .slice(2)
+    .split('/')
+    .reduce((n, k) => n?.[k], SCHEMA);
+function reachesDuration(node) {
+  if (!node || typeof node !== 'object') return false;
+  if (node.$ref === '#/$defs/duration') return true;
+  if (reaches.has(node)) return reaches.get(node);
+  reaches.set(node, false);
+  const kids = [
+    node.$ref && refOf(node.$ref),
+    ...(node.anyOf ?? []),
+    ...(node.oneOf ?? []),
+    node.items,
+    typeof node.additionalProperties === 'object' && node.additionalProperties,
+    ...Object.values(node.properties ?? {}),
+  ];
+  const yes = kids.some(reachesDuration);
+  reaches.set(node, yes);
+  return yes;
+}
+function written(value, node) {
+  if (!node || !reachesDuration(node)) return value;
+  // (0 stays the number 0: it means "none" where a duration is optional, and "0s" would read as one given)
+  if (node.$ref === '#/$defs/duration') return Number.isSafeInteger(value) && value > 0 ? durationText(value) : value;
+  if (node.$ref) return written(value, refOf(node.$ref));
+  const branches = [...(node.anyOf ?? []), ...(node.oneOf ?? [])];
+  // A number a branch takes as itself ("upTo": points, or a duration) stays a number.
+  if (typeof value === 'number' && branches.some(b => b.type === 'integer' || b.type === 'number')) return value;
+  let v = value;
+  for (const b of branches) v = written(v, b);
+  if (Array.isArray(v) && node.items) {
+    const out = v.map(x => written(x, node.items));
+    return out.some((x, i) => x !== v[i]) ? out : v;
+  }
+  if (
+    v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    (node.properties || typeof node.additionalProperties === 'object')
+  ) {
+    let out = v;
+    for (const [k, x] of Object.entries(v)) {
+      const sub =
+        node.properties?.[k] ?? (typeof node.additionalProperties === 'object' ? node.additionalProperties : null);
+      const y = written(x, sub);
+      if (y !== x) out = out === v ? { ...v, [k]: y } : Object.assign(out, { [k]: y });
+    }
+    return out;
+  }
+  return v;
+}
+/**
+ * The spec with every duration written as seconds ("lock": 86400) given in its words instead ("1d"): the same seconds
+ * (toSeconds reads it back exactly), so what is said repeats what was meant. A spec with none is returned as it is.
+ */
+export const writtenDurations = economy => written(economy, SCHEMA);
+
 /** "7d" → 604800. A number is seconds already. */
 export function toSeconds(duration) {
   if (duration === undefined || duration === null) return 0;
@@ -450,7 +520,7 @@ function tokenOf(given) {
  * them); call `check` first when it matters.
  */
 export function model(economy, { now = 0 } = {}) {
-  const e = economy ?? {};
+  const e = writtenDurations(economy ?? {});
   const tokens = new Map((e.tokens ?? []).map(t => [t.key, tokenOf(t)]));
   const currencyKey = e.currency ?? (tokens.size === 1 ? [...tokens.keys()][0] : undefined);
   const currency = tokens.get(currencyKey);
@@ -546,9 +616,11 @@ export function model(economy, { now = 0 } = {}) {
       ...(it.fall ? { fall: it.fall } : {}),
       ...(it.split ? { split: it.split } : {}),
       ...(it.gate ? { gate: it.gate } : {}),
-      // When it sells, and how many one wallet may buy.
+      // When it sells, and how many one wallet (or one person) may buy.
       ...Object.fromEntries(
-        ['opens', 'closes', 'perWallet', 'perWalletEach'].filter(k => it[k] !== undefined).map(k => [k, it[k]]),
+        ['opens', 'closes', 'perWallet', 'perWalletEach', 'perPerson', 'perPersonEach']
+          .filter(k => it[k] !== undefined)
+          .map(k => [k, it[k]]),
       ),
       active: it.active !== false,
       outcomes: [{ gives: 'item', item: it.key, weight: 1 }],
@@ -1010,8 +1082,43 @@ export const gateOf = (gate, m) => {
   return { Holds: [ruleOf(gate, m)] };
 };
 
+/**
+ * What an item is that the program never lets change once a unit of it is issued (catalog.rs KindLocked): its kind,
+ * soulbound, burnable, collection and drawn traits. The fields of `it` (as written) that differ from `was`'s.
+ */
+export const lockedChanges = (it, was) =>
+  [
+    ['kind', x => x.kind ?? 'collectible'],
+    ['soulbound', x => Boolean(x.soulbound)],
+    ['burnable', x => Boolean(x.burnable)],
+    ['collection', x => x.collection ?? null],
+    ['drawn', x => JSON.stringify(x.drawn ?? [])],
+  ]
+    .filter(([, of]) => of(it) !== of(was))
+    .map(([field]) => field);
+
 /** Whether a part limits each person ("perPerson", "perPersonEach") rather than each wallet. */
 export const byPerson = part => part?.perPerson != null || part?.perPersonEach != null;
+
+/** Whether a part limits each player at all: per wallet or per person, in all or in each window. */
+export const limitsPlayers = part =>
+  Boolean(part?.perWallet || part?.perWalletEach?.count || part?.perPerson || part?.perPersonEach?.count);
+
+/**
+ * A part's limits on each player in words, whichever of the four it is written as: ["3 per wallet"], ["1 per person
+ * every 1d"]. `what` follows the count (" tickets"), `per` joins it to whom ("per", or "a": "3 a wallet"), `after`
+ * follows a limit in all (" a round"), and `every` is the window when its "every" is left out (a lottery's is an hour,
+ * any other part's a day).
+ */
+export const limitPhrases = (part, { what = '', per = 'per', after = '', every = '1d' } = {}) =>
+  [
+    part?.perWallet && `${part.perWallet}${what} ${per} wallet${after}`,
+    part?.perWalletEach?.count &&
+      `${part.perWalletEach.count}${what} ${per} wallet every ${part.perWalletEach.every ?? every}`,
+    part?.perPerson && `${part.perPerson}${what} ${per} person${after}`,
+    part?.perPersonEach?.count &&
+      `${part.perPersonEach.count}${what} ${per} person every ${part.perPersonEach.every ?? every}`,
+  ].filter(Boolean);
 
 /**
  * The program's `PerWallet` for a part's limit on each player: by wallet, "perWallet" (in all) and "perWalletEach"

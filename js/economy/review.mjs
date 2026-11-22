@@ -12,8 +12,11 @@ import { check } from './check.mjs';
 import { gateWords, ruleWords } from './explain.mjs';
 import {
   boxRolls,
+  byPerson,
   farmCeiling,
   destination,
+  limitPhrases,
+  limitsPlayers,
   listOf,
   model,
   outcomeParts,
@@ -192,6 +195,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       l.perWalletEach?.count && `${l.perWalletEach.count} per wallet every ${l.perWalletEach.every ?? '1d'}`,
       l.perPerson &&
         `${l.perPerson} per person (every wallet the issuer linked to them; a claim that names nobody is refused)`,
+      l.perPersonEach?.count &&
+        `${l.perPersonEach.count} per person every ${l.perPersonEach.every ?? '1d'} (every wallet the issuer linked to them; a claim that names nobody is refused)`,
       l.perKey && `${l.perKey} per key`,
       l.perDay && `${l.perDay} a day, all wallets together`,
       l.total && `${l.total} in all`,
@@ -224,11 +229,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
           .join(', or ');
 
     // The most one cheater gets.
-    const perWallet = l.perWallet
-      ? `${l.perWallet} per wallet`
-      : l.perWalletEach?.count
-        ? `${l.perWalletEach.count} per wallet every ${l.perWalletEach.every ?? '1d'}`
-        : 'no limit per wallet';
+    const perWallet = limitPhrases(l)[0] ?? 'no limit per wallet';
     const cap = l.perDay
       ? `up to ${l.perDay} a day (everyone’s daily total)${l.total ? ` and ${l.total} in all` : ', with no total: without end'}`
       : l.total
@@ -318,8 +319,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
 
     // Open grants: anyone claims.
     if (open && !list.length) {
-      const extra =
-        !l.perWallet && !l.perWalletEach?.count ? ' It limits no wallet: one wallet claims again and again.' : '';
+      const extra = !limitsPlayers(l) ? ' It limits no wallet: one wallet claims again and again.' : '';
       if (worth) {
         const severity = !g.gate ? 'high' : g.gate.wallets || g.gate.list ? 'info' : 'medium';
         find(
@@ -377,8 +377,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const enforced = [
       price > 0 ? `the price, ${fmt(price)} ${t}` : 'no price: free',
       it?.supply && `${it.supply} exist`,
-      b.perWallet && `${b.perWallet} per wallet`,
-      b.perWalletEach?.count && `${b.perWalletEach.count} per wallet every ${b.perWalletEach.every ?? '1d'}`,
+      ...limitPhrases(b),
       b.opens && `from ${b.opens}`,
       b.closes && `until ${b.closes}`,
       b.gate && gateWords(b.gate, kind === 'item' ? 'buy it' : 'open it', m).replace(/^Only/, 'only'),
@@ -386,7 +385,9 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ].filter(Boolean);
     const free = price === 0;
     const ceiling = free
-      ? `${b.perWallet ? `${b.perWallet} per wallet, and wallets are free: ` : ''}${it?.supply ? `all ${it.supply}` : 'as many as they like'}, for only the fees.`
+      ? byPerson(b)
+        ? `${limitPhrases(b).join(', ')}, as far as the issuer tells one person from another, for only the fees.`
+        : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${it.supply}` : 'as many as they like'}, for only the fees.`
       : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
@@ -442,8 +443,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       trigger: 'any wallet holding what it takes',
       enforced: [
         'every line it takes, all or nothing',
-        r.perWallet && `${r.perWallet} per wallet`,
-        r.perWalletEach?.count && `${r.perWalletEach.count} per wallet every ${r.perWalletEach.every ?? '1d'}`,
+        ...limitPhrases(r),
         r.opens && `from ${r.opens}`,
         r.closes && `until ${r.closes}`,
       ].filter(Boolean),
@@ -514,7 +514,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       name: l.name,
       trigger: `any wallet that buys a ticket${l.ticketNft ? ' (with an NFT)' : ` (${fmt(l.price ?? 0)} ${t})`}`,
       enforced: [
-        l.perWallet && `${l.perWallet} tickets per wallet a round`,
+        ...limitPhrases(l, { what: ' tickets', after: ' a round', every: '1h' }),
         l.gate && gateWords(l.gate, 'buy a ticket', m).replace(/^Only/, 'only'),
         'the draw is by the oracle; its places are paid by the program’s rules',
       ].filter(Boolean),

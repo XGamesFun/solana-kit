@@ -11,7 +11,7 @@
 // Anyone can make a mint that names the project-to-be its minter, with a supply of their own already out, or with a
 // name of their choosing written on it for good.
 import { encodeBase58 } from '../chain/base58.js';
-import { parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
+import { parseCoreAsset, parseCoreCollection, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { utf8 } from '../chain/bytes.js';
 import { METADATA_LIMITS, metadataAddress, parseRecord } from '../chain/metadata.js';
 import { parseMint } from '../chain/mint.js';
@@ -19,7 +19,7 @@ import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { ata, BUBBLEGUM_PROGRAM, lootProgram, pda } from '../client/pda.js';
 import { METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
-import { fromUnits, tokenLabels } from '../economy/model.mjs';
+import { fromUnits, lockedChanges, stashNfts, tokenLabels } from '../economy/model.mjs';
 import { madeSoFar } from '../economy/plan.mjs';
 
 /** A `live` section that does not match the chain: the message says what differs, in plain words. */
@@ -469,6 +469,8 @@ export async function checkMints({ m, chain, project = null }) {
     if (says) powers.push({ key: t.key, mint: t.mint, says });
   }
   await checkTreasury({ m, chain });
+  await checkNfts({ m, chain });
+  await checkItemLocks({ m, chain, project });
   return { powers };
 }
 
@@ -486,6 +488,83 @@ const HOLDS_A_VAULT = {
  * multisig's own account, a token account, an NFT, a program) signs for nothing, so what went there would be stuck.
  * Throws MintMismatch (what the spec names does not match the chain).
  */
+/**
+ * Each Core NFT the setup puts in a stash (the project's, or a lottery's own) against the chain: it moves with the
+ * collection the spec names for it, or the game's when it names none, and Core refuses the move of an NFT that is in
+ * another collection (an NFT in none moves with any). One the spec names wrong would fail as its step is sent, after
+ * the steps before it landed: refused here instead, before anything is signed. An NFT that is not a Core asset
+ * (Token Metadata, compressed) is the program's to read.
+ */
+export async function checkNfts({ m, chain }) {
+  if (typeof chain.account !== 'function') return;
+  const game = m.live?.collection ?? null;
+  const named = [];
+  for (const s of m.stashes)
+    for (const n of stashNfts(s))
+      if (n.kind === 'core')
+        named.push({ nft: n.asset, collection: n.collection ?? null, where: `the stash “${s.name ?? s.key}”` });
+  for (const l of m.lotteries) {
+    const own = [
+      ...(l.places ?? []).map(p => (typeof p === 'object' && p.prize?.held ? p.prize : null)).filter(Boolean),
+      ...(l.nfts ?? []).map(n => (typeof n === 'string' ? { nft: n } : n)),
+    ];
+    for (const n of own)
+      named.push({ nft: n.nft, collection: n.collection ?? null, where: `the lottery “${l.name ?? l.key}”` });
+  }
+  // What an earlier approval put in already is not moved again (setupSteps skips it): it may since have been given out,
+  // and burned, so it is not read.
+  const published = m.live?.published ?? {};
+  const placed = new Set([
+    ...(published.stashes ?? []).flatMap(s => stashNfts(s).map(n => n.asset)),
+    ...(published.lotteries ?? []).flatMap(l => [
+      ...(l.raffle ? [typeof l.raffle === 'string' ? l.raffle : l.raffle.nft] : []),
+      ...(l.nfts ?? []).map(n => (typeof n === 'string' ? n : n.nft)),
+      ...(l.places ?? []).map(p => (typeof p === 'object' && p?.prize?.held ? p.prize.nft : null)).filter(Boolean),
+    ]),
+  ]);
+  const landed = (m.live?.landed ?? []).join(' ');
+  for (const n of named) {
+    if (placed.has(n.nft) || landed.includes(n.nft)) continue;
+    const account = await chain.account(n.nft);
+    if (!account)
+      throw new MintMismatch(`There is no NFT at ${n.nft}, which ${n.where} names: the setup could not put it in.`);
+    if (account.owner !== MPL_CORE_PROGRAM) continue;
+    let asset;
+    try {
+      asset = parseCoreAsset(account.data);
+    } catch {
+      continue;
+    }
+    if (!asset.collection) continue;
+    const passed = n.collection ?? game;
+    if (asset.collection !== passed)
+      throw new MintMismatch(
+        `The NFT ${n.nft}, which ${n.where} names, is in the collection ${asset.collection}, and the spec ${n.collection ? `names ${n.collection}` : 'names none for it (so it is read as one of the game’s own)'}: Core would refuse to move it, and the setup would stop there. Write it as { "nft": "${n.nft}", "collection": "${asset.collection}" }.`,
+      );
+  }
+}
+
+/**
+ * A live item whose kind, soulbound, burnable, collection or drawn traits the spec changes, against the chain: once a
+ * unit of it is issued the program refuses that edit (catalog.rs KindLocked), and every step after it would wait on
+ * it. Refused here, with how many were issued, before anything is signed.
+ */
+export async function checkItemLocks({ m, chain, project }) {
+  if (typeof chain.account !== 'function' || !project) return;
+  for (const it of m.items) {
+    const was = (m.live?.published?.items ?? []).find(x => x.key === it.key);
+    const changed = was && Number.isInteger(it.id) ? lockedChanges(it, was) : [];
+    if (!changed.length) continue;
+    const account = await chain.account(pda.item(project, it.id));
+    if (!account) continue;
+    const issued = BigInt(decode('Item', account.data).issued ?? 0);
+    if (issued > 0n)
+      throw new MintMismatch(
+        `“${it.name ?? it.key}” has ${issued.toLocaleString('en-US')} issued, and the spec changes its ${changed.join(', ')}: the program never changes what an item is under the people who hold one (KindLocked). Put ${changed.length === 1 ? 'it' : 'them'} back as published, or make a new item.`,
+      );
+  }
+}
+
 export async function checkTreasury({ m, chain }) {
   const treasury = m.treasuryWallet;
   if (!treasury || typeof chain.account !== 'function') return;

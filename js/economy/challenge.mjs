@@ -632,12 +632,13 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
     if (!each) continue;
     const covers = Math.floor(num(g.fund) / each);
     const l = g.limits ?? {};
+    const window = l.perWalletEach ?? l.perPersonEach;
     const per =
       l.perPerson ??
       l.perWallet ??
-      (l.perWalletEach
-        ? l.perWalletEach.count *
-          Math.ceil((num(m.scenario.days) || 30) / Math.max(toSeconds(l.perWalletEach.every ?? '1d') / 86_400, 1 / 24))
+      (window
+        ? window.count *
+          Math.ceil((num(m.scenario.days) || 30) / Math.max(toSeconds(window.every ?? '1d') / 86_400, 1 / 24))
         : null);
     const players = num(m.scenario.players);
     if (!players)
@@ -708,8 +709,12 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
       line?.gives === 'tokens' ? (prizeToken(line, m)?.symbol ?? sym(line.currency ?? m.currencyKey)) : 'of its prize';
     const sr = serverRate(g);
     const own = sr && sr.per !== 'all' && sr.one > 0;
+    // The chain's window on each claimer: per wallet, or per person (every wallet linked to them together).
+    const win = l.perWalletEach?.count ? l.perWalletEach : l.perPersonEach?.count ? l.perPersonEach : null;
+    const winWho = l.perWalletEach?.count ? 'wallet' : 'person';
+    const winField = l.perWalletEach?.count ? 'perWalletEach' : 'perPersonEach';
     const counts = [
-      l.perWalletEach?.count && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+      win && `${win.count} a ${winWho} every ${win.every ?? '1d'}`,
       l.perWallet && `${l.perWallet} a wallet in all`,
       l.perPerson && `${l.perPerson} a person in all`,
       l.perDay && `${l.perDay} a day for everyone`,
@@ -721,11 +726,11 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
       ? sr.claimsPerDay !== null
         ? { perDay: sr.claimsPerDay, atLeast: false, says: `its server signs ${sr.says}` }
         : { perDay: sr.one / each, atLeast: true, says: `its server signs ${sr.says}` }
-      : l.perWalletEach?.count
+      : win
         ? {
-            perDay: (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1),
+            perDay: (win.count * 86_400) / Math.max(toSeconds(win.every ?? '1d'), 1),
             atLeast: false,
-            says: `the chain allows ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+            says: `the chain allows ${win.count} a ${winWho} every ${win.every ?? '1d'}`,
           }
         : null;
     // The server counts an amount and the chain counts claims: how many claims an honest player makes is the question.
@@ -736,23 +741,23 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
         `${named(g)}'s server limits what it signs in ${unit} (${sr.says}), and the chain's caps count claims (${words(counts)}): how many claims an honest player makes is unknown, so each cap below is reached at least as soon as said, and a server that counts only ${unit} can sign a claim the chain then refuses, after it has counted it.`,
         'Ask, then declare it ("serverLimit": { …, "claims": n }), and have the server refuse a claim before it signs whatever the chain would refuse.',
         {
-          severity: l.perWalletEach?.count || l.perDay ? 'medium' : 'low',
+          severity: win || l.perDay ? 'medium' : 'low',
           ask: `${named(g)}'s server counts ${unit}, while the chain counts claims (${words(counts)}): how many times a day does a regular player claim it, at most?`,
         },
       );
     if (!pace) continue;
     // A server that signs more claims in a window than the chain takes: the extra are signed, counted and refused.
-    if (own && l.perWalletEach?.count) {
-      const chainDay = (l.perWalletEach.count * 86_400) / Math.max(toSeconds(l.perWalletEach.every ?? '1d'), 1);
+    if (own && win) {
+      const chainDay = (win.count * 86_400) / Math.max(toSeconds(win.every ?? '1d'), 1);
       if (pace.perDay > chainDay)
         warn(
           'W-ASSUMPTION',
-          `economy.grants.${g.key}.limits.perWalletEach`,
-          `${named(g)}'s server signs ${pace.atLeast ? 'at least ' : ''}about ${+pace.perDay.toFixed(2)} claims a day for an honest player (${sr.says}), and the chain takes ${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}: past that, the server signs and counts a claim the chain refuses, and the player gets nothing for it until the window turns.`,
-          `Have the server refuse first: its claims a window at or under the chain's (${l.perWalletEach.count} every ${l.perWalletEach.every ?? '1d'}), or raise the chain's cap to what the server allows.`,
+          `economy.grants.${g.key}.limits.${winField}`,
+          `${named(g)}'s server signs ${pace.atLeast ? 'at least ' : ''}about ${+pace.perDay.toFixed(2)} claims a day for an honest player (${sr.says}), and the chain takes ${win.count} a ${winWho} every ${win.every ?? '1d'}: past that, the server signs and counts a claim the chain refuses, and the player gets nothing for it until the window turns.`,
+          `Have the server refuse first: its claims a window at or under the chain's (${win.count} every ${win.every ?? '1d'}), or raise the chain's cap to what the server allows.`,
           {
             severity: 'medium',
-            ask: `A regular player can earn about ${Math.ceil(pace.perDay)} claims a day of ${named(g)}, and the chain takes ${l.perWalletEach.count} every ${l.perWalletEach.every ?? '1d'}: should the server stop at ${l.perWalletEach.count}, or should the chain take more?`,
+            ask: `A regular player can earn about ${Math.ceil(pace.perDay)} claims a day of ${named(g)}, and the chain takes ${win.count} every ${win.every ?? '1d'}: should the server stop at ${win.count}, or should the chain take more?`,
           },
         );
     }
@@ -767,7 +772,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
         'W-ASSUMPTION',
         `economy.grants.${g.key}.limits.${l.perPerson ? 'perPerson' : 'perWallet'}`,
         `${named(g)} gives each ${who} ${mine} claims in all${life === null ? ', and it has no end ("until")' : ''}, and ${pace.says} (${pace.atLeast ? 'at least ' : ''}about ${+pace.perDay.toFixed(2)} claims a day): an honest player reaches the cap ${pace.atLeast ? 'within' : 'in'} about ${about(reach)}, and every claim after that is refused for good. What the game keeps counting toward it after that can never be claimed. A cap “in all” counts claims, not ${unit}, for a player's whole time in the game.`,
-        `If it is a day's limit, write it as one ("perWalletEach": { "count": ${mine}, "every": "1d" }, or the server's "serverLimit"); if it is meant for good, tell players when they reach it and stop counting what can't be paid.`,
+        `If it is a day's limit, write it as one ("${l.perPerson ? 'perPersonEach' : 'perWalletEach'}": { "count": ${mine}, "every": "1d" }, or the server's "serverLimit"); if it is meant for good, tell players when they reach it and stop counting what can't be paid.`,
         {
           severity: soon ? 'medium' : 'low',
           ask: `${named(g)} lets each ${who} claim ${mine} times in all (claims, not ${unit}), and ${pace.says}: a regular player is done ${pace.atLeast ? 'within' : 'in'} about ${about(reach)}. Is ${mine} meant for good, or for a day?`,
@@ -832,6 +837,11 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
             `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}${worth(l.perWalletEach.count)}`,
         ],
         ['perWallet', l.perWallet && `${l.perWallet} a wallet in all${worth(l.perWallet)}`],
+        [
+          'perPersonEach',
+          l.perPersonEach?.count &&
+            `${l.perPersonEach.count} a person every ${l.perPersonEach.every ?? '1d'}${worth(l.perPersonEach.count)}`,
+        ],
         ['perPerson', l.perPerson && `${l.perPerson} a person in all${worth(l.perPerson)}`],
         ['perDay', l.perDay && `${l.perDay} a day for everyone${worth(l.perDay)}`],
         ['total', l.total && `${l.total} in all${worth(l.total)}`],

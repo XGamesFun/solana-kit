@@ -4496,7 +4496,12 @@ export function bidIx({
     // The vault takes a bid in tokens; NFT bids leave it alone, unlocked.
     {
       remaining: [
-        ...gateAccounts(project, { gate: auction.gate, wallet: bidder, shown, listProof }),
+        ...gateAccounts(project, {
+          gate: auction.gate,
+          wallet: bidder,
+          shown: shownFor(project, auction.gate, bidder, shown),
+          listProof,
+        }),
         ...bundle,
         ...tailOf(extra),
       ],

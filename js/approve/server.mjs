@@ -256,7 +256,10 @@ export async function createApproval({
   const scope = () => ({ only, renames });
 
   /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
-  const live = () => spec.live ?? null;
+  /** A live grant's record split (`shard_bits`) as the chain holds it, by its key: read as a wallet connects (`trust`),
+   *  handed to the plan, never written to the file. */
+  let grantShards = null;
+  const live = () => (spec.live ? { ...spec.live, ...(grantShards ? { grantShards } : {}) } : null);
   /**
    * What the chain says the keys of the mints this spec names can do, where the spec doesn't say it (`checkMints`,
    * read when a wallet connects): shown with the legal flags, so the owner ticks having read them before approving.
@@ -393,6 +396,15 @@ export async function createApproval({
     try {
       const m = model(spec, { now: at });
       const trusted = await checkLive({ live: live(), m, wallet, chain });
+      // each live grant's record split, which no edit may change (grant.rs ShardsFixed): the chain's, for the plan
+      if (spec.live?.project && typeof chain.account === 'function') {
+        const read = {};
+        for (const g of m.grants.filter(x => Number.isInteger(x.id))) {
+          const account = await chain.account(pda.grant(spec.live.project, g.id));
+          if (account) read[g.key] = Number(decode('Grant', account.data).shard_bits);
+        }
+        grantShards = Object.keys(read).length ? read : null;
+      }
       projectOnChain = trusted.treasury
         ? { creator: trusted.creator, treasury: trusted.treasury, authority: trusted.authority }
         : null;

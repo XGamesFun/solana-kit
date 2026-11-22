@@ -6,7 +6,17 @@
 //
 // Lotteries, boxes (the shop's items with them), recipes and grants are modelled; the other kinds are the
 // walk-through's own words until they are.
-import { boxRolls, ORACLE_FEE, prizeLine, prizePool, prizeToken, prizeWords, toSeconds, toTime } from './model.mjs';
+import {
+  boxRolls,
+  ORACLE_FEE,
+  placeOf,
+  prizeLine,
+  prizePool,
+  prizeToken,
+  prizeWords,
+  toSeconds,
+  toTime,
+} from './model.mjs';
 import { DEFAULT_PER_DAY } from './simulate.mjs';
 
 const DAY = 86_400;
@@ -77,6 +87,28 @@ function participation(m, kind, key, days, perWallet) {
   return { expected: Math.floor(expected), said: true, how };
 }
 
+/** A lottery's places in words, each resolved first (a plain number is a percent of what the round pays from): "place 1
+ * 60% of the pot and place 2 40% of the pot"; a run of places given alike is numbered as the run ("places 2–4 each ..."). */
+function placesWords(l, m) {
+  const from = Number.isInteger(l.pot) ? 'the pot' : "the round's ticket money";
+  let next = 1;
+  return words(
+    (l.places ?? []).map(raw => {
+      const p = placeOf(raw);
+      const times = Math.max(1, num(p.times));
+      const what = [
+        num(p.percent) > 0 ? `${num(p.percent)}% of ${from}` : null,
+        p.prize ? prizeWords(p.prize, m) : null,
+      ]
+        .filter(Boolean)
+        .join(' plus ');
+      const label = times > 1 ? `places ${next}–${next + times - 1} each` : `place ${next}`;
+      next += times;
+      return `${label} ${what || 'nothing'}`;
+    }),
+  );
+}
+
 /**
  * The model: { assets, routes, worth }. `worth`: Map asset key (an item's as "item:<key>") → its worth in the project's
  * currency at the spec's own rates.
@@ -145,7 +177,7 @@ export function flows(m, { now }) {
     const minSold = num(l.minSold);
     // Its round's span unknown (a draw date passed or not given): what it sells is unknown unless the scenario says.
     const people = roundDays
-      ? participation(m, 'lottery', l.key, roundDays, num(l.perWallet))
+      ? participation(m, 'lottery', l.key, roundDays, num(l.perWallet ?? l.perPerson))
       : m.scenario.perDay?.[`lottery:${l.key}`] === undefined && !num(m.scenario.players)
         ? { expected: null, said: false, how: `the scenario names no count for it (“lottery:${l.key}”) and no players` }
         : null;
@@ -207,7 +239,7 @@ export function flows(m, { now }) {
           then: `the next ask ${ORACLE_TIMEOUT_DAYS} days after the first cancels it: every ticket refunded`,
         },
         { ending: 'The draw asked late', then: 'it is drawn then; nothing is lost, the winners just wait' },
-        ...((l.places ?? []).length > 1 || (l.places ?? []).some(p => num(p.times) > 1)
+        ...((l.places ?? []).length > 1 || (l.places ?? []).some(p => placeOf(p).times > 1)
           ? [
               {
                 ending: 'Fewer tickets than places',
@@ -291,7 +323,7 @@ export function flows(m, { now }) {
           {
             by: 'anyone',
             pays: 'sender',
-            says: `pulls each winner's part to the winner: ${words((l.places ?? []).map((p, i) => `place ${i + 1} ${p.prize ? prizeWords(p.prize, m) : `${num(p.percent)}% of the pot`}`)) || 'the pot'}. An item is given while it has stock`,
+            says: `pulls each winner's part to the winner: ${placesWords(l, m) || (Number.isInteger(l.pot) ? 'the pot' : "the round's ticket money")}. An item is given while it has stock`,
             ifNobody: 'a part nobody pulls waits for its winner, with no deadline',
             per: 'each winner',
             short: 'each winner’s part pulled to them',
@@ -510,6 +542,7 @@ export function flows(m, { now }) {
     const l = g.limits ?? {};
     const windows = [
       l.perWalletEach?.count && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
+      l.perPersonEach?.count && `${l.perPersonEach.count} a person every ${l.perPersonEach.every ?? '1d'}`,
       l.perDay && `${l.perDay} a day for everyone`,
     ].filter(Boolean);
     const forGood = [

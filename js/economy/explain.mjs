@@ -12,6 +12,7 @@ import {
   farmEndWords,
   keepsPot,
   lateRunWords,
+  limitPhrases,
   listOf,
   lotterySplit,
   model,
@@ -113,13 +114,12 @@ export const gateWords = (gate, verb, m) =>
         : gate.staked
           ? `Only wallets with ${stakeWords(gate.staked, m)} can ${verb}`
           : `Only players who show ${ruleWords(gate)} can ${verb}`;
-/** When a part sells, and how many one wallet may: "from …, until …; 1 per wallet, 2 a day per wallet". */
+/** When a part sells, and how many one wallet (or person) may: "from …, until …, 1 per wallet, 2 per person every 1d". */
 const limitWords = part => {
   const words = [
     part.opens && `from ${part.opens}`,
     part.closes && `until ${part.closes}`,
-    part.perWallet && `${part.perWallet} per wallet`,
-    part.perWalletEach && `${part.perWalletEach.count} per wallet every ${part.perWalletEach.every ?? '1d'}`,
+    ...limitPhrases(part),
   ].filter(Boolean);
   return words.length ? ` ${words.join(', ')}.` : '';
 };
@@ -225,7 +225,13 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   for (const it of sim.items) {
     const src = m.item.get(it.key);
     actions.push(
-      `Buy “${it.name}”: ${num(it.price)} ${sym(it.token)}, ${inAll(it.realCost)}${src.supply ? `; ${src.supply} exist` : ''}${src.rise ? '; the price rises after every sale' : ''}${src.fall ? `; the price falls ${src.fall.step} every ${src.fall.every}${src.fall.floor !== undefined ? ` to at least ${src.fall.floor}` : ''}` : ''}${src.soulbound ? '; soulbound' : ''}${src.gate ? `; ${gateWords(src.gate, 'buy it', m).replace(/^Only/, 'only')}` : ''}. The money: ${splitOf(src.split)}.`,
+      `Buy “${it.name}”: ${num(it.price)} ${sym(it.token)}, ${inAll(it.realCost)}${src.supply ? `; ${src.supply} exist` : ''}${src.rise ? '; the price rises after every sale' : ''}${src.fall ? `; the price falls ${src.fall.step} every ${src.fall.every}${src.fall.floor !== undefined ? ` to at least ${src.fall.floor}` : ''}` : ''}${src.soulbound ? '; soulbound' : ''}${limitPhrases(
+        src,
+      )
+        .map(x => `; at most ${x}`)
+        .join(
+          '',
+        )}${src.gate ? `; ${gateWords(src.gate, 'buy it', m).replace(/^Only/, 'only')}` : ''}. The money: ${splitOf(src.split)}.`,
     );
   }
   for (const b of sim.boxes) {
@@ -369,7 +375,14 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
         ? ` (tickets are not weighted by time: someone may buy most of them ${src.closesBefore ? 'just before sales close' : 'right before the draw'} and risk only the fees)`
         : '';
     actions.push(
-      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map(num).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back${late}` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${src.perWallet ? `; at most ${src.perWallet} tickets per wallet a round` : ''}${[...timing, ...short].map(x => `; ${x}`).join('')}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
+      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map((v, i) => `${num(v)}${l.placeTimes?.[i] > 1 ? ` ×${l.placeTimes[i]}` : ''}`).join(' / ')}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back${late}` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${limitPhrases(
+        src,
+        { what: ' tickets', after: ' a round', every: '1h' },
+      )
+        .map(x => `; at most ${x}`)
+        .join(
+          '',
+        )}${[...timing, ...short].map(x => `; ${x}`).join('')}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
     );
   }
   for (const f of sim.farms) {
@@ -478,9 +491,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const src = m.grant.get(g.key);
     const l = src.limits ?? {};
     const limits = [
-      l.perWallet && `${l.perWallet} per wallet`,
-      l.perWalletEach && `${l.perWalletEach.count} per wallet every ${l.perWalletEach.every ?? '1d'}`,
-      l.perPerson && `${l.perPerson} per person`,
+      ...limitPhrases(l),
       l.perKey && `${l.perKey} per key`,
       l.perDay && `${l.perDay} a day`,
       l.total && `${l.total} in all`,
@@ -494,7 +505,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     ].filter(Boolean);
     const who = signers.length ? signers.join(' or ') : 'that asks (it is open to any wallet)';
     // A grant of a fixed amount of tokens, paid by voucher or list: each claim may name its own amount, up to the grant's.
-    const named = signers.length > 0 && src.prize?.gives === 'tokens';
+    const named = signers.length > 0 && prizeLine(src.prize ?? src.gives)?.gives === 'tokens';
     // What the voucher's server checks before it signs (`trust`): the spec's own word, never sent on chain.
     const trust = src.trust
       ? ` What its server checks: ${TRUST_WORDS[src.trust]}.`

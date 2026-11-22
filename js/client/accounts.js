@@ -511,6 +511,8 @@ export function decodeTokenMetadata(data) {
 /** An entry's word: its tickets' end in the low 48 bits, its own part paid in the top bit. */
 const END_BITS = (1n << 48n) - 1n;
 export const OWN_PAID = 1n << 63n;
+/** An entry's tickets a grant gave (lottery.rs `FREE`): nothing was paid for them, so nothing is owed back. */
+const FREE_TICKETS = 1n << 62n;
 
 /** The mint a lottery's tickets are paid in (`terms`: a Lottery's or a round's): its ticket mint, burned, or `mint`. */
 export const paymentMint = terms => (ticketsBurn(terms) ? terms.ticket_mint : terms.mint);
@@ -565,14 +567,18 @@ export function decodeRound(data) {
     const tickets = last - sold;
     let k = 40;
     const take = n => e.subarray((k += n) - n, k);
-    const amount = r.fee ? readUintLE(take(8), 0, 8) : tickets * BigInt(r.terms.price);
+    const free = (word & FREE_TICKETS) !== 0n;
+    // (an entry of a round with fees writes what it paid even when its tickets were free: read past it either way)
+    const written = r.fee ? readUintLE(take(8), 0, 8) : null;
+    const amount = free ? 0n : (written ?? tickets * BigInt(r.terms.price));
     const end = weighted ? readUintLE(take(16), 0, 16) : last;
     const entry = {
       buyer: encodeBase58(e.subarray(0, 32)),
       start,
       end,
       tickets,
-      paid: word & ~END_BITS,
+      paid: word & ~END_BITS & ~FREE_TICKETS,
+      ...(free ? { free: true } : {}),
       amount,
       nft: r.terms.nft_ticket ? encodeBase58(take(32)) : NO_ADDRESS,
     };
