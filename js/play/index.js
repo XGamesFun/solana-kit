@@ -3625,7 +3625,12 @@ export function solanaApp({
       });
       // Leaving a mission that rolls: its roll is made in an order of the player's, which `collect` then finishes; its
       // prize's roll (a chest) at the next nonce.
-      const seat = await read('Seat', loot.pda.seat(loot.pda.farm(project, f.id), asset));
+      // A booster on a token farm sits on the player's own seat (farm.rs `seat_by`: by the player in a farm of tokens,
+      // by the NFT in a farm of NFTs).
+      const seat = await read(
+        'Seat',
+        loot.pda.seat(loot.pda.farm(project, f.id), farm.farmed.Tokens ? wallet.address : asset),
+      );
       const roll = farm.tiers[seat.tier]?.roll ?? null;
       const prize = farm.tiers[seat.tier]?.prize ?? null;
       // A forfeit takes no prize: none of its accounts (`unstakeNftIx`).

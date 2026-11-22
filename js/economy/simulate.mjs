@@ -146,6 +146,62 @@ const MAX_WALK = 10_000_000;
 export const walkBudget = () => ({ left: MAX_WALK });
 
 /**
+ * How likely each of `weights` is to be drawn in `count` draws that each leave out what was drawn (a slot that keeps
+ * each outcome once: order.rs, the slot's own copy of the weights with each one taken set to 0): exactly, over every
+ * set drawn, for up to 16 outcomes; else from 20,000 opens drawn with a fixed seed, so the same spec says the same.
+ */
+export function drawnWithout(weights, count) {
+  const n = weights.length;
+  const live = weights.filter(w => w > 0).length;
+  if (count >= live) return weights.map(w => (w > 0 ? 1 : 0));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!total || count <= 0) return weights.map(() => 0);
+  const out = new Array(n).fill(0);
+  if (n <= 16) {
+    // the chance of each set of outcomes drawn so far, after each draw
+    let states = new Map([[0, 1]]);
+    for (let d = 0; d < count; d++) {
+      const next = new Map();
+      for (const [mask, p] of states) {
+        let left = total;
+        for (let i = 0; i < n; i++) if (mask & (1 << i)) left -= weights[i];
+        if (left <= 0) {
+          next.set(mask, (next.get(mask) ?? 0) + p);
+          continue;
+        }
+        for (let i = 0; i < n; i++) {
+          if (mask & (1 << i) || !(weights[i] > 0)) continue;
+          const q = (p * weights[i]) / left;
+          out[i] += q;
+          next.set(mask | (1 << i), (next.get(mask | (1 << i)) ?? 0) + q);
+        }
+      }
+      states = next;
+    }
+    return out;
+  }
+  let seed = 0x9e3779b9;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 2 ** 32;
+  };
+  const RUNS = 20_000;
+  for (let r = 0; r < RUNS; r++) {
+    const left = [...weights];
+    let sum = total;
+    for (let d = 0; d < count && sum > 0; d++) {
+      let x = rnd() * sum;
+      let i = 0;
+      while (i < n - 1 && (x -= left[i]) >= 0) i++;
+      out[i] += 1 / RUNS;
+      sum -= left[i];
+      left[i] = 0;
+    }
+  }
+  return out;
+}
+
+/**
  * What `perDay` sales a day over `days` pay, one every 1/perDay of a day (the first half a gap in), with the part's
  * rise and fall exactly as the program prices them (state.rs `Fall::sell`): each sale pays the price fallen since the
  * later of the fall's start and the last sale, and the price after it is what was paid plus the rise. A price that stops
@@ -535,8 +591,13 @@ export function simulate(economy, { now = 0 } = {}) {
       const among = (slot.from ?? w.map((_, i) => i)).filter(i => i < w.length);
       const weight = among.reduce((n, i) => n + w[i], 0);
       const count = Number(slot.count ?? 1);
-      for (const i of among)
-        given[i] += slot.distinct && count >= among.length ? 1 : weight ? (count * w[i]) / weight : 0;
+      const each = slot.distinct
+        ? drawnWithout(
+            among.map(i => w[i]),
+            count,
+          )
+        : among.map(i => (weight ? (count * w[i]) / weight : 0));
+      among.forEach((i, j) => (given[i] += each[j]));
     }
     // One part of what an outcome gives (model `outcomeParts`), landing with chance `p` a draw and `p` times an open
     // on average (`n`, its draws counted): its row, and its flows.
@@ -1397,7 +1458,18 @@ export function simulate(economy, { now = 0 } = {}) {
       perTicket !== null && l.price && l.token === l.potToken && !l.unpricedPrizes
         ? round((perTicket / l.price) * 100 + (l.noLoss ? 100 : 0), 4)
         : null;
-    add(players.get, l.potToken, run.once ? paid / run.spreadDays : inflow);
+    // A pot that draws again starts with its seed: its first draw pays its places' share of the seed and the round's
+    // money (lottery.rs: the pot as it stands, the round's part with it), and each draw after pays its share of what
+    // the one before left, so the seed is paid out over the rounds (all of it at once when the places take 100%).
+    let fromSeed = 0;
+    if (pool && !run.once && run.seed > 0 && placesTotal > 0) {
+      const firstPot = run.seed + inflow * l.roundDays;
+      l.firstPotBeforeDraw = round(firstPot);
+      l.firstPrizes = l.places.map(pct => round((firstPot * pct) / 100));
+      const rounds = Math.max(1, Math.floor(scenarioDays / (l.roundDays || 1)));
+      fromSeed = run.seed * (1 - (1 - Math.min(1, placesTotal)) ** rounds);
+    }
+    add(players.get, l.potToken, (run.once ? paid / run.spreadDays : inflow) + fromSeed / scenarioDays);
   }
 
   const poolRows = [...pools.values()].map(p => {
@@ -1733,7 +1805,7 @@ export function explain(sim, economy) {
         ? `each round pays from its own ticket money, about ${n(l.potBeforeDraw)} ${sym(l.potToken)}, what its places leave going to “${l.rest}”,`
         : `the pot reaches about ${n(l.potBeforeDraw)} ${sym(l.potToken)} and`;
     lines.push(
-      `Lottery “${l.name}”: ${rounds}; ${from} pays ${l.prizes.map((v, i) => `${n(v)}${l.placePrizes?.[i] ? ` and ${l.placePrizes[i]}` : ''}${l.placeTimes?.[i] > 1 ? ` ×${l.placeTimes[i]}` : ''}`).join(' / ')}; ${l.ticketNft ? (l.noLoss ? 'a ticket (one NFT, back to its buyer after the draw)' : 'a ticket (one NFT, spent at once, never refunded)') : `a ${n(l.price)} ${sym(l.token)} ticket${l.noLoss ? ' (back to its buyer after the draw)' : ''}`} ${l.noLoss ? 'wins' : 'is worth'} ${n(l.expectedPerTicket)} ${sym(l.potToken)} on average${l.noLoss ? ' on top' : ''}${l.unpricedPrizes ? ', plus its chance at the places’ prizes (no price given)' : ''}${l.returnPercent !== null ? ` (${n(l.returnPercent)}%${l.noLoss ? ' back, the ticket included' : ''})` : ''}; one ticket bought alone: ${inAll(l.realCost)}.`,
+      `Lottery “${l.name}”: ${rounds}; ${from} pays ${l.prizes.map((v, i) => `${n(v)}${l.placePrizes?.[i] ? ` and ${l.placePrizes[i]}` : ''}${l.placeTimes?.[i] > 1 ? ` ×${l.placeTimes[i]}` : ''}`).join(' / ')}${l.firstPrizes ? ` (its first draw, with the seed, ${l.firstPrizes.map(n).join(' / ')})` : ''}; ${l.ticketNft ? (l.noLoss ? 'a ticket (one NFT, back to its buyer after the draw)' : 'a ticket (one NFT, spent at once, never refunded)') : `a ${n(l.price)} ${sym(l.token)} ticket${l.noLoss ? ' (back to its buyer after the draw)' : ''}`} ${l.noLoss ? 'wins' : 'is worth'} ${n(l.expectedPerTicket)} ${sym(l.potToken)} on average${l.noLoss ? ' on top' : ''}${l.unpricedPrizes ? ', plus its chance at the places’ prizes (no price given)' : ''}${l.returnPercent !== null ? ` (${n(l.returnPercent)}%${l.noLoss ? ' back, the ticket included' : ''})` : ''}; one ticket bought alone: ${inAll(l.realCost)}.`,
     );
     if (l.minSold)
       lines.push(

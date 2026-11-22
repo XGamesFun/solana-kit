@@ -4,6 +4,31 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.7: a second audit against loot 0.29.0 (loot 0.29.0, unchanged)
+
+The tools alone. From a fresh audit of the kit against the deployed program.
+
+- **Fixed: a part added to a live economy could take the id of one removed from it.** The program kept the old
+  record at that id, with what it had counted, under the new part's name: a player's item became another item, and a
+  removed item's listing sold the new one. A live economy's ids, its published parts' and listings', are never given
+  again.
+- **Fixed: a player couldn't take a booster off a token farm through js/play**, and the stake then couldn't leave.
+- **Fixed: changes to a live economy.** A table added while live is published (it was recorded but never written). An
+  item taken out of the shop has its listing switched off (it went on selling). Times said from going live
+  ("publish+7d", a falling price with no start) are the dates the approval sent, written into the file: a later change
+  sends them again instead of counting them from that change (a file from before is warned of). What the program never
+  changes once live (a farm, an auction, a pool's token, a table, a sealed schedule, a lottery's currency) is refused
+  by check when the spec changes it, instead of being left out of the approval while the file said otherwise.
+- **Fixed, numbers:** a slot that keeps each outcome once is drawn without putting back, as the program draws it (a
+  pack's return could be shown at 60% and pay over 1000%); a farm's rate is quoted as the program keeps it (per
+  1,000,000 base units staked, so a staked token of more than 6 decimals drops its last digits), with a warning; a pot
+  that draws again pays its seed at its first draw.
+- **check refuses a lottery that limits each buyer by round and by a window both**: the program keeps one, and the
+  tools said both.
+- **The client:** a contest's NFT picked for its winner by the project's keys after the grace period goes to the
+  winner. The approval says "Change" for a live lottery (the round selling keeps its terms) and "Take … out of the
+  shop" for a listing switched off.
+
 ## 0.29.6: a coin made elsewhere read as the chain has it (loot 0.29.0, unchanged)
 
 The tools alone.

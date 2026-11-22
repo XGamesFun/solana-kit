@@ -1148,7 +1148,9 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   for (const b of m.allBoxes) visit(b);
   for (const b of boxOrder) {
     const says = b.shopOf
-      ? `Put “${b.name}” in the shop at ${b.price} ${m.priceToken(b)?.symbol}`
+      ? b.active === false
+        ? `Take “${b.name}” out of the shop (its listing switched off)`
+        : `Put “${b.name}” in the shop at ${b.price} ${m.priceToken(b)?.symbol}`
       : `${b.active === false ? 'Switch off' : wasLive.has(b.key) ? 'Change' : 'Put on sale'} the box “${b.name}” at ${b.price} ${m.priceToken(b)?.symbol}${b.active === false ? '' : `: ${odds(b)}`}`;
     record(
       b.shopOf ? `item:${b.shopOf}` : `box:${b.key}`,
@@ -1269,7 +1271,9 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
     record(
       `lottery:${l.key}`,
       { Lottery: { id: l.id, args: lotteryArgs(l, m) } },
-      `Start the ${l.raffle ? 'raffle' : 'lottery'} “${l.name}”`,
+      (live?.published?.lotteries ?? []).some(x => x.key === l.key)
+        ? `Change the ${l.raffle ? 'raffle' : 'lottery'} “${l.name}”: a round already selling keeps its terms, and the next round takes these`
+        : `Start the ${l.raffle ? 'raffle' : 'lottery'} “${l.name}”`,
       'Lottery',
       `the lottery “${l.name}”`,
     );

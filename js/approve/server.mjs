@@ -1125,7 +1125,9 @@ export async function createApproval({
       ),
       mints: { ...(ctx.mints ?? {}), ...(progress.mints ?? {}) },
     };
-    const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString() });
+    // the parts this session sent: those it was changing, or all of them for a new setup
+    const sent = progress.published ? new Set(progress.changing ?? []) : null;
+    const final = recordLanded(bare, { ctx: all, now: at, at: new Date(clock()).toISOString(), sent });
     const before = progress.published?.tokens ?? null;
     if (before && held.size)
       final.live.published.tokens = final.live.published.tokens.map(t => {

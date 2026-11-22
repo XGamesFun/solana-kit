@@ -123,7 +123,14 @@ test(
     const bubl = saved.live.mints.bubl,
       gem = saved.live.mints.gem;
     assert.deepEqual([named(w, bubl).name, named(w, bubl).uri], ['Bubble', null]);
-    assert.deepEqual(changedParts(saved), { only: new Set(), fixed: [], removed: [], settings: [], renames: [] });
+    assert.deepEqual(changedParts(saved), {
+      only: new Set(),
+      fixed: [],
+      fixedEdited: [],
+      removed: [],
+      settings: [],
+      renames: [],
+    });
 
     // BUBL gets its picture, and a longer name; GEM, whose minting is off for good, a new ticker
     const next = edit(edit(saved, 'bubl', { name: 'Bubble Day', uri: LINK }), 'gem', { symbol: 'GEMS' });

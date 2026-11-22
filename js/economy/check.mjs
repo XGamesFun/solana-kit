@@ -76,6 +76,8 @@ import {
   setupSteps,
   stepAloneBytes,
 } from './plan.mjs';
+// live.mjs imports plan.mjs, which imports check(): each module only calls the others' functions, never at load time.
+import { changedParts, goLiveFields } from './live.mjs';
 /** A lottery's token accounts at most (lottery.rs MAX_MINTS), and what one instruction grows an account by (MAX_GROW). */
 const LOTTERY_MINTS = 8;
 const LOTTERY_ROUND_GROW = 10_240;
@@ -2058,6 +2060,55 @@ export function check(
         );
     }
   };
+
+  // ---- what can't change once live (live.mjs changedParts `fixed`): the program never edits a farm or an auction once
+  // open, takes no new token for a pool, appends a table's rows when it is written again, never edits a sealed schedule,
+  // and keeps a lottery's pot in its mint. A change to one is refused here, before anything is signed: left out of what
+  // the approval sends, it would stay as it was on chain while the file said otherwise.
+  if (economy.live?.published) {
+    const WHY = {
+      farm: 'a farm is never edited once open: a new one replaces it (another key)',
+      auction: 'an auction is never edited once open: a new one replaces it (another key)',
+      pool: 'a pool keeps its token: a new pool (another key) takes another',
+      table: 'a table written again adds its rows after the ones it has: a new table (another key) takes new rows',
+      schedule: 'a sealed schedule is written once: nobody edits it (Sealed)',
+      lottery: "a lottery's pot stays in its mint (WrongMint): a new lottery (another key) takes another currency",
+    };
+    // A live part sent again that still says a time from its going live (a file from before the approval wrote its
+    // dates): this change reads it from now, so on chain it moves; the approval writes the date it sends from then on.
+    const LISTS = {
+      item: 'items',
+      box: 'boxes',
+      recipe: 'recipes',
+      schedule: 'schedules',
+      lottery: 'lotteries',
+      auction: 'auctions',
+      grant: 'grants',
+    };
+    for (const id of changedParts(economy).only) {
+      const [kind, key] = id.split(':');
+      const list = LISTS[kind];
+      if (!list || !(economy.live.published[list] ?? []).some(p => p.key === key)) continue;
+      const part = (economy[list] ?? []).find(p => p.key === key);
+      const fields = goLiveFields(part, list);
+      if (fields.length)
+        warn(
+          'W-LIVE-TIME',
+          `economy.${list}.${key}`,
+          `The live ${kind} “${key}” is sent again, and its ${fields.join(', ')} ${fields.length === 1 ? 'says' : 'say'} a time from going live ("publish…"${fields.includes('fall.start') ? ', or a fall with no start' : ''}): this change counts ${fields.length === 1 ? 'it' : 'them'} from now, so on chain ${fields.length === 1 ? 'it moves' : 'they move'} later than ${fields.length === 1 ? 'it was' : 'they were'}.`,
+          'Write the date it was published with (an ISO date) to keep it; from this approval on, the file says the date it sends.',
+        );
+    }
+    for (const id of changedParts(economy).fixedEdited) {
+      const [kind, key] = id.split(':');
+      refuse(
+        'E-LIVE-FIXED',
+        `economy.${Object.entries({ farm: 'farms', auction: 'auctions', pool: 'pools', table: 'tables', schedule: 'schedules', lottery: 'lotteries' }).find(([k]) => k === kind)?.[1] ?? kind}.${key}`,
+        `The live ${kind} “${key}” is changed, and ${WHY[kind] ?? 'it can’t change once live'}.`,
+        'Put it back as it was published, or make the change as a new part with a key of its own.',
+      );
+    }
+  }
 
   // ---- a live item's kind, soulbound, burnable, collection and drawn traits are fixed once a unit of it is issued
   // (catalog.rs KindLocked): its edit is then refused. How many were issued is the chain's to say, read as the change is
@@ -4332,6 +4383,19 @@ export function check(
         'Set "closesBefore" (sales close that long before the draw), or "timeWeighted": true so a ticket counts for the time it is held.',
       );
     // A place takes a share of the pot, a roll of a box for its winner, or both (lottery.rs Place).
+    // A lottery keeps one limit on each buyer: tickets in a round, or tickets in a window of time (counter.rs; model.mjs
+    // lotteryLimitOf). With both, the window would be kept and the round's cap dropped, though the spec says both.
+    for (const [round, each] of [
+      ['perWallet', 'perWalletEach'],
+      ['perPerson', 'perPersonEach'],
+    ])
+      if (l[round] !== undefined && l[each] !== undefined)
+        refuse(
+          'E-LOTTERY',
+          `${where}.${each}`,
+          `${label(l)} limits each buyer to ${l[round]} tickets a round and to ${l[each].count} every ${l[each].every ?? '1h'}: a lottery keeps one of them, never both, and the program would keep only the second.`,
+          `Keep "${round}" (tickets in a round) or "${each}" (tickets in a window of time).`,
+        );
     const placed = (l.places ?? [100]).map(placeOf);
     tooMany(
       placed.length,
@@ -4912,6 +4976,15 @@ export function check(
           `${where}.rate.perDay`,
           `${label(f)}’s rate of ${f.rate.perDay} a day is less than one base unit for each 1,000,000 base units staked.`,
           'Raise "perDay".',
+        );
+      // A rate the program keeps without its last digits (model.mjs `keptRate`): said, with what is paid.
+      const paid = m.farm.get(f.key)?.rate;
+      if (paid?.perDaySaid !== undefined && Number(paid.perDay) > 0)
+        warn(
+          'W-FARM-RATE',
+          `${where}.rate.perDay`,
+          `${label(f)}’s rate of ${paid.perDaySaid} a day is paid as ${paid.perDay} a day for each ${m.tokens.get(f.stakes)?.symbol ?? f.stakes}: the program keeps a rate for each 1,000,000 base units staked, and ${m.tokens.get(f.stakes)?.symbol ?? f.stakes} has ${m.tokens.get(f.stakes)?.decimals} decimals, so the last digits go.`,
+          `Write "perDay": ${paid.perDay} to say what is paid, or a rate whose last digits the program keeps.`,
         );
       // The rate the program keeps, for each 1,000,000 base units staked (plan.mjs `farmArgs`), fits 8 bytes: a large rate
       // in a token of many decimals, for a staked token of few, does not, and the setup could not write it.

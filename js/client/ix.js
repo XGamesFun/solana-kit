@@ -4238,6 +4238,9 @@ export function enterIx({
   );
 }
 
+/** How long a winner has to make their own picks before the project's keys may make them (constants.rs). */
+const CLAIM_GRACE_SECONDS = 30 * 86_400;
+
 /**
  * Anyone (`payer`) claims `player`'s entry (`entries`: the contest's decoded entries, `decodeEntries`), into the
  * player's account of the mint, which `payer` opens when it is not there. A winner's first claim also gives the
@@ -4272,8 +4275,13 @@ export function claimIx({
   hold = false,
   programs,
   extra = [],
+  now = Math.floor(Date.now() / 1000),
 }) {
   const address = pda.contest(project, id);
+  // A loser's NFT goes to the winner picking it: the winner's own claim, or the project's keys' once the grace after the
+  // decision has passed (contest.rs: `signed || (late && keys)`).
+  const late = now >= Number(contest.decided_at ?? 0) + CLAIM_GRACE_SECONDS;
+  const keys = Boolean(projectState) && (payer === projectState.owner || payer === projectState.authority);
   // A contest that owes nothing (nobody entered, or every part claimed) is only closed: by any claim, entry 0, any player.
   const closing = BigInt(contest.owed) === 0n;
   player ??= payer;
@@ -4310,7 +4318,7 @@ export function claimIx({
     const theirs = entries[j];
     let to = contest.opener;
     if (contest.verdict !== 'Won' || Number(theirs.side) === Number(contest.winner)) to = theirs.player;
-    else if (won && payer === player && !(me.bits & ENDED) && taken < shareOf(contest, me))
+    else if (won && (payer === player || (late && keys)) && !(me.bits & ENDED) && taken < shareOf(contest, me))
       [to, taken] = [player, taken + 1];
     moved.push(meta(theirs.player, false, true));
     if (holds(hold, theirs.nft)) moved.push(meta(pda.hold(theirs.nft, 0), false, true));
