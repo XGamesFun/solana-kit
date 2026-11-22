@@ -14,7 +14,7 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { COMPUTE_BUDGET_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit, computeUnitPrice, priorityFee } from '../chain/programs.js';
 import { compileMessage, isEmptySignature, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

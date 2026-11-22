@@ -9,7 +9,7 @@ import { freshKeypair } from '../approve/ed25519.mjs';
 import { approve, writeWhole } from '../approve/server.mjs';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_790_000_000;

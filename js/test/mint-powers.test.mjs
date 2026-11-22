@@ -16,7 +16,7 @@ import { check } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NONE32 = new Uint8Array(32);
@@ -554,7 +554,7 @@ test('no batch is handed out until the page has shown what the chain says of the
   const path = (await import('node:path')).default;
   const { freshKeypair } = await import('../approve/ed25519.mjs');
   const { createApproval } = await import('../approve/server.mjs');
-  const { approvalChain } = await import('./world.mjs');
+  const { approvalChain } = await import('./helpers/world.mjs');
   const w = world({ project: false, seed: 'mint-powers-gate' });
   w.chain.warp(1_790_000_000);
   const owner = freshKeypair();

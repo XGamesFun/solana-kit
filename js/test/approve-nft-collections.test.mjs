@@ -11,7 +11,7 @@ import { meta } from '../chain/programs.js';
 import { checkNfts, MintMismatch, withNftCollections } from '../approve/live-check.mjs';
 import { model } from '../economy/model.mjs';
 import { newAddress } from '../sim/chain.mjs';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun();
 

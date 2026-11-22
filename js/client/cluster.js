@@ -108,7 +108,7 @@ export function lootProgram() {
 /** Whether the client works on mainnet now: what is paid and won there is real money. */
 export const realMoney = () => cluster() === 'mainnet';
 
-// The tests' own switch, set by js/test/on-mainnet.mjs before a run of the whole suite on mainnet's address and by
+// The tests' own switch, set by js/test/helpers/on-mainnet.mjs before a run of the whole suite on mainnet's address and by
 // nothing else: the tests' economies, which say devnet or name no network, are then read as mainnet's.
 const TEST_NETWORK = Symbol.for('xsolana.test.network');
 

@@ -12,7 +12,7 @@ import { request } from 'node:http';
 import { approve, createApproval, ownRequest } from '../approve/server.mjs';
 import * as loot from '../client/index.js';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
-import { approvalChain, cannotRun, cannotRunCompressed, world } from './world.mjs';
+import { approvalChain, cannotRun, cannotRunCompressed, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
@@ -422,9 +422,9 @@ describe('xsolana approve: a lookup table that can’t be made or added to', () 
     },
   );
 
-  // A file 0.26.3 left: the table's own transaction was found landed with no address kept, and the setup was cut
-  // again before the table's second step. Its address is of a slot nobody recorded, so nothing more is planned for it
-  // and the setup finishes; before, every approve failed on a table that was never made.
+  // A file whose table's own transaction was found landed with no address kept, and whose setup was cut again before
+  // the table's second step. Its address is of a slot nobody recorded, so nothing more is planned for it and the setup
+  // finishes, never failing on a table that was never made.
   test(
     'a table made with no address kept is not added to, and the setup finishes',
     { skip: skip ?? false },

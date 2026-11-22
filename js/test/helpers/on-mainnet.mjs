@@ -3,5 +3,7 @@
 // this run as mainnet's, so the same tests run every flow against loot's mainnet build and address. Nothing but this
 // file sets the switch (client/cluster.js, `networkOf`).
 if (process.env.XSOLANA_CLUSTER !== 'mainnet')
-  throw new Error('js/test/on-mainnet.mjs is for a test run with XSOLANA_CLUSTER=mainnet (npm run test:mainnet).');
+  throw new Error(
+    'js/test/helpers/on-mainnet.mjs is for a test run with XSOLANA_CLUSTER=mainnet (npm run test:mainnet).',
+  );
 globalThis[Symbol.for('xsolana.test.network')] = 'mainnet';

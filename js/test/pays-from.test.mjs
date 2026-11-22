@@ -1,5 +1,5 @@
-// loot 0.25: where a lottery's places are paid from (a pot kept from round to round, or each round's own ticket money
-// with what the places leave sent to `rest`), the round before's leftover moved into its pot by the next ask, a contest's
+// Where a lottery's places are paid from (a pot kept from round to round, or each round's own ticket money with what
+// the places leave sent to `rest`), the round before's leftover moved into its pot by the next ask, a contest's
 // winnings written at the decision, a box that stops selling and names a stash's NFT beside a random one of it, and a
 // token seat's booster used by a recipe. Each run on the real program where it can be, and in the spec's tools.
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plan } from '../economy/plan.mjs';
 import { simulate } from '../economy/simulate.mjs';
-import { boxArgs, cannotRun, collectible, drop, itemDrop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const pda = loot.pda;

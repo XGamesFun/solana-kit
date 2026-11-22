@@ -1,17 +1,17 @@
-// The routes that hand out an NFT a record holds, when that NFT is gone from the project (loot 0.27), through js/play
+// The routes that hand out an NFT a record holds, when that NFT is gone from the project, through js/play
 // on the real program: a lottery's pulls, a contest's claims, an auction's end, a raffle's own stash and a project's
 // stash. Whoever controls a collection the project does not can take an NFT out of the project's hands, or burn it,
 // while a round, a contest, an auction or a stash has it. Where the program reads the NFT's own accounts (a ticket's
 // price, an auction's end, a stash) the route finishes without it on the proof. Where it only hands the NFT out (a
 // ticket going back, a place's prize, a contest's NFT, a topped bid), the route makes it a hold and the hold closes on
 // the proof (`NftGone`) in the same step. Each test runs for a Core asset, a Token Metadata NFT and a compressed NFT
-// (`gone-kinds.mjs`), taken and burned.
+// (`helpers/gone-kinds.mjs`), taken and burned.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as loot from '../client/index.js';
-import { coreOwner } from './gone-chain.mjs';
-import { appOf, KINDS, logged, names, receiptsOf } from './gone-kinds.mjs';
-import { collectible } from './world.mjs';
+import { coreOwner } from './helpers/gone-chain.mjs';
+import { appOf, KINDS, logged, names, receiptsOf } from './helpers/gone-kinds.mjs';
+import { collectible } from './helpers/world.mjs';
 
 const { pda } = loot;
 const NOBODY = '11111111111111111111111111111111';

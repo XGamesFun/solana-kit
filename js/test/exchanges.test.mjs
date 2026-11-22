@@ -1,7 +1,7 @@
-// Both sides of an exchange move together (loot 0.26): an auction's end delivers the lot with the money, sends the lot
-// first and the money after, or calls the sale off; a loan's repayment brings its NFT home in the same instruction; a
-// roll won on another route reads its player's profile and an NFT they show at its first ask. Each built by js/client
-// (or js/play) and run on the real program, for every kind of NFT the test world makes: Core, Token Metadata, compressed.
+// Both sides of an exchange move together: an auction's end delivers the lot with the money, sends the lot first and
+// the money after, or calls the sale off; a loan's repayment brings its NFT home in the same instruction; a roll won on
+// another route reads its player's profile and an NFT they show at its first ask. Each built by js/client (or js/play)
+// and run on the real program, for every kind of NFT the test world makes: Core, Token Metadata, compressed.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addressBytes } from '../chain/base58.js';
@@ -16,9 +16,9 @@ import { EXECUTE_DISCRIMINATOR, MEMO_PROGRAM, validationAddress } from '../chain
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cnftTree, onChainRoot } from './cnft-chain.mjs';
-import { nftOf as tmNft, setup as tmSetup } from './tm-chain.mjs';
-import { boxArgs, cannotRun, cannotRunCompressed, collectible, itemDrop, pinned, world } from './world.mjs';
+import { cnftTree, onChainRoot } from './helpers/cnft-chain.mjs';
+import { nftOf as tmNft, setup as tmSetup } from './helpers/tm-chain.mjs';
+import { boxArgs, cannotRun, cannotRunCompressed, collectible, itemDrop, pinned, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const skipCompressed = cannotRunCompressed() ?? false;

@@ -17,7 +17,7 @@ import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

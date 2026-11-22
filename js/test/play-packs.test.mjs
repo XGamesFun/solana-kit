@@ -1,6 +1,6 @@
-// Packs through js/play (loot 0.22): a box whose slots draw several cards an open, and a purchase of several opens,
-// from one wallet prompt and one oracle answer; the throwaway key settles it in as many parts as the chain needs. A
-// fresh item's traits are drawn from the spec's table and written on each card.
+// Packs through js/play: a box whose slots draw several cards an open, and a purchase of several opens, from one wallet
+// prompt and one oracle answer; the throwaway key settles it in as many parts as the chain needs. A fresh item's traits
+// are drawn from the spec's table and written on each card.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;

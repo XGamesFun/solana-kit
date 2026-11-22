@@ -1,11 +1,11 @@
 // Token Metadata NFTs on the local chain, for the client's tests: the real Token Metadata program as mainnet runs it
 // (`js/test/fixtures/token_metadata.so`, pinned), a maker's sized collection, and legacy NFTs verified in it.
-import { addressBytes, encodeBase58 } from '../chain/base58.js';
-import { concat, uintLE, utf8 } from '../chain/bytes.js';
-import { SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, TOKEN_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit, meta } from '../chain/programs.js';
-import * as loot from '../client/index.js';
-import { newAddress } from '../sim/chain.mjs';
+import { addressBytes, encodeBase58 } from '../../chain/base58.js';
+import { concat, uintLE, utf8 } from '../../chain/bytes.js';
+import { SYSTEM_PROGRAM, SYSVAR_INSTRUCTIONS, TOKEN_PROGRAM } from '../../chain/pda.js';
+import { computeUnitLimit, meta } from '../../chain/programs.js';
+import * as loot from '../../client/index.js';
+import { newAddress } from '../../sim/chain.mjs';
 import { world } from './world.mjs';
 
 const TM = loot.TOKEN_METADATA_PROGRAM;

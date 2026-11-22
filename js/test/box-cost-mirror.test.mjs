@@ -1,7 +1,7 @@
-// The client's copy of the program's box cost check, held against the program: for boxes at and around each edge loot
-// 0.26.1 names, `boxFits` says a box fits exactly when the program writes it, and `drawsFit` with `purchase` (what
-// `opensAnOrder` counts) says a purchase fits exactly when `open_box` sells it. Each purchase at its edge is answered by
-// the oracle with the compute its real answer has, every draw made.
+// The client's copy of the program's box cost check, held against the program: for boxes at and around each edge the
+// program names, `boxFits` says a box fits exactly when the program writes it, and `drawsFit` with `purchase` (what
+// `opensAnOrder` counts) says a purchase fits exactly when `open_box` sells it. Each purchase at its edge is answered
+// by the oracle with the compute its real answer has, every draw made.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
@@ -10,7 +10,7 @@ import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { freshAddresses, prepare } from '../economy/live.mjs';
 import { plan } from '../economy/plan.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

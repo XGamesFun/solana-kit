@@ -3,13 +3,13 @@
 // that mirrors every leaf as DAS keeps it (`getAsset`, `getAssetProof`), so `compressedFromDas`, `proveLeafIx` and the
 // player module's `nftOf` read them as they read a real indexer. The chain keeps only the tree's root and changelog: a
 // change on chain is mirrored here once it landed (`moved`). Hashes are Keccak-256, as Bubblegum's.
-import { addressBytes, encodeBase58 } from '../chain/base58.js';
-import { concat, uintLE, utf8 } from '../chain/bytes.js';
-import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit, meta } from '../chain/programs.js';
-import { createAccountIx } from '../chain/token.js';
-import * as loot from '../client/index.js';
-import { newAddress } from '../sim/chain.mjs';
+import { addressBytes, encodeBase58 } from '../../chain/base58.js';
+import { concat, uintLE, utf8 } from '../../chain/bytes.js';
+import { SYSTEM_PROGRAM } from '../../chain/pda.js';
+import { computeUnitLimit, meta } from '../../chain/programs.js';
+import { createAccountIx } from '../../chain/token.js';
+import * as loot from '../../client/index.js';
+import { newAddress } from '../../sim/chain.mjs';
 
 // ---------------------------------------------------------------- Keccak-256 (the original padding, not SHA-3's)
 

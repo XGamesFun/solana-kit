@@ -25,7 +25,7 @@ import {
   sponsorSigner,
   sponsorTopUp,
 } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

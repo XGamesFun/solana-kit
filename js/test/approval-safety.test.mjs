@@ -15,7 +15,7 @@ import * as loot from '../client/index.js';
 import { units } from '../play/index.js';
 import { cost } from '../economy/cost.mjs';
 import { newAddress } from '../sim/chain.mjs';
-import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './world.mjs';
+import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_790_000_000;

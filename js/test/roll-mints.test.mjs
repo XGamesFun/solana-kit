@@ -18,7 +18,7 @@ import { buySize, check, craftSize } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, pinned, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, pinned, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

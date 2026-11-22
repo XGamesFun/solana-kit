@@ -1,7 +1,7 @@
-// js/play on loot 0.26, through the player module on the real program: a settle that fails because the player can't
-// receive a prize says which and that tokens given up stay in the project's vault, and `collect` with `giveUp` settles
-// the rest; and a lottery whose run of places each give a roll, more than one pull carries, claimed until nothing is
-// owed, each place's roll at its own order and the round's close on the last pull only.
+// js/play, through the player module on the real program: a settle that fails because the player can't receive a prize
+// says which and that tokens given up stay in the project's vault, and `collect` with `giveUp` settles the rest; and a
+// lottery whose run of places each give a roll, more than one pull carries, claimed until nothing is owed, each place's
+// roll at its own order and the round's close on the last pull only.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addressBytes } from '../chain/base58.js';
@@ -10,7 +10,7 @@ import { parseCoreAsset } from '../chain/core.js';
 import { readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOBODY = '11111111111111111111111111111111';

@@ -3,12 +3,12 @@
 // its controller's (Metaplex Core's own plugins, on the real Core program), an asset of it, and the controller's take
 // and burn, which need nobody else's signature. The instructions are plain builders, so a script sends them on devnet
 // as they are; the `seizing*` helpers send them on a test world.
-import { addressBytes } from '../chain/base58.js';
-import { concat, uintLE, utf8 } from '../chain/bytes.js';
-import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
-import { SYSTEM_PROGRAM } from '../chain/pda.js';
-import { meta } from '../chain/programs.js';
-import { newAddress } from '../sim/chain.mjs';
+import { addressBytes } from '../../chain/base58.js';
+import { concat, uintLE, utf8 } from '../../chain/bytes.js';
+import { MPL_CORE_PROGRAM, parseCoreAsset } from '../../chain/core.js';
+import { SYSTEM_PROGRAM } from '../../chain/pda.js';
+import { meta } from '../../chain/programs.js';
+import { newAddress } from '../../sim/chain.mjs';
 
 const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));
 /** Core's plugins by their number (`Plugin`). */

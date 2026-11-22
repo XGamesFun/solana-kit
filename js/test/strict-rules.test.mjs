@@ -15,7 +15,7 @@ import { ANSWER_HOLDS, LIMITS } from '../economy/model.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, program, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, program, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const pda = loot.pda;
@@ -1095,7 +1095,7 @@ test('every cap refuses a spec over it, with a plain message', () => {
       `${words}: ${JSON.stringify(refused(spec).map(r => r.message.slice(0, 80)))}`,
     );
   }
-  // At the measured number, nothing of that is refused; and a recipe of more lines than 0.25 took is not refused.
+  // At the measured number, nothing of that is refused; and a recipe of many lines is not refused.
   assert.ok(
     !refused(
       base({ boxes: [{ key: 'b', name: 'B', price: 1, outcomes: nothing(ANSWER_HOLDS.entriesOfNothing) }] }),

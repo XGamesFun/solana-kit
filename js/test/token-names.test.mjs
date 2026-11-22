@@ -20,7 +20,7 @@ import { explainEconomy } from '../economy/explain.mjs';
 import { freshAddresses, prepare } from '../economy/live.mjs';
 import { plan } from '../economy/plan.mjs';
 import { BUDGET } from '../economy/txsize.mjs';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_790_000_000;

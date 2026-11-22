@@ -13,7 +13,7 @@ import { TOKEN_PROGRAM } from '../chain/pda.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, setAuthorityIx } from '../chain/token.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { attachWallet, launchBrowser } from '../../evals/live/wallet.mjs';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/chromium'].some(p => existsSync(p));

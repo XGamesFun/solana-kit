@@ -18,7 +18,7 @@ import { model } from '../economy/model.mjs';
 import { recipeArgs } from '../economy/plan.mjs';
 import { simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';

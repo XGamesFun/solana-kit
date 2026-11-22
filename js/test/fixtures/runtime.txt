@@ -1,7 +1,7 @@
 # The runtime the client's LiteSVM tests model, as each cluster runs it: rent, and every feature gate that is off on
 # mainnet or devnet (every other feature LiteSVM knows is on, on both). Read on 2026-10-29 from the Rent sysvar and from
 # each feature account (mainnet slot 463,001,707, Agave 4.3.2; devnet slot 516,522,585, Agave 4.4), read-only.
-# js/test/world.mjs reads the mainnet column (the devnet one with XSOLANA_TEST_CLUSTER=devnet) and turns off, in LiteSVM
+# js/test/helpers/world.mjs reads the mainnet column (the devnet one with XSOLANA_TEST_CLUSTER=devnet) and turns off, in LiteSVM
 # 1.5, each feature listed off there. Some rows name one feature under an old and a new id, as different Agave
 # versions know it.
 #

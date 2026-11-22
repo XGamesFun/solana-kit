@@ -46,7 +46,7 @@ then "Report a vulnerability"). This covers both the tools here and the deployed
 for a vulnerability.
 
 Include the version, what an attacker can do, and a failing test if you can: the tests here run the real program in
-LiteSVM (`js/test/world.mjs` sets up a chain; `npm run fixtures` downloads the program and the programs it calls).
+LiteSVM (`js/test/helpers/world.mjs` sets up a chain; `npm run fixtures` downloads the program and the programs it calls).
 
 ## The tools
 

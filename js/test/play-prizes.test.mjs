@@ -8,7 +8,7 @@ import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, PRICE, world } from './world.mjs';
+import { cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOBODY = '11111111111111111111111111111111';

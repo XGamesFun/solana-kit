@@ -7,7 +7,7 @@ import { computeUnitLimit } from '../chain/programs.js';
 import { setAuthorityIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

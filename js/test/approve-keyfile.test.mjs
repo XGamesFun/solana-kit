@@ -26,7 +26,7 @@ import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js
 import { KeyFileError, keyFilePath, makeKeyFile, readKeyFile } from '../approve/keyfile.mjs';
 import { approvalCode, approvalText, approveWithKey, NOTICE } from '../approve/with-key.mjs';
 import { createApproval } from '../approve/server.mjs';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

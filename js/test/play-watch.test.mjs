@@ -8,7 +8,7 @@ import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { meta } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 

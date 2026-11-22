@@ -12,7 +12,7 @@ import { GENESIS, rpcClient } from '../chain/rpc.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { draws, fetchVouchers, newKey, report, resultBytes, signVoucher } from '../results/index.js';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const address = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i === 0 ? n : i + 1)));

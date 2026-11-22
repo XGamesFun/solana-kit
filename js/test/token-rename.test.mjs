@@ -26,7 +26,7 @@ import { changedParts, renamesNote } from '../economy/live.mjs';
 import { model } from '../economy/model.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { pda } from '../client/pda.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_790_000_000;

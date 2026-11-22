@@ -7,7 +7,7 @@ import { parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import { compileMessage, MAX_TRANSACTION_BYTES, SIGNATURE_BYTES, signersOf } from '../chain/tx.js';
 import * as loot from '../client/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

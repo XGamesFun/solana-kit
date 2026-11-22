@@ -29,7 +29,7 @@ import { COMPUTE_BUDGET_PROGRAM, SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MAX_TRANSACTION_BYTES, readMessage, readTransaction, transactionSize, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp, walletStandardSigner } from '../play/index.js';
-import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const key = n => encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 31 + n * 7 + 3) % 256));

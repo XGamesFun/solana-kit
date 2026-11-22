@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { cannotRun, collectible, PRICE, world } from './world.mjs';
+import { cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

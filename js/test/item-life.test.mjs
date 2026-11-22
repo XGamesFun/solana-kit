@@ -9,7 +9,7 @@ import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { lifeLines, model } from '../economy/model.mjs';
 import { recipeArgs } from '../economy/plan.mjs';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

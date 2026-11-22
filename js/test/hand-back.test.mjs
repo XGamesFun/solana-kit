@@ -8,8 +8,8 @@ import { test } from 'node:test';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, drop } from './world.mjs';
-import { nftOf, setup } from './tm-chain.mjs';
+import { cannotRun, drop } from './helpers/world.mjs';
+import { nftOf, setup } from './helpers/tm-chain.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

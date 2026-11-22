@@ -1,6 +1,6 @@
-// loot 0.26 in the economy tools: what the program no longer refuses goes live and is warned of in words, the bounds
-// it keeps are refused before anything is signed, and the simulator counts the new settings (a boosted weight in
-// BigInt, a box that gives nothing for a miss, a stash with nothing that weighs, a round weighed by time, a short pool).
+// What the program takes but can turn against a project goes live and is warned of in words, the bounds it keeps are
+// refused before anything is signed, and the simulator counts these settings (a boosted weight in BigInt, a box that
+// gives nothing for a miss, a stash with nothing that weighs, a round weighed by time, a short pool).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
@@ -22,7 +22,7 @@ import {
 } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { simulate } from '../economy/simulate.mjs';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const WALLET = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
@@ -79,7 +79,7 @@ function goLive(spec, seed) {
   return { w, project: p.ctx.project };
 }
 
-describe('what 0.26 takes goes live, and is warned of', () => {
+describe('what the program takes goes live, and is warned of', () => {
   const spec = base({
     boxes: [
       {

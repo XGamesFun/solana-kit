@@ -18,7 +18,7 @@ import { model, WSOL } from '../economy/model.mjs';
 import { contestArgs } from '../economy/plan.mjs';
 import { carryIds } from '../mcp/tools.mjs';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;

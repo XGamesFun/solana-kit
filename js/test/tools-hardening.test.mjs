@@ -26,7 +26,7 @@ import { plan, setupContext } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './world.mjs';
+import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;
