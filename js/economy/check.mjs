@@ -1327,8 +1327,9 @@ export function check(
    */
   const prizeCheck = (given, at, what, code) => {
     const line = prizeLine(given);
-    // "held" is a lottery place's NFT, waiting in the lottery's own stash: anywhere else it changes nothing.
-    if (given?.held && (line?.gives !== 'nft' || code !== 'E-LOTTERY'))
+    // "held" is a lottery place's NFT, waiting in the lottery's own stash: on a prize that is no NFT it changes nothing
+    // (on an NFT outside a lottery's place it is refused, below).
+    if (given?.held && line?.gives !== 'nft')
       warn(
         'W-PRIZE',
         `${at}.held`,

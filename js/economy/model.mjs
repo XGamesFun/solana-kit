@@ -211,7 +211,8 @@ function reachesDuration(node) {
 }
 function written(value, node) {
   if (!node || !reachesDuration(node)) return value;
-  if (node.$ref === '#/$defs/duration') return Number.isSafeInteger(value) && value >= 0 ? durationText(value) : value;
+  // (0 stays the number 0: it means "none" where a duration is optional, and "0s" would read as one given)
+  if (node.$ref === '#/$defs/duration') return Number.isSafeInteger(value) && value > 0 ? durationText(value) : value;
   if (node.$ref) return written(value, refOf(node.$ref));
   const branches = [...(node.anyOf ?? []), ...(node.oneOf ?? [])];
   // A number a branch takes as itself ("upTo": points, or a duration) stays a number.

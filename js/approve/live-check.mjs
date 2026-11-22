@@ -511,7 +511,20 @@ export async function checkNfts({ m, chain }) {
     for (const n of own)
       named.push({ nft: n.nft, collection: n.collection ?? null, where: `the lottery “${l.name ?? l.key}”` });
   }
+  // What an earlier approval put in already is not moved again (setupSteps skips it): it may since have been given out,
+  // and burned, so it is not read.
+  const published = m.live?.published ?? {};
+  const placed = new Set([
+    ...(published.stashes ?? []).flatMap(s => stashNfts(s).map(n => n.asset)),
+    ...(published.lotteries ?? []).flatMap(l => [
+      ...(l.raffle ? [typeof l.raffle === 'string' ? l.raffle : l.raffle.nft] : []),
+      ...(l.nfts ?? []).map(n => (typeof n === 'string' ? n : n.nft)),
+      ...(l.places ?? []).map(p => (typeof p === 'object' && p?.prize?.held ? p.prize.nft : null)).filter(Boolean),
+    ]),
+  ]);
+  const landed = (m.live?.landed ?? []).join(' ');
   for (const n of named) {
+    if (placed.has(n.nft) || landed.includes(n.nft)) continue;
     const account = await chain.account(n.nft);
     if (!account)
       throw new MintMismatch(`There is no NFT at ${n.nft}, which ${n.where} names: the setup could not put it in.`);

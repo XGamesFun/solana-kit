@@ -192,3 +192,31 @@ test('check says what a spec writes that does nothing or contradicts itself, and
   live.items[0].soulbound = false;
   assert.ok(codes(live).includes('W-ITEM-LOCKED economy.items.badge'), codes(live).join());
 });
+
+test('a duration of 0 stays none: a farm that runs 0 never ends, a lottery that draws every 0 draws once', async () => {
+  const { farmArgs } = await import('../economy/plan.mjs');
+  const { model } = await import('../economy/model.mjs');
+  const farm = example('paper-hands-farm');
+  farm.farms[0].runs = 0;
+  const m = model(farm, { now: NOW });
+  assert.equal(farmArgs(m.farms[0], m).ends_at, 0n);
+  const raffle = example('nft-raffle');
+  raffle.lotteries[0].every = 0;
+  assert.deepEqual(refused(raffle), []);
+});
+
+test('a limit in a window shorter than a day is counted a day as the chain allows it', () => {
+  const s = sol({
+    items: [{ key: 'gem', name: 'Gem', price: 0.01 }],
+    grants: [
+      {
+        key: 'g',
+        name: 'G',
+        prize: { gives: 'item', item: 'gem' },
+        fund: 0.1,
+        limits: { perWalletEach: { count: 1, every: '1h' }, perDay: 1000 },
+      },
+    ],
+  });
+  assert.equal(simulate(s, { now: NOW }).grants[0].many.one, 24);
+});

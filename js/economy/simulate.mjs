@@ -586,12 +586,14 @@ export function simulate(economy, { now = 0 } = {}) {
     });
     // Every part of every outcome, each with its outcome's chance.
     const partsOf = outcomes.flatMap(o => (o.gives === 'bundle' ? o.prizes : [o]));
-    // How much the prizes swing from day to day, per pool: opens × (E[prize²] − E[prize]²).
+    // How much the prizes swing from day to day, per pool: opens × draws × (E[prize²] − E[prize]²), each draw's odds
+    // being how often an open gives each prize over its draws (one draw: its chance).
+    const draws = drawsOf(b);
     for (const key of new Set(partsOf.filter(o => o.gives === 'pay').map(o => o.pool))) {
       const rows = partsOf.filter(o => o.gives === 'pay' && o.pool === key);
-      const mean = rows.reduce((n, o) => n + (o.chance / 100) * o.amount, 0);
-      const square = rows.reduce((n, o) => n + (o.chance / 100) * o.amount ** 2, 0);
-      if (pools.has(key)) pools.get(key).variance += opens * (square - mean ** 2);
+      const mean = rows.reduce((n, o) => n + (o.perOpen / draws) * o.amount, 0);
+      const square = rows.reduce((n, o) => n + (o.perOpen / draws) * o.amount ** 2, 0);
+      if (pools.has(key)) pools.get(key).variance += opens * draws * (square - mean ** 2);
     }
     // Money: the payment is split (a share may burn it).
     carryOut(b.split, token, opens * price, `box:${b.key}`);
@@ -697,11 +699,12 @@ export function simulate(economy, { now = 0 } = {}) {
       playerAction(sales, 1);
       if (collectible) players.rent += sales * COLLECTIBLE_RENT;
       const listed = num(it.price);
-      // The next price, grown in base units and rounded down as the program grows it (state.rs `Rise::next`).
-      const unit = 10 ** -(m.tokens.get(game)?.decimals ?? 0);
-      const rises = it.rise
-        ? Math.floor((listed * (num(it.rise.growthPercent) / 100)) / unit + 1e-9) * unit + num(it.rise.step)
-        : 0;
+      // The next price, grown in base units and rounded down as the program grows it (state.rs `Rise::next`), with
+      // its token's decimals as salePrices has them (none known: not rounded).
+      const decimals = m.tokens.get(it.currency ?? game)?.decimals ?? null;
+      const grown = listed * (num(it.rise?.growthPercent) / 100);
+      const unit = decimals === null ? 0 : 10 ** -decimals;
+      const rises = it.rise ? (unit ? Math.floor(grown / unit + 1e-9) * unit : grown) + num(it.rise.step) : 0;
       const realCost = realCostOf({
         price: listed,
         token: game,
@@ -1187,7 +1190,7 @@ export function simulate(economy, { now = 0 } = {}) {
     // A limit per person: every wallet the issuer links to one person counts together, so more wallets take no more.
     if (byPerson(l)) {
       const each = l.perPersonEach?.count
-        ? l.perPersonEach.count / Math.max((toSeconds(l.perPersonEach.every ?? '1d') || DAY) / DAY, 1)
+        ? (l.perPersonEach.count * DAY) / Math.max(toSeconds(l.perPersonEach.every ?? '1d') || DAY, 1)
         : null;
       return {
         person: each !== null ? { one: round(each), per: 'a day' } : { one: l.perPerson, per: 'in all' },
@@ -1199,7 +1202,7 @@ export function simulate(economy, { now = 0 } = {}) {
         ? 'each showing what its gate asks'
         : '(free to make)';
     if (l.perWalletEach?.count) {
-      const each = l.perWalletEach.count / Math.max((toSeconds(l.perWalletEach.every ?? '1d') || DAY) / DAY, 1);
+      const each = (l.perWalletEach.count * DAY) / Math.max(toSeconds(l.perWalletEach.every ?? '1d') || DAY, 1);
       const many = Math.min(MANY * each, l.perDay || Infinity);
       return {
         many: {

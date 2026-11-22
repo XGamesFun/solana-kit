@@ -106,3 +106,20 @@ test(
     await locks({ price: 0.02 });
   },
 );
+
+test('an NFT an earlier approval put in is not read again: given out and burned since, it blocks no later change', async () => {
+  const { checkNfts } = await import('../approve/live-check.mjs');
+  const gone = 'Gone111111111111111111111111111111111111111';
+  const spec = {
+    version: 2,
+    network: 'devnet',
+    name: 'T',
+    currency: 'sol',
+    tokens: [{ key: 'sol', source: 'sol' }],
+    stashes: [{ key: 's', name: 'S', nfts: [gone] }],
+  };
+  const chain = { account: async () => null };
+  await assert.rejects(checkNfts({ m: model(spec, { now: 0 }), chain }), /no NFT/);
+  const live = { ...spec, live: { project: 'P', published: structuredClone(spec) } };
+  await checkNfts({ m: model(live, { now: 0 }), chain });
+});
