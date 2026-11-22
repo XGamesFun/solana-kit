@@ -4,6 +4,16 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.6: a coin made elsewhere read as the chain has it (loot 0.29.0, unchanged)
+
+The tools alone.
+
+- **The approval no longer refuses a coin made elsewhere whose `decimals` or `program` the spec says otherwise.** It
+  reads the mint, uses the chain's (the spec's amounts are whole tokens, so they mean what they say), says what it
+  changed and what the file's would have made of each amount, and the file says the chain's once the step lands.
+  Wrapped SOL is read with its 9 decimals the same way. A token the setup made, which the chain says otherwise, is
+  still refused: that is a file changed by hand, not a fact to read.
+
 ## 0.29.5: an NFT moved with the collection the chain says (loot 0.29.0, unchanged)
 
 The tools alone.
