@@ -4,7 +4,7 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
-## Unreleased: what the tools say and send, held to what loot does (loot 0.29.0, unchanged)
+## 0.29.4: what the tools say and send, held to what loot does (loot 0.29.0, unchanged)
 
 The tools alone. An audit of the kit against loot 0.29.0. Every shipped example plans the same go-live
 transactions as before, and every live economy we could read checks as it did.
