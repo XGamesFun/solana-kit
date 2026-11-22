@@ -639,6 +639,20 @@ const NOBODY = '11111111111111111111111111111111';
 /** The program id of the box a prize rolls (a box key), or null for none. */
 const rollOf = (box, m) => (box ? (m.box.get(box)?.id ?? 0) : null);
 
+/**
+ * How a grant's claim records are split (`shard_bits`), which the program never lets an edit change (grant.rs
+ * ShardsFixed): what the chain holds for a live grant (`grantShards`, read by the approval as it connects: never kept in
+ * the file, which every kit reads), else what its published spec sized, else its `wallets` (its list's length) and
+ * `rounds` now.
+ */
+export function grantShardBits(g, m) {
+  const onChain = m.grantShards?.[g.key];
+  if (Number.isInteger(onChain)) return onChain;
+  const was = (m.live?.published?.grants ?? []).find(x => x.key === g.key);
+  const sized = was ?? g;
+  return loot.shardBitsFor(sized.wallets ?? (sized.list ?? []).length ?? 0, sized.rounds ?? 1);
+}
+
 export function grantArgs(g, m) {
   const gives = prizeArgs(g.prize ?? g.gives, m);
   const vouchers = [...(g.vouchers ?? []), NOBODY, NOBODY, NOBODY].slice(0, 3);
@@ -666,7 +680,7 @@ export function grantArgs(g, m) {
     active: g.active !== false,
     gate: gateOf(g.gate, m),
     // Its records in 2^bits lists, the fewest that keep each under ~100,000 over its life (wallets × rounds).
-    shard_bits: loot.shardBitsFor(g.wallets ?? list.length ?? 0, g.rounds ?? 1),
+    shard_bits: grantShardBits(g, m),
   };
 }
 
@@ -739,6 +753,8 @@ const placeholderKey = name => encodeBase58(sha256(utf8(`loot-plan:${name}`)));
 export function setupSteps(economy, { now = 0, only = null, live: given = null, renames = null } = {}) {
   const m = model(economy, { now });
   const live = madeSoFar(given);
+  // a live grant's record split, as the chain holds it (the approval reads it): no edit may change it
+  m.grantShards = given?.grantShards ?? null;
   const steps = [];
   const want = id => !only || only.has(id);
   const landed = new Set(live?.landed ?? []);

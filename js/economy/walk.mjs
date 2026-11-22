@@ -5,7 +5,7 @@
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
 import { realMoney } from '../client/pda.js';
-import { prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
+import { limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -402,6 +402,9 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
           : '',
         l.perWallet ? `${l.perWallet} a wallet in all${of(l.perWallet)}` : '',
         l.perPerson ? `${l.perPerson} a person in all${of(l.perPerson)}` : '',
+        l.perPersonEach?.count
+          ? `${l.perPersonEach.count} a person every ${l.perPersonEach.every ?? '1d'}${of(l.perPersonEach.count)}`
+          : '',
         l.perDay
           ? `${l.perDay} a day for everyone together${of(l.perDay)}, so the first claims of a day can use it up`
           : '',
@@ -562,9 +565,7 @@ export function controlWords(m, fl) {
     const p = r.part ?? {};
     const l = p.limits ?? p;
     const said = [
-      l.perWallet && `${l.perWallet} a wallet`,
-      l.perWalletEach && `${l.perWalletEach.count} a wallet every ${l.perWalletEach.every ?? '1d'}`,
-      l.perPerson && `${l.perPerson} a person`,
+      ...limitPhrases(l, { per: 'a', every: r.kind === 'lottery' ? '1h' : '1d' }),
       l.perDay && `${l.perDay} a day`,
       l.total && `${l.total} in all`,
       r.kind === 'lottery' && r.cancel?.minSold && `at least ${r.cancel.minSold} tickets`,

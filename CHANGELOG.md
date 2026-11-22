@@ -4,6 +4,39 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## Unreleased: what the tools say and send, held to what loot does (loot 0.29.0, unchanged)
+
+The tools alone. An audit of the kit against loot 0.29.0. Every shipped example plans the same go-live
+transactions as before, and every live economy we could read checks as it did.
+
+- **Fixed: a shop item limited per person went live with no limit.** `perPerson` and `perPersonEach` on an item were
+  dropped when its shop listing was made, so the listing sold to anyone without limit. They are written now.
+- **Fixed: a change to a live economy left parts that read the changed one as they were.** A lottery's `pot` moved
+  while a sale kept paying its share into the old pot; an item's `life` changed while each recipe that enforces it kept
+  the old rules. A change now publishes every part whose instructions it changes.
+- **Fixed: a live grant whose `wallets` or `rounds` changed could not be edited again** (ShardsFixed). The approval
+  reads how the grant's records are split from the chain and keeps it.
+- **Fixed: free lottery tickets a grant gave were read as paid.** Their holder was offered a refund that always failed,
+  and so was the claim that pays the others, so the round could not close.
+- **Fixed: a bid on an auction gated on the player's profile** left the profile out and always failed.
+- **Fixed, numbers:** a box with several draws an open (`slots`) was valued as one draw; a run of lottery places
+  (`times`) was counted once; a schedule paying a share into a farm never reached the farm; halving was left out of
+  what a farm or a schedule pays a day (a pool that runs dry read as steady); a rising price grew without the rounding
+  the program does in base units; explain read lottery places written as plain numbers (`[60, 40]`) as 0%.
+- **Fixed, words:** per-person limits read as no limit in several warnings and lines (`perPerson`, `perPersonEach`);
+  a grant written with the older `gives` lost a line in explain; a duration written in seconds is said as "1d", not
+  "86400".
+- **check refuses what the program refuses:** a compressed item's link at a ten-digit serial; more than 8 token
+  accounts in a lottery's rounds; a round too wide for one instruction; a lottery's share into its own pot; a boost per
+  point with no `upTo`; one NFT handed over twice; a recipe that keeps attributes onto a compressed output; two traits
+  drawn from one table; a farm rate past 8 bytes (the plan crashed); `free` with a price.
+- **check takes what the program takes:** a contest's share to `"chosen"` (a bounty's worker, named by its verdict).
+- **New warnings:** a live item whose kind, soulbound, burnable, collection or drawn traits change (fixed once issued);
+  `fund` on a schedule that is not sealed, `on` on an output that is not a roll, `held` outside a lottery's place.
+- **The approval reads more of the chain before anything is signed:** each Core NFT a stash or a lottery takes against
+  the collection the spec names (one in another collection is refused, with the line to write), and a live item's
+  issued count before a change to what it is.
+
 ## 0.29.3: mainnet's fee quoted as mainnet charges it; the hosted server's tools say only what they do (loot 0.29.0, unchanged)
 
 The tools alone.

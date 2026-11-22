@@ -4,7 +4,7 @@ import { encodeBase58 } from '../chain/base58.js';
 import { randomBytes } from '../chain/bytes.js';
 import { lootProgram } from '../client/pda.js';
 import { compressedTree, listOf, model, tokenLabels } from './model.mjs';
-import { auctionSeller, plan, setupContext } from './plan.mjs';
+import { auctionSeller, placeholderContext, plan, setupContext, setupSteps } from './plan.mjs';
 
 /** A key for each fresh account the plan creates. Their secret halves are made by whoever signs (the page). */
 export function freshAddresses(names, random = randomBytes) {
@@ -136,6 +136,32 @@ const PART_LISTS = {
 };
 /** Parts that never change once live: a farm and an auction are never edited, a pool's token is fixed. */
 const FIXED = new Set(['farm', 'pool', 'auction']);
+const PART_KINDS = new Set(Object.values(PART_LISTS));
+
+/**
+ * Each part's go-live instructions as bytes, by part id ("box:crate"; a shop item's listing counts as its item's), for a
+ * spec put live afresh at `now` with stand-in addresses: two specs that build a part alike write it alike.
+ */
+function partBytes(spec, now) {
+  const m = model(spec, { now });
+  const ctx = placeholderContext(m);
+  const out = new Map();
+  for (const step of setupSteps(spec, { now }).steps) {
+    const [kind, key] = step.id.split(':');
+    if (!PART_KINDS.has(kind)) continue;
+    const id = `${kind}:${key}`;
+    // (an instruction is written either way: { programAddress, accounts: [{ address }] } or { programId, keys: [{ pubkey }] })
+    const ixs = step
+      .build(ctx)
+      .map(ix => [
+        String(ix.programAddress ?? ix.programId),
+        Buffer.from(ix.data ?? []).toString('hex'),
+        (ix.accounts ?? ix.keys ?? []).map(a => String(a.address ?? a.pubkey)),
+      ]);
+    out.set(id, (out.get(id) ?? '') + JSON.stringify(ixs));
+  }
+  return out;
+}
 
 /**
  * What a change to a live economy publishes: the parts that are new or differ from what is on chain (`live.published`),
@@ -166,6 +192,20 @@ export function changedParts(economy) {
       before.delete(part.key);
     }
     for (const key of before.keys()) removed.push(`${kind}:${key}`);
+  }
+  // A part the spec leaves as it was can still be written otherwise: what it reads from another part changed (a
+  // lottery's pot, which a sale's share is paid into; an item's life, which each recipe that takes it enforces). Each
+  // part whose instructions now build otherwise than the published spec's is published too, or said fixed.
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const was = partBytes(published, now);
+    for (const [id, bytes] of partBytes(economy, now)) {
+      if (!was.has(id) || was.get(id) === bytes || only.has(id) || fixed.includes(id)) continue;
+      if (FIXED.has(id.split(':')[0])) fixed.push(id);
+      else only.add(id);
+    }
+  } catch {
+    // A published spec this version can no longer build (an older file): its parts are compared as written, above.
   }
   // A token is made once. One whose name, ticker or link the spec now gives otherwise than it was published with
   // (`renames`; by what they come to, not how they are spelled: model.mjs tokenLabels) has its name record written

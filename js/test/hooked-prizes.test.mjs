@@ -151,11 +151,13 @@ test('salePrices stops once the price stops moving, and throws past ten million 
   await quick('a price still moving', () =>
     assert.throws(() => salePrices({ price: 0.1, rise: { growthPercent: 1e-9 } }, 1e6, 3650), /10,000,000 sales/),
   );
+  // In a spec the price grows in its token's base units, rounded down, as the program grows it: a growth too small to
+  // add one unit (1e-9% is no basis point at all) never moves the price, so the walk stops at once.
   const slow = rising(3650, 1e6, { growthPercent: 1e-9 });
   assert.equal((await quick('check', () => check(slow, { now: NOW }))).ok, true);
   const r = await quick('xsolana_simulate', () => runTool('xsolana_simulate', { spec: slow }, { now: NOW }));
-  assert.equal(r.isError, true);
-  assert.match(r.text, /10,000,000 sales/);
+  assert.equal(r.isError, undefined, r.text);
+  assert.doesNotMatch(r.text, /10,000,000 sales/);
 });
 
 // A spec of one token checks without a `currency` (that token is its currency), so xsolana_save's test of a spec's shape

@@ -268,3 +268,30 @@ test('what the scenario assumes for what it doesn’t name is said as it is coun
     /Each day, if 100 of each thing happen \(auction bids 10 a day\)/,
   );
 });
+
+test('explain names each lottery place by its percent, written as a plain number or as an object, and a run of places as a run', () => {
+  const said = spec =>
+    explainEconomy(spec, { now: NOW }).text.match(/pulls each winner's part to the winner: ([^.]*)\./)?.[1];
+  assert.equal(said(exampleSpec('stakers-draw')), 'place 1 60% of the pot and place 2 40% of the pot');
+  const weekly = from =>
+    solSpec({
+      lotteries: [
+        {
+          key: 'weekly',
+          name: 'Weekly',
+          price: 0.01,
+          every: '7d',
+          ...from,
+          places: [40, { percent: 20, times: 2 }, { percent: 10 }],
+        },
+      ],
+    });
+  assert.equal(
+    said(weekly({ pot: 0 })),
+    'place 1 40% of the pot, places 2–3 each 20% of the pot and place 4 10% of the pot',
+  );
+  assert.equal(
+    said(weekly({ rest: 'treasury' })),
+    "place 1 40% of the round's ticket money, places 2–3 each 20% of the round's ticket money and place 4 10% of the round's ticket money",
+  );
+});
