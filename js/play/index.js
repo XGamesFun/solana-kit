@@ -19,13 +19,14 @@
 //
 // `spec` is the live xsolana.json (its `live` section names the project). `wallet` is { address, signTransaction(wire) →
 // signed wire }: `walletStandardSigner` makes one from a Wallet Standard wallet (Phantom, Solflare, Backpack).
-import { decodeBase58, encodeBase58 } from '../chain/base58.js';
+import { decodeBase58, encodeBase58, NO_ADDRESS } from '../chain/base58.js';
 import { ownedAssetFilters, parseCoreAsset, parseCoreCollection } from '../chain/core.js';
 import {
   ASSOCIATED_TOKEN_PROGRAM,
   associatedTokenAddress,
   COMPUTE_BUDGET_PROGRAM,
   NATIVE_MINT,
+  SYSVAR_CLOCK,
   SYSVAR_SLOT_HASHES,
   TOKEN_2022_PROGRAM,
   TOKEN_PROGRAM,
@@ -40,7 +41,7 @@ import {
   withComputeBudget,
   withSolWrap,
 } from '../chain/programs.js';
-import { rightCluster, rpcClient } from '../chain/rpc.js';
+import { rightCluster, rpcClient, sleep } from '../chain/rpc.js';
 import { extension, mayStartFrozen, mintPowers, resolveTransfers } from '../chain/token2022.js';
 import {
   compileFitting,
@@ -57,7 +58,7 @@ import {
   WALLET_ADDS_BYTES,
   LOOKUP_TABLE_PROGRAM,
 } from '../chain/lookup.js';
-import { compileMessage, readTransaction, wireTransaction } from '../chain/tx.js';
+import { compileMessage, readTransaction, SIGNATURE_LAMPORTS, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { browserStore, keyring } from './keys.js';
 import { SPONSOR_MAX_LAMPORTS, sponsoredCost, sponsorGiveBack, sponsorTopUp, stepShape, topUpFor } from './sponsor.js';
@@ -75,26 +76,23 @@ export {
   SPONSOR_MAX_LAMPORTS,
 } from './sponsor.js';
 
-// The options of a call made without any: read-only, and typed so the generated declarations take any option.
-/** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
 /** The compute units a sponsored step asks for: all a transaction can have. It sets a price of 0, so they cost nothing. */
 const SPONSORED_UNITS = 1_400_000;
 
+/** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
 const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 /** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
 const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...LOTTERY_STEPS]);
+// The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const MPL_CORE = loot.MPL_CORE_PROGRAM;
-const NOBODY = '11111111111111111111111111111111';
 /** A table made this many slots ago whose transaction never landed was never sent: its blockhashes ran out long since. */
 const TABLE_UNSENT_SLOTS = 300n;
 /** A compressed NFT's `prove_leaf`: its record stays good while the leaf is unchanged, so it may go in a transaction of its own first. */
 const isProveLeaf = ix => ix.programId === loot.lootProgram() && loot.instructionOf(ix.data)?.name === 'prove_leaf';
 /** A system account must keep this much (rent for 0 bytes) or be emptied. */
 const RENT_EMPTY = 890_880n;
-const SIGNATURE_FEE = 5_000n;
 
 /**
  * A signer from a Wallet Standard wallet and one of its accounts: the wallet signs, the app sends. With the wallet's
@@ -464,8 +462,8 @@ export function solanaApp({
     return out;
   }
   /**
-   * What proves `asset` gone from the project, as the instruction that lets go of it takes it (loot 0.27: a record
-   * whose NFT is proven gone closes): { before, kind }, or null when the project still holds it or nothing shows either
+   * What proves `asset` gone from the project, as the instruction that lets go of it takes it (a record whose NFT is
+   * proven gone closes): { before, kind }, or null when the project still holds it or nothing shows either
    * way. Whoever controls a collection the project does not can take an NFT out of the project's hands or burn it. A
    * Core asset shows it by itself (`kind`: its collection now); a Token Metadata NFT by the token account that holds it
    * now, or its mint once burned (`kind.tokenMetadata.evidence`); a compressed NFT by its record, proven again as its
@@ -633,7 +631,7 @@ export function solanaApp({
   /** A token seat's refresh (`seat` decoded), with its booster's accounts (a compressed one proven first), to go first in
    * a stake or a compound's transaction (`loot.stakeRefreshFirst`). */
   async function refreshOf(f, farm, seat) {
-    const { before, ...nft } = seat.asset !== NOBODY ? await nftOf(seat.asset) : { before: [] };
+    const { before, ...nft } = seat.asset !== NO_ADDRESS ? await nftOf(seat.asset) : { before: [] };
     return [
       ...before,
       loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by: seat.player, seat, ...nft }),
@@ -761,19 +759,8 @@ export function solanaApp({
   }
 
   /**
-   * Build, have the wallet sign, send and confirm. Extra signers (fresh keys) sign first. Returns the signature.
-   * `keepWrapped`: leave the player's wrapped-SOL account open (a bid's: what is topped comes back there).
-   * Its size is checked before the wallet signs (`sendFitting`): one that fits a legacy transaction and leaves the
-   * wallet less than `WALLET_ADDS_BYTES` for the checks it adds goes as v0 with the project's standing tables, when
-   * they make it smaller (the same one prompt); a transaction too big for a legacy one goes as one v0
-   * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
-   * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
-   * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
-   * signing (`loot.withLeafCloses`), so its rent comes straight back.
-   */
-  /**
    * The project's standing lookup tables (made at go-live, `spec.live.tables`), each as the chain holds it now: one
-   * deactivated (or gone) is left out, and a transaction then makes a table of its own as before.
+   * deactivated (or gone) is left out, and a transaction then makes a table of its own.
    */
   let standingTables = null;
   async function standing() {
@@ -790,10 +777,21 @@ export function solanaApp({
 
   /**
    * The room kept in a step the player's wallet signs, for what the wallet adds before it signs (`WALLET_ADDS_BYTES`);
-   * none for a wallet that says it signs no v0 transaction (`wallet.versions`), which gets a legacy one as before.
+   * none for a wallet that says it signs no v0 transaction (`wallet.versions`), which gets a legacy one.
    */
   const walletRoom = () => (wallet?.versions && !wallet.versions.includes(0) ? 0 : WALLET_ADDS_BYTES);
 
+  /**
+   * Build, have the wallet sign, send and confirm. Extra signers (fresh keys) sign first. Returns the signature.
+   * `keepWrapped`: leave the player's wrapped-SOL account open (a bid's: what is topped comes back there).
+   * Its size is checked before the wallet signs (`sendFitting`): one that fits a legacy transaction and leaves the
+   * wallet less than `WALLET_ADDS_BYTES` for the checks it adds goes as v0 with the project's standing tables, when
+   * they make it smaller (the same one prompt); a transaction too big for a legacy one goes as one v0
+   * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
+   * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
+   * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
+   * signing (`loot.withLeafCloses`), so its rent comes straight back.
+   */
   async function send(instructions, extra = [], { keepWrapped = false } = {}) {
     if (!wallet?.address) throw new Error('Connect a wallet first.');
     // A compressed NFT's record is closed in the transaction that used it, its prover signing: its rent comes back.
@@ -838,7 +836,7 @@ export function solanaApp({
 
   /** The most the sponsor pays a transaction (its top-up and network fee), as the app was told. */
   // It lends the player that, less room for the network fee, and takes back what the step didn't need.
-  const sponsorMax = sponsor ? BigInt(sponsor.maxLamports ?? SPONSOR_MAX_LAMPORTS) - SIGNATURE_FEE * 4n : 0n;
+  const sponsorMax = sponsor ? BigInt(sponsor.maxLamports ?? SPONSOR_MAX_LAMPORTS) - SIGNATURE_LAMPORTS * 4n : 0n;
 
   /** Every account a list of instructions names, its programs too. */
   const namedIn = instructions => [
@@ -1074,11 +1072,11 @@ export function solanaApp({
    * proof record: then the wallet sends that step. `key`: one made already (a box's open names it before it knows how
    * many settles it funds).
    */
-  async function keyFor(pays = SIGNATURE_FEE, key = null) {
+  async function keyFor(pays = SIGNATURE_LAMPORTS, key = null) {
     key ??= await freshKey();
     return {
       key,
-      fund: transferLamports(wallet.address, key.address, (await rentEmpty()) + BigInt(pays) + SIGNATURE_FEE),
+      fund: transferLamports(wallet.address, key.address, (await rentEmpty()) + BigInt(pays) + SIGNATURE_LAMPORTS),
     };
   }
 
@@ -1115,8 +1113,10 @@ export function solanaApp({
    * than that fee (a settle of its that failed on chain took its fee: the wallet then pays the move, one more prompt). */
   async function emptyKey(key) {
     const left = BigInt(await client.balance(key.address).catch(() => 0n));
-    if (left >= (await rentEmpty()) + SIGNATURE_FEE)
-      await sendAs(key, [transferLamports(key.address, wallet.address, left - SIGNATURE_FEE)]).catch(() => null);
+    // A refund that fails is not the player's error, so it is not thrown: the key's job already landed, and `recover`
+    // finds a key still holding SOL and sends it back.
+    if (left >= (await rentEmpty()) + SIGNATURE_LAMPORTS)
+      await sendAs(key, [transferLamports(key.address, wallet.address, left - SIGNATURE_LAMPORTS)]).catch(() => null);
     else if (left > 0n) await send([transferLamports(key.address, wallet.address, left)], [key]).catch(() => null);
     // A key kept in storage is dropped once it holds nothing.
     if (key.name && !(BigInt(await client.balance(key.address).catch(() => 1n)) > 0n)) keys?.forget(key.name);
@@ -1166,7 +1166,7 @@ export function solanaApp({
       // Each order its own key, named by it (it can be made again after a reload, `recover`): its settle's fee, a spare
       // for its parts and its give-back, and what its settle may open or mint. The ask names it as the order's settler.
       const { key, fund } = await keyFor(
-        SIGNATURE_FEE * 3n + loot.settleRent(box, Number(order.opens ?? 1), await itemsOf(box)),
+        SIGNATURE_LAMPORTS * 3n + loot.settleRent(box, Number(order.opens ?? 1), await itemsOf(box)),
         await jobKey(orderAddress),
       );
       asks.push(...(await asksFor(wallet.address, orderAddress, order, key.address)));
@@ -1361,7 +1361,7 @@ export function solanaApp({
         before: subjectProof,
         gone: subjectGone,
         ...subject
-      } = order.subject && order.subject !== NOBODY
+      } = order.subject && order.subject !== NO_ADDRESS
         ? order.held
           ? await leaving(order.subject, signer)
           : await nftOf(order.subject, signer)
@@ -1395,7 +1395,7 @@ export function solanaApp({
     // A key the order doesn't name can't settle it (`Order::settler`): then the player signs.
     const by = burner && !chooses && order.settler === burner.address ? burner.address : wallet.address;
     const fits = async instructions =>
-      Boolean(compileFitting({ payer: by, blockhash: NOBODY, instructions, tables: await standing() })) &&
+      Boolean(compileFitting({ payer: by, blockhash: NO_ADDRESS, instructions, tables: await standing() })) &&
       transactionLocks(by, instructions) <= 64;
     const part = async end => [computeUnitLimit(loot.settleComputeUnits(order)), (await settleBy(by, end)).ix];
     const sendPart = async end =>
@@ -1424,7 +1424,8 @@ export function solanaApp({
     let emptied = false;
     const byBurner = burner && !chooses && order.settler === burner.address ? await settleBy(burner.address) : null;
     const alone = byBurner && !byBurner.before.length ? [...budget, byBurner.ix] : null;
-    const legacy = instructions => Boolean(compileFitting({ payer: burner.address, blockhash: NOBODY, instructions }));
+    const legacy = instructions =>
+      Boolean(compileFitting({ payer: burner.address, blockhash: NO_ADDRESS, instructions }));
     const tried = alone && legacy(alone) ? await dryRun(burner.address, alone, [burner.address]) : null;
     if (tried?.ok) {
       // Its last settle gives back all the burner holds after it, in the same transaction, as the dry run says it will
@@ -1707,7 +1708,7 @@ export function solanaApp({
     ]);
     if (orNull && gives.length > 1) {
       const fits =
-        compileFitting({ payer: wallet.address, blockhash: NOBODY, instructions }) &&
+        compileFitting({ payer: wallet.address, blockhash: NO_ADDRESS, instructions }) &&
         transactionLocks(wallet.address, instructions) <= 64;
       if (!fits || !(await dryRun(wallet.address, instructions)).ok) return null;
     }
@@ -1856,7 +1857,7 @@ export function solanaApp({
     if (oneSignature) {
       for (const o of orders) {
         const { key, fund } = await keyFor(
-          SIGNATURE_FEE * BigInt(loot.settleParts(box, o.n) + 1) + loot.settleRent(box, o.n, items),
+          SIGNATURE_LAMPORTS * BigInt(loot.settleParts(box, o.n) + 1) + loot.settleRent(box, o.n, items),
           o.settlerKey,
         );
         burners.push(key);
@@ -1960,7 +1961,7 @@ export function solanaApp({
   const recentSlots = async () => slotHashes((await client.account(SYSVAR_SLOT_HASHES))?.data);
   /** The chain's clock (Unix seconds), read from its Clock sysvar; the computer's (`now`) when it can't be read. */
   const chainNow = async () => {
-    const clock = await client.account('SysvarC1ock11111111111111111111111111111111').catch(() => null);
+    const clock = await client.account(SYSVAR_CLOCK).catch(() => null);
     if (!clock?.data || clock.data.length < 40) return BigInt(now());
     const v = clock.data.subarray(32, 40).reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n);
     return v >= 1n << 63n ? v - (1n << 64n) : v;
@@ -2264,7 +2265,7 @@ export function solanaApp({
    */
   async function heldThenReleased(at, instructions, outs) {
     const { key, fund } = await keyFor(
-      BigInt(outs.length) * (2n * SIGNATURE_FEE + loot.SETTLE_RENT_UNIT),
+      BigInt(outs.length) * (2n * SIGNATURE_LAMPORTS + loot.SETTLE_RENT_UNIT),
       await jobKey(at),
     );
     const signature = await send([...instructions, fund]);
@@ -2521,7 +2522,7 @@ export function solanaApp({
       // Tried in a dry run when they are one transaction as they stand; a longer list is made to fit as it is sent.
       const one = compileFitting({
         payer: wallet.address,
-        blockhash: NOBODY,
+        blockhash: NO_ADDRESS,
         instructions: trial,
         tables: await standing(),
       });
@@ -2562,7 +2563,7 @@ export function solanaApp({
       Boolean(
         compileFitting({
           payer: wallet.address,
-          blockhash: NOBODY,
+          blockhash: NO_ADDRESS,
           instructions: loot.withLeafCloses(together),
           tables: await standing(),
         }),
@@ -2606,7 +2607,7 @@ export function solanaApp({
    */
   async function hookTail(mints) {
     const out = new Map();
-    for (const mint of new Set(mints.filter(x => x && x !== NOBODY))) {
+    for (const mint of new Set(mints.filter(x => x && x !== NO_ADDRESS))) {
       const resolved = await resolveTransfers(client, mint).catch(() => null);
       for (const m of resolved?.extraAccounts ?? []) {
         const had = out.get(m.pubkey);
@@ -2646,7 +2647,7 @@ export function solanaApp({
     const extra = await hookTail(roundMints({ terms }, poolMints));
     const first = !round || round.status === 'Open';
     const owingAt =
-      first && lottery?.owing && lottery.owing !== NOBODY && loot.potIdOf(terms) != null
+      first && lottery?.owing && lottery.owing !== NO_ADDRESS && loot.potIdOf(terms) != null
         ? await client.account(lottery.owing)
         : null;
     const owing = owingAt?.owner === loot.lootProgram() ? loot.decodeRound(owingAt.data) : null;
@@ -2728,7 +2729,7 @@ export function solanaApp({
     for (const { entry, parts } of mine) {
       const e = r.entries[entry];
       for (const part of parts) {
-        if (part === 'Own' && e.nft !== NOBODY) tickets.push(e.nft);
+        if (part === 'Own' && e.nft !== NO_ADDRESS) tickets.push(e.nft);
         if (!part.Prize || loot.tokenRun(r, Number(part.Prize[0]))) continue;
         const run = Number(part.Prize[0]);
         const place = r.terms.places[run];
@@ -2828,7 +2829,7 @@ export function solanaApp({
       // account's rent is), each released right after it. The round only hands an NFT out and reads nothing, so one
       // proven gone from the project is made a hold, and that hold closes on the proof.
       const holdsMade = new Map();
-      if (part === 'Own' && e.nft !== NOBODY) {
+      if (part === 'Own' && e.nft !== NO_ADDRESS) {
         const then = r.status === 'Cancelled' || r.terms.returns ? null : r.terms.nft_ticket?.then;
         more.handBack = Boolean(then?.Give) && loot.handsBack(await client.account(then.Give[0]));
         const to = !then || more.handBack ? e.buyer : then.Give ? then.Give[0] : undefined;
@@ -2918,7 +2919,7 @@ export function solanaApp({
             const tx = [computeUnitLimit(1_400_000), requestHeapFrame(loot.LARGE_SETTLE_HEAP), ix];
             return (
               Boolean(
-                compileFitting({ payer: signer, blockhash: NOBODY, instructions: tx, tables: await standing() }),
+                compileFitting({ payer: signer, blockhash: NO_ADDRESS, instructions: tx, tables: await standing() }),
               ) && (await dryRun(signer, tx)).ok
             );
           };
@@ -3530,7 +3531,7 @@ export function solanaApp({
       const seat = await readMaybe('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
       const first = [];
       if (seat && loot.refreshFirst(farm, seat, value, forfeit)) {
-        const { before, ...nft } = seat.asset !== NOBODY ? await nftOf(seat.asset) : { before: [] };
+        const { before, ...nft } = seat.asset !== NO_ADDRESS ? await nftOf(seat.asset) : { before: [] };
         first.push(
           ...before,
           loot.refreshSeatIx({ signer: wallet.address, project, id: f.id, farm, by, seat, ...nft, extra: token.extra }),
@@ -3738,7 +3739,7 @@ export function solanaApp({
       const f = part('farms', farmKey);
       const farm = await read('Farm', loot.pda.farm(project, f.id));
       const seat = await read('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
-      const held = seat.asset !== NOBODY;
+      const held = seat.asset !== NO_ADDRESS;
       const { before, ...nft } = held ? await nftOf(seat.asset) : { before: [], hasAuthority: true };
       // A refresh moves no tokens (a farm's rewards are numbers until a seat is paid): only a collectible's own tail.
       return send(
@@ -3762,7 +3763,7 @@ export function solanaApp({
       let [held, tree, before] = [null, null, []];
       if (farm.custody === 'Watch') {
         const { asset } = await read('Seat', loot.pda.seat(loot.pda.farm(project, f.id), by));
-        if (asset !== NOBODY) {
+        if (asset !== NO_ADDRESS) {
           const nft = await nftOf(asset);
           held = nft.compressed ? loot.pda.leaf(asset) : nft.tokenMetadata ? loot.ata(wallet.address, asset) : asset;
           tree = nft.compressed?.tree ?? null;
@@ -3831,7 +3832,7 @@ export function solanaApp({
       const out = [];
       for (const { pubkey, account } of found) {
         let seat = loot.decode('Seat', account.data);
-        const held = seat.asset !== NOBODY;
+        const held = seat.asset !== NO_ADDRESS;
         let counted = false;
         try {
           payer ??= await funded();
@@ -4115,7 +4116,7 @@ export function solanaApp({
           says: `${p.holder} can move anyone's tokens of the loan's token, the ones you would repay with too.${lender(p.holder)}`,
         };
       });
-      // What the token's own settings let a lender do: the program no longer refuses these, so the kit says them.
+      // What the token's own settings let a lender do: the program takes these, so the kit says them.
       risks.push(...tokenSettings(account, 'repaying', 'the lender', 'and take your NFT when the loan is due'));
       const { amount, repay, lasts } = offer.deal.Lend;
       return { address, offer, mint: offer.mint, program: account.owner, amount, repay, lasts, risks };
@@ -4828,7 +4829,7 @@ export function solanaApp({
         pays_from: { Round: { rest: 'Treasury' } },
         shares,
         places: [{ bps: 0, prize: { Held: [nft] } }],
-        ticket_mint: NOBODY,
+        ticket_mint: NO_ADDRESS,
         every: 0n,
         draws_at: BigInt(drawsAt),
         gate: null,
@@ -4875,15 +4876,6 @@ export function solanaApp({
     },
 
     /**
-     * Claims a grant for the connected wallet: from the approved list (the proof comes from xsolana.json, or is given:
-     * `proof`, `personHash` and the `round` the list pays, as a results server's list answers them), or with a voucher
-     * a server signed ({ publicKey, signature, incarnation, round and amount, or rounds: [{ id, amount }], expires, personHash }). A list in xsolana.json names
-     * no round (zeros). `amount` (a voucher's, or `options.amount` for a list's leaf): the tokens this claim gives, in
-     * base units, up to the grant's own, for a grant of a fixed amount of tokens (a reward by rank); absent or 0 gives
-     * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
-     * lists and `collect` asks for and settles.
-     */
-    /**
      * Takes the link voucher the project's issuer signed for this wallet: { person (32 bytes or 64 hex characters),
      * expires, publicKey (the issuer's), signature } over `loot.linkBytes`. Nothing is sent now: the wallet's next step
      * that counts by person (a purchase, a ticket, a craft, a claim) links it in the same transaction.
@@ -4903,6 +4895,15 @@ export function solanaApp({
       pendingLink = { ...voucher, person, signature };
     },
 
+    /**
+     * Claims a grant for the connected wallet: from the approved list (the proof comes from xsolana.json, or is given:
+     * `proof`, `personHash` and the `round` the list pays, as a results server's list answers them), or with a voucher
+     * a server signed ({ publicKey, signature, incarnation, round and amount, or rounds: [{ id, amount }], expires, personHash }). A list in xsolana.json names
+     * no round (zeros). `amount` (a voucher's, or `options.amount` for a list's leaf): the tokens this claim gives, in
+     * base units, up to the grant's own, for a grant of a fixed amount of tokens (a reward by rank); absent or 0 gives
+     * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
+     * lists and `collect` asks for and settles.
+     */
     async claimGrant(grantKey, options = {}) {
       only(options, ['voucher', 'proof', 'personHash', 'round', 'amount', 'shown', 'listProof'], 'claimGrant');
       let {
@@ -5496,7 +5497,7 @@ export function solanaApp({
       const mineListed = await client.programAccounts(loot.lootProgram(), [tag('Listing'), at(1, project), at(33, me)]);
       for (const { account } of mineListed) {
         const listing = loot.decode('Listing', account.data);
-        if (listing.deal.Rent && listing.user !== NOBODY && !loot.renterOf(listing, chainTime))
+        if (listing.deal.Rent && listing.user !== NO_ADDRESS && !loot.renterOf(listing, chainTime))
           out.push({
             kind: 'unlist',
             asset: listing.asset,

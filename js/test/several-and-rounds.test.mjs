@@ -1,6 +1,6 @@
-// What loot 0.23 does in one call that took many, built by js/client and run on the program: several NFTs a call
-// (holds, stashes, a farm's seats, makes), a grant voucher of several rounds, a lottery's places as runs and a raffle of
-// many NFTs, a contest whose winners share the losers' NFTs, and a burned NFT's Sheet closed by anyone.
+// What the program does in one call, built by js/client and run on the program: several NFTs a call (holds, stashes, a
+// farm's seats, makes), a grant voucher of several rounds, a lottery's places as runs and a raffle of many NFTs, a
+// contest whose winners share the losers' NFTs, and a burned NFT's Sheet closed by anyone.
 import assert from 'node:assert/strict';
 import { createPrivateKey, createPublicKey, sign } from 'node:crypto';
 import { test } from 'node:test';
@@ -9,7 +9,7 @@ import { concat } from '../chain/bytes.js';
 import { parseCoreAsset } from '../chain/core.js';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

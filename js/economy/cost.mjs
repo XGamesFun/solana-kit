@@ -4,6 +4,7 @@
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { priorityFee } from '../chain/programs.js';
+import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import {
   boxOrderBytes,
   plan as compile,
@@ -33,7 +34,6 @@ import {
   LAMPORTS_PER_SOL,
   ORACLE_FEE,
   RENT_PER_BYTE,
-  SIGNATURE_FEE,
   model,
   prizeLine,
   prizeRolls,
@@ -75,7 +75,7 @@ export function setupCost(plan, economy) {
   // The network's fee: 5,000 lamports a signature, and each transaction's own priority fee (its unit limit times the
   // unit price the plan sets: 2 lamports; none for a transaction listed without its instructions).
   const networkLamports = plan.transactions.reduce(
-    (n, t) => n + BigInt(t.signers.length) * SIGNATURE_FEE + priorityFee(t.instructions ?? []),
+    (n, t) => n + BigInt(t.signers.length) * SIGNATURE_LAMPORTS + priorityFee(t.instructions ?? []),
     0n,
   );
   // Only the seeds and grant funds this plan puts in: a change to a live economy doesn't pay its seeds again.
@@ -137,7 +137,7 @@ export function setupCost(plan, economy) {
  * that asks MagicBlock's oracle for a random number (a box's open, a lottery's draw, the authority's `roll`) the
  * oracle's own fee (`oracleSol`, model.mjs ORACLE_FEE).
  */
-export function actionCosts(economy, { now } = NO_OPTIONS) {
+function actionCosts(economy, { now } = NO_OPTIONS) {
   const m = model(economy);
   const FEES = m.fees;
   // A player's real cost of one action, from the simulation (simulate.mjs realCostOf): the number to quote.
@@ -157,7 +157,7 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
       who,
       feeSol: sol(fee),
       ...(oracle ? { oracleSol: sol(oracle) } : {}),
-      networkSol: sol(SIGNATURE_FEE),
+      networkSol: sol(SIGNATURE_LAMPORTS),
       deposits,
       ...(extra ? { note: extra } : {}),
       ...(r ? { inAllSol: r.totalSol ?? null, onTopSol: r.extrasSol, holdSol: r.holdSol, inAll: inAll(r) } : {}),
@@ -489,8 +489,10 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   return rows;
 }
 
-/** Setup and play costs for a spec, or its refusals. */
-/** `only` and `live`: a change to a live economy, priced as only what it publishes (live.mjs `changedParts`). */
+/**
+ * Setup and play costs for a spec, or its refusals. `only` and `live`: a change to a live economy, priced as only what
+ * it publishes (live.mjs `changedParts`).
+ */
 export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null, live = null, renames = null } = {}) {
   const plan = compile(economy, { now, only, live, renames });
   if (!plan.ok) return plan;

@@ -12,7 +12,7 @@ import { EXECUTE_DISCRIMINATOR, validationAddress } from '../chain/token2022.js'
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, collectible, pinned, world } from './world.mjs';
+import { cannotRun, collectible, pinned, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const HOOK = 'Hook111111111111111111111111111111111111111';

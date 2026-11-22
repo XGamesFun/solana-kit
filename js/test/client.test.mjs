@@ -12,7 +12,7 @@ import { closeTokenAccount, computeUnitLimit, meta } from '../chain/programs.js'
 import { mintToIx, setAuthorityIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, FEES, fromPool, itemDrop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, FEES, fromPool, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun();
 const t = (name, fn) => test(name, { skip: skip ?? false }, fn);

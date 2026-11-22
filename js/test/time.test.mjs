@@ -13,7 +13,7 @@ import { check } from '../economy/check.mjs';
 import { recipeArgs, farmArgs } from '../economy/plan.mjs';
 import { model } from '../economy/model.mjs';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

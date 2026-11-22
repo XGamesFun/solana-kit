@@ -16,8 +16,8 @@ import { parseCoreAsset } from '../chain/core.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, collectible } from './world.mjs';
-import { nftOf, ownerOf, setup } from './tm-chain.mjs';
+import { cannotRun, collectible } from './helpers/world.mjs';
+import { nftOf, ownerOf, setup } from './helpers/tm-chain.mjs';
 
 const skip = cannotRun() ?? false;
 const TM = loot.TOKEN_METADATA_PROGRAM;

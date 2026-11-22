@@ -1,4 +1,4 @@
-# The programs and chain accounts the client's LiteSVM tests load (js/test/world.mjs), pinned by hash: the outside
+# The programs and chain accounts the client's LiteSVM tests load (js/test/helpers/world.mjs), pinned by hash: the outside
 # programs as the Solana clusters run them, the loot program as devnet runs it (the build release.json pins), the
 # oracle's queue as it is on mainnet, and a small transfer hook made for the tests.
 #

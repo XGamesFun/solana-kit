@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun();
 

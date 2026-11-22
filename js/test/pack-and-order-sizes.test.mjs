@@ -1,6 +1,6 @@
-// The economy tools for the program's final fixes (8938ee0): the checker refuses what the program refuses (an outcome no
-// slot draws, a pack one answer can't draw, a run of places too long to walk), an open's order is sized as `open_box`
-// sizes it, and a lottery holds SOL for its rounds and every entry by default, so a buyer pays no program rent.
+// The checker refuses what the program refuses (an outcome no slot draws, a pack one answer can't draw, a run of places
+// too long to walk), an open's order is sized as `open_box` sizes it, and a lottery holds SOL for its rounds and every
+// entry by default, so a buyer pays no program rent.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -17,7 +17,7 @@ import IDL from '../client/idl/loot.js';
 import { check } from '../economy/check.mjs';
 import { FEES, model } from '../economy/model.mjs';
 import { boxArgs, boxOrderBytes, itemArgs, roundRentOf, roundSize } from '../economy/plan.mjs';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;

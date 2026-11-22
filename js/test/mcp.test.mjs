@@ -135,7 +135,7 @@ describe('the xsolana MCP server', () => {
   });
 
   // The plugin manifests and the MCP Registry entry name the same version as the package; release.json names the
-  // program's (the IDL's), which a JS-only patch release (0.25.1 on loot 0.25.0) leaves as it is.
+  // program's (the IDL's), which a release that changes only JavaScript leaves as it is.
   test('the plugin manifests and server.json carry this package’s version; release.json its program’s', () => {
     const root = new URL('../../', import.meta.url);
     const { name, version, mcpName } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));

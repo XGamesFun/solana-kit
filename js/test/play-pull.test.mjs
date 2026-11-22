@@ -15,7 +15,7 @@ import { createAssociatedTokenAccountIdempotent, withSolWrap } from '../chain/pr
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

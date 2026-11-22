@@ -3,11 +3,11 @@
 // same way through Bubblegum (`cnft-chain.mjs`), and a Token Metadata NFT whose token is moved by hand, as only its own
 // program could. Each makes a world of its own and answers the same few calls, so one test runs for every kind.
 import assert from 'node:assert/strict';
-import { addressBytes, encodeBase58 } from '../chain/base58.js';
-import { TOKEN_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit } from '../chain/programs.js';
-import * as loot from '../client/index.js';
-import { solanaApp } from '../play/index.js';
+import { addressBytes, encodeBase58 } from '../../chain/base58.js';
+import { TOKEN_PROGRAM } from '../../chain/pda.js';
+import { computeUnitLimit } from '../../chain/programs.js';
+import * as loot from '../../client/index.js';
+import { solanaApp } from '../../play/index.js';
 import { cnftTree, onChainRoot } from './cnft-chain.mjs';
 import { burn, coreOwner, seizingAsset, seizingCollection, takeBack } from './gone-chain.mjs';
 import { nftOf as tmNft, setup as tmSetup } from './tm-chain.mjs';

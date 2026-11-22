@@ -15,7 +15,7 @@ import { meta } from '../chain/programs.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun();
 

@@ -7,6 +7,7 @@
 // Lotteries, boxes (the shop's items with them), recipes and grants are modelled; the other kinds are the
 // walk-through's own words until they are.
 import {
+  DAY,
   boxRolls,
   ORACLE_FEE,
   placeOf,
@@ -19,7 +20,6 @@ import {
 } from './model.mjs';
 import { DEFAULT_PER_DAY } from './simulate.mjs';
 
-const DAY = 86_400;
 /** A draw the oracle hasn't answered this long after its ask is cancelled at the next ask (LOTTERY_TIMEOUT_SECONDS). */
 const ORACLE_TIMEOUT_DAYS = 7;
 export const num = x => Number(x ?? 0);

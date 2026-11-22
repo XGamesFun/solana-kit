@@ -9,7 +9,7 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { check } from '../economy/check.mjs';
 import { newKey } from '../results/index.js';
-import { approvalChain, cannotRun, world } from './world.mjs';
+import { approvalChain, cannotRun, world } from './helpers/world.mjs';
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;
 async function approve(w, owner, file) {

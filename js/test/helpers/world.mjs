@@ -9,17 +9,17 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { encodeBase58 } from '../chain/base58.js';
-import { fromBase64 } from '../chain/bytes.js';
-import { createCollectionInstruction } from '../chain/core.js';
-import { ASSOCIATED_TOKEN_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
-import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../chain/programs.js';
-import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx } from '../chain/token.js';
-import { readTransaction } from '../chain/tx.js';
-import * as loot from '../client/index.js';
-import { loadLiteSVM, newAddress, seeded, simChain } from '../sim/chain.mjs';
+import { encodeBase58 } from '../../chain/base58.js';
+import { fromBase64 } from '../../chain/bytes.js';
+import { createCollectionInstruction } from '../../chain/core.js';
+import { ASSOCIATED_TOKEN_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../../chain/pda.js';
+import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../../chain/programs.js';
+import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx } from '../../chain/token.js';
+import { readTransaction } from '../../chain/tx.js';
+import * as loot from '../../client/index.js';
+import { loadLiteSVM, newAddress, seeded, simChain } from '../../sim/chain.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 /** A local build of the loot program (XSOLANA_PROGRAM_DIR), or null: the test that the IDL matches its build runs only with one. */
 export const program = process.env.XSOLANA_PROGRAM_DIR ? path.resolve(process.env.XSOLANA_PROGRAM_DIR) : null;
 /** The pinned programs, accounts and runtime the tests load. */

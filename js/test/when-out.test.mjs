@@ -1,7 +1,6 @@
-// What loot 0.24 changed for clients after the strict rules: what a box does once an entry runs out (`when_out`, its
-// count of draws waiting, a refund that names the box), a compressed NFT's Sheet closed against its tree, a print read as
-// in no collection, a forfeit that writes nothing, and the caps on an item's traits. Each run on the real program where
-// it can be.
+// What a box does once an entry runs out (`when_out`, its count of draws waiting, a refund that names the box), a
+// compressed NFT's Sheet closed against its tree, a print read as in no collection, a forfeit that writes nothing, and
+// the caps on an item's traits. Each run on the real program where it can be.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,7 +19,7 @@ import { LIMITS, model } from '../economy/model.mjs';
 import { boxArgs as specBoxArgs } from '../economy/plan.mjs';
 import { simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './world.mjs';
+import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const pda = loot.pda;

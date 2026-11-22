@@ -4,6 +4,19 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.8: tidier code and docs (loot 0.29.0, unchanged)
+
+No behaviour changed: the same tests pass, and every export of the package's entry points is still there.
+
+- **One wording change:** the walk-through's line on crafting and buying tickets with one approval no longer ends
+  with "(kit 0.28.7 and later)".
+- Comments and docs say what the code does now, with no version or date notes (history stays here); doc comments sit
+  above their own code; the oracle fee's comment matches its value (a high-priority request, 0.0008 SOL).
+- The release steps are in `RELEASING.md`, and say that `release.json` carries the program's version.
+- Shared constants and helpers have one copy each. The entry points gain three exports: `SYSVAR_CLOCK`
+  (`chain/pda`), `sleep` (`chain/rpc`) and `SIGNATURE_LAMPORTS` (`chain/tx`, the same value `sponsor` exports).
+- Test files are named for what they test, and the modules they share are in `js/test/helpers`.
+
 ## 0.29.7: a second audit against loot 0.29.0 (loot 0.29.0, unchanged)
 
 The tools alone. From a fresh audit of the kit against the deployed program.

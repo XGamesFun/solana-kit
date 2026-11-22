@@ -1,17 +1,17 @@
-// A record whose NFT is gone from the project closes (loot 0.27), through js/play on the real program. Whoever
-// controls a collection the project does not can take an NFT out of the project's hands, or burn it, while a hold, a
-// loan or a listing has it. The instruction that would have moved it then finishes without it and leaves an `NftGone`
-// receipt: a hold closes at any time (`claims`, `claim`), a loan ends unpaid, a listing closes for its maker
-// (`unlist`) and for anyone (`closeGone`), and a deposit clears what an earlier owner left before it hands the NFT in.
-// For each kind of NFT the test world makes: a Core asset its controller really takes or burns (a permanent transfer
-// and burn delegate), a compressed NFT the same way through Bubblegum, and a Token Metadata NFT whose token is moved by
-// hand, as only its own program could.
+// A record whose NFT is gone from the project closes, through js/play on the real program. Whoever controls a
+// collection the project does not can take an NFT out of the project's hands, or burn it, while a hold, a loan or a
+// listing has it. The instruction that would have moved it then finishes without it and leaves an `NftGone` receipt: a
+// hold closes at any time (`claims`, `claim`), a loan ends unpaid, a listing closes for its maker (`unlist`) and for
+// anyone (`closeGone`), and a deposit clears what an earlier owner left before it hands the NFT in. For each kind of
+// NFT the test world makes: a Core asset its controller really takes or burns (a permanent transfer and burn delegate),
+// a compressed NFT the same way through Bubblegum, and a Token Metadata NFT whose token is moved by hand, as only its
+// own program could.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
-import { cnftTree } from './cnft-chain.mjs';
-import { burn, coreOwner, takeBack } from './gone-chain.mjs';
+import { cnftTree } from './helpers/cnft-chain.mjs';
+import { burn, coreOwner, takeBack } from './helpers/gone-chain.mjs';
 import {
   appOf,
   FEE,
@@ -23,9 +23,9 @@ import {
   skip,
   skipCompressed,
   takeTokenMetadata,
-} from './gone-kinds.mjs';
-import { nftOf as tmNft, setup as tmSetup } from './tm-chain.mjs';
-import { boxArgs, drop, PRICE } from './world.mjs';
+} from './helpers/gone-kinds.mjs';
+import { nftOf as tmNft, setup as tmSetup } from './helpers/tm-chain.mjs';
+import { boxArgs, drop, PRICE } from './helpers/world.mjs';
 
 const { pda } = loot;
 

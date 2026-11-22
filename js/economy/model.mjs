@@ -6,12 +6,15 @@ import { treeSize } from '../client/ix.js';
 import { networkOf } from '../client/cluster.js';
 import { SCHEMA } from './validate.mjs';
 
+/** A day, in seconds. */
+export const DAY = 86_400;
+
 // ---------------------------------------------------------------- the program's numbers
 // Each is the loot program's own unless it says otherwise.
 
 /**
- * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`, read from the chain
- * on 2026-11-21: devnet EZJiX7BY…, mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
+ * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`: devnet EZJiX7BY…,
+ * mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
  * the tools quote these and the program charges what the account holds. The program caps each at 0.01 SOL.
  */
 export const FEES_ON = Object.freeze({
@@ -23,11 +26,11 @@ export const FEES = FEES_ON.devnet;
 /** The fees on the cluster an economy is on: the `network` its file names, devnet when it names none. */
 export const feesOf = economy => FEES_ON[networkOf(economy)] ?? FEES;
 /**
- * What MagicBlock's VRF oracle queue (Cuj97ggr…, ephemeral-vrf-sdk 0.17.2 consts.rs DEFAULT_QUEUE) takes for each
- * random number asked of it: VRF_LAMPORTS_COST = 500,000 lamports, 0.0005 SOL (magicblock-labs/ephemeral-vrf,
- * api/src/consts.rs; the high-priority queue's 800,000 is not the one loot uses). Paid by whoever asks: the player
- * on `open_box` (order.rs), whoever sends `draw_lottery` (lottery.rs, its `payer`), the authority on `roll`
- * (roll.rs). Measured on devnet: 500,000 lamports per open.
+ * What MagicBlock's VRF oracle takes for each random number loot asks of it: 800,000 lamports, 0.0008 SOL. loot asks
+ * its default queue (Cuj97ggr…, ephemeral-rollups-sdk `vrf::consts::DEFAULT_QUEUE`) at high priority
+ * (`create_request_high_priority_scoped_randomness_ix`, roll.rs `oracle_request`), so the oracle answers with a
+ * compute limit of 400,000; a regular request costs 500,000 and gets 300,000. Paid by whoever asks: the player on
+ * `open_box` (order.rs), whoever sends `draw_lottery` (lottery.rs, its `payer`), the authority on `roll` (roll.rs).
  */
 export const ORACLE_FEE = 800_000n;
 /**
@@ -51,8 +54,6 @@ export const rent = bytes => (BigInt(bytes) + ACCOUNT_OVERHEAD) * RENT_PER_BYTE;
  * measures 0.00309 to 0.00313 SOL across its fixtures.
  */
 export const COLLECTIBLE_RENT = 3_100_000n;
-/** The network's base fee per signature. Priority fees are extra and up to the wallet. */
-export const SIGNATURE_FEE = 5_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;
 export const WSOL = 'So11111111111111111111111111111111111111112';
 /** The limits a spec meets: the chain's (the oracle's answer carries 21 accounts; a farm names a tier and a recipe a
@@ -113,12 +114,12 @@ export const ANSWER_HOLDS = Object.freeze({
 /** Attribute names the program writes itself, which a recipe cannot copy and `Set` cannot change (craft.rs, make.rs),
  * and the two a collectible's life keeps (`lifeLines`: its uses and its next use). */
 export const RESERVED_ATTRIBUTES = Object.freeze(['made', 'used', 'next_use', 'item_id', 'rarity', 'serial', 'origin']);
-export const RARITIES = Object.freeze(['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']);
+const RARITIES = Object.freeze(['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic']);
 
 // ---------------------------------------------------------------- units
 
 /** A refusal raised while reading a value; the checker turns it into a refusal with a code. */
-export class SpecError extends Error {
+class SpecError extends Error {
   constructor(code, message, fix) {
     super(message);
     this.code = code;
@@ -127,7 +128,7 @@ export class SpecError extends Error {
 }
 
 /** A plain decimal string for an amount written as a number or text (no exponent). */
-export function decimalText(amount) {
+function decimalText(amount) {
   if (typeof amount === 'string') return amount;
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0)
     throw new SpecError('E-AMOUNT', `${amount} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
@@ -201,7 +202,7 @@ export function toBps(percent) {
 const UNIT = { s: 1, m: 60, h: 3600, d: 86_400, w: 604_800 };
 
 /** Seconds as the shortest exact duration the spec could have written: 604800 → "1w", 90 → "90s" ("1.5m" is not exact). */
-export const durationText = seconds => {
+const durationText = seconds => {
   for (const [unit, size] of [...Object.entries(UNIT)].reverse())
     if (seconds > 0 && seconds % size === 0) return `${seconds / size}${unit}`;
   return `${seconds}s`;
@@ -282,12 +283,12 @@ export function toSeconds(duration) {
  * How long what lands in a farm's rewards vault takes to be released to its seats, in seconds (a farm that shares what
  * lands, `farm.rs` `release_span`): its longest lock tier, and a day at least.
  */
-export const releaseSeconds = f => Math.max(86_400, ...(f.tiers ?? []).map(t => toSeconds(t.lock ?? 0)));
+export const releaseSeconds = f => Math.max(DAY, ...(f.tiers ?? []).map(t => toSeconds(t.lock ?? 0)));
 
 /** A farm's release span in words: "a day", "30 days", "36 hours". */
 export function releaseWords(f) {
   const s = releaseSeconds(f);
-  if (s % 86_400 === 0) return s === 86_400 ? 'a day' : `${s / 86_400} days`;
+  if (s % DAY === 0) return s === DAY ? 'a day' : `${s / DAY} days`;
   return s % 3_600 === 0 ? `${s / 3_600} hours` : `${s} seconds`;
 }
 
@@ -316,7 +317,7 @@ export const boostReadsGrowth = f =>
   );
 
 /** A box's roll against what is in stock, in words (order.rs): the odds stay as written, whatever is left. */
-export const STOCK_WORDS =
+const STOCK_WORDS =
   'The odds stay as written whatever is in stock: a draw that lands on an outcome that can’t be given then (its pool short of the whole amount, its item or stash gone) is not made, no other outcome takes its place, and that draw’s worth of the price goes back at the settle; with no draw made at all, a paid open fails and is refunded, and a free roll goes back to waiting';
 
 /**
@@ -442,7 +443,7 @@ export function farmEndWords(f) {
  * collectibles the project's currency. One that names a pool (as farms did before they had a vault of their own) is
  * read as that pool's token, and the checker refuses it.
  */
-export function farmRewardsToken(f, tokens, currencyKey, poolCurrency = new Map()) {
+function farmRewardsToken(f, tokens, currencyKey, poolCurrency = new Map()) {
   if (f.rewards && tokens.has(f.rewards)) return f.rewards;
   if (f.rewards && poolCurrency.has(f.rewards)) return poolCurrency.get(f.rewards);
   return f.stakes && f.stakes !== 'collectibles' ? f.stakes : currencyKey;
@@ -736,7 +737,7 @@ export const prizePool = p => (p?.gives === 'tokens' && p.from?.startsWith('pool
 export function serverRate(g, players = 0) {
   const b = g?.serverLimit;
   if (!b) return null;
-  const windows = 86_400 / Math.max(toSeconds(b.every ?? '1d') || 86_400, 1);
+  const windows = DAY / Math.max(toSeconds(b.every ?? '1d') || DAY, 1);
   const one = Number(b.amount ?? 0) * windows;
   const all = b.per === 'all' ? one : players ? one * players : null;
   return {
@@ -759,11 +760,11 @@ export function serverRate(g, players = 0) {
 export function farmCeiling(f) {
   if (!f?.rate) return null;
   const perDay = Number(f.rate.perDay ?? 0);
-  const runs = f.runs ? toSeconds(f.runs) / 86_400 : null;
-  const halve = f.rate.halveEvery ? toSeconds(f.rate.halveEvery) / 86_400 : null;
+  const runs = f.runs ? toSeconds(f.runs) / DAY : null;
+  const halve = f.rate.halveEvery ? toSeconds(f.rate.halveEvery) / DAY : null;
   const term =
     (f.tiers ?? []).length && (f.tiers ?? []).every(t => t.earnsFor)
-      ? Math.max(...f.tiers.map(t => toSeconds(t.earnsFor) / 86_400))
+      ? Math.max(...f.tiers.map(t => toSeconds(t.earnsFor) / DAY))
       : null;
   const life = [runs, term].filter(x => x !== null);
   const days = life.length ? Math.min(...life) : null;
@@ -947,7 +948,6 @@ export function outcomeParts(o) {
   return [o];
 }
 
-/** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
 /** How many draws one open of a box makes: its slots' counts, or one. */
 export const drawsOf = b => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
@@ -975,6 +975,8 @@ export function settleUnits(b, m) {
   return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
 }
 
+/** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, an NFT at random, or a
+ * fresh item whose traits are drawn. */
 export const boxRolls = (b, m) =>
   (b.outcomes ?? []).length > 1 ||
   (b.outcomes ?? [])

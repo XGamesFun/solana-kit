@@ -1,8 +1,8 @@
-// loot 0.26 on the routes of boxes, recipes, settles, lotteries, farms and stashes, as the client builds them and the
-// real program takes them: a box whose gate reads the player's profile and whose odds read an NFT; a recipe of several
-// rolls whose payment lines nobody can take go to the treasury; a prize the player can't receive, given up at the
-// settle; tickets weighed by time, bought, drawn and pulled, each place's winner found by its slice of the draw; a run
-// of places that each give a roll, pulled in parts; a stash stocked in a batch; a mission's leave without its prize.
+// The routes of boxes, recipes, settles, lotteries, farms and stashes, as the client builds them and the real program
+// takes them: a box whose gate reads the player's profile and whose odds read an NFT; a recipe of several rolls whose
+// payment lines nobody can take go to the treasury; a prize the player can't receive, given up at the settle; tickets
+// weighed by time, bought, drawn and pulled, each place's winner found by its slice of the draw; a run of places that
+// each give a roll, pulled in parts; a stash stocked in a batch; a mission's leave without its prize.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCoreAsset } from '../chain/core.js';
@@ -20,7 +20,7 @@ import {
   itemDrop,
   PRICE,
   world,
-} from './world.mjs';
+} from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

@@ -38,7 +38,8 @@ export class RpcError extends Error {
   }
 }
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+/** Waits `ms` milliseconds. */
+export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** The first block of each public Solana cluster: it names the cluster whatever URL reaches it. */
 export const GENESIS = Object.freeze({

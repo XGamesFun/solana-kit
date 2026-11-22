@@ -14,7 +14,7 @@ const NAME = 'xsolana';
 const SKILL = 'xsolana-economy';
 
 /** The scopes `xsolana connect` knows: every project of this user, or the one project folder it runs in. */
-export const SCOPES = ['user', 'project'];
+const SCOPES = ['user', 'project'];
 
 /**
  * The agents xsolana connect to, as data: a new agent is a row. `scopes`: where the agent can register an MCP server

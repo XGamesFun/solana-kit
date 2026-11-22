@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { equalBytes, fromBase64, toBase64 } from '../chain/bytes.js';
 import { alreadyProcessed, rpcClient } from '../chain/rpc.js';
-import { addressBytes, encodeBase58 } from '../chain/base58.js';
+import { addressBytes, encodeBase58, NO_ADDRESS } from '../chain/base58.js';
 import { slotHashes, tableAddress } from '../chain/lookup.js';
 import { SYSVAR_SLOT_HASHES } from '../chain/pda.js';
 import { MINT_BYTES } from '../chain/token.js';
@@ -270,10 +270,10 @@ export async function createApproval({
   /** What a plan of this session is scoped by. */
   const scope = () => ({ only, renames });
 
-  /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   /** A live grant's record split (`shard_bits`) as the chain holds it, by its key: read as a wallet connects (`trust`),
    *  handed to the plan, never written to the file. */
   let grantShards = null;
+  /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   const live = () => (spec.live ? { ...spec.live, ...(grantShards ? { grantShards } : {}) } : null);
   /**
    * What the chain says the keys of the mints this spec names can do, where the spec doesn't say it (`checkMints`,
@@ -441,8 +441,7 @@ export async function createApproval({
       // The session's copy of the live section says of the project's treasury and authority what the chain says, so
       // what this session records is the chain's: the file says it once a step lands (or at once, with none to send).
       // The project's issuer too (none is left out): a spec naming another one plans its update (`plan.mjs`).
-      const issuer =
-        trusted.issuer && trusted.issuer !== '11111111111111111111111111111111' ? trusted.issuer : undefined;
+      const issuer = trusted.issuer && trusted.issuer !== NO_ADDRESS ? trusted.issuer : undefined;
       if (
         trusted.treasury &&
         (spec.live.treasury !== trusted.treasury ||

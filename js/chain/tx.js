@@ -7,6 +7,8 @@ import { compactU16, concat, equalBytes, readCompactU16 } from './bytes.js';
 /** A serialized transaction must fit one packet. */
 export const MAX_TRANSACTION_BYTES = 1232;
 export const SIGNATURE_BYTES = 64;
+/** The network's base fee per signature, in lamports. Priority fees are extra. */
+export const SIGNATURE_LAMPORTS = 5_000n;
 const V0_PREFIX = 0x80;
 
 /**

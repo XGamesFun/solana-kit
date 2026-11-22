@@ -9,7 +9,7 @@ import * as loot from '../client/index.js';
 import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { simulate } from '../economy/simulate.mjs';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const { pda } = loot;
 const NOW = 1_790_000_000;

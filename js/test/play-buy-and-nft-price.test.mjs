@@ -13,7 +13,7 @@ import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;

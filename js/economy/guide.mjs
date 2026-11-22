@@ -1,10 +1,9 @@
 // What an economy can be made of, read from the schema, and what loot cannot do: the guide an agent reads first.
 // Pure.
-import { FEES_ON, LAMPORTS_PER_SOL, ORACLE_FEE } from './model.mjs';
+import { sol } from './format.mjs';
+import { FEES_ON, ORACLE_FEE } from './model.mjs';
 import { SCHEMA } from './validate.mjs';
 import { IDL } from '../client/ix.js';
-
-const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
 
 /** Each part: what it is for, who acts at play time and its fee, and the nested shapes worth showing. */
 export const PARTS = {
@@ -146,16 +145,10 @@ export const CONVENTIONS = [
 ];
 
 /**
- * What no part of loot does, and the combinations that come closest: { what, words (to match a person's own words),
- * why, nearest: [the version, and what it gives up] }. A limit is never the end of the answer: say what is missing,
- * then offer the nearest versions with their numbers, best first, and build the one the person picks. A feature that
- * ships later moves its entry to HOW.
- */
-/**
  * What no code removes, only makes smaller: a wallet is not a person, the page can't be trusted, and bots play well.
  * Said once in the guide, so every design starts from it.
  */
-export const SAFETY = [
+const SAFETY = [
   'A wallet is not a person: wallets are free, so a limit per wallet never limits a person. What bounds a reward is its totals ("perDay", "total": the most it can ever pay), and what makes farming cost something: a gate on holding a collectible the game sells or a locked stake, or vouchers from your server that count people ("perPerson": the voucher signer names a person hash, which needs an outside sign-in such as X; a wallet-only player has none).',
   'Open grants (no voucher, keys or list) pay any wallet: keep their prizes small or soulbound, gate them, and set "perDay". `xsolana_simulate` says what a crowd of wallets could take next to one.',
   'The page can’t be trusted: a game runs in the player’s browser, so a result worth paying is decided or checked by your server, which signs the voucher. A server checks what a wallet holds with `collectiblesOf` / `holds`, pays only wallets a player proved (`proofRequest` / `verifyProof`), and makes promo codes with `makeCodes` (80 bits: a code’s key is public, so a short code can be guessed offline) and `codeAddresses` for the grant’s `keys` (all from `@xgamesfun/solana/results`). How far a signed result can be trusted is what the server checks: it decides the result (runs the game or match; the page sends only inputs), replays it (re-runs the page’s inputs from randomness it keeps), or only bounds it (pace, order, caps: a script at human speed gets through). Say which on each voucher grant (`"trust"`), and run xsolana_review before going live: it says what a cheater gets on every route.',
@@ -163,6 +156,12 @@ export const SAFETY = [
   'A gate costs a sybil most when it asks for something the game sells: a rule takes any of several items (`{ "items": ["oak", "pine"] }`, up to 16), and can read the attributes only the program writes on every minted collectible, `item_id`, `rarity`, `serial` and `made` (`{ "attribute": "rarity", "atLeast": 2 }`: any of the game’s Rare or better).',
 ];
 
+/**
+ * What no part of loot does, and the combinations that come closest: { what, words (to match a person's own words),
+ * why, nearest: [the version, and what it gives up] }. A limit is never the end of the answer: say what is missing,
+ * then offer the nearest versions with their numbers, best first, and build the one the person picks. A feature that
+ * ships later moves its entry to HOW.
+ */
 export const CANNOT = [
   {
     what: 'a prize that is a share of what a pool holds (a jackpot paying a tenth of itself)',

@@ -29,7 +29,7 @@ import {
 } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, cannotRunCompressed, world } from './world.mjs';
+import { cannotRun, cannotRunCompressed, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const dir = new URL('../../examples/', import.meta.url);

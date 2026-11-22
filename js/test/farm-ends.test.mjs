@@ -9,7 +9,7 @@ import { cost, explainCost } from '../economy/cost.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { farmEnds, plan } from '../economy/plan.mjs';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, PRICE, world } from './world.mjs';
+import { cannotRun, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const pda = loot.pda;

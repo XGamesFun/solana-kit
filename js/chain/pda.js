@@ -19,6 +19,7 @@ export const LIGHTHOUSE_PROGRAM = 'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95';
 export const METAPLEX_METADATA_PROGRAM = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
 /** Metaplex Core: the program of Core assets and collections. */
 export const MPL_CORE_PROGRAM = 'CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d';
+export const SYSVAR_CLOCK = 'SysvarC1ock11111111111111111111111111111111';
 export const SYSVAR_INSTRUCTIONS = 'Sysvar1nstructions1111111111111111111111111';
 export const SYSVAR_SLOT_HASHES = 'SysvarS1otHashes111111111111111111111111111';
 /** Wrapped SOL: a shop priced in SOL holds this mint, and players pay plain SOL. */

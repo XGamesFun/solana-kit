@@ -43,7 +43,7 @@ export async function keyFromSeed(seed, name = null) {
 }
 
 /** The text a wallet signs once a session for its settle keys. It moves nothing and says so. */
-export const settleKeysText = (project, wallet) =>
+const settleKeysText = (project, wallet) =>
   `loot: the keys that settle your orders\nproject ${project}\nwallet ${wallet}\n\nSigning this moves nothing. A page that closes before it settles makes the same key again from it, to finish or send your SOL back.`;
 
 /**

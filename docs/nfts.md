@@ -53,7 +53,7 @@ Token Metadata, Bubblegum), and its collection's controls (royalty rules, a pNFT
 delegates) still apply to it, whoever controls them. The creator of an NFT with a permanent delegate can pull it back
 out of a hold, a stake, a loan or a listing, or burn it there.
 
-**A record whose NFT is gone closes** (loot 0.27). Once the NFT is proven gone from the project, the instruction that
+**A record whose NFT is gone closes.** Once the NFT is proven gone from the project, the instruction that
 would have moved it finishes without it and leaves an `NftGone` receipt: a hold closes at any time, sent by anyone
 (`release`); a listing closes for its maker (`close_listing`) and for anyone, who pays nothing (`take_listing`), once
 no rental runs; an order is refunded or settled without it. Nothing moves but the record's rent, which goes where

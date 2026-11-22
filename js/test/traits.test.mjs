@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as loot from '../client/index.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const fresh = () => encodeBase58(randomBytes(32));

@@ -35,7 +35,7 @@ const SECRET_PATTERNS = [
 ];
 
 /** Whether a string looks like it carries a key, a token or a keyed RPC URL. */
-export const secretLike = value => typeof value === 'string' && SECRET_PATTERNS.some(p => p.test(value));
+const secretLike = value => typeof value === 'string' && SECRET_PATTERNS.some(p => p.test(value));
 
 const MNEMONIC_LENGTHS = new Set([12, 15, 18, 21, 24]);
 /** A seed phrase: 12 to 24 lower-case words of 3 to 8 letters and nothing else (no sentence is only such words). */

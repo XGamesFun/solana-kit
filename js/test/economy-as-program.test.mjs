@@ -1,6 +1,5 @@
-// What an audit of the kit against loot 0.29.0 found (2026-11-22), each as the program does it: a box's draws, runs of
-// lottery places, a schedule paying a farm, halving over the scenario, a rise grown in base units; and what check let
-// through that the program refuses.
+// The economy tools count as the program does: a box's draws, runs of lottery places, a schedule paying a farm, halving
+// over the scenario, a rise grown in base units; and check refuses what the program refuses.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';

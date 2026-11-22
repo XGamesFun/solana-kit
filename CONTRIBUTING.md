@@ -53,7 +53,7 @@ server and the skill with Claude Code and Codex (`--remove` takes them out again
   ([evals/README.md](evals/README.md)). Write general rules, never a fix that names one scenario or product.
 - Plain ES modules, no build step. `js/chain`, `js/client`, `js/play` and `js/results` stay browser-safe: lint refuses
   a `node:` import, `Buffer`, `process` or `require` there.
-- Formatting is Prettier's (`.prettierrc.json`, the same settings as xcore's): `npm run format`, and your editor can
+- Formatting is Prettier's (`.prettierrc.json`): `npm run format`, and your editor can
   follow `.editorconfig`. The code was reformatted in one commit; `git config blame.ignoreRevsFile
 .git-blame-ignore-revs` makes `git blame` look past it (GitHub does on its own).
 

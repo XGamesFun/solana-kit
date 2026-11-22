@@ -9,9 +9,12 @@
 // its items, stashes or named NFTs run out (its own opens alone), a box that stops selling (`whenOut` "stopSales") says
 // the day it stops, and one that draws among what is left ("drawLeft") the day each outcome runs out and the odds of
 // the rest from then (`stockWalk`). It is a guide, not a promise: the full simulation (js/sim) runs the real program.
+import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import { entryWidth, LIMIT_RECORD_BYTES, ROUND_RECORD_BYTES } from '../client/index.js';
+import { sol } from './format.mjs';
 import { boxOrderBytes, entryShape, roundRentOf } from './plan.mjs';
 import {
+  DAY,
   byPerson,
   boostedWeights,
   boxBuys,
@@ -21,10 +24,8 @@ import {
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
-  LAMPORTS_PER_SOL,
   ORACLE_FEE,
   RENT_PER_BYTE,
-  SIGNATURE_FEE,
   destination,
   listOf,
   keepsPot,
@@ -51,18 +52,16 @@ import {
   whenOutWords,
 } from './model.mjs';
 
-const DAY = 86_400;
 export const DEFAULT_PER_DAY = 100;
 /** How many wallets the simulation's crowd is, next to one: what a person with many wallets could take from a grant. */
 const MANY_WALLETS = 100;
 /** Bids a day on an auction the scenario doesn't name (`auction:<key>`); a grant it doesn't name is claimed by nobody. */
 const DEFAULT_BIDS = 10;
-const sol = lamports => Number(lamports) / Number(LAMPORTS_PER_SOL);
 // The platform's two fees on the economy's cluster, in SOL: set by `simulate` as it starts, for everything it calls.
 // It is synchronous, so one run never sees another's.
 let PLAYER_FEE = 0;
 let PROJECT_FEE = 0;
-const NETWORK_FEE = sol(SIGNATURE_FEE);
+const NETWORK_FEE = sol(SIGNATURE_LAMPORTS);
 /** MagicBlock's oracle, per random number: a box's open (the player), a lottery's draw, a `roll` (model.mjs ORACLE_FEE). */
 const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the

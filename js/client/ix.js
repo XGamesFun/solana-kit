@@ -84,8 +84,6 @@ export { IDL, ASSOCIATED_TOKEN_PROGRAM };
 export const TOKEN_METADATA_PROGRAM = METAPLEX_METADATA_PROGRAM;
 
 const ZERO_REFERENCE = new Uint8Array(32);
-/** The default address: names nobody, and nobody signs as it. */
-const NOBODY_KEY = '11111111111111111111111111111111';
 const hashToAddress = hash => encodeBase58(hash);
 
 /** 32 bytes a project names a call by (a match id, a payout's reason). Zeros when not given. */
@@ -265,7 +263,6 @@ export function destinationAccounts(project, to, mint, { holders = {}, programs,
   throw new Error(`Unknown destination ${JSON.stringify(to)}`);
 }
 
-/** A split's destinations, in order. */
 /** The most shares a split kept to be paid later holds (`MAX_SHARES`, not in the IDL): a box's, a lottery's, a contest's,
  * an auction's, an offer's or a listing's (a ninth is `BadShares`); a payment's own split has no such cap. */
 export const MAX_SHARES = 8;
@@ -295,6 +292,7 @@ const traitsInCaps = (traits = []) => {
   return traits;
 };
 
+/** The accounts of a split's destinations, in order. */
 export const shareAccounts = (project, shares, mint, options) =>
   shares.flatMap(s => destinationAccounts(project, s.to, mint, options));
 
@@ -1135,7 +1133,7 @@ export function openBoxIx({
   subject,
   chosenRecipient = null,
   chosen = null,
-  settler = NOBODY_KEY,
+  settler = NO_ADDRESS,
   poolMints,
   playerToken,
   programs,
@@ -1752,7 +1750,7 @@ export function askRollIx({
   orderAddress,
   order,
   box,
-  settler = NOBODY_KEY,
+  settler = NO_ADDRESS,
   poolMints,
   items = {},
   programs,
@@ -2803,14 +2801,13 @@ export function endsToWalk(farm, ends, now) {
 
 /** How many ends `walk_farm` walks in one transaction at `WALK_COMPUTE_UNITS`: an end takes up to some 3,150 units at
  * the dearest farm, a halving rate and seats of 4 × 10^16 base units at a ×100 tier (`js/test/farm-ends.test.mjs`
- * measures it: 400 ends take 1,260,730 units, 2,270 an end with light seats). Since loot 0.27 each end walked also
- * frees the leaving weight's share of the carry, some 300 units more at that farm; it was 500 until then, measured
- * with light seats only. */
+ * measures it: 400 ends take 1,260,730 units, 2,270 an end with light seats). Each end walked also frees the leaving
+ * weight's share of the carry, some 300 units of that at the dearest farm. */
 export const WALK_PER_TX = 400;
 /** The compute units a transaction that walks ends asks for: `walk_farm`, or a move with ends to walk first. */
 export const WALK_COMPUTE_UNITS = 1_400_000;
 /** How many ends a move can walk first at `WALK_COMPUTE_UNITS` and still do its own work (some 400,000 units are left
- * for it at the dearest farm): past this, the farm is walked first (`farmNeedsWalk`). 400 until loot 0.27. */
+ * for it at the dearest farm): past this, the farm is walked first (`farmNeedsWalk`). */
 export const MOVE_WALK_ROOM = 300;
 
 /**
@@ -2985,7 +2982,7 @@ const NO_PIECE = {
  *   a compressed NFT (`compressed`, from `compressedFromDas`), proven by a `proveLeafIx` earlier in the transaction.
  * A Token Metadata or compressed NFT passes its Sheet: the project writes nothing on it.
  * An NFT proven gone from the project (whoever controls its collection took it out of the project's hands or burned
- * it) is let go by the record that holds it, on these same accounts (loot 0.27, receipt `NftGone`): a Core asset shows
+ * it) is let go by the record that holds it, on these same accounts (receipt `NftGone`): a Core asset shows
  * it by itself; a compressed NFT by its record, proven again as the leaf is now; a Token Metadata NFT by
  * `tokenMetadata.evidence`, the token account that holds it now, or its mint when it was burned, which goes in the
  * place of `wallet`'s token account. Anything else shows nothing, and the route goes its usual way.

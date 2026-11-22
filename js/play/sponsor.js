@@ -31,16 +31,14 @@
 // Browser-safe: the server side needs only an RPC and the sponsor's own `sign`, which the project's server provides
 // (this package never holds a key).
 import { readTable } from '../chain/lookup.js';
-import { COMPUTE_BUDGET_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
+import { COMPUTE_BUDGET_PROGRAM, SYSTEM_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { transferLamports } from '../chain/programs.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
-import { readMessage, readTransaction, withSignature } from '../chain/tx.js';
+import { readMessage, readTransaction, SIGNATURE_LAMPORTS, withSignature } from '../chain/tx.js';
 import { lootProgram, MPL_CORE_PROGRAM, pda, VRF_PROGRAM } from '../client/index.js';
 
-const SYSTEM_PROGRAM = '11111111111111111111111111111111';
-/** What a signature costs the fee payer, in lamports. */
-export const SIGNATURE_LAMPORTS = 5_000n;
+export { SIGNATURE_LAMPORTS };
 /** The most a sponsored transaction may cost the sponsor by default: its top-up and its network fee, 0.01 SOL. */
 export const SPONSOR_MAX_LAMPORTS = 10_000_000n;
 

@@ -15,7 +15,7 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { COMPUTE_BUDGET_PROGRAM, LIGHTHOUSE_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
 import { computeUnitLimit, computeUnitPrice, requestHeapFrame, transferLamports } from '../chain/programs.js';
 import { compileMessage, readMessage, readTransaction, wireTransaction } from '../chain/tx.js';
-import { approvalChain, cannotRun, pinned, world } from './world.mjs';
+import { approvalChain, cannotRun, pinned, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();

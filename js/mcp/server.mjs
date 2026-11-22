@@ -80,7 +80,7 @@ export const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'
  * Every way `input` does not fit a tool's input schema, in words; [] when it fits. A field the tool doesn't take comes
  * with the fields that place does take.
  */
-export function inputProblems(schema, input) {
+function inputProblems(schema, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     return [`arguments must be an object (this tool takes ${fieldsAt(schema, schema).join(', ') || 'none'})`];
   return validate(input, schema, schema, 'arguments').map(e => {

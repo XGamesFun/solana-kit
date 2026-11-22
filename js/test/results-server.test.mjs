@@ -21,7 +21,7 @@ import {
   verifyProof,
   winPaid,
 } from '../results/index.js';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_800_000_000;

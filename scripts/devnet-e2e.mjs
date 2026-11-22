@@ -26,12 +26,12 @@ import {
   syncNative,
   transferLamports,
 } from '../js/chain/programs.js';
-import { checkCluster, notMainnet, rpcClient } from '../js/chain/rpc.js';
+import { checkCluster, notMainnet, rpcClient, sleep } from '../js/chain/rpc.js';
 import { compileMessage, readTransaction, wireTransaction } from '../js/chain/tx.js';
 import * as loot from '../js/client/index.js';
 import { solanaApp } from '../js/play/index.js';
 import { newKey, newRound, signLink, signVoucher } from '../js/results/index.js';
-import { seizingAssetIx, seizingCollectionIx, takeBackIx } from '../js/test/gone-chain.mjs';
+import { seizingAssetIx, seizingCollectionIx, takeBackIx } from '../js/test/helpers/gone-chain.mjs';
 
 const arg = n => process.argv[process.argv.indexOf(`--${n}`) + 1];
 const url = process.env.XSOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -43,7 +43,6 @@ const funder = keypairFromSecret(Uint8Array.from(JSON.parse(readFileSync(arg('ke
 const chain = clusterChain(url);
 const dir = process.argv.includes('--keep') ? arg('keep') : mkdtempSync(path.join(tmpdir(), 'xsolana-devnet-'));
 mkdirSync(dir, { recursive: true });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function send(signers, instructions) {
   const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();
@@ -480,7 +479,7 @@ if (want('stash')) {
     throw new Error("The trophy is not the player's.");
   console.log(`stash: ${owner.address} holds the trophy ${won}`);
 }
-// 7. Packs (loot 0.22): a booster of four cards and a guaranteed rare, and a pack of fresh heroes whose color is drawn
+// 7. Packs: a booster of four cards and a guaranteed rare, and a pack of fresh heroes whose color is drawn
 // from a sealed table and power from a range; four boosters bought at once, one wallet prompt, the real oracle's one
 // answer, settled in parts by the throwaway key.
 if (want('packs')) {
@@ -580,7 +579,7 @@ if (want('packs')) {
   console.log(`packs: the largest pack, 40 cards, every draw made: ${(big.parts ?? [big.settled]).join(', ')}`);
   console.log(`packs: project ${live.live.project}`);
 }
-// 8. A lottery (loot 0.23: each round is a record of its own): two fresh players buy tickets of a one-off draw due
+// 8. A lottery, each round a record of its own: two fresh players buy tickets of a one-off draw due
 // 90 seconds after going live; once it is due, one reveals it, MagicBlock's real oracle draws, and the players take
 // what they are owed (anyone may pay out everyone): the winner has the pot, and the last pull closes the round.
 if (want('lottery')) {
@@ -799,7 +798,7 @@ if (want('compressed')) {
     `compressed: ${player.address} claimed ${claimed}; the tree ${tree} holds badge ${loot.pda.compressedAsset(tree, 0)}`,
   );
 }
-// 10. A no-loss lottery whose tickets weigh by the time they are held (loot 0.26): the pot is a seed, sales close 20
+// 10. A no-loss lottery whose tickets weigh by the time they are held: the pot is a seed, sales close 20
 // seconds before the draw, and the second player buys the same tickets half a minute after the first, so they weigh
 // less. MagicBlock's real oracle draws over the round's weight; every ticket's price comes back, and the winner has the pot.
 if (want('weighted')) {
@@ -892,7 +891,7 @@ if (want('weighted')) {
     `weighted: every ticket's price is back and the winner has the pot; in all, against before the purchases: ${players.map((k, i) => `${k.address} ${after[i] - before[i]}`).join(', ')} lamports`,
   );
 }
-// 11. Both sides of an exchange move together (loot 0.26). A player auctions a collectible they hold, another bids,
+// 11. Both sides of an exchange move together. A player auctions a collectible they hold, another bids,
 // and one end delivers the lot to the winner and pays the seller in the same instruction. Then a loan: a lender offers
 // SOL against a collectible, the player borrows, and the repayment brings the NFT home in the same transaction.
 if (want('exchanges')) {
@@ -1040,7 +1039,7 @@ if (want('exchanges')) {
     `exchanges: repaid ${repaid.signature}: the lender has 2,200,000 lamports and the relic is home, in one transaction`,
   );
 }
-// 12. A record whose NFT is gone closes (loot 0.27). A throwaway key makes a Core collection it controls, with a
+// 12. A record whose NFT is gone closes. A throwaway key makes a Core collection it controls, with a
 // permanent transfer delegate of its own, and an NFT of it for a player, who puts it on a hold of an hour. The
 // controller takes the NFT back out of the project's hands. A third wallet then sends the hold's release: on the proof
 // that the NFT is gone the hold closes at once, nothing moves, the log has NftGone and no Released, and every lamport

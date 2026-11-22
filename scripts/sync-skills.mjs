@@ -4,7 +4,7 @@
 // .agents/skills (an agent working in this checkout). Byte for byte; extra files there are removed. `--check` exits 1
 // when a copy differs. Each skill needs front matter whose `name` is its folder's and a `description` of at most 1,024
 // characters (the Agent Skills standard) that is a plain YAML scalar: a `: ` or a ` #` inside it is read as a mapping or
-// a comment by a strict parser, which then drops the whole skill (the `skills` installer did, with 0.29.1's).
+// a comment by a strict parser, which then drops the whole skill (the `skills` installer does).
 import { cp, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

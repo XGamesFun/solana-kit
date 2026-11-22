@@ -5,6 +5,7 @@ import { LEGAL } from './legal.mjs';
 import { walkThrough } from './walk.mjs';
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
+import { plural } from './format.mjs';
 import {
   boostReadsGrowth,
   boxBuys,
@@ -33,7 +34,6 @@ import { TRUST_WORDS } from './trust.mjs';
 import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 import { realMoney } from '../client/cluster.js';
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const num = x => (Number.isFinite(x) ? String(round(x, 6)) : String(x));
 
 /**

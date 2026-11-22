@@ -15,7 +15,7 @@
 // Who sends each later step and what happens if nobody does is in the walk-through (walk.mjs, from the same model); a
 // voucher's trust in the review's trust levels.
 import { at, flows, lineToken, named, num, ticketOf, words } from './flows.mjs';
-import { prizeLine, prizeToken, serverRate, toSeconds, toTime } from './model.mjs';
+import { DAY, prizeLine, prizeToken, serverRate, toSeconds, toTime } from './model.mjs';
 import { simulate } from './simulate.mjs';
 import { converts, exchanges, payouts } from './exchanges.mjs';
 import { journeyOf } from './walk.mjs';
@@ -26,8 +26,6 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
 /**
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
  * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
- */
-/**
  * `simulation`: the caller's own run of the simulation (check.mjs: run once for the whole check, and said once when it
  * cannot run); without one it is run here, and a run that fails gives no numbers.
  */
@@ -402,7 +400,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
   for (const f of m.farms) {
     sim ??= simulated();
     const row = sim?.farms?.find(x => x.key === f.key);
-    const days = f.runs ? toSeconds(f.runs) / 86_400 : num(sim?.scenario?.days);
+    const days = f.runs ? toSeconds(f.runs) / DAY : num(sim?.scenario?.days);
     if (!row) continue;
     if (row.perUnitPerDay === undefined) {
       if (f.rate?.shared || !f.rate)
@@ -638,7 +636,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
       l.perWallet ??
       (window
         ? window.count *
-          Math.ceil((num(m.scenario.days) || 30) / Math.max(toSeconds(window.every ?? '1d') / 86_400, 1 / 24))
+          Math.ceil((num(m.scenario.days) || 30) / Math.max(toSeconds(window.every ?? '1d') / DAY, 1 / 24))
         : null);
     const players = num(m.scenario.players);
     if (!players)
@@ -728,7 +726,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
         : { perDay: sr.one / each, atLeast: true, says: `its server signs ${sr.says}` }
       : win
         ? {
-            perDay: (win.count * 86_400) / Math.max(toSeconds(win.every ?? '1d'), 1),
+            perDay: (win.count * DAY) / Math.max(toSeconds(win.every ?? '1d'), 1),
             atLeast: false,
             says: `the chain allows ${win.count} a ${winWho} every ${win.every ?? '1d'}`,
           }
@@ -748,7 +746,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
     if (!pace) continue;
     // A server that signs more claims in a window than the chain takes: the extra are signed, counted and refused.
     if (own && win) {
-      const chainDay = (win.count * 86_400) / Math.max(toSeconds(win.every ?? '1d'), 1);
+      const chainDay = (win.count * DAY) / Math.max(toSeconds(win.every ?? '1d'), 1);
       if (pace.perDay > chainDay)
         warn(
           'W-ASSUMPTION',
@@ -764,7 +762,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
     const who = l.perPerson ? 'person' : 'wallet';
     const mine = l.perPerson ?? l.perWallet;
     const until = l.until !== undefined ? toTime(l.until, now) : null;
-    const life = until !== null ? Math.max((until - now) / 86_400, 0) : null;
+    const life = until !== null ? Math.max((until - now) / DAY, 0) : null;
     const reach = mine ? mine / pace.perDay : null;
     if (reach !== null && (life === null || reach < life)) {
       const soon = reach < horizon;

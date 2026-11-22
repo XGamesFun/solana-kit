@@ -11,7 +11,7 @@ import { computeUnitLimit, meta } from '../chain/programs.js';
 import { setAuthorityIx } from '../chain/token.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, world } from './world.mjs';
+import { boxArgs, cannotRun, collectible, drop, fromPool, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);

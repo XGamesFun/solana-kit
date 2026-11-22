@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { draws, fetchVouchers, newKey, newRound, signVoucher } from '../results/index.js';
-import { cannotRun, collectible, PRICE, world } from './world.mjs';
+import { cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const NOW = 1_790_000_000;

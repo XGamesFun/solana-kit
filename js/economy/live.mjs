@@ -80,10 +80,6 @@ export function wideParts(m, warnings = []) {
 }
 
 /**
- * The spec once its setup landed: every part keeps the program number it was given, and `live` names the game, its
- * collection, the treasury, the mints made and the program, with a copy of what is now on chain.
- */
-/**
  * The times a part says from its going live ("publish", "publish+7d", a falling price with no `start`), as the date
  * this approval sent (`now`, Unix seconds): once a part is live they are its dates, so a later change sends them again
  * and never counts them from that change. By the part's list (its kind's fields: schema.json `time`).
@@ -125,6 +121,10 @@ function frozenTimes(part, list, now) {
   return out;
 }
 
+/**
+ * The spec once its setup landed: every part keeps the program number it was given, and `live` names the game, its
+ * collection, the treasury, the mints made and the program, with a copy of what is now on chain.
+ */
 export function recordLanded(economy, { ctx, signatures = [], at = new Date().toISOString(), now, sent = null }) {
   const m = model(economy, { now });
   const ids = (list, field = 'id') => list.map(x => x[field]);

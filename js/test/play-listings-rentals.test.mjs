@@ -9,7 +9,7 @@ import { mintToIx } from '../chain/token.js';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, PRICE, world } from './world.mjs';
+import { cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;

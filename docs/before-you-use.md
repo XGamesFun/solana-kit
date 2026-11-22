@@ -13,8 +13,8 @@ version; this is the whole of it.
   browser wallet instead, go live in one: `xsolana approve --browser`.
 - **The program can be upgraded, and an upgrade can mean starting again.** Its upgrade authority can replace the
   program's code, which is power over every economy on it (on mainnet that key is to be a multisig). Most versions
-  so far have not carried accounts over from the one before: an economy made on 0.25 is made again for 0.26 (0.27
-  changed no stored record, so an economy made on 0.26 runs on as it is). Pin the package
+  so far have not carried accounts over from the one before: 0.29 can't read the accounts 0.28 made, so an economy
+  made on 0.28 is made again for 0.29. Pin the package
   version (each one names the program build it is for in `release.json`) and expect to set an economy up again after an
   upgrade.
 - **Players trust the project.** Its owner and authority are trusted keys with no caps: the authority mints, moves the

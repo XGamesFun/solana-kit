@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import * as loot from '../client/index.js';
-import { program } from './world.mjs';
+import { program } from './helpers/world.mjs';
 
 const built = program ? path.join(program, 'target/idl/loot.json') : '';
 

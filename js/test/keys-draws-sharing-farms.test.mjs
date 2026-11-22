@@ -12,7 +12,7 @@ import { check } from '../economy/check.mjs';
 import { model } from '../economy/model.mjs';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const fails = (fn, error) =>

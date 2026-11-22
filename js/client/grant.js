@@ -130,7 +130,6 @@ export function readVoucher(body) {
   };
 }
 
-/** A voucher key's leaf under a grant's `key_root`. */
 /**
  * The bytes the project's issuer signs to link `wallet` to `person` (a 32-byte hash it makes of an account it knows,
  * an X id) until `expires` (unix seconds): `"loot-link-v1" | sha256(program | project | wallet | person | expires)`.
@@ -162,6 +161,7 @@ export const linkWalletIx = ({ project, wallet, person, expires }) =>
     { project, wallet, link: pda.link(project, wallet) },
   );
 
+/** A voucher key's leaf under a grant's `key_root`. */
 export const keyLeaf = key => sha256(concat(utf8(KEY_DOMAIN), bytes32(key, 'key')));
 
 /** A list entry's round as the leaf names it: a number (a spec's `round`) in the first 8 of 16 bytes; 0 is zeros. */

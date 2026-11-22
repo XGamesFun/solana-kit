@@ -1,6 +1,6 @@
-// A second audit of the kit against loot 0.29.0 (2026-11-22): a live economy's ids are never given again, a live
-// part's times and fixed fields hold, a table is published, a listing taken out of the shop is switched off, and the
-// numbers of distinct packs, kept farm rates, a lottery's two limits and a seeded pot are the program's.
+// A live economy's ids are never given again, a live part's times and fixed fields hold, a table is published, a
+// listing taken out of the shop is switched off, and the numbers of distinct packs, kept farm rates, a lottery's two
+// limits and a seeded pot are the program's.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -54,7 +54,7 @@ test('a live part’s go-live times are its dates once sent, and a change sends 
   // a part not sent this time keeps what it says
   const other = landed(e, NOW + 5 * 86_400, new Set());
   assert.equal(other.items[0].closes, e.items[0].closes);
-  // a file from before the dates were written: its change is warned of
+  // a file whose approval did not write the dates: its change is warned of
   const old = landed(example('stakers-draw'));
   old.items[0].closes = 'publish+7d';
   old.live.published.items[0].closes = 'publish+7d';

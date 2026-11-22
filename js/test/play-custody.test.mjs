@@ -8,7 +8,7 @@ import { meta } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRun, collectible, world } from './world.mjs';
+import { cannotRun, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const str = s => concat(uintLE(utf8(s).length, 4), utf8(s));

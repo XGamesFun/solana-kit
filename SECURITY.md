@@ -5,7 +5,7 @@
 | Piece                             | Version                                                                                                                   | Where                                                                                   | Review                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | The loot program                  | 0.29.0: `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet` on devnet, `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy` on mainnet | devnet since slot 524,113,825 (2026-11-19), mainnet since slot 471,855,650 (2026-11-20) | Internal reviews only. **Not independently audited** |
-| These tools (`@xgamesfun/solana`) | 0.29.7                                                                                                                    | npm                                                                                     | Internal reviews only                                |
+| These tools (`@xgamesfun/solana`) | 0.29.8                                                                                                                    | npm                                                                                     | Internal reviews only                                |
 
 `release.json` pins the exact program binary, IDL and client this package is built for. The program runs on devnet
 and on mainnet (the table above). **It has not been independently audited**: an economy on mainnet holds real money
@@ -46,7 +46,7 @@ then "Report a vulnerability"). This covers both the tools here and the deployed
 for a vulnerability.
 
 Include the version, what an attacker can do, and a failing test if you can: the tests here run the real program in
-LiteSVM (`js/test/world.mjs` sets up a chain; `npm run fixtures` downloads the program and the programs it calls).
+LiteSVM (`js/test/helpers/world.mjs` sets up a chain; `npm run fixtures` downloads the program and the programs it calls).
 
 ## The tools
 

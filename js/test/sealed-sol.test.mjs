@@ -6,7 +6,7 @@ import * as loot from '../client/index.js';
 import { freshAddresses, prepare } from '../economy/live.mjs';
 import { plan } from '../economy/plan.mjs';
 import { freshKeypair } from '../approve/ed25519.mjs';
-import { cannotRun, world } from './world.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;

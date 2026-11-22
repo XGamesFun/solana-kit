@@ -12,7 +12,7 @@ import { freshAddresses, prepare, recordLanded } from '../economy/live.mjs';
 import { compressedTree, model } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { newAddress } from '../sim/chain.mjs';
-import { cannotRunCompressed, collectible, world } from './world.mjs';
+import { cannotRunCompressed, collectible, world } from './helpers/world.mjs';
 
 const skip = cannotRunCompressed() ?? false;
 const t = (name, fn) => test(name, { skip }, fn);
