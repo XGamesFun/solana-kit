@@ -469,9 +469,9 @@ export async function checkMints({ m, chain, project = null }) {
     if (says) powers.push({ key: t.key, mint: t.mint, says });
   }
   await checkTreasury({ m, chain });
-  await checkNfts({ m, chain });
+  const collections = await checkNfts({ m, chain });
   await checkItemLocks({ m, chain, project });
-  return { powers };
+  return { powers, collections };
 }
 
 /** Programs whose own accounts are often pasted where their vault was meant: a multisig's or a DAO's account. */
@@ -491,12 +491,14 @@ const HOLDS_A_VAULT = {
 /**
  * Each Core NFT the setup puts in a stash (the project's, or a lottery's own) against the chain: it moves with the
  * collection the spec names for it, or the game's when it names none, and Core refuses the move of an NFT that is in
- * another collection (an NFT in none moves with any). One the spec names wrong would fail as its step is sent, after
- * the steps before it landed: refused here instead, before anything is signed. An NFT that is not a Core asset
- * (Token Metadata, compressed) is the program's to read.
+ * another collection (an NFT in none moves with any). The chain says which collection an NFT is in, so one the spec
+ * names otherwise is not refused: → [{ nft, where, said, collection }], the collection the chain says, which the
+ * approval puts in the spec (`withNftCollections`) and says. An NFT that is not there is refused: nothing can move it. An
+ * NFT that is not a Core asset (Token Metadata, compressed) is the program's to read.
  */
 export async function checkNfts({ m, chain }) {
-  if (typeof chain.account !== 'function') return;
+  const corrections = [];
+  if (typeof chain.account !== 'function') return corrections;
   const game = m.live?.collection ?? null;
   const named = [];
   for (const s of m.stashes)
@@ -538,10 +540,51 @@ export async function checkNfts({ m, chain }) {
     if (!asset.collection) continue;
     const passed = n.collection ?? game;
     if (asset.collection !== passed)
-      throw new MintMismatch(
-        `The NFT ${n.nft}, which ${n.where} names, is in the collection ${asset.collection}, and the spec ${n.collection ? `names ${n.collection}` : 'names none for it (so it is read as one of the game’s own)'}: Core would refuse to move it, and the setup would stop there. Write it as { "nft": "${n.nft}", "collection": "${asset.collection}" }.`,
-      );
+      corrections.push({ nft: n.nft, where: n.where, said: n.collection, collection: asset.collection });
   }
+  return corrections;
+}
+
+/**
+ * The spec with each NFT `corrections` names (checkNfts) given the collection the chain says, wherever a stash or a
+ * lottery names it; → { spec, lines }, the lines saying each.
+ */
+export function withNftCollections(spec, corrections) {
+  if (!corrections.length) return { spec, lines: [] };
+  const to = new Map(corrections.map(c => [c.nft, c.collection]));
+  const fix = (x, key) => {
+    const nft = typeof x === 'string' ? x : x?.[key];
+    return to.has(nft) ? { ...(typeof x === 'string' ? { [key]: x } : x), collection: to.get(nft) } : x;
+  };
+  const out = {
+    ...spec,
+    ...(spec.stashes
+      ? { stashes: spec.stashes.map(s => (s.nfts ? { ...s, nfts: s.nfts.map(n => fix(n, 'asset')) } : s)) }
+      : {}),
+    ...(spec.lotteries
+      ? {
+          lotteries: spec.lotteries.map(l => ({
+            ...l,
+            ...(l.raffle ? { raffle: fix(l.raffle, 'nft') } : {}),
+            ...(l.nfts ? { nfts: l.nfts.map(n => fix(n, 'nft')) } : {}),
+            ...(l.places
+              ? {
+                  places: l.places.map(p =>
+                    typeof p === 'object' && p?.prize?.held && to.has(p.prize.nft)
+                      ? { ...p, prize: { ...p.prize, collection: to.get(p.prize.nft) } }
+                      : p,
+                  ),
+                }
+              : {}),
+          })),
+        }
+      : {}),
+  };
+  const lines = corrections.map(
+    c =>
+      `On chain the NFT ${c.nft}, which ${c.where} names, is in the collection ${c.collection} (the file said ${c.said ?? 'none, so the game’s own'}): it is moved with that one.`,
+  );
+  return { spec: out, lines };
 }
 
 /**
