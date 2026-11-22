@@ -430,15 +430,16 @@ function powersAgainst(t, what, onChain, said = {}, { state = {}, project = null
 export async function checkMints({ m, chain, project = null }) {
   const named = [...m.tokens.values()].filter(t => t.mint && !t.mint.startsWith('@'));
   const powers = [];
+  // What the chain says of a coin made elsewhere that the spec says otherwise (its decimals, its token program): the
+  // chain's is the coin's, and the spec's amounts are whole tokens, so the approval writes the chain's into the spec
+  // and says it (`withTokenCorrections`); nothing is refused for it.
+  const tokens = [];
   let epoch = null;
   if (named.some(t => !t.wsol) && typeof chain.epoch === 'function') epoch = await chain.epoch().catch(() => null);
   for (const t of named) {
     const what = `the token ${t.symbol ?? t.key} (“${t.key}”)`;
     if (t.wsol) {
-      if (t.decimals !== 9)
-        throw new MintMismatch(
-          `The spec gives ${what} ${t.decimals} decimals; its mint ${t.mint} is wrapped SOL, which has 9. Write "decimals": 9.`,
-        );
+      if (t.decimals !== 9) tokens.push({ key: t.key, what, field: 'decimals', said: t.decimals ?? null, is: 9 });
       continue;
     }
     if (typeof chain.account !== 'function')
@@ -449,13 +450,9 @@ export async function checkMints({ m, chain, project = null }) {
     const mint = account ? parseMint(t.mint, account.owner, account.data) : null;
     if (!mint) throw new MintMismatch(`The spec names ${what} at ${t.mint}, and there is no token mint there.`);
     if (mint.decimals !== t.decimals)
-      throw new MintMismatch(
-        `The spec gives ${what} ${t.decimals ?? 'no'} decimals; its mint ${t.mint} has ${mint.decimals}, so every amount in it would be ${scale(t.decimals ?? 0, mint.decimals)} what the page shows. Write "decimals": ${mint.decimals}.`,
-      );
+      tokens.push({ key: t.key, what, field: 'decimals', said: t.decimals ?? null, is: mint.decimals });
     if (mint.program !== t.program)
-      throw new MintMismatch(
-        `The spec says ${what} is a ${t.program} token; its mint ${t.mint} is ${mint.program}. Write "program": "${mint.program}".`,
-      );
+      tokens.push({ key: t.key, what, field: 'program', said: t.program ?? null, is: mint.program });
     let onChain, state;
     try {
       onChain = powersOf(account, { project, epoch }) ?? {};
@@ -471,7 +468,23 @@ export async function checkMints({ m, chain, project = null }) {
   await checkTreasury({ m, chain });
   const collections = await checkNfts({ m, chain });
   await checkItemLocks({ m, chain, project });
-  return { powers, collections };
+  return { powers, collections, tokens };
+}
+
+/**
+ * The spec with each coin `corrections` names (checkMints `tokens`) given what the chain says of it; → { spec, lines }.
+ */
+export function withTokenCorrections(spec, corrections) {
+  if (!corrections.length) return { spec, lines: [] };
+  const tokens = (spec.tokens ?? []).map(t => {
+    const mine = corrections.filter(c => c.key === t.key);
+    return mine.length ? { ...t, ...Object.fromEntries(mine.map(c => [c.field, c.is])) } : t;
+  });
+  const lines = corrections.map(
+    c =>
+      `On chain ${c.what} has ${c.field === 'decimals' ? `${c.is} decimals` : `the ${c.is} program`} (the file said ${c.said ?? 'none'}${c.field === 'decimals' && Number.isInteger(c.said) ? `, which would have made every amount ${scale(c.said, c.is)} what it says` : ''}): every amount in it is read with ${c.field === 'decimals' ? 'those decimals, as whole tokens as written' : 'that program'}.`,
+  );
+  return { spec: { ...spec, tokens }, lines };
 }
 
 /** Programs whose own accounts are often pasted where their vault was meant: a multisig's or a DAO's account. */

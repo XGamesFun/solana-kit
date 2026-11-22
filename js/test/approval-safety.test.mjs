@@ -118,56 +118,44 @@ test(
   },
 );
 
-test('the approval reads an existing mint’s decimals and refuses a spec that says otherwise', { skip }, async () => {
-  const seeded = (decimals, mint) => w => ({
-    version: 2,
-    name: 'Prize pool',
-    currency: 'usdc',
-    collection: false,
-    tokens: [{ key: 'usdc', symbol: 'USDC', source: 'existing', mint: mint ?? w.mint, decimals }],
-    pools: [{ key: 'prizes', currency: 'usdc', seed: 1 }],
-  });
-  // The mint has 6 decimals: 9 would put 1,000 USDC in the pool while the page says 1.
-  const wrong = await approval('decimals-wrong', seeded(9));
-  const state = await wrong.session.stateFor(wrong.owner.address);
-  assert.match(
-    state.refused,
-    /9 decimals; its mint \w+ has 6, so every amount in it would be 1000 times what the page shows\. Write "decimals": 6\./,
-  );
-  await assert.rejects(wrong.session.prepare(wrong.owner.address), e => e.status === 409 && /has 6/.test(e.message));
-  assert.equal(wrong.w.balance(wrong.owner.address), 5_000_000_000n, 'nothing moved');
+test(
+  'the approval reads an existing mint’s decimals and program, and goes live with the chain’s where the spec says otherwise',
+  { skip },
+  async () => {
+    const seeded = (decimals, mint) => w => ({
+      version: 2,
+      name: 'Prize pool',
+      currency: 'usdc',
+      collection: false,
+      tokens: [{ key: 'usdc', symbol: 'USDC', source: 'existing', mint: mint ?? w.mint, decimals }],
+      pools: [{ key: 'prizes', currency: 'usdc', seed: 1 }],
+    });
+    // The mint has 6 decimals: the spec's 9 would have put 1,000 USDC in the pool while the page says 1. The approval
+    // reads the chain's 6, says so, and the pool holds the 1 USDC the file says.
+    const wrong = await approval('decimals-wrong', seeded(9));
+    const state = await wrong.session.stateFor(wrong.owner.address);
+    assert.equal(state.refused, undefined);
+    assert.match(
+      JSON.stringify(state),
+      /has 6 decimals \(the file said 9, which would have made every amount 1000 times what it says\)/,
+    );
+    const saved = await wrong.runAll();
+    assert.equal(saved.tokens[0].decimals, 6, 'the file says the chain’s');
+    assert.equal(wrong.w.chain.tokens(loot.pda.pool(saved.live.project, saved.pools[0].index)), 1_000_000n);
 
-  const price = await approval('decimals-price', w => ({
-    version: 2,
-    name: 'Shop',
-    currency: 'usdc',
-    collection: false,
-    tokens: [{ key: 'usdc', symbol: 'USDC', source: 'existing', mint: w.mint, decimals: 3 }],
-    pools: [{ key: 'house', currency: 'usdc' }],
-    boxes: [
-      {
-        key: 'chest',
-        name: 'Chest',
-        price: 10,
-        split: [{ to: 'pool:house', percent: 100 }],
-        outcomes: [{ gives: 'nothing', chance: 100 }],
-      },
-    ],
-  }));
-  await assert.rejects(
-    price.session.prepare(price.owner.address),
-    /3 decimals; its mint \w+ has 6, so every amount in it would be 1\/1000 of what the page shows/,
-  );
+    // 12 decimals on wrapped SOL: read as its 9
+    const wsol = await approval('decimals-wsol', seeded(12, NATIVE_MINT));
+    assert.match(JSON.stringify(await wsol.session.stateFor(wsol.owner.address)), /has 9 decimals \(the file said 12/);
 
-  const wsol = await approval('decimals-wsol', seeded(12, NATIVE_MINT));
-  await assert.rejects(wsol.session.prepare(wsol.owner.address), /wrapped SOL, which has 9/);
-
-  // The mint's own decimals go live, and the pool holds the 1 USDC the page says.
-  const right = await approval('decimals-right', seeded(6));
-  assert.equal((await right.session.stateFor(right.owner.address)).refused, undefined);
-  const saved = await right.runAll();
-  assert.equal(right.w.chain.tokens(loot.pda.pool(saved.live.project, saved.pools[0].index)), 1_000_000n);
-});
+    // The mint's own decimals go live as they always did.
+    const right = await approval('decimals-right', seeded(6));
+    const rightState = await right.session.stateFor(right.owner.address);
+    assert.equal(rightState.refused, undefined);
+    assert.doesNotMatch(JSON.stringify(rightState), /the file said/);
+    const kept = await right.runAll();
+    assert.equal(right.w.chain.tokens(loot.pda.pool(kept.live.project, kept.pools[0].index)), 1_000_000n);
+  },
+);
 
 test(
   'the page lists each wallet of a grant’s list with its amount, the prize and the limits, and warns of outside ones',

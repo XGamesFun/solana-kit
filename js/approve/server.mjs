@@ -30,7 +30,15 @@ import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
-import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames, withNftCollections } from './live-check.mjs';
+import {
+  checkLive,
+  checkMints,
+  LiveMismatch,
+  MintMismatch,
+  readRenames,
+  withNftCollections,
+  withTokenCorrections,
+} from './live-check.mjs';
 import { walletAdded } from './wallet-adds.mjs';
 
 const PREPARE_TTL_MS = 90_000;
@@ -235,11 +243,11 @@ export async function createApproval({
    */
   let fileCorrections = [];
   /** What the chain said of the NFTs the spec moves, put in the session's spec (`withNftCollections`): said, and written. */
-  let nftCorrections = [];
+  let chainCorrections = [];
   /** Writes the session's spec to the file: what it corrected from the chain is said there from now on. */
   const writeSpec = async () => {
     await write(file, `${JSON.stringify(spec, null, 2)}\n`);
-    nftCorrections = [];
+    chainCorrections = [];
   };
   /** Where the chain's treasury is not the one the spec names (`checkLive`), in words. */
   let chainNotes = [];
@@ -395,10 +403,15 @@ export async function createApproval({
       const checked = await checkMints({ m, chain, project });
       mintPowers = checked.powers;
       // an NFT the spec places in another collection than the chain says: moved with the chain's, and the file says it
-      const fixed = withNftCollections(spec, checked.collections ?? []);
-      if (fixed.lines.length) {
+      // and a coin made elsewhere whose decimals or token program the spec says otherwise: read with the chain's
+      for (const correct of [
+        s => withTokenCorrections(s, checked.tokens ?? []),
+        s => withNftCollections(s, checked.collections ?? []),
+      ]) {
+        const fixed = correct(spec);
+        if (!fixed.lines.length) continue;
         spec = fixed.spec;
-        nftCorrections = [...nftCorrections, ...fixed.lines];
+        chainCorrections = [...chainCorrections, ...fixed.lines];
       }
     } catch (e) {
       if (!(e instanceof MintMismatch)) throw e;
@@ -422,8 +435,8 @@ export async function createApproval({
       projectOnChain = trusted.treasury
         ? { creator: trusted.creator, treasury: trusted.treasury, authority: trusted.authority }
         : null;
-      if (trusted.corrected.length || nftCorrections.length)
-        fileCorrections = [...nftCorrections, ...trusted.corrected];
+      if (trusted.corrected.length || chainCorrections.length)
+        fileCorrections = [...chainCorrections, ...trusted.corrected];
       chainNotes = trusted.notes;
       // The session's copy of the live section says of the project's treasury and authority what the chain says, so
       // what this session records is the chain's: the file says it once a step lands (or at once, with none to send).
