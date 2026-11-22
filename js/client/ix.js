@@ -84,8 +84,6 @@ export { IDL, ASSOCIATED_TOKEN_PROGRAM };
 export const TOKEN_METADATA_PROGRAM = METAPLEX_METADATA_PROGRAM;
 
 const ZERO_REFERENCE = new Uint8Array(32);
-/** The default address: names nobody, and nobody signs as it. */
-const NOBODY_KEY = '11111111111111111111111111111111';
 const hashToAddress = hash => encodeBase58(hash);
 
 /** 32 bytes a project names a call by (a match id, a payout's reason). Zeros when not given. */
@@ -1135,7 +1133,7 @@ export function openBoxIx({
   subject,
   chosenRecipient = null,
   chosen = null,
-  settler = NOBODY_KEY,
+  settler = NO_ADDRESS,
   poolMints,
   playerToken,
   programs,
@@ -1752,7 +1750,7 @@ export function askRollIx({
   orderAddress,
   order,
   box,
-  settler = NOBODY_KEY,
+  settler = NO_ADDRESS,
   poolMints,
   items = {},
   programs,

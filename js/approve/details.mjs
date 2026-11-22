@@ -2,15 +2,15 @@
 // every payee of a split, where a schedule or a recipe sends tokens, who is given an NFT, the project's treasury and
 // authority, a grant's prize, limits, voucher keys and list (each wallet with its amount), and whether any wallet may
 // claim it. Addresses are written in full, so an owner sees a payee that an edit re-pointed before they sign.
+import { NO_ADDRESS } from '../chain/base58.js';
 import { decodeBorsh } from '../chain/borsh.js';
 import { equalBytes, toHex } from '../chain/bytes.js';
 import { accountKind, decode, IDL, instructionOf, keyLeaf, merkleRoot } from '../client/index.js';
 import { lootProgram, pda } from '../client/pda.js';
 import { dateWords, FAR_SECONDS } from '../economy/check.mjs';
-import { fromUnits } from '../economy/model.mjs';
+import { DAY, fromUnits } from '../economy/model.mjs';
 import { grantArgs } from '../economy/plan.mjs';
 
-const NOBODY = '11111111111111111111111111111111';
 /** What places of tokens from a short pool get, by their `when_short`. */
 const SHORT = {
   InOrder: 'whole prizes, first place first, while the pool covers one',
@@ -27,7 +27,7 @@ const FAR = {
 /** A number of seconds in words: "1 day", "36 hours", "90 seconds". */
 const duration = v => {
   const n = Number(v);
-  if (n % 86_400 === 0) return `${n / 86_400} day${n === 86_400 ? '' : 's'}`;
+  if (n % DAY === 0) return `${n / DAY} day${n === DAY ? '' : 's'}`;
   if (n % 3_600 === 0) return `${n / 3_600} hours`;
   return `${n} seconds`;
 };
@@ -231,7 +231,7 @@ function readDetails(reads, names) {
         else if (k === 'Give' && Array.isArray(v) && typeof v[0] === 'string')
           lines.push(`Gives the NFT to ${address(v[0])}`);
         else if (k === 'vouchers' && Array.isArray(v)) {
-          const keys = v.filter(a => a !== NOBODY);
+          const keys = v.filter(a => a !== NO_ADDRESS);
           if (keys.length) lines.push(`Voucher keys (each decides who gets it): ${keys.join(', ')}`);
         } else if (k === 'key_root' && v instanceof Uint8Array) {
           if (!equalBytes(v, ZERO)) {
@@ -313,7 +313,7 @@ function grantTerms(args, names) {
     BigInt(l.tokens ?? 0) ? `${l.tokens} base units of tokens in all` : null,
     l.per_key ? `each voucher key ${times(l.per_key)}` : null,
     l.all?.per_window
-      ? `${times(l.all.per_window)} ${Number(l.all.window) === 86_400 ? 'a day' : `every ${l.all.window} seconds`}`
+      ? `${times(l.all.per_window)} ${Number(l.all.window) === DAY ? 'a day' : `every ${l.all.window} seconds`}`
       : null,
     l.all?.total ? `${times(l.all.total)} in all` : null,
     BigInt(l.window?.opens_at ?? 0) ? `opens ${when(l.window.opens_at)}` : null,

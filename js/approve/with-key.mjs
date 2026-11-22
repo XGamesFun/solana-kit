@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
+import { plural } from '../economy/format.mjs';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, readKeyFile } from './keyfile.mjs';
 import { clusterChain, createApproval } from './server.mjs';
@@ -37,8 +38,6 @@ function solToLamports(text) {
   const [whole, frac = ''] = String(text).split('.');
   return BigInt(whole || '0') * LAMPORTS + BigInt(frac.padEnd(9, '0').slice(0, 9) || '0');
 }
-
-const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** The key's own signature put into its slot of a prepared transaction, as a wallet's signTransaction does. */
 function signWire(key, b64) {
@@ -143,7 +142,7 @@ export function approvalText(state, { keyFile, balance = null }) {
     lines.push('', 'Landed already');
     for (const l of state.landed) lines.push(`- ${l.says}`);
   }
-  lines.push('', `To send: ${count(state.steps.length, 'step')} in ${count(state.remaining, 'transaction')}`);
+  lines.push('', `To send: ${plural(state.steps.length, 'step')} in ${plural(state.remaining, 'transaction')}`);
   state.steps.forEach((s, i) => {
     const who = s.signer === 'authority' ? ` (the authority signs: ${state.authority})` : '';
     lines.push(`${i + 1}. ${s.says}${who}`);
@@ -262,7 +261,7 @@ export async function approveWithKey({
     }
     if (yes === null && confirm) {
       const said = await confirm(
-        `${state.cluster === 'mainnet' ? 'This is MAINNET: real SOL and real tokens. ' : ''}Send ${count(state.remaining, 'transaction')} from ${key.address}? Type yes to send: `,
+        `${state.cluster === 'mainnet' ? 'This is MAINNET: real SOL and real tokens. ' : ''}Send ${plural(state.remaining, 'transaction')} from ${key.address}? Type yes to send: `,
       );
       if (!said) {
         out('Nothing was sent.');
@@ -288,7 +287,7 @@ export async function approveWithKey({
     const changed = () => {
       const sent = landed();
       out(
-        `${sent ? `Stopped after ${count(sent, 'transaction')}` : 'Nothing was sent'}: what is left to send is not what was shown above. Run the command again to read what is left, and go on from there.`,
+        `${sent ? `Stopped after ${plural(sent, 'transaction')}` : 'Nothing was sent'}: what is left to send is not what was shown above. Run the command again to read what is left, and go on from there.`,
       );
       return { ok: false, sent, done: false, code };
     };
@@ -317,8 +316,8 @@ export async function approveWithKey({
     const sent = landed();
     out(
       live()
-        ? `Live on ${state.cluster}: ${count(sent, 'transaction')} landed, and ${state.file} now holds the project’s addresses (project ${session.spec.live.project}).`
-        : `${count(sent, 'transaction')} landed, and ${state.file} is not recorded as live yet: run the command again.`,
+        ? `Live on ${state.cluster}: ${plural(sent, 'transaction')} landed, and ${state.file} now holds the project’s addresses (project ${session.spec.live.project}).`
+        : `${plural(sent, 'transaction')} landed, and ${state.file} is not recorded as live yet: run the command again.`,
     );
     return { ok: live(), sent, done: live(), code };
   } catch (e) {
@@ -326,9 +325,9 @@ export async function approveWithKey({
     // A transaction that was sent and is not known to have landed is still looked for: it is not "nothing sent".
     const unknown = session.spec.live?.pending?.length ?? 0;
     const so = [
-      sent ? `Stopped after ${count(sent, 'transaction')} landed` : unknown ? 'Stopped' : 'Nothing was sent',
+      sent ? `Stopped after ${plural(sent, 'transaction')} landed` : unknown ? 'Stopped' : 'Nothing was sent',
       unknown
-        ? ` (${count(unknown, 'more was', 'more were')} sent and ${unknown === 1 ? 'is' : 'are'} not known to have landed yet)`
+        ? ` (${plural(unknown, 'more was', 'more were')} sent and ${unknown === 1 ? 'is' : 'are'} not known to have landed yet)`
         : '',
     ].join('');
     out(

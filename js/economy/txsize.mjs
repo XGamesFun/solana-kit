@@ -14,8 +14,8 @@
 // A transaction's compute budget instructions (a unit limit and a unit price) take 52 bytes. A setup transaction
 // leads with its own (plan.mjs `withSetupBudget`), and a player's wallet may add its own to a transaction that sets
 // none. So an estimate keeps WALLET_ROOM free below the network's 1,232-byte limit.
+import { MAX_TRANSACTION_BYTES } from '../chain/tx.js';
 
-export const MAX_TRANSACTION_BYTES = 1232;
 export const WALLET_ROOM = 64;
 export const BUDGET = MAX_TRANSACTION_BYTES - WALLET_ROOM;
 
@@ -25,7 +25,7 @@ export const compact = n => (n < 0x80 ? 1 : n < 0x4000 ? 2 : 3);
  * instructions: [{ program: name, accounts: [names], data: bytes }]; signers: [names] (the fee payer first).
  * Returns the estimated wire size in bytes.
  */
-export function transactionSize({ instructions, signers }) {
+export function estimateTransactionSize({ instructions, signers }) {
   const keys = new Set(signers);
   for (const ix of instructions) {
     for (const a of ix.accounts) keys.add(a);

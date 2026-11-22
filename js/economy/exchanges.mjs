@@ -2,10 +2,8 @@
 // followed across routes: a recipe at its lines' amounts, a box at its outcomes' odds, a farm at what one unit staked
 // earns over its life (its ceiling; boosts at their best). And what each feature pays one player a day, in the
 // project's currency at the spec's own rates. Pure.
-import { farmCeiling, prizeLine, serverRate, toSeconds } from './model.mjs';
+import { DAY, farmCeiling, prizeLine, serverRate, toSeconds } from './model.mjs';
 import { lineToken, named, num } from './flows.mjs';
-
-const DAY = 86_400;
 
 /** A per-wallet limit in words, or null. */
 function capOf(part) {

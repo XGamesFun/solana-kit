@@ -7,7 +7,7 @@
 // name: address } } where `keys` are the fresh keys this setup makes ("new:collection", "new:tree", "new:mint/points"), each of
 // which signs the step that creates it. `placeholderContext` fills every address with a stand-in, so a plan can be
 // sized and shown before anyone connects a wallet.
-import { encodeBase58 } from '../chain/base58.js';
+import { encodeBase58, NO_ADDRESS } from '../chain/base58.js';
 import { encodeBorsh } from '../chain/borsh.js';
 import IDL from '../client/idl/loot.js';
 import { createCollectionInstruction } from '../chain/core.js';
@@ -50,6 +50,7 @@ import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
 import { check, MAX_COMPUTE_UNITS } from './check.mjs';
 import {
+  DAY,
   ACCOUNT_OVERHEAD,
   boxBuys,
   rent,
@@ -125,7 +126,7 @@ export function itemArgs(it, m) {
     uri: it.uri ?? '',
     max_supply: it.supply ?? 0,
     active: it.active !== false,
-    collection: kind === 'Normal' ? NOBODY : (it.collection ?? '@collection'),
+    collection: kind === 'Normal' ? NO_ADDRESS : (it.collection ?? '@collection'),
     // A fresh collectible's traits, each drawn per unit (a table's row, or a number in a range).
     traits:
       kind === 'Normal'
@@ -154,10 +155,10 @@ export const boxOrderBytes = (b, m, opens = 1, { opened = false } = {}) => {
 
 /** The most bytes of rows one table write carries: what a 1,232-byte transaction leaves after the upsert's accounts,
  * its signature and its own bytes. */
-export const TABLE_BATCH_BYTES = 800;
+const TABLE_BATCH_BYTES = 800;
 
 /** A spec table's rows as the program takes them ({ weight, left, label }), in batches that fit a transaction each. */
-export function tableBatches(t) {
+function tableBatches(t) {
   const rows = t.rows.map(r => ({
     weight: r.weight,
     left: r.stock ?? 4294967295,
@@ -175,7 +176,7 @@ export function tableBatches(t) {
 }
 
 /** The program's `Prize` for one part of a box outcome (`model.outcomeParts`). */
-export function partPrize(o, m) {
+function partPrize(o, m) {
   // An item, or a compressed NFT of it, minted at the settle into the project's tree.
   if (o.gives === 'item' && o.compressed) return { Compressed: { item: m.item.get(o.item)?.id ?? 0, tree: '@tree' } };
   if (o.gives === 'item') return { Item: [m.item.get(o.item)?.id ?? 0] };
@@ -240,7 +241,7 @@ export function boxArgs(b, m) {
 }
 
 /** Where an outcome sends the NFT a box rolls on: back (null), burned, given (the treasury's wallet is filled in when the economy goes live), or into a stash. */
-export const thenOf = (then, m) => {
+const thenOf = (then, m) => {
   if (!then || then === 'back') return null;
   if (then === 'burn') return 'Burn';
   if (then.stash) return { Stash: [m?.stash.get(then.stash)?.id ?? 0] };
@@ -360,7 +361,7 @@ export function prizeArgs(p, m) {
  * its own amount (whole units of `t`, the grant's token) and round, so one wallet listed under several rounds claims
  * each once (monthly vesting, a season's airdrop).
  */
-export const listLeaves = (list, t) =>
+const listLeaves = (list, t) =>
   list.map(e =>
     typeof e === 'string'
       ? loot.listLeaf(e, null)
@@ -397,7 +398,7 @@ export function lotteryArgs(l, m) {
         when_short: WHEN_SHORT[p.whenShort ?? 'inOrder'],
         times: p.times,
       })),
-      ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : '11111111111111111111111111111111',
+      ticket_mint: l.ticketCurrency ? `@mint:${l.ticketCurrency}` : NO_ADDRESS,
       draws_at: BigInt(l.firstDraw ? toTime(l.firstDraw, m.now) : m.now + every),
       // A ticket paid with one NFT that passes the rule, in place of tokens.
       nft_ticket: l.ticketNft ? { rule: ruleOf(l.ticketNft.rule, m), then: spendOf(l.ticketNft.then, m) } : null,
@@ -418,11 +419,11 @@ export function lotteryArgs(l, m) {
 
 /** A box's `whenOut` in the spec, and the program's `WhenOut`: stop selling while an outcome is out (a paid miss is
  * refunded), draw among what is left, or give nothing for a draw on an outcome that is out. */
-export const WHEN_OUT = { stopSales: 'StopSales', drawLeft: 'DrawLeft', giveNothing: 'GiveNothing' };
+const WHEN_OUT = { stopSales: 'StopSales', drawLeft: 'DrawLeft', giveNothing: 'GiveNothing' };
 /** A place's `whenShort` in the spec, and the program's `WhenShort`: what places of tokens from one pool get when the
  * pool holds less than they win. Prizes of 1,000, 500 and 500 from a pool holding 1,700: 1,000, 500 and 0 in order;
  * 850, 425 and 425 in proportion; or nothing. */
-export const WHEN_SHORT = { inOrder: 'InOrder', inProportion: 'InProportion', nothing: 'Nothing' };
+const WHEN_SHORT = { inOrder: 'InOrder', inProportion: 'InProportion', nothing: 'Nothing' };
 
 /**
  * A lottery round's header as its first purchase sizes it (`LotteryRound::new`: its `head`), and the token accounts a
@@ -473,11 +474,10 @@ export const entryShape = l => {
 /** How many rounds of a lottery are open or still paying out at once, and how many purchases a round takes, as the
  * spec expects them (`expect`): by default two rounds of a lottery that draws again (one selling, one paying out) and
  * one of a lottery that draws once; a round's purchases from the scenario's purchases a day over a round, else 100. */
-export function roundsExpected(l, m) {
+function roundsExpected(l, m) {
   const every = toSeconds(l.every ?? 0);
   const perDay = Number(m.scenario?.perDay?.[`lottery:${l.key}`] ?? 0);
-  const days =
-    every > 0 ? every / 86_400 : l.firstDraw ? Math.max(1, (toTime(l.firstDraw, m.now) - m.now) / 86_400) : 1;
+  const days = every > 0 ? every / DAY : l.firstDraw ? Math.max(1, (toTime(l.firstDraw, m.now) - m.now) / DAY) : 1;
   const rounds = l.expect?.rounds ?? (every > 0 ? 2 : 1);
   const entries = l.expect?.entries ?? (perDay > 0 ? Math.ceil(perDay * days) : 100);
   return { rounds, entries };
@@ -600,7 +600,7 @@ export function farmArgs(f, m) {
 }
 
 /** A fee's sink (`Sink`): "burn", "rewards" (the farm's own vault), or "pool:<key>", one of the project's pools. */
-export const sinkOf = (to, m) =>
+const sinkOf = (to, m) =>
   to === 'burn'
     ? 'Burn'
     : to === 'rewards'
@@ -613,7 +613,7 @@ export const farmEnds = f =>
   ((f.tiers ?? []).some(t => t.earnsFor) || Boolean(f.upkeepAttribute)) && (!f.rate || Number(f.rate.perDay) > 0);
 
 /** An auction's args: its lot, reserve, least raise, times and split. "start" is when it goes live unless it says. */
-export function auctionArgs(a, m) {
+function auctionArgs(a, m) {
   const t = m.priceToken(a);
   const startsAt = toTime(a.start, m.now);
   return {
@@ -635,7 +635,6 @@ export function auctionArgs(a, m) {
   };
 }
 
-const NOBODY = '11111111111111111111111111111111';
 /** The program id of the box a prize rolls (a box key), or null for none. */
 const rollOf = (box, m) => (box ? (m.box.get(box)?.id ?? 0) : null);
 
@@ -645,7 +644,7 @@ const rollOf = (box, m) => (box ? (m.box.get(box)?.id ?? 0) : null);
  * the file, which every kit reads), else what its published spec sized, else its `wallets` (its list's length) and
  * `rounds` now.
  */
-export function grantShardBits(g, m) {
+function grantShardBits(g, m) {
   const onChain = m.grantShards?.[g.key];
   if (Number.isInteger(onChain)) return onChain;
   const was = (m.live?.published?.grants ?? []).find(x => x.key === g.key);
@@ -655,7 +654,7 @@ export function grantShardBits(g, m) {
 
 export function grantArgs(g, m) {
   const gives = prizeArgs(g.prize ?? g.gives, m);
-  const vouchers = [...(g.vouchers ?? []), NOBODY, NOBODY, NOBODY].slice(0, 3);
+  const vouchers = [...(g.vouchers ?? []), NO_ADDRESS, NO_ADDRESS, NO_ADDRESS].slice(0, 3);
   const list = g.list ?? [];
   const keys = g.keys ?? [];
   const l = g.limits ?? {};
@@ -674,7 +673,7 @@ export function grantArgs(g, m) {
       // The tokens it gives in all, whatever the claims and keys: what a leaked voucher key can drain at most.
       tokens: l.tokens !== undefined ? amount(l.tokens, prizeToken(prizeLine(g.prize ?? g.gives), m)) : 0n,
       // Every wallet's claims together: in all, and a day (a window of 86,400 seconds, from the unix epoch).
-      all: { total: l.total ?? 0, per_window: l.perDay ?? 0, window: l.perDay ? 86_400 : 0, by_person: false },
+      all: { total: l.total ?? 0, per_window: l.perDay ?? 0, window: l.perDay ? DAY : 0, by_person: false },
       window: windowOf({ opens: l.opens, closes: l.until }, m.now),
     },
     active: g.active !== false,
@@ -932,15 +931,14 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   }
 
   // A live project whose issuer the spec changes (the chain's, read by the approval into `live.issuer`): the owner sets it.
-  const NOBODY_KEY = '11111111111111111111111111111111';
-  if (!fresh && live?.project && (m.issuer ?? NOBODY_KEY) !== (live.issuer ?? NOBODY_KEY))
+  if (!fresh && live?.project && (m.issuer ?? NO_ADDRESS) !== (live.issuer ?? NO_ADDRESS))
     add({
       id: `issuer:${m.issuer ?? 'none'}`,
       part: 'issuer',
       says: m.issuer
         ? `Name ${m.issuer} the project’s issuer: the key that says which person a wallet belongs to`
         : 'Name no issuer: no wallet is linked to a person from now on',
-      build: ctx => [loot.updateProjectIx({ owner: ctx.owner, project: ctx.project, issuer: m.issuer ?? NOBODY_KEY })],
+      build: ctx => [loot.updateProjectIx({ owner: ctx.owner, project: ctx.project, issuer: m.issuer ?? NO_ADDRESS })],
     });
 
   // The tree compressed prizes are minted into: made empty by the owner, then opened with the project as its creator.
@@ -1426,10 +1424,10 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
           what: `the auction “${a.name}” (back when it ends)`,
           bytes:
             encodedSize('Auction', {
-              project: NOBODY,
+              project: NO_ADDRESS,
               id: 0,
-              seller: NOBODY,
-              mint: NOBODY,
+              seller: NO_ADDRESS,
+              mint: NO_ADDRESS,
               lot: args.lot,
               ours: false,
               pin: 0,
@@ -1441,7 +1439,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
               shares: args.shares,
               gate: args.gate,
               nft_bids: placeholders(args).nft_bids,
-              high_bidder: NOBODY,
+              high_bidder: NO_ADDRESS,
               high: 0n,
               last_bid_at: 0n,
               proceeds_owed: 0n,
@@ -1664,7 +1662,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
 
 /** The token accounts going live opens (`setupSteps`): [{ who ('the treasury', 'the project' or a wallet), token }], each
  * once, for the coins the economy takes in. */
-export function goLiveAccounts(m) {
+function goLiveAccounts(m) {
   const out = new Map();
   const add = (who, token) => token && out.set(`${who}|${token}`, { who, token });
   const takes = (part, token = part.currency ?? m.currencyKey) => {
@@ -1686,7 +1684,7 @@ const TABLE_GROUP = 24;
  * platform, the oracle's), the project and its fee box, its treasury and collections, each coin's mint, its vault and
  * the treasury's account of it, then each pool, item, box and stash. Each a function of the go-live context.
  */
-export function standingAddresses(m) {
+function standingAddresses(m) {
   const fixed = [
     loot.lootProgram(),
     loot.pda.platform(),
@@ -1729,7 +1727,7 @@ const groupsOf = (list, n) =>
 
 /** A stash's bytes with `n` NFTs: a table of NFTs (`table.rs`): its 51-byte header, a total for each group of 4,096
  * rows and each block of 64, and 36 bytes an NFT (its weight and its address). */
-export const stashBytes = n => (n ? loot.tableRowAt(36, n - 1) + 36 : 51);
+const stashBytes = n => (n ? loot.tableRowAt(36, n - 1) + 36 : 51);
 
 /** Who puts a spec's auction up, and so is named in its address: the owner for a collectible it holds, the authority for a new unit of an item. */
 export const auctionSeller = (a, ctx) => (a.lot?.asset ? ctx.owner : ctx.authority);
@@ -1737,13 +1735,13 @@ export const auctionSeller = (a, ctx) => (a.lot?.asset ? ctx.owner : ctx.authori
 export const recordBytesOf = (kind, body) => {
   const args = body.args;
   const base = {
-    Item: () => ({ project: NOBODY, item_id: 0, ...placeholders(args), issued: 0, voided: 0, compressed: false }),
-    LootBox: () => ({ project: NOBODY, box_id: 0, ...placeholders(args), in_flight: 0n, version: 0 }),
-    Recipe: () => ({ project: NOBODY, id: 0, version: 0, ...placeholders(args) }),
-    Schedule: () => ({ project: NOBODY, id: 0, ...placeholders(args), runs: 0 }),
+    Item: () => ({ project: NO_ADDRESS, item_id: 0, ...placeholders(args), issued: 0, voided: 0, compressed: false }),
+    LootBox: () => ({ project: NO_ADDRESS, box_id: 0, ...placeholders(args), in_flight: 0n, version: 0 }),
+    Recipe: () => ({ project: NO_ADDRESS, id: 0, version: 0, ...placeholders(args) }),
+    Schedule: () => ({ project: NO_ADDRESS, id: 0, ...placeholders(args), runs: 0 }),
     // Its terms and its round number: each round keeps the rest in a record of its own.
     Lottery: () => ({
-      project: NOBODY,
+      project: NO_ADDRESS,
       id: 0,
       incarnation: 0n,
       revision: 0,
@@ -1751,10 +1749,10 @@ export const recordBytesOf = (kind, body) => {
       round: 0,
       last: 0,
       pots: 0,
-      owing: NOBODY,
+      owing: NO_ADDRESS,
     }),
     Grant: () => ({
-      project: NOBODY,
+      project: NO_ADDRESS,
       id: 0,
       incarnation: 0n,
       ...placeholders(args),
@@ -1765,13 +1763,13 @@ export const recordBytesOf = (kind, body) => {
   return encodedSize(kind, base());
 };
 /** A farm's bytes as `open_farm` writes it: its args and its numbers. */
-export const farmBytes = (f, m) =>
+const farmBytes = (f, m) =>
   encodedSize('Farm', {
-    project: NOBODY,
+    project: NO_ADDRESS,
     id: 0,
-    farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NOBODY } },
+    farmed: f.stakes === 'collectibles' ? 'Collectibles' : { Tokens: { mint: NO_ADDRESS } },
     ...placeholders(farmArgs(f, m)),
-    rewards_mint: NOBODY,
+    rewards_mint: NO_ADDRESS,
     rate_carry: 0n,
     opened_at: 0n,
     total_weight: 0n,
@@ -1788,11 +1786,11 @@ export const farmBytes = (f, m) =>
 /** Exact initial contest record size for its configured shares, gate, sides and deciders. */
 export const contestBytes = (contest, m) =>
   encodedSize('Contest', {
-    project: NOBODY,
+    project: NO_ADDRESS,
     id: 0,
     incarnation: 0n,
-    opener: NOBODY,
-    mint: NOBODY,
+    opener: NO_ADDRESS,
+    mint: NO_ADDRESS,
     decided_at: 0n,
     ...placeholders(contestArgs(contest, m)),
     verdict: 'Open',
@@ -1927,7 +1925,7 @@ export function setupContext(m, { owner: ownerKey, keys, live: given = {}, rent,
 // ---------------------------------------------------------------- packing
 
 /** The bytes of a transaction of `instructions` the owner pays for: what `pack` holds against the budget. */
-export const stepBytes = (instructions, ctx) =>
+const stepBytes = (instructions, ctx) =>
   transactionSize(compileMessage({ payer: ctx.owner, blockhash: placeholderKey('blockhash'), instructions }));
 
 /** `instructions`, led by a compute limit of all a transaction can have when `compute` (a box's write is in them). */
@@ -1942,7 +1940,7 @@ export const stepAloneBytes = (step, ctx) => stepBytes(budgeted(step.build(ctx),
  * may read 0 as no price set). With the unit limit below it comes to 1.4 lamports, charged as 2 lamports a transaction
  * on top of the 5,000 a signature.
  */
-export const SETUP_UNIT_PRICE = 1n;
+const SETUP_UNIT_PRICE = 1n;
 
 /**
  * A setup transaction's instructions as the owner's wallet is handed them: led by a compute unit limit and a compute

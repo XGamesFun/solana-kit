@@ -1,6 +1,6 @@
 // Rent sizes from the current IDL. Fixed allocations reserve the largest enum and option forms,
 // matching Anchor InitSpace. Dynamic records use their actual encoded fields.
-import { addressBytes } from '../chain/base58.js';
+import { addressBytes, NO_ADDRESS } from '../chain/base58.js';
 import { encodeAccount, encodeBorsh } from '../chain/borsh.js';
 import { uintLE, utf8 } from '../chain/bytes.js';
 import IDL from './idl/loot.js';
@@ -82,7 +82,6 @@ export function callbackAccounts(entries) {
 export const tableBudget = entries => MAX_CALLBACK_ACCOUNTS - callbackAccounts(entries);
 
 const draws = lootBox => (lootBox.slots?.length ? lootBox.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
-const ZERO = '11111111111111111111111111111111';
 
 /** The most an order can be (`MAX_ORDER_BYTES`, not in the IDL): a box whose one open's order would be more is refused
  * at its upsert (`BadEntries`). In practice a pack is bounded first by what one oracle answer draws (`drawsFit`). */
@@ -139,22 +138,22 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     null,
   );
   const empty = {
-    project: ZERO,
-    player: ZERO,
-    mint: ZERO,
-    loot_box: ZERO,
+    project: NO_ADDRESS,
+    player: NO_ADDRESS,
+    mint: NO_ADDRESS,
+    loot_box: NO_ADDRESS,
     box_version: 0,
     odds_bps: new Array(lootBox.odds?.length ?? 0).fill(0),
     status: 'Waiting',
     won: [],
     paid: 0n,
     fee: 0n,
-    shares: new Array(shares).fill({ to: { Account: [ZERO] }, bps: 0 }),
+    shares: new Array(shares).fill({ to: { Account: [NO_ADDRESS] }, bps: 0 }),
     opens: 0,
     settled: 0,
     undrawn: 0,
     back: 0n,
-    settler: ZERO,
+    settler: NO_ADDRESS,
     drew: 0,
     answer: new Uint8Array(32),
     drawn: [],
@@ -166,7 +165,7 @@ export function orderBytes(lootBox, shares = 0, opens = 1, items) {
     counted: 0,
     // The person its count is for, when its box's limit counts by person.
     person: new Uint8Array(32),
-    subject: lootBox.subject ? ZERO : null,
+    subject: lootBox.subject ? NO_ADDRESS : null,
     held: false,
     fate,
   };

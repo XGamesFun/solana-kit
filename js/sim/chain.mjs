@@ -85,7 +85,7 @@ const NAMES = new Map(
 const ORACLE_UNITS = 340_000;
 
 /** A loot instruction's name and its account names, found by its tag (1 byte; 8 for the oracle's callbacks). */
-export const lootName = ix => {
+const lootName = ix => {
   const def = ix.programId === lootProgram() ? instructionOf(ix.data) : null;
   return def ? { name: def.name, names: NAMES.get(def.name), tag: def.discriminator.length } : null;
 };

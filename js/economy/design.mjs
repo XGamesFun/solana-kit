@@ -9,6 +9,7 @@
 //
 // Routes come in families (FAMILIES): a draw (a lottery or a raffle) and how it is paid, a sale of an item, a reward
 // (a grant), staking (a farm) and a contest. More join the same way: a requirement as a test, a bridge as a build.
+import { NO_ADDRESS } from '../chain/base58.js';
 import { check } from './check.mjs';
 import { flows } from './flows.mjs';
 import { farmCeiling, model } from './model.mjs';
@@ -522,7 +523,7 @@ const DRAW_BRIDGES = {
 };
 
 /** An address that stands in for a list the person builds (the system program's: no wallet). */
-const STAND_IN = '11111111111111111111111111111111';
+const STAND_IN = NO_ADDRESS;
 const UP = t => String(t ?? '').toUpperCase();
 const perWord = n => (n === 1 ? 'one' : String(n));
 
@@ -540,7 +541,7 @@ const SERVER_NEEDS = Object.freeze([
  * The families of routes, each with its choices (`dims`: one bridge from each), how a candidate is set up (`init`), which
  * combinations make no sense (`skip`), and how a candidate plays (`experience`).
  */
-export const FAMILIES = {
+const FAMILIES = {
   // ---- a draw (a lottery or a raffle) and how it is paid
   draw: {
     dims: [DRAW_BRIDGES.pay, DRAW_BRIDGES.burn, DRAW_BRIDGES.refund, DRAW_BRIDGES.free],

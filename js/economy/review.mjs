@@ -9,8 +9,10 @@
 // (what it checks, which person it names, the limits it is given) and the economy's own design (emission without an
 // end, prizes worth farming). The findings are about those.
 import { check } from './check.mjs';
+import { label } from './format.mjs';
 import { gateWords, ruleWords } from './explain.mjs';
 import {
+  DAY,
   boxRolls,
   byPerson,
   farmCeiling,
@@ -34,11 +36,10 @@ import { walkThrough } from './walk.mjs';
 export const SEVERITIES = Object.freeze(['high', 'medium', 'low', 'info']);
 export { TRUST_LEVELS, TRUST_WORDS };
 
-const label = part => `“${part?.name ?? part?.key}”`;
 const fmt = x =>
   Number.isFinite(Number(x)) ? Number(x).toLocaleString('en-US', { maximumFractionDigits: 6 }) : String(x);
 const short = a => `${String(a).slice(0, 4)}…${String(a).slice(-4)}`;
-const days = d => toSeconds(d) / 86_400;
+const days = d => toSeconds(d) / DAY;
 
 /** Which money a pool filler is: what players pay (not the owner's seed or a timer's mint). */
 const PLAYER_MONEY = /^(payment|box|item|lottery|contest|recipe|auction):/;

@@ -5,7 +5,7 @@
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
 import { realMoney } from '../client/pda.js';
-import { limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
+import { DAY, limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -244,7 +244,7 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
 }
 
 /** Each player action of the routes the model holds: its wallet prompts and the SOL it costs, its price aside. */
-export function actionWords(fl, fees) {
+function actionWords(fl, fees) {
   const fee = Number(fees.player) / 1e9;
   return fl.routes
     .filter(r => r.price.length)
@@ -262,7 +262,7 @@ export function actionWords(fl, fees) {
 }
 
 /** Every dated moment of the spec, in order: [{ at, when, what }] (a contest's, counted from when it opens, last). */
-export function timeline(m, fl, now) {
+function timeline(m, fl, now) {
   const rows = [];
   const add = (seconds, what) => seconds && rows.push({ at: seconds, when: at(seconds), what });
   for (const r of fl.routes) {
@@ -534,7 +534,7 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   // A returning player's day, doing each thing once: every approval added up, and what folds them.
   const day = [];
   for (const g of m.grants.filter(
-    g => g.active !== false && g.limits?.perWalletEach && toSeconds(g.limits.perWalletEach.every ?? '1d') <= 86_400,
+    g => g.active !== false && g.limits?.perWalletEach && toSeconds(g.limits.perWalletEach.every ?? '1d') <= DAY,
   ))
     day.push({ what: `claim ${named(g)}`, n: 1 });
   for (const r of fl.routes.filter(r => r.price.length && ['box', 'item', 'lottery', 'contest'].includes(r.kind)))
@@ -558,7 +558,7 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
  * (a voucher server's grants, a decider's contests), and what the owner's key can still change (and so whether a cap
  * can be raised).
  */
-export function controlWords(m, fl) {
+function controlWords(m, fl) {
   const rows = [];
   const caps = [];
   for (const r of fl.routes) {

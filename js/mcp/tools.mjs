@@ -23,6 +23,7 @@ import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
+import { plural } from '../economy/format.mjs';
 import { describeReview, review } from '../economy/review.mjs';
 import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
 import { model, rent as rentOf } from '../economy/model.mjs';
@@ -47,7 +48,7 @@ const SAVE_NAME = /^(?:[A-Za-z0-9._][A-Za-z0-9._-]*\/)*[A-Za-z0-9._][A-Za-z0-9._
  * (a quoted word is a POSIX shell's rule; PowerShell, cmd.exe and fish read the same quotes another way and would run
  * the code planted in the name), so a plain one is one word, the same in every shell, and never an option.
  */
-export function plainName(rel, paths = path) {
+function plainName(rel, paths = path) {
   const name = String(rel).split(paths.sep).join('/');
   return SAVE_NAME.test(name) ? name : null;
 }
@@ -77,8 +78,7 @@ export function keyFileFor(name) {
   return `~/.config/xsolana/${slug || 'project'}.json`;
 }
 /** The command that makes a project's key file (it prints the key's address, never the key). */
-export const keygenCommand = keyFile => `npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ${keyFile}`;
-export const DEVNET_RPC = 'https://api.devnet.solana.com';
+const keygenCommand = keyFile => `npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ${keyFile}`;
 /** The RPC a tool reads through: the test's own when it gives one, else this process's cluster's (XSOLANA_RPC_URL, or devnet's public RPC). */
 const chainOf = ctx =>
   ctx?.rpc ? ctx.rpc(process.env.XSOLANA_RPC_URL || CLUSTERS[cluster()].rpc) : rpcClient(clusterRpcUrl());
@@ -98,10 +98,9 @@ export const PROGRAM_INFO = Object.freeze({
   package: `@xgamesfun/solana@${PACKAGE_VERSION}`,
 });
 const footer = () => `\n\nloot ${VERSION} · program ${lootProgram()} · ${cluster()}`;
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const nowOf = ctx => ctx?.now ?? Math.floor(Date.now() / 1000);
 const cwdOf = ctx => ctx?.cwd ?? process.cwd();
-export const DEFAULT_FILE = 'xsolana.json';
+const DEFAULT_FILE = 'xsolana.json';
 
 /**
  * The tools a hosted server (js/mcp/http.mjs) offers: those that read nothing but their arguments and the chain.
@@ -135,7 +134,7 @@ function realPath(p) {
  * The spec file `rel` names, inside the project folder: a `.json` file there or in a folder below it. Anything else (an
  * absolute path elsewhere, `..`, a link out of the folder, another kind of file) is refused.
  */
-export function projectFile(rel, ctx) {
+function projectFile(rel, ctx) {
   const root = realPath(path.resolve(cwdOf(ctx)));
   const file = path.resolve(root, String(rel));
   const inside = p => {
@@ -162,7 +161,7 @@ const economyOf = value => (plainObject(value) && plainObject(value.economy) ? v
  * and nothing but the spec's keys, as it is or as the only key of a file, `economy` (a file with other keys beside it
  * would lose them). Every spec xsolana_save writes passes.
  */
-export function isSpec(value) {
+function isSpec(value) {
   const s = specOf(value);
   return (
     plainObject(s) &&
@@ -295,7 +294,7 @@ function liveChange(economy) {
 }
 
 /** In words: the spec changes the project's own settings, which publishing never writes. */
-export const settingsNote = (settings, live) =>
+const settingsNote = (settings, live) =>
   `The spec changes the project’s ${settings.join(', ')}, and publishing never changes those: the project keeps the ones it has on chain (by the file’s live section, the authority ${live.authority ?? 'as it was'} and the treasury ${live.treasury ?? 'as it was'}). Changing them takes the owner’s update_project, which loot does not send yet; until then, put them back as they were in the spec.`;
 
 export const tools = [

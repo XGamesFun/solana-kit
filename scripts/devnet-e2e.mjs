@@ -26,7 +26,7 @@ import {
   syncNative,
   transferLamports,
 } from '../js/chain/programs.js';
-import { checkCluster, notMainnet, rpcClient } from '../js/chain/rpc.js';
+import { checkCluster, notMainnet, rpcClient, sleep } from '../js/chain/rpc.js';
 import { compileMessage, readTransaction, wireTransaction } from '../js/chain/tx.js';
 import * as loot from '../js/client/index.js';
 import { solanaApp } from '../js/play/index.js';
@@ -43,7 +43,6 @@ const funder = keypairFromSecret(Uint8Array.from(JSON.parse(readFileSync(arg('ke
 const chain = clusterChain(url);
 const dir = process.argv.includes('--keep') ? arg('keep') : mkdtempSync(path.join(tmpdir(), 'xsolana-devnet-'));
 mkdirSync(dir, { recursive: true });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function send(signers, instructions) {
   const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();

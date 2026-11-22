@@ -34,7 +34,7 @@ function walletRegistry() {
     );
 }
 
-export function approvalPage(token) {
+function approvalPage(token) {
   const list = walletRegistry();
   let wallet = null;
   let account = null;

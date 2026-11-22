@@ -14,9 +14,11 @@ import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../chain/pda.js';
 import { addressBytes, encodeBase58 } from '../chain/base58.js';
 import { isOnCurve } from '../chain/curve.js';
 import { utf8 } from '../chain/bytes.js';
+import { MAX_TRANSACTION_BYTES } from '../chain/tx.js';
 import { METADATA_LIMITS } from '../chain/metadata.js';
 import { sha256 } from '../chain/sha256.js';
 import {
+  DAY,
   feesOf,
   rent as rentOf,
   LIMITS,
@@ -79,9 +81,10 @@ import {
 // live.mjs imports plan.mjs, which imports check(): each module only calls the others' functions, never at load time.
 import { changedParts, goLiveFields } from './live.mjs';
 import { challenge } from './challenge.mjs';
+import { label } from './format.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
-import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
+import { BUDGET, estimateTransactionSize, transactionLocks, WALLET_ROOM } from './txsize.mjs';
 import { PARTS } from './guide.mjs';
 import { fieldsAt, schemaAt, shapeOf, validate } from './validate.mjs';
 
@@ -94,9 +97,7 @@ const U64_MAX = 2n ** 64n - 1n;
 
 /** A transaction's estimated bytes, or with `detail` { bytes, locks }. */
 const measured = (input, detail) =>
-  detail ? { bytes: transactionSize(input), locks: transactionLocks(input) } : transactionSize(input);
-
-const label = part => `“${part?.name ?? part?.key}”`;
+  detail ? { bytes: estimateTransactionSize(input), locks: transactionLocks(input) } : estimateTransactionSize(input);
 
 /** Every place a spec gives a share of a pool as a prize, as a path ("economy.boxes[0].outcomes[1]"): the program has none. */
 function sharePrizes(value, path = 'economy', found = []) {
@@ -377,11 +378,11 @@ export function openBoxSize(b, m, { detail = false } = {}) {
 }
 
 /** The longest proof a compressed NFT's tree can leave: Bubblegum v2 refuses a smaller canopy. */
-export const LONGEST_PROOF = 17;
+const LONGEST_PROOF = 17;
 /** How many accounts a transaction may lock: so the most a settle can name. */
-export const ACCOUNT_LOCKS = 64;
+const ACCOUNT_LOCKS = 64;
 /** A v0 transaction's lookup table and the lookup-table program: the transaction deactivates the table it loads from. */
-export const TABLE_LOCKS = 2;
+const TABLE_LOCKS = 2;
 /** More accounts than this never fit a legacy transaction (32 bytes each): such a transaction goes as v0. */
 const LEGACY_MOST_ACCOUNTS = 35;
 
@@ -599,7 +600,7 @@ export function settleSize(b, o, m) {
   // A table holds every account but the signer and the programs the transaction calls.
   const held = keys.filter(k => !['wallet:signer', 'program:compute-budget', 'program:loot'].includes(k)).length;
   return {
-    legacy: transactionSize({ signers: ['wallet:signer'], instructions: [...budget, settle] }),
+    legacy: estimateTransactionSize({ signers: ['wallet:signer'], instructions: [...budget, settle] }),
     tableRent: rentOf(56 + 32 * held),
     locks: count,
   };
@@ -710,7 +711,7 @@ const MAX_RUN_PLACES = Number(IDL.constants.find(c => c.name === 'MAX_RUN_PLACES
 
 /** How far off a time may land before the checker asks whether its unit is right: three years. The program
  * takes any time a date holds; a time written in milliseconds lands thousands of years out and locks what waits on it. */
-export const FAR_SECONDS = 3 * 365 * 86_400;
+export const FAR_SECONDS = 3 * 365 * DAY;
 /** A Unix time in words, in English: "14 March 2031". Past what a date can show, the year alone. */
 export function dateWords(seconds) {
   const d = new Date(Number(seconds) * 1000);
@@ -961,7 +962,7 @@ export function check(
     warn(
       'W-FAR-TIME',
       where,
-      `${what} lands on ${dateWords(at)}, ${Math.floor((at - now) / 31_536_000).toLocaleString('en-US')} years after go-live${millis ? `: ${written} reads like milliseconds, and the program counts seconds (${meant.toLocaleString('en-US')} seconds is ${meant >= 86_400 ? `${Math.round(meant / 86_400).toLocaleString('en-US')} days` : `${Math.round(meant / 3_600).toLocaleString('en-US')} hours`})` : ''}. The program takes any time, so ${locks} until then.`,
+      `${what} lands on ${dateWords(at)}, ${Math.floor((at - now) / 31_536_000).toLocaleString('en-US')} years after go-live${millis ? `: ${written} reads like milliseconds, and the program counts seconds (${meant.toLocaleString('en-US')} seconds is ${meant >= DAY ? `${Math.round(meant / DAY).toLocaleString('en-US')} days` : `${Math.round(meant / 3_600).toLocaleString('en-US')} hours`})` : ''}. The program takes any time, so ${locks} until then.`,
       millis
         ? 'Write the time in seconds, or as a duration like "7d".'
         : 'Check the unit and the date before you sign: a duration like "30d" or a date like "2027-01-01" is safest.',
@@ -6235,7 +6236,7 @@ function farmRounding(f, row, warn, m) {
   const weight = whole * 10 ** staked.decimals * top * boost;
   if (!(weight > 1e12)) return;
   const step = weight / 1e12;
-  const span = releaseSeconds(f) / 86_400;
+  const span = releaseSeconds(f) / DAY;
   const units = (Number(f.seed ?? 0) + Number(row.rewardsPerDay ?? 0) * span) * 10 ** reward.decimals;
   if (!(units > 0) || units >= 100 * step) return;
   const [ss, rs] = [staked.symbol ?? f.stakes, reward.symbol ?? f.rewardsToken];
@@ -6271,7 +6272,7 @@ function rateRoom(f, warn, m) {
   const count = known ? Number(staked.supply) : Math.max(ofCollectibles ? 10_000 : 1e9, scenario);
   const top = Math.max(1, ...(f.tiers ?? []).map(t => Number(t.multiplier ?? 1)));
   const boost = (f.boosts ?? []).length ? 1 + Number(f.maxBoostPercent ?? 0) / 100 : 1;
-  const days = f.runs ? toSeconds(f.runs) / 86_400 : 3650;
+  const days = f.runs ? toSeconds(f.runs) / DAY : 3650;
   const units = Number(f.rate.perDay) * (f.rate.shared ? 1 : count * top * boost) * days * 10 ** reward.decimals;
   const room = 2 ** 64;
   if (!(units >= room / 10)) return;
