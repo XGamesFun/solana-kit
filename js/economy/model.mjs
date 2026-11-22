@@ -155,6 +155,28 @@ export function toUnits(amount, decimals) {
   return units;
 }
 
+/**
+ * A farm's fixed rate as the program keeps it (plan.mjs farmArgs): a rate for each unit of a staked token is kept per
+ * 1,000,000 base units staked (farm.rs NFT_UNIT), rounded down, so in a token of more than 6 decimals a rate whose last
+ * digits that drops is paid without them. `perDay` is what is paid; `perDaySaid`, when it differs, what the spec wrote.
+ * A shared rate, a farm of collectibles, or an amount that does not read is as written.
+ */
+function keptRate(f, rewardsToken, tokens) {
+  const staked = f.stakes && f.stakes !== 'collectibles' ? tokens.get(f.stakes) : null;
+  const rewards = tokens.get(rewardsToken);
+  if (f.rate.shared || !staked || !rewards) return f.rate;
+  try {
+    const units = toUnits(f.rate.perDay ?? 0, rewards.decimals ?? 0);
+    const scale = 10n ** BigInt(staked.decimals ?? 0);
+    const kept = (((units * 1_000_000n) / scale) * scale) / 1_000_000n;
+    return kept === units
+      ? f.rate
+      : { ...f.rate, perDay: fromUnits(kept, rewards.decimals ?? 0), perDaySaid: f.rate.perDay };
+  } catch {
+    return f.rate;
+  }
+}
+
 /** 100000000n with 9 decimals → "0.1". */
 export function fromUnits(units, decimals) {
   const negative = units < 0n;
@@ -454,9 +476,13 @@ export const isAddress = s => typeof s === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32
 
 // ---------------------------------------------------------------- the model
 
-/** Gives every part without one the next free program id (pools from 0, the rest from 1). */
-function assignIds(list, field, first) {
-  const used = new Set(list.map(x => x[field]).filter(v => Number.isInteger(v)));
+/**
+ * Gives every part without one the next free program id (pools from 0, the rest from 1). `taken`: ids a live economy
+ * has used already (its published parts, those since removed included): never given again, as the program's record at
+ * that id is still there, with what it has counted.
+ */
+function assignIds(list, field, first, taken = []) {
+  const used = new Set([...list.map(x => x[field]), ...taken].filter(v => Number.isInteger(v)));
   let next = first;
   return list.map(x => {
     if (Number.isInteger(x[field])) return x;
@@ -521,6 +547,10 @@ function tokenOf(given) {
  */
 export function model(economy, { now = 0 } = {}) {
   const e = writtenDurations(economy ?? {});
+  // The ids a live economy has used, by list: a part removed since keeps its record on chain, so its id is not new.
+  const published = e.live?.published ?? {};
+  const takenIn = (list, field = 'id') =>
+    (Array.isArray(published[list]) ? published[list] : []).map(x => x?.[field]).filter(v => Number.isInteger(v));
   const tokens = new Map((e.tokens ?? []).map(t => [t.key, tokenOf(t)]));
   const currencyKey = e.currency ?? (tokens.size === 1 ? [...tokens.keys()][0] : undefined);
   const currency = tokens.get(currencyKey);
@@ -533,14 +563,15 @@ export function model(economy, { now = 0 } = {}) {
     order.map(i => listed[i]),
     'index',
     0,
+    takenIn('pools', 'index'),
   );
   const pools = listed.map((_, i) => assigned[order.indexOf(i)]);
   // A farm's rewards land in a vault of its own: `rewardsToken` is their token.
   const poolCurrency = new Map(pools.map(p => [p.key, p.currency]));
-  const farms = (e.farms ?? []).map(f => ({
-    ...f,
-    rewardsToken: farmRewardsToken(f, tokens, currencyKey, poolCurrency),
-  }));
+  const farms = (e.farms ?? []).map(f => {
+    const rewardsToken = farmRewardsToken(f, tokens, currencyKey, poolCurrency);
+    return { ...f, rewardsToken, ...(f.rate ? { rate: keptRate(f, rewardsToken, tokens) } : {}) };
+  });
   // A raffle: its NFT is first place's prize, held in the lottery's own stash.
   const lotteries = (e.lotteries ?? []).map(l => {
     if (!l.raffle) return l;
@@ -582,20 +613,20 @@ export function model(economy, { now = 0 } = {}) {
     treeHolds: e.compressedTree?.holds ?? 16_384,
     /** The project's number among its owner's: its address is ["project", owner, number]. */
     projectNumber: e.projectNumber ?? 0,
-    items: assignIds(e.items ?? [], 'id', 1),
+    items: assignIds(e.items ?? [], 'id', 1, takenIn('items')),
     pools,
-    stashes: assignIds(e.stashes ?? [], 'id', 1),
-    tables: assignIds(e.tables ?? [], 'id', 1),
+    stashes: assignIds(e.stashes ?? [], 'id', 1, takenIn('stashes')),
+    tables: assignIds(e.tables ?? [], 'id', 1, takenIn('tables')),
     boxes: [],
     payments: e.payments ?? [],
-    recipes: assignIds(e.recipes ?? [], 'id', 1),
-    schedules: assignIds(e.schedules ?? [], 'id', 1),
-    lotteries: assignIds(lotteries, 'id', 1),
-    farms: assignIds(farms, 'id', 1),
-    contests: assignIds(e.contests ?? [], 'id', 1),
-    auctions: assignIds(e.auctions ?? [], 'id', 1),
+    recipes: assignIds(e.recipes ?? [], 'id', 1, takenIn('recipes')),
+    schedules: assignIds(e.schedules ?? [], 'id', 1, takenIn('schedules')),
+    lotteries: assignIds(lotteries, 'id', 1, takenIn('lotteries')),
+    farms: assignIds(farms, 'id', 1, takenIn('farms')),
+    contests: assignIds(e.contests ?? [], 'id', 1, takenIn('contests')),
+    auctions: assignIds(e.auctions ?? [], 'id', 1, takenIn('auctions')),
     holds: e.holds ?? [],
-    grants: assignIds(e.grants ?? [], 'id', 1),
+    grants: assignIds(e.grants ?? [], 'id', 1, takenIn('grants')),
     traits: e.traits ?? [],
     decisions: e.decisions ?? [],
     /** What a server or page does off chain with what players hold, declared so value is followed through it. */
@@ -605,8 +636,10 @@ export function model(economy, { now = 0 } = {}) {
   };
   // A shop item is a box of one entry (the program sells items only through boxes). Its box takes the item's price,
   // rise, fall, split and gate; it is numbered with the boxes, after the ones the spec numbered itself.
+  // An item that has a listing on chain (`shopBox`) keeps it: taken out of the shop (no price), the listing is written
+  // switched off, never left selling at its old price.
   const shop = m.items
-    .filter(it => Number(it.price ?? 0) > 0 || it.free)
+    .filter(it => Number(it.price ?? 0) > 0 || it.free || Number.isInteger(it.shopBox))
     .map(it => ({
       key: `shop-${it.key}`,
       ...(Number.isInteger(it.shopBox) ? { id: it.shopBox } : {}),
@@ -622,11 +655,14 @@ export function model(economy, { now = 0 } = {}) {
           .filter(k => it[k] !== undefined)
           .map(k => [k, it[k]]),
       ),
-      active: it.active !== false,
+      active: it.active !== false && (Number(it.price ?? 0) > 0 || Boolean(it.free)),
       outcomes: [{ gives: 'item', item: it.key, weight: 1 }],
       shopOf: it.key,
     }));
-  const numbered = assignIds([...(e.boxes ?? []), ...shop], 'id', 1);
+  const numbered = assignIds([...(e.boxes ?? []), ...shop], 'id', 1, [
+    ...takenIn('boxes'),
+    ...takenIn('items', 'shopBox'),
+  ]);
   m.boxes = numbered.filter(b => !b.shopOf);
   m.shop = numbered.filter(b => b.shopOf);
   /** Every box the program holds: the spec's own and the shop's. */

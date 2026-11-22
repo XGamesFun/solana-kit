@@ -3,7 +3,7 @@
 import { encodeBase58 } from '../chain/base58.js';
 import { randomBytes } from '../chain/bytes.js';
 import { lootProgram } from '../client/pda.js';
-import { compressedTree, listOf, model, tokenLabels } from './model.mjs';
+import { compressedTree, listOf, model, tokenLabels, toTime } from './model.mjs';
 import { auctionSeller, placeholderContext, plan, setupContext, setupSteps } from './plan.mjs';
 
 /** A key for each fresh account the plan creates. Their secret halves are made by whoever signs (the page). */
@@ -83,7 +83,49 @@ export function wideParts(m, warnings = []) {
  * The spec once its setup landed: every part keeps the program number it was given, and `live` names the game, its
  * collection, the treasury, the mints made and the program, with a copy of what is now on chain.
  */
-export function recordLanded(economy, { ctx, signatures = [], at = new Date().toISOString(), now }) {
+/**
+ * The times a part says from its going live ("publish", "publish+7d", a falling price with no `start`), as the date
+ * this approval sent (`now`, Unix seconds): once a part is live they are its dates, so a later change sends them again
+ * and never counts them from that change. By the part's list (its kind's fields: schema.json `time`).
+ */
+const TIME_FIELDS = {
+  items: ['opens', 'closes', 'fall.start'],
+  boxes: ['opens', 'closes', 'fall.start'],
+  recipes: ['opens', 'closes'],
+  schedules: ['start'],
+  lotteries: ['firstDraw'],
+  auctions: ['start'],
+  grants: ['limits.opens', 'limits.until'],
+};
+/** The fields of `part` (in `list`) that still say a time from its going live. */
+export function goLiveFields(part, list) {
+  return (TIME_FIELDS[list] ?? []).filter(field => {
+    const [a, b] = field.split('.');
+    const holder = b ? part?.[a] : part;
+    if (!holder || typeof holder !== 'object') return false;
+    const said = holder[b ?? a];
+    return field === 'fall.start' ? said === undefined : typeof said === 'string' && said.startsWith('publish');
+  });
+}
+
+function frozenTimes(part, list, now) {
+  let out = part;
+  for (const field of TIME_FIELDS[list] ?? []) {
+    const [a, b] = field.split('.');
+    const holder = b ? out[a] : out;
+    if (!holder || typeof holder !== 'object') continue;
+    const said = holder[b ?? a];
+    // a falling price with no start falls from when it went live
+    const fromGoLive =
+      field === 'fall.start' ? said === undefined : typeof said === 'string' && said.startsWith('publish');
+    if (!fromGoLive) continue;
+    const date = new Date(toTime(said ?? 'publish', now) * 1000).toISOString().replace('.000Z', 'Z');
+    out = b ? { ...out, [a]: { ...out[a], [b]: date } } : { ...out, [a]: date };
+  }
+  return out;
+}
+
+export function recordLanded(economy, { ctx, signatures = [], at = new Date().toISOString(), now, sent = null }) {
   const m = model(economy, { now });
   const ids = (list, field = 'id') => list.map(x => x[field]);
   const withIds = (key, list, field = 'id') =>
@@ -97,6 +139,10 @@ export function recordLanded(economy, { ctx, signatures = [], at = new Date().to
   out.boxes = withIds('boxes', m.boxes);
   for (const k of ['stashes', 'tables', 'recipes', 'schedules', 'lotteries', 'farms', 'grants', 'auctions'])
     if (economy[k]) out[k] = withIds(k, m[k]);
+  // The parts this approval sent (`sent`, part ids; all of them for a new setup) have their go-live times frozen.
+  for (const [list, kind] of Object.entries(PART_LISTS))
+    if (Array.isArray(out[list]))
+      out[list] = out[list].map(p => (!sent || sent.has(`${kind}:${p.key}`) ? frozenTimes(p, list, now) : p));
   // An auction's address names its seller: the page finds it by both.
   if (economy.auctions) out.auctions = out.auctions.map(a => ({ ...a, seller: a.seller ?? auctionSeller(a, ctx) }));
   for (const k of ['items', 'pools', 'boxes']) if (!economy[k]) delete out[k];
@@ -126,6 +172,7 @@ const PART_LISTS = {
   items: 'item',
   pools: 'pool',
   stashes: 'stash',
+  tables: 'table',
   boxes: 'box',
   recipes: 'recipe',
   schedules: 'schedule',
@@ -134,8 +181,11 @@ const PART_LISTS = {
   grants: 'grant',
   auctions: 'auction',
 };
-/** Parts that never change once live: a farm and an auction are never edited, a pool's token is fixed. */
-const FIXED = new Set(['farm', 'pool', 'auction']);
+/**
+ * Parts that never change once live: a farm and an auction are never edited, a pool's token is fixed, and a table
+ * written again appends its rows (table.rs `write`), so a live one is never written again.
+ */
+const FIXED = new Set(['farm', 'pool', 'auction', 'table']);
 const PART_KINDS = new Set(Object.values(PART_LISTS));
 
 /**
@@ -147,8 +197,9 @@ function partBytes(spec, now) {
   const ctx = placeholderContext(m);
   const out = new Map();
   for (const step of setupSteps(spec, { now }).steps) {
-    const [kind, key] = step.id.split(':');
-    if (!PART_KINDS.has(kind)) continue;
+    // by the part a step writes (a lookup table's steps are the project's, never a table of the spec)
+    const [kind, key] = String(step.part ?? '').split(':');
+    if (!PART_KINDS.has(kind) || !key) continue;
     const id = `${kind}:${key}`;
     // (an instruction is written either way: { programAddress, accounts: [{ address }] } or { programId, keys: [{ pubkey }] })
     const ixs = step
@@ -170,13 +221,26 @@ function partBytes(spec, now) {
  */
 export function changedParts(economy) {
   const published = economy.live?.published;
-  if (!published) return { only: null, fixed: [], removed: [], settings: [], renames: [] };
+  if (!published) return { only: null, fixed: [], fixedEdited: [], removed: [], settings: [], renames: [] };
   const only = new Set();
   const fixed = [];
+  // the fixed parts the spec itself edits (not those another change would write otherwise, a project's new treasury)
+  const fixedEdited = [];
   const removed = [];
   const renames = [];
   // A grant's `trust` is the spec's own note about its server, never sent on chain: changing it publishes nothing.
   const strip = ({ id, index, shopBox, seller, trust, ...rest }) => JSON.stringify(rest);
+  // What can't change on a live part, as the program refuses it: a fixed kind; a sealed schedule (written once,
+  // schedule.rs Sealed); a lottery's currency, the mint its pot holds (lottery.rs WrongMint).
+  const potMint = (l, spec) => l?.currency ?? spec?.currency ?? null;
+  const isFixed = (kind, key) => {
+    if (FIXED.has(kind)) return true;
+    const was = (published[Object.keys(PART_LISTS).find(k => PART_LISTS[k] === kind)] ?? []).find(p => p.key === key);
+    const now = (economy[Object.keys(PART_LISTS).find(k => PART_LISTS[k] === kind)] ?? []).find(p => p.key === key);
+    if (kind === 'schedule') return Boolean(was?.sealed);
+    if (kind === 'lottery') return Boolean(was && now) && potMint(was, published) !== potMint(now, economy);
+    return false;
+  };
   for (const [list, kind] of Object.entries(PART_LISTS)) {
     const before = new Map((published[list] ?? []).map(p => [p.key, p]));
     for (const part of economy[list] ?? []) {
@@ -186,8 +250,10 @@ export function changedParts(economy) {
         if (kind === 'pool') only.add(`seed:${part.key}`);
         if (kind === 'grant') only.add(`fund:${part.key}`);
       } else if (strip(was) !== strip(part)) {
-        if (FIXED.has(kind)) fixed.push(`${kind}:${part.key}`);
-        else only.add(`${kind}:${part.key}`);
+        if (isFixed(kind, part.key)) {
+          fixed.push(`${kind}:${part.key}`);
+          fixedEdited.push(`${kind}:${part.key}`);
+        } else only.add(`${kind}:${part.key}`);
       }
       before.delete(part.key);
     }
@@ -201,7 +267,7 @@ export function changedParts(economy) {
     const was = partBytes(published, now);
     for (const [id, bytes] of partBytes(economy, now)) {
       if (!was.has(id) || was.get(id) === bytes || only.has(id) || fixed.includes(id)) continue;
-      if (FIXED.has(id.split(':')[0])) fixed.push(id);
+      if (isFixed(...id.split(':'))) fixed.push(id);
       else only.add(id);
     }
   } catch {
@@ -234,7 +300,7 @@ export function changedParts(economy) {
   if ((published.treasury ?? null) !== (economy.treasury ?? null)) settings.push('its treasury');
   if (JSON.stringify(published.collections ?? []) !== JSON.stringify(economy.collections ?? []))
     settings.push('the collections it takes');
-  return { only, fixed, removed, settings, renames };
+  return { only, fixed, fixedEdited, removed, settings, renames };
 }
 
 /**

@@ -284,7 +284,7 @@ function liveChange(economy) {
     settings.length ? `\n${settingsNote(settings, economy.live)}` : '',
     renames.length ? `\n${renamesNote(renames)}` : '',
     fixed.length
-      ? `\nThese can't change once live, and stay as they were: ${fixed.join(', ')} (a farm, an auction or a pool's token).`
+      ? `\nThese can't change once live, and stay as they were: ${fixed.join(', ')} (a farm, an auction, a table, a sealed schedule, a pool's token or a lottery's currency).`
       : '',
     removed.length
       ? `\nTaken out of the spec but still on chain: ${removed.join(', ')}. To stop one, keep it and set "active": false.`
