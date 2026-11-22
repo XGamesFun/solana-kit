@@ -78,15 +78,16 @@ import {
 } from './plan.mjs';
 // live.mjs imports plan.mjs, which imports check(): each module only calls the others' functions, never at load time.
 import { changedParts, goLiveFields } from './live.mjs';
-/** A lottery's token accounts at most (lottery.rs MAX_MINTS), and what one instruction grows an account by (MAX_GROW). */
-const LOTTERY_MINTS = 8;
-const LOTTERY_ROUND_GROW = 10_240;
 import { challenge } from './challenge.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { BUDGET, MAX_TRANSACTION_BYTES, transactionLocks, transactionSize, WALLET_ROOM } from './txsize.mjs';
 import { PARTS } from './guide.mjs';
 import { fieldsAt, schemaAt, shapeOf, validate } from './validate.mjs';
+
+/** A lottery's token accounts at most (lottery.rs MAX_MINTS), and what one instruction grows an account by (MAX_GROW). */
+const LOTTERY_MINTS = 8;
+const LOTTERY_ROUND_GROW = 10_240;
 
 /** The most a u64 holds. */
 const U64_MAX = 2n ** 64n - 1n;
@@ -718,13 +719,6 @@ export function dateWords(seconds) {
 }
 
 /**
- * Checks an economy spec. `now` (Unix seconds) dates "publish". `project`: the project's address, once a wallet is named
- * (the plan for a real setup passes it; a live economy's file names it): a box's write searches for each of its pools'
- * and stashes' addresses, and the checker counts each search exactly with it, else at an assumed 2 tries an address
- * (`ASSUMED_TRIES`).
- * Returns { ok, refusals: [{ code, where, message, fix }], warnings: [{ code, where, message, fix? }] }.
- */
-/**
  * The fix of a schema refusal: the shape the schema expects where it failed (or, for a field it doesn't take, the
  * fields that place does take), and the guide's part that has every field of it.
  */
@@ -739,6 +733,13 @@ function schemaFix(path) {
   return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and {"part": …} gives one with its fields.'}`;
 }
 
+/**
+ * Checks an economy spec. `now` (Unix seconds) dates "publish". `project`: the project's address, once a wallet is named
+ * (the plan for a real setup passes it; a live economy's file names it): a box's write searches for each of its pools'
+ * and stashes' addresses, and the checker counts each search exactly with it, else at an assumed 2 tries an address
+ * (`ASSUMED_TRIES`).
+ * Returns { ok, refusals: [{ code, where, message, fix }], warnings: [{ code, where, message, fix? }] }.
+ */
 export function check(
   economy,
   { now = Math.floor(Date.now() / 1000), project = economy?.live?.project ?? null, simulator = simulate } = {},
@@ -794,7 +795,7 @@ export function check(
       'Only the current version 2 economy format is supported.',
       'Write the economy using the current schema.',
     );
-  // A roll no longer burns the payment for one outcome (loot 0.23): said in words, not again by the schema.
+  // A box's outcome never burns the payment (its split's "burn" share does): said in words, not again by the schema.
   const burnsGone = new Set();
   (Array.isArray(economy?.boxes) ? economy.boxes : []).forEach((b, i) =>
     (Array.isArray(b?.outcomes) ? b.outcomes : []).forEach((o, j) => {
@@ -811,7 +812,7 @@ export function check(
       );
     }),
   );
-  // A share of a pool as a prize is gone (loot 0.24): said in words, not again by the schema.
+  // The program has no prize that is a share of a pool: said in words, not again by the schema.
   const shares = sharePrizes(economy);
   for (const at of shares)
     refuse(
@@ -824,8 +825,8 @@ export function check(
     shares.some(
       at => path === at || path.startsWith(`${at}.`) || at.startsWith(`${path}.`) || at.startsWith(`${path}[`),
     );
-  // Where a lottery's places are paid from is the project's to name, never a default (loot 0.25): said in words, not
-  // again by the schema.
+  // Where a lottery's places are paid from is the project's to name, never a default: said in words, not again by the
+  // schema.
   const paysUnsaid = new Set();
   (Array.isArray(economy?.lotteries) ? economy.lotteries : []).forEach((l, i) => {
     if (!l || typeof l !== 'object' || 'pot' in l !== 'rest' in l) return;
@@ -2074,7 +2075,7 @@ export function check(
       schedule: 'a sealed schedule is written once: nobody edits it (Sealed)',
       lottery: "a lottery's pot stays in its mint (WrongMint): a new lottery (another key) takes another currency",
     };
-    // A live part sent again that still says a time from its going live (a file from before the approval wrote its
+    // A live part sent again that still says a time from its going live (a file whose approval did not write its
     // dates): this change reads it from now, so on chain it moves; the approval writes the date it sends from then on.
     const LISTS = {
       item: 'items',

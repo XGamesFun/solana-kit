@@ -10,8 +10,8 @@ import { SCHEMA } from './validate.mjs';
 // Each is the loot program's own unless it says otherwise.
 
 /**
- * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`, read from the chain
- * on 2026-11-21: devnet EZJiX7BY…, mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
+ * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`: devnet EZJiX7BY…,
+ * mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
  * the tools quote these and the program charges what the account holds. The program caps each at 0.01 SOL.
  */
 export const FEES_ON = Object.freeze({
@@ -23,11 +23,11 @@ export const FEES = FEES_ON.devnet;
 /** The fees on the cluster an economy is on: the `network` its file names, devnet when it names none. */
 export const feesOf = economy => FEES_ON[networkOf(economy)] ?? FEES;
 /**
- * What MagicBlock's VRF oracle queue (Cuj97ggr…, ephemeral-vrf-sdk 0.17.2 consts.rs DEFAULT_QUEUE) takes for each
- * random number asked of it: VRF_LAMPORTS_COST = 500,000 lamports, 0.0005 SOL (magicblock-labs/ephemeral-vrf,
- * api/src/consts.rs; the high-priority queue's 800,000 is not the one loot uses). Paid by whoever asks: the player
- * on `open_box` (order.rs), whoever sends `draw_lottery` (lottery.rs, its `payer`), the authority on `roll`
- * (roll.rs). Measured on devnet: 500,000 lamports per open.
+ * What MagicBlock's VRF oracle takes for each random number loot asks of it: 800,000 lamports, 0.0008 SOL. loot asks
+ * its default queue (Cuj97ggr…, ephemeral-rollups-sdk `vrf::consts::DEFAULT_QUEUE`) at high priority
+ * (`create_request_high_priority_scoped_randomness_ix`, roll.rs `oracle_request`), so the oracle answers with a
+ * compute limit of 400,000; a regular request costs 500,000 and gets 300,000. Paid by whoever asks: the player on
+ * `open_box` (order.rs), whoever sends `draw_lottery` (lottery.rs, its `payer`), the authority on `roll` (roll.rs).
  */
 export const ORACLE_FEE = 800_000n;
 /**
@@ -947,7 +947,6 @@ export function outcomeParts(o) {
   return [o];
 }
 
-/** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, or an NFT at random. */
 /** How many draws one open of a box makes: its slots' counts, or one. */
 export const drawsOf = b => ((b.slots ?? []).length ? b.slots.reduce((n, s) => n + Number(s.count), 0) : 1);
 
@@ -975,6 +974,8 @@ export function settleUnits(b, m) {
   return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
 }
 
+/** Whether a box leaves its outcome to the oracle (catalog.rs `rolls`): more than one outcome, an NFT at random, or a
+ * fresh item whose traits are drawn. */
 export const boxRolls = (b, m) =>
   (b.outcomes ?? []).length > 1 ||
   (b.outcomes ?? [])

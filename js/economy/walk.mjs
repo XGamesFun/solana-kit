@@ -303,7 +303,7 @@ export function journeyOf(r, fl) {
     if (craft && r.kind === 'lottery' && !(craft.recipe.out ?? []).some(o => o.gives === 'roll')) {
       const per = num(r.price[0].amount) / num(craft.makes || 1);
       bundles.push(
-        `the play client's buyTickets("${r.key}", count, { listing, make: { recipe: "${craft.recipe.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval (kit 0.28.7 and later)`,
+        `the play client's buyTickets("${r.key}", count, { listing, make: { recipe: "${craft.recipe.key}", times: ${per === 1 ? 'count' : `count × ${+per.toFixed(9)}`}, listing } }) crafts and buys with one approval`,
       );
     }
   }

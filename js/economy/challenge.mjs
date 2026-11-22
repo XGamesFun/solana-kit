@@ -26,8 +26,6 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
 /**
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
  * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
- */
-/**
  * `simulation`: the caller's own run of the simulation (check.mjs: run once for the whole check, and said once when it
  * cannot run); without one it is run here, and a run that fails gives no numbers.
  */

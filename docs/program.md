@@ -203,7 +203,7 @@ Also: a **pool** is a plain token account at `["pool", project, index]` that onl
 owner (`open_pool`), never closed. Every collectible loot mints of its own accord (an order's, a prize's, a craft's,
 an auction lot's) is at `["asset", item, serial]` (`pda.itemAsset`): a serial is handed out once, so the address is
 always new and the sender signs alone. A `Project` resizes only when `update_project` changes its collections (the
-owner pays the growth and gets the shrink back). Tag 21, a stash's own account before 0.22, is no longer used: a
+owner pays the growth and gets the shrink back). Tag 21 is unused: a
 stash is a table of NFTs, each row its weight and its address (36 bytes), so an account's 10 MiB holds some 290,000.
 
 **Tables** are read in place, never loaded whole: rows in blocks of 64 led by their weight in stock, blocks in groups
@@ -622,7 +622,7 @@ has by default where its addresses take many tries: the plan's transaction that 
 that doesn't roll sells by `buy` when one
 transaction carries the whole purchase (`buyFits`, the program's `buy_fits`: 64 accounts, 64 instructions, 1,400,000
 compute units), else through the oracle with its heap counted; such a box can't give a roll (`PackTooLarge` at its
-write). On loot 0.24: 31 draws of tokens from a pool by `buy`, 20 through the oracle; 64 of one item (past 14 no `buy`
+write). So 31 draws of tokens from a pool by `buy`, 20 through the oracle; 64 of one item (past 14 no `buy`
 carries them); 60 of a three-entry box of items, twelve 5-card opens of a two-entry one. js/play cuts a purchase into orders of `opensAnOrder(box)` opens (that, and an order's rent and fee within
 0.01 SOL), all in its one transaction. Every entry must be one some slot draws (`BadEntries`), and `open_box` is
 refused when none of the first slot's entries is in stock (`SoldOut`): the roll could only refund.
@@ -1253,12 +1253,10 @@ transaction take nothing). The clock pauses while nobody weighs anything. Roundi
 refreshes lose nothing. The farm's carry (that rounding) is credited to whoever is in once it adds up to a share; with
 no weight left its whole tokens are free again: at the end of a move that leaves no weight, and where a walk of the
 record of ends takes the last weight out or begins with none (`walk_farm`'s, and the authority's take-back of free
-tokens, `TokenSource::Farm`, included), before any weight that move brings comes in (loot 0.26.1; before, the first
-stake after every seat had stopped earning was credited all of it, and a farm 0.26.0 already left with no weight and a
-carry frees it at its next walk).
+tokens, `TokenSource::Farm`, included), before any weight that move brings comes in.
 
 **Weight that leaves the farm frees its share of the carry's whole tokens, and the weight that stays keeps its own**
-(loot 0.27, `Farm::free_share`: what rounding a leaving weight leaves goes back to the project). Weight leaves when a
+(`Farm::free_share`: what rounding a leaving weight leaves goes back to the project). Weight leaves when a
 seat goes out (an exit, a forfeit, a watched NFT found gone), when a seat weighs less over the whole of its move (a
 part taken out, a booster off, a lighter tier, a refresh that finds it weighs less), and when the walk of the record
 of ends passes a seat's end and takes its weight out, once. Only the drop of the farm's total across the move counts:
@@ -1336,8 +1334,7 @@ with the account for the next time written. Whatever moves the farm walks every 
 up to that second by the weight then in, writes `reward_per_weight` there, and takes that weight out of the total. So
 nothing released after a seat's end reaches it, nothing earned before it is lost, and the seats that stay earn by the weight
 really there. A farm that has passed more times than a transaction can walk (up to about 3,150 compute units each at
-the dearest farm, a halving rate and very heavy seats, since loot 0.27 frees the leaving weight's share of the carry
-at each; about 2,270 with light seats: the client walks 400 a `walk_farm`, `WALK_PER_TX`, and lets a move walk 300
+the dearest farm, a halving rate and very heavy seats, each also freeing the leaving weight's share of the carry; about 2,270 with light seats: the client walks 400 a `walk_farm`, `WALK_PER_TX`, and lets a move walk 300
 first, `MOVE_WALK_ROOM`) is
 walked in parts by `walk_farm`, anyone's and free; every move then walks the rest. The record holds 238,312 different
 times at most (what an account holds); the first staker on a new second pays about 0.0003 SOL for it, and when it is
@@ -1425,9 +1422,8 @@ can't make a cheap NFT pass a stranger's offer by writing its Sheet.
 
 Whoever controls an NFT's collection can take the NFT out of the project's hands, or burn it, while a record holds it
 (a Core collection's permanent transfer or burn delegate, a compressed NFT's collection's). The record can't send it
-anywhere then. Since loot 0.27 the instruction that would have moved it, sent with its usual accounts, finishes without
-it when the NFT is **proven gone**, and writes `NftGone`: the record, the NFT, who sent it. No receipt says the NFT
-moved. Before 0.27 such a record stayed open for good, with its rent, and an order's payment with it.
+anywhere then. The instruction that would have moved it, sent with its usual accounts, finishes without it when the
+NFT is **proven gone**, and writes `NftGone`: the record, the NFT, who sent it. No receipt says the NFT moved.
 
 **Proven gone** is read only on evidence, never from an account left out:
 

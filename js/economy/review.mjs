@@ -665,8 +665,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const key = /^economy\.tokens\.([^.]+)/.exec(w.where)?.[1];
     find('R-MINT-POWERS', 'low', key ? `token:${key}` : 'economy', w.message, w.fix);
   }
-  // What the program takes and a player, a partner or a typo can turn against the project (loot 0.26): each warning,
-  // as a finding on its route.
+  // What the program takes and a player, a partner or a typo can turn against the project: each warning, as a finding
+  // on its route.
   const routeOf = where => {
     const [, list, key] = /^economy\.([a-z]+)\.([^.[]+)/.exec(where) ?? [];
     const kinds = {

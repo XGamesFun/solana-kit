@@ -33,7 +33,7 @@ its text names no harness. `xsolana connect` knows Claude Code and Codex only. F
   `REMOTE_TOOLS` (the tools that read nothing but their arguments and the chain), no `file` argument, and instructions
   that give the spec as a file and the `keygen` and `approve --keypair` commands instead of `xsolana_save` and `xsolana_publish`. A host
   mounts `mcpHttp` (exported as `@xgamesfun/solana/mcp/http`); `xsolana mcp --http` serves it on 127.0.0.1, answering
-  only pages on localhost. xgames.fun hosts it at `https://xgames.fun/mcp` (games.fun `creator-studio/app/mcp/route.ts`, its pin moved with each release), which `server.json` names under `remotes`.
+  only pages on localhost. xgames.fun hosts it at `https://xgames.fun/mcp`, which `server.json` names under `remotes`.
 
 ## The edition Anthropic's directory lists
 
@@ -53,35 +53,7 @@ server's, so they move with xgames.fun whatever its version.
 
 ## Releasing a version
 
-Keep these in step:
-
-- `version` in `package.json`, `plugin/.claude-plugin/plugin.json`, `plugin/plugin.json`, `release.json` and
-  `server.json` (twice: the server's and its npm package's; `npm test` fails when they differ), and in
-  `claude-directory/.claude-plugin/plugin.json` only when that edition is submitted again (above);
-- the `--package=@xgamesfun/solana@<version>` pin in `plugin/.mcp.json` and `plugin/mcp.json`, and every
-  `npx -y @xgamesfun/solana@<version>` line in `README.md`, this file and the skill (`npm test` fails on a pin that
-  isn't `package.json`'s version; in `claude-directory/README.md`, on one that isn't its manifest's);
-- `release.json` (`node scripts/release-manifest.mjs`, after a program build and `node scripts/sync-idl.mjs`);
-- the skill's copies (`node scripts/sync-skills.mjs` after editing `skills/`);
-- the hosted results server (xgames.fun's `creator-studio`), which refuses any program build but the one it is pinned to
-  and answers 503 `R-RELEASE` until it is re-pinned: with each program upgrade on devnet, run
-  `node scripts/sync-loot-release.mjs <this checkout> <the program build>` there, check it with
-  `node scripts/loot-release.mjs --deployed`, and deploy it the same day.
-
-`npm run check` runs the pin and version tests, `release.json`'s check, the fixtures' check and the skill copies' check.
-
-Publishing a GitHub release runs `.github/workflows/publish.yml`: the checks, then `npm publish` with provenance (the
-release's tag must be the package's version). The first publish uses an npm token (the `NPM_TOKEN` secret); after it,
-add the workflow as the package's trusted publisher on npmjs.com and delete the token, and npm publishes over OIDC.
-Then `.github/workflows/mcp-registry.yml` lists the version in the MCP Registry from `server.json`, once npm serves it
-(a new package can take minutes): `mcp-publisher` (pinned, its signature verified) signs in with the workflow's own
-GitHub identity, so the namespace `io.github.XGamesFun` works only from a repository the `XGamesFun` account owns. It
-can also be run by hand from the Actions tab, and a publish run that failed after npm can be run again: it skips a
-version npm has already. Actions are pinned to commit hashes, and Dependabot moves them.
-
-Then check both harnesses still load the plugin: `claude plugin validate ./plugin` and `claude plugin validate .`;
-and for Codex, in a scratch `CODEX_HOME`, `codex plugin marketplace add ./`, `codex plugin add xsolana@xgamesfun`,
-then `codex mcp list` shows the `xsolana` stdio server.
+[RELEASING.md](../RELEASING.md) has the steps: what to keep in step, publishing, and checking both harnesses.
 
 ## Fresh-session evals
 

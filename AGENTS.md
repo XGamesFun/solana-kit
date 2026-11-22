@@ -2,10 +2,10 @@
 
 This repository is **solana-kit**, the npm package `@xgamesfun/solana`: the tools for loot, one shared Solana program for
 game and community economies. It holds loot's JavaScript client and economy tools (`js/`), the MCP server and CLI
-(`js/mcp`, `bin/xsolana.mjs`), the skill (`skills/xsolana-economy`) and the plugin that carries both to Claude Code and Codex
-(`plugin/`). The program itself runs on devnet and on mainnet, at an address of its own on each (`js/client/cluster.js`); its
-source is not in this repository. `docs/program.md`
-describes how it behaves, and its IDL is `js/client/idl/loot.json`.
+(`js/mcp`, `bin/xsolana.mjs`), the skill (`skills/xsolana-economy`) and the plugin that carries both to Claude Code
+and Codex (`plugin/`). The program itself runs on devnet and on mainnet, at an address of its own on each
+(`js/client/cluster.js`); its source is not in this repository. `docs/program.md` describes how it behaves, and its IDL
+is `js/client/idl/loot.json`.
 
 If you were asked to **build an economy** (a shop, loot boxes, staking, a lottery, rewards…), use the `xsolana-economy`
 skill and the `xsolana_*` tools. Everything below is for changing the tools.

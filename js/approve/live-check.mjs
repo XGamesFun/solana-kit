@@ -239,7 +239,7 @@ const clip = text => [...String(text).replace(HIDES, '')].slice(0, 40).join('');
  *   - the record says something else, is the mint's, is the project owner's to change (its update authority, and
  *     still changeable) and holds nothing a write of its words would take away (a royalty, creators, a collection,
  *     uses: `parseRecord`'s `plain`).
- * A token with no record (one that went live before setups named tokens), or a record handed on, made unchangeable
+ * A token with no record (its setup wrote none), or a record handed on, made unchangeable
  * or given a royalty or creators outside these tools, is not written: said in `notes`, and nothing else is held up.
  * A name so held is not recorded as published (approve/server.mjs), so it is said again at each approve until the
  * spec gives the old name back. Nothing here trusts the file for what is on chain. `owner`: the project's owner.
@@ -495,13 +495,6 @@ const HOLDS_A_VAULT = {
 };
 
 /**
- * The treasury the spec names ("wallet:<address>"), against the chain: what every
- * split leaves goes to the treasury's own account of the mint, which only the treasury's key can move. A wallet, a
- * Squads vault and a Realms treasury are System's accounts (or not there yet); an account another program owns (a
- * multisig's own account, a token account, an NFT, a program) signs for nothing, so what went there would be stuck.
- * Throws MintMismatch (what the spec names does not match the chain).
- */
-/**
  * Each Core NFT the setup puts in a stash (the project's, or a lottery's own) against the chain: it moves with the
  * collection the spec names for it, or the game's when it names none, and Core refuses the move of an NFT that is in
  * another collection (an NFT in none moves with any). The chain says which collection an NFT is in, so one the spec
@@ -621,6 +614,13 @@ export async function checkItemLocks({ m, chain, project }) {
   }
 }
 
+/**
+ * The treasury the spec names ("wallet:<address>"), against the chain: what every
+ * split leaves goes to the treasury's own account of the mint, which only the treasury's key can move. A wallet, a
+ * Squads vault and a Realms treasury are System's accounts (or not there yet); an account another program owns (a
+ * multisig's own account, a token account, an NFT, a program) signs for nothing, so what went there would be stuck.
+ * Throws MintMismatch (what the spec names does not match the chain).
+ */
 export async function checkTreasury({ m, chain }) {
   const treasury = m.treasuryWallet;
   if (!treasury || typeof chain.account !== 'function') return;

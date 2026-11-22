@@ -75,14 +75,14 @@ export {
   SPONSOR_MAX_LAMPORTS,
 } from './sponsor.js';
 
-// The options of a call made without any: read-only, and typed so the generated declarations take any option.
-/** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
 /** The compute units a sponsored step asks for: all a transaction can have. It sets a price of 0, so they cost nothing. */
 const SPONSORED_UNITS = 1_400_000;
 
+/** A lottery's steps in `claims()`: each depends on the one before, so `claimAll` takes one of a lottery's a call. */
 const LOTTERY_STEPS = new Set(['reveal', 'cancel-draw', 'pull', 'payout']);
 /** The claims that are one transaction of the wallet's: `claimAll` signs them together. */
 const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...LOTTERY_STEPS]);
+// The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -464,8 +464,8 @@ export function solanaApp({
     return out;
   }
   /**
-   * What proves `asset` gone from the project, as the instruction that lets go of it takes it (loot 0.27: a record
-   * whose NFT is proven gone closes): { before, kind }, or null when the project still holds it or nothing shows either
+   * What proves `asset` gone from the project, as the instruction that lets go of it takes it (a record whose NFT is
+   * proven gone closes): { before, kind }, or null when the project still holds it or nothing shows either
    * way. Whoever controls a collection the project does not can take an NFT out of the project's hands or burn it. A
    * Core asset shows it by itself (`kind`: its collection now); a Token Metadata NFT by the token account that holds it
    * now, or its mint once burned (`kind.tokenMetadata.evidence`); a compressed NFT by its record, proven again as its
@@ -761,19 +761,8 @@ export function solanaApp({
   }
 
   /**
-   * Build, have the wallet sign, send and confirm. Extra signers (fresh keys) sign first. Returns the signature.
-   * `keepWrapped`: leave the player's wrapped-SOL account open (a bid's: what is topped comes back there).
-   * Its size is checked before the wallet signs (`sendFitting`): one that fits a legacy transaction and leaves the
-   * wallet less than `WALLET_ADDS_BYTES` for the checks it adds goes as v0 with the project's standing tables, when
-   * they make it smaller (the same one prompt); a transaction too big for a legacy one goes as one v0
-   * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
-   * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
-   * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
-   * signing (`loot.withLeafCloses`), so its rent comes straight back.
-   */
-  /**
    * The project's standing lookup tables (made at go-live, `spec.live.tables`), each as the chain holds it now: one
-   * deactivated (or gone) is left out, and a transaction then makes a table of its own as before.
+   * deactivated (or gone) is left out, and a transaction then makes a table of its own.
    */
   let standingTables = null;
   async function standing() {
@@ -790,10 +779,21 @@ export function solanaApp({
 
   /**
    * The room kept in a step the player's wallet signs, for what the wallet adds before it signs (`WALLET_ADDS_BYTES`);
-   * none for a wallet that says it signs no v0 transaction (`wallet.versions`), which gets a legacy one as before.
+   * none for a wallet that says it signs no v0 transaction (`wallet.versions`), which gets a legacy one.
    */
   const walletRoom = () => (wallet?.versions && !wallet.versions.includes(0) ? 0 : WALLET_ADDS_BYTES);
 
+  /**
+   * Build, have the wallet sign, send and confirm. Extra signers (fresh keys) sign first. Returns the signature.
+   * `keepWrapped`: leave the player's wrapped-SOL account open (a bid's: what is topped comes back there).
+   * Its size is checked before the wallet signs (`sendFitting`): one that fits a legacy transaction and leaves the
+   * wallet less than `WALLET_ADDS_BYTES` for the checks it adds goes as v0 with the project's standing tables, when
+   * they make it smaller (the same one prompt); a transaction too big for a legacy one goes as one v0
+   * transaction with a lookup table the wallet makes first (one to three more approvals, and the table's rent until the
+   * player closes it, which `claims()` lists); only when even that is too big does each compressed NFT's `prove_leaf`
+   * go alone, after the table and before the rest. A compressed NFT's record closes in the same transaction, its prover
+   * signing (`loot.withLeafCloses`), so its rent comes straight back.
+   */
   async function send(instructions, extra = [], { keepWrapped = false } = {}) {
     if (!wallet?.address) throw new Error('Connect a wallet first.');
     // A compressed NFT's record is closed in the transaction that used it, its prover signing: its rent comes back.
@@ -1115,6 +1115,8 @@ export function solanaApp({
    * than that fee (a settle of its that failed on chain took its fee: the wallet then pays the move, one more prompt). */
   async function emptyKey(key) {
     const left = BigInt(await client.balance(key.address).catch(() => 0n));
+    // A refund that fails is not the player's error, so it is not thrown: the key's job already landed, and `recover`
+    // finds a key still holding SOL and sends it back.
     if (left >= (await rentEmpty()) + SIGNATURE_FEE)
       await sendAs(key, [transferLamports(key.address, wallet.address, left - SIGNATURE_FEE)]).catch(() => null);
     else if (left > 0n) await send([transferLamports(key.address, wallet.address, left)], [key]).catch(() => null);
@@ -4115,7 +4117,7 @@ export function solanaApp({
           says: `${p.holder} can move anyone's tokens of the loan's token, the ones you would repay with too.${lender(p.holder)}`,
         };
       });
-      // What the token's own settings let a lender do: the program no longer refuses these, so the kit says them.
+      // What the token's own settings let a lender do: the program takes these, so the kit says them.
       risks.push(...tokenSettings(account, 'repaying', 'the lender', 'and take your NFT when the loan is due'));
       const { amount, repay, lasts } = offer.deal.Lend;
       return { address, offer, mint: offer.mint, program: account.owner, amount, repay, lasts, risks };
@@ -4875,15 +4877,6 @@ export function solanaApp({
     },
 
     /**
-     * Claims a grant for the connected wallet: from the approved list (the proof comes from xsolana.json, or is given:
-     * `proof`, `personHash` and the `round` the list pays, as a results server's list answers them), or with a voucher
-     * a server signed ({ publicKey, signature, incarnation, round and amount, or rounds: [{ id, amount }], expires, personHash }). A list in xsolana.json names
-     * no round (zeros). `amount` (a voucher's, or `options.amount` for a list's leaf): the tokens this claim gives, in
-     * base units, up to the grant's own, for a grant of a fixed amount of tokens (a reward by rank); absent or 0 gives
-     * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
-     * lists and `collect` asks for and settles.
-     */
-    /**
      * Takes the link voucher the project's issuer signed for this wallet: { person (32 bytes or 64 hex characters),
      * expires, publicKey (the issuer's), signature } over `loot.linkBytes`. Nothing is sent now: the wallet's next step
      * that counts by person (a purchase, a ticket, a craft, a claim) links it in the same transaction.
@@ -4903,6 +4896,15 @@ export function solanaApp({
       pendingLink = { ...voucher, person, signature };
     },
 
+    /**
+     * Claims a grant for the connected wallet: from the approved list (the proof comes from xsolana.json, or is given:
+     * `proof`, `personHash` and the `round` the list pays, as a results server's list answers them), or with a voucher
+     * a server signed ({ publicKey, signature, incarnation, round and amount, or rounds: [{ id, amount }], expires, personHash }). A list in xsolana.json names
+     * no round (zeros). `amount` (a voucher's, or `options.amount` for a list's leaf): the tokens this claim gives, in
+     * base units, up to the grant's own, for a grant of a fixed amount of tokens (a reward by rank); absent or 0 gives
+     * the grant's prize as it is. A grant that gives a roll of a box makes the wallet's roll, which `claims()` then
+     * lists and `collect` asks for and settles.
+     */
     async claimGrant(grantKey, options = {}) {
       only(options, ['voucher', 'proof', 'personHash', 'round', 'amount', 'shown', 'listProof'], 'claimGrant');
       let {

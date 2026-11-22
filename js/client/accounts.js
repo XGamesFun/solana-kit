@@ -40,7 +40,7 @@ export const TAGS = Object.freeze({
   Grant: 27,
   // A wallet's link to its person (`pda.link`).
   Link: 28,
-  // A table, and a stash: a table of NFTs (21 was a stash's own before 0.22).
+  // A table, and a stash: a table of NFTs (tag 21 is unused).
   Table: 25,
   // A list of records: a wallet's counts, a grant's claims or rounds, a contest's entries.
   List: 26,
@@ -419,16 +419,16 @@ export function decodeStash(data) {
 }
 
 /**
- * A compressed NFT's record (`["leaf", asset]`, `prove_leaf`): { asset, tree, owner (null once burned), delegate,
- * collection (or null), flags, nonce, root (hex: the tree's root it holds for), payer }. Routes read it only while the
- * tree's root is still `root`; after that anyone may close it (`closeLeafIx`).
- */
-/**
  * Where a Proven record's payer is: after the tag, eight 32-byte fields, the asset data hash's flag (and its 32 bytes
  * when it has one), the flags and the nonce. Without an asset data hash, then with one.
  */
 export const PROVEN_PAYER_AT = Object.freeze([1 + 32 * 8 + 1 + 1 + 8, 1 + 32 * 8 + 33 + 1 + 8]);
 
+/**
+ * A compressed NFT's record (`["leaf", asset]`, `prove_leaf`): { asset, tree, owner (null once burned), delegate,
+ * collection (or null), flags, nonce, root (hex: the tree's root it holds for), payer }. Routes read it only while the
+ * tree's root is still `root`; after that anyone may close it (`closeLeafIx`).
+ */
 export function decodeProven(data) {
   // Its shortest: the tag, five addresses, the root, data hash and creator hash, no asset data hash, the flags and
   // nonce, and its payer.

@@ -526,10 +526,6 @@ const STAND_IN = '11111111111111111111111111111111';
 const UP = t => String(t ?? '').toUpperCase();
 const perWord = n => (n === 1 ? 'one' : String(n));
 
-/**
- * The families of routes, each with its choices (`dims`: one bridge from each), how a candidate is set up (`init`), which
- * combinations make no sense (`skip`), and how a candidate plays (`experience`).
- */
 /** What a reward a server signs needs from the person before its first spec: the numbers and the rule only they have. */
 const SERVER_NEEDS = Object.freeze([
   'The most claims one player makes a day?',
@@ -540,6 +536,10 @@ const SERVER_NEEDS = Object.freeze([
   'A voucher that runs out before it is claimed: signed again for them (until when), or lost? Follow the balance your server keeps from the moment it signs.',
 ]);
 
+/**
+ * The families of routes, each with its choices (`dims`: one bridge from each), how a candidate is set up (`init`), which
+ * combinations make no sense (`skip`), and how a candidate plays (`experience`).
+ */
 export const FAMILIES = {
   // ---- a draw (a lottery or a raffle) and how it is paid
   draw: {
@@ -1088,14 +1088,8 @@ function searchRoute(base, route, family, requirements, now) {
   return { route, family, candidates, conflicts, allKept: all, inPart };
 }
 
-/**
- * The designs for every route the requirements name, each route searched in turn on the best design of the ones
- * before it: { routes: [{ route, family, candidates, conflicts, inPart, allKept }], …the first route's result }.
- * Requirements name their route (`route`); its family follows from where that key is in the spec (a lottery: a draw;
- * an item: a sale; a grant: a reward; a farm: staking; a contest), or from a requirement's own `family`.
- */
-/** What a requirement's own fields must be, by field: which kinds need it, how it reads when wrong, and its test. */
 const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+/** What a requirement's own fields must be, by field: which kinds need it, how it reads when wrong, and its test. */
 const FIELDS = {
   currencies: {
     needs: ['pay-in'],
@@ -1136,6 +1130,12 @@ export function requirementProblems(requirements) {
   return out;
 }
 
+/**
+ * The designs for every route the requirements name, each route searched in turn on the best design of the ones
+ * before it: { routes: [{ route, family, candidates, conflicts, inPart, allKept }], …the first route's result }.
+ * Requirements name their route (`route`); its family follows from where that key is in the spec (a lottery: a draw;
+ * an item: a sale; a grant: a reward; a farm: staking; a contest), or from a requirement's own `family`.
+ */
 export function design(base, requirements, { now = Math.floor(Date.now() / 1000) } = {}) {
   const first = requirements.find(r => r.route)?.route ?? base.lotteries?.[0]?.key;
   const order = [...new Set(requirements.map(r => r.route ?? first))];
@@ -1169,7 +1169,7 @@ function sayIt(c) {
   return `“${what.charAt(0).toUpperCase()}${what.slice(1)}.${gave.length ? ` The catch: ${gave.map(q => q.why).join('; ')}.` : ''}”`;
 }
 
-/** The design in words, for the agent to read and put to the person: the requirements, the conflicts, the top specs. */
+/** Each family of routes in words. */
 const FAMILY_WORDS = { draw: 'a draw', sale: 'a sale', reward: 'a reward', earn: 'staking', contest: 'a contest' };
 
 /** The design in words, for every route the requirements name: one section a route. */
@@ -1220,6 +1220,7 @@ function alsoSigned(result, requirements) {
   ].join('\n');
 }
 
+/** The design in words, for the agent to read and put to the person: the requirements, the conflicts, the top specs. */
 function describeRoutes(result, requirements, { top = 3 } = {}) {
   const routes = result.routes ?? [result];
   const first = requirements.find(r => r.route)?.route;

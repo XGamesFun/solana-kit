@@ -270,10 +270,10 @@ export async function createApproval({
   /** What a plan of this session is scoped by. */
   const scope = () => ({ only, renames });
 
-  /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   /** A live grant's record split (`shard_bits`) as the chain holds it, by its key: read as a wallet connects (`trust`),
    *  handed to the plan, never written to the file. */
   let grantShards = null;
+  /** What is live so far: the spec's own live section (a resumed or changed economy) and what landed this session. */
   const live = () => (spec.live ? { ...spec.live, ...(grantShards ? { grantShards } : {}) } : null);
   /**
    * What the chain says the keys of the mints this spec names can do, where the spec doesn't say it (`checkMints`,

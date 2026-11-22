@@ -489,8 +489,10 @@ export function actionCosts(economy, { now } = NO_OPTIONS) {
   return rows;
 }
 
-/** Setup and play costs for a spec, or its refusals. */
-/** `only` and `live`: a change to a live economy, priced as only what it publishes (live.mjs `changedParts`). */
+/**
+ * Setup and play costs for a spec, or its refusals. `only` and `live`: a change to a live economy, priced as only what
+ * it publishes (live.mjs `changedParts`).
+ */
 export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null, live = null, renames = null } = {}) {
   const plan = compile(economy, { now, only, live, renames });
   if (!plan.ok) return plan;

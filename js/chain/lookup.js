@@ -159,8 +159,8 @@ const sizeOf = input => {
 /**
  * The bytes kept free in a transaction a player's wallet signs, for what the wallet adds to it before it signs.
  * Phantom adds a compute unit limit and price (52 bytes) and checks of its own (instructions of the Lighthouse
- * program, one for each account it watches): 306 and 333 bytes in two legacy transactions it signed on mainnet on
- * 2026-11-13, with seven and eight checks. A transaction with no room for them it cannot check, and it shows its user
+ * program, one for each account it watches): 306 and 333 bytes in two legacy transactions it signed on mainnet, with
+ * seven and eight checks. A transaction with no room for them it cannot check, and it shows its user
  * "This dApp could be malicious" in place of what the transaction does.
  */
 export const WALLET_ADDS_BYTES = 400;

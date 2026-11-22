@@ -5,7 +5,7 @@
 // read accounts and fail the transaction when something is not as the wallet expected). The page takes such a
 // transaction only when everything that was prepared and shown is still in it, untouched, and everything else is of
 // the two programs a wallet adds for its own sake: Compute Budget and Lighthouse. Then what is sent is the wallet's
-// own message with the wallet's own signature. Anything else is refused, as any change was before.
+// own message with the wallet's own signature. Any other change is refused.
 //
 // The rule, each part of which is needed:
 // - Both messages are legacy, with no lookup table: every account is in the message itself, so every account is

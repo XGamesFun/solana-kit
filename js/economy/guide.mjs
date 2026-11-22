@@ -146,12 +146,6 @@ export const CONVENTIONS = [
 ];
 
 /**
- * What no part of loot does, and the combinations that come closest: { what, words (to match a person's own words),
- * why, nearest: [the version, and what it gives up] }. A limit is never the end of the answer: say what is missing,
- * then offer the nearest versions with their numbers, best first, and build the one the person picks. A feature that
- * ships later moves its entry to HOW.
- */
-/**
  * What no code removes, only makes smaller: a wallet is not a person, the page can't be trusted, and bots play well.
  * Said once in the guide, so every design starts from it.
  */
@@ -163,6 +157,12 @@ export const SAFETY = [
   'A gate costs a sybil most when it asks for something the game sells: a rule takes any of several items (`{ "items": ["oak", "pine"] }`, up to 16), and can read the attributes only the program writes on every minted collectible, `item_id`, `rarity`, `serial` and `made` (`{ "attribute": "rarity", "atLeast": 2 }`: any of the game’s Rare or better).',
 ];
 
+/**
+ * What no part of loot does, and the combinations that come closest: { what, words (to match a person's own words),
+ * why, nearest: [the version, and what it gives up] }. A limit is never the end of the answer: say what is missing,
+ * then offer the nearest versions with their numbers, best first, and build the one the person picks. A feature that
+ * ships later moves its entry to HOW.
+ */
 export const CANNOT = [
   {
     what: 'a prize that is a share of what a pool holds (a jackpot paying a tenth of itself)',
