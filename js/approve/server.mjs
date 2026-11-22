@@ -30,7 +30,7 @@ import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
-import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames } from './live-check.mjs';
+import { checkLive, checkMints, LiveMismatch, MintMismatch, readRenames, withNftCollections } from './live-check.mjs';
 import { walletAdded } from './wallet-adds.mjs';
 
 const PREPARE_TTL_MS = 90_000;
@@ -234,6 +234,13 @@ export async function createApproval({
    * session's own copy of the live section says the chain's from then on).
    */
   let fileCorrections = [];
+  /** What the chain said of the NFTs the spec moves, put in the session's spec (`withNftCollections`): said, and written. */
+  let nftCorrections = [];
+  /** Writes the session's spec to the file: what it corrected from the chain is said there from now on. */
+  const writeSpec = async () => {
+    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    nftCorrections = [];
+  };
   /** Where the chain's treasury is not the one the spec names (`checkLive`), in words. */
   let chainNotes = [];
   /**
@@ -385,7 +392,14 @@ export async function createApproval({
       const m = model(spec, { now: at });
       // the project a mint the spec calls the project's must name: the live one, else this wallet's own to be
       const project = live()?.project ?? pda.project(wallet, m.projectNumber);
-      mintPowers = (await checkMints({ m, chain, project })).powers;
+      const checked = await checkMints({ m, chain, project });
+      mintPowers = checked.powers;
+      // an NFT the spec places in another collection than the chain says: moved with the chain's, and the file says it
+      const fixed = withNftCollections(spec, checked.collections ?? []);
+      if (fixed.lines.length) {
+        spec = fixed.spec;
+        nftCorrections = [...nftCorrections, ...fixed.lines];
+      }
     } catch (e) {
       if (!(e instanceof MintMismatch)) throw e;
       throw new ApproveError(
@@ -408,7 +422,8 @@ export async function createApproval({
       projectOnChain = trusted.treasury
         ? { creator: trusted.creator, treasury: trusted.treasury, authority: trusted.authority }
         : null;
-      if (trusted.corrected.length) fileCorrections = trusted.corrected;
+      if (trusted.corrected.length || nftCorrections.length)
+        fileCorrections = [...nftCorrections, ...trusted.corrected];
       chainNotes = trusted.notes;
       // The session's copy of the live section says of the project's treasury and authority what the chain says, so
       // what this session records is the chain's: the file says it once a step lands (or at once, with none to send).
@@ -952,7 +967,7 @@ export async function createApproval({
       },
     };
     generation++;
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
   }
 
   /** Takes a transaction out of the pending list: it landed (and is recorded), failed, or can no longer land. */
@@ -968,7 +983,7 @@ export async function createApproval({
       spec = { ...spec, live: asItWas };
     }
     generation++;
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
   }
 
   /** The owner of `project` on chain, or null when it can't be read. */
@@ -1072,7 +1087,7 @@ export async function createApproval({
     spec = { ...spec, live: progress };
     generation++;
     if (!more) record(ctx);
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
   }
 
   /**
@@ -1124,7 +1139,7 @@ export async function createApproval({
     const lines = fileCorrections.map(line => `${line} The file now says the chain’s.`);
     fileCorrections = [];
     generation++;
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
     return lines;
   }
 
@@ -1132,7 +1147,7 @@ export async function createApproval({
   async function finish(ctx, options) {
     if (!record(ctx, options)) return;
     generation++;
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
   }
 
   /**
@@ -1155,7 +1170,7 @@ export async function createApproval({
     spec = { ...spec, live: { ...now, published: { ...now.published, tokens } } };
     settled = new Set();
     generation++;
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await writeSpec();
   }
 }
 

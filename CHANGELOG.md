@@ -4,6 +4,15 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.5: an NFT moved with the collection the chain says (loot 0.29.0, unchanged)
+
+The tools alone.
+
+- **The approval no longer refuses an NFT the spec places in another collection than the one it is in.** It reads
+  each Core NFT a stash or a lottery takes, moves it with the collection the chain says, and the file says that
+  collection once the step lands (as it does for the project's treasury and authority). An NFT that is not there is
+  still refused: nothing could move it.
+
 ## 0.29.4: what the tools say and send, held to what loot does (loot 0.29.0, unchanged)
 
 The tools alone. An audit of the kit against loot 0.29.0. Every shipped example plans the same go-live

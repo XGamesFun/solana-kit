@@ -1,13 +1,14 @@
 // An NFT a setup puts in a stash moves with the collection the spec names for it, or the game's: approving reads each
-// Core NFT and refuses one the spec places in a collection it is not in, before anything is signed. An NFT in no
-// collection moves with any (as the program took it in a test of its own).
+// Core NFT and moves one the spec places in another collection with the one the chain says, and the file says it from
+// then on. An NFT in no collection moves with any (as the program took it in a test of its own); one that is not there
+// is refused.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { concat, uintLE, utf8 } from '../chain/bytes.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { createCollectionInstruction, MPL_CORE_PROGRAM } from '../chain/core.js';
 import { meta } from '../chain/programs.js';
-import { checkNfts, MintMismatch } from '../approve/live-check.mjs';
+import { checkNfts, MintMismatch, withNftCollections } from '../approve/live-check.mjs';
 import { model } from '../economy/model.mjs';
 import { newAddress } from '../sim/chain.mjs';
 import { approvalChain, cannotRun, world } from './world.mjs';
@@ -15,7 +16,7 @@ import { approvalChain, cannotRun, world } from './world.mjs';
 const skip = cannotRun();
 
 test(
-  'approving refuses an NFT the spec puts in a collection it is not in, and takes one in no collection',
+  'approving moves an NFT with the collection the chain says, takes one in no collection, refuses one not there',
   { skip: skip ?? false },
   async () => {
     const w = world({ seed: 'nft-collections' });
@@ -56,10 +57,17 @@ test(
       lotteries: [{ key: 'art', name: 'Art', price: 0.01, rest: 'treasury', raffle, firstDraw: '2030-01-01' }],
     });
     const checked = raffle => checkNfts({ m: model(spec(raffle), { now: w.chain.now() }), chain });
-    await checked(core(null));
+    assert.deepEqual(await checked(core(null)), []);
     const theirs = core(other);
-    await checked({ nft: theirs, collection: other });
-    await assert.rejects(checked(theirs), e => e instanceof MintMismatch && e.message.includes(other));
+    assert.deepEqual(await checked({ nft: theirs, collection: other }), []);
+    const said = await checked(theirs);
+    assert.deepEqual(
+      said.map(c => [c.nft, c.collection, c.said]),
+      [[theirs, other, null]],
+    );
+    const { spec: fixed, lines } = withNftCollections(spec(theirs), said);
+    assert.deepEqual(fixed.lotteries[0].raffle, { nft: theirs, collection: other });
+    assert.match(lines[0], new RegExp(`is in the collection ${other}`));
     await assert.rejects(checked(newAddress(w.random)), e => e instanceof MintMismatch && /no NFT/.test(e.message));
   },
 );
