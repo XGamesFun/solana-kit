@@ -4,6 +4,20 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.9: check split by part (loot 0.29.0, unchanged)
+
+No behaviour changed: `check()` gives the same refusals and warnings, in the same order, and every export of
+`js/economy/check.mjs` is still there.
+
+- `check()` was one function of 5,000 lines. It now reads the spec whole (secrets, network, version, schema) and
+  builds the helpers every part uses, then runs each part's checks from `js/economy/check/`, in the order they ran
+  before: `keys`, `tokens` (with the checks later parts reuse), `live-parts` (what a live economy can't change),
+  `items`, `pools` (and stashes), `boxes`, `recipes` (and payments), `schedules`, `lotteries`, `farms`,
+  `contests`, `auctions` (and each NFT handed over once), `grants` (and holds), `decisions` (and parts switched
+  off), `setup` and `analyses`.
+- The estimates of what a player's transactions take (`craftSize`, `openBoxSize`, `buySize`, `settleAccounts`,
+  `settleUnits`, `settleSize`) are in `js/economy/sizes.mjs`, beside `txsize.mjs`; `check.mjs` still exports them.
+
 ## 0.29.8: tidier code and docs (loot 0.29.0, unchanged)
 
 No behaviour changed: the same tests pass, and every export of the package's entry points is still there.
