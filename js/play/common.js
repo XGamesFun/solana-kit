@@ -1,6 +1,6 @@
 // What the page client's modules share, none of it tied to one app: amounts in whole units (`units`, `show`), a fresh
-// key, the options a call made without any has and the rule that refuses one a method doesn't take (`only`), and
-// the programs and instructions several parts name.
+// key, the options a call made without any has and the rule that refuses one a method doesn't take (`only`), the
+// programs and instructions several parts name, and the types of the context the parts are built with (`Base`, `Ctx`).
 import { encodeBase58 } from '../chain/base58.js';
 import * as loot from '../client/index.js';
 
@@ -69,3 +69,35 @@ export function only(options, takes, method) {
     `${method} doesn’t take ${unknown.map(k => `“${k}”`).join(', ')}${hint}. It takes: ${takes.join(', ')}.`,
   );
 }
+
+/**
+ * What solanaApp() puts on the context its parts share (index.js), before any part adds its helpers: the spec, the
+ * wallet, the RPC and the reads of its setup, typed as solanaApp() itself has them.
+ * @typedef {object} Base
+ * @property {any} spec
+ * @property {any} wallet
+ * @property {{}} programs
+ * @property {() => number} now
+ * @property {null} sponsor
+ * @property {any} live
+ * @property {any} client
+ * @property {any} project
+ * @property {ReturnType<typeof import('./keys.js').keyring> | null} keys
+ * @property {(name: any) => ReturnType<typeof freshKey>} jobKey
+ * @property {any} collections
+ * @property {(collection: any) => any} ours
+ * @property {Map<any, any>} tokens
+ * @property {any} currencyKey
+ * @property {(key: any) => any} mintOf
+ * @property {(key: any) => any} decimalsOf
+ * @property {(mint: any) => any} programOf
+ * @property {(list: any, key: any) => any} part
+ * @property {(name: any, address: any) => Promise<any>} read
+ * @property {(name: any, address: any) => Promise<any>} readMaybe
+ */
+
+/**
+ * The context once every part has put its helpers on it (each `add…` factory, in order): what the parts' methods are
+ * built with. Each factory's return type adds its own, so every helper keeps the type it has.
+ * @typedef {ReturnType<typeof import('./contests.js').addContests>} Ctx
+ */

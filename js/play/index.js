@@ -28,24 +28,24 @@ import { rightCluster, rpcClient } from '../chain/rpc.js';
 import * as loot from '../client/index.js';
 import { browserStore, keyring } from './keys.js';
 import { freshKey } from './common.js';
-import { addNfts } from './nfts.js';
-import { addGates } from './gates.js';
-import { addReads } from './reads.js';
-import { addSending } from './sending.js';
+import { addNfts, nftMethods } from './nfts.js';
+import { addGates, gateMethods } from './gates.js';
+import { addReads, readMethods } from './reads.js';
+import { addSending, sendingMethods } from './sending.js';
 import { addRolls } from './rolls.js';
 import { addLeftovers } from './leftovers.js';
-import { addFarms } from './farms.js';
-import { addLotteries } from './lotteries.js';
-import { addAuctions } from './auctions.js';
-import { addContests } from './contests.js';
-import { addListings } from './listings.js';
-import { addBoxes } from './boxes.js';
-import { addPayments } from './payments.js';
-import { addHolds } from './holds.js';
-import { addRecipes } from './recipes.js';
-import { addSchedules } from './schedules.js';
-import { addGrants } from './grants.js';
-import { addClaims } from './claims.js';
+import { addFarms, farmMethods } from './farms.js';
+import { addLotteries, lotteryMethods } from './lotteries.js';
+import { addAuctions, auctionMethods } from './auctions.js';
+import { addContests, contestMethods } from './contests.js';
+import { listingMethods } from './listings.js';
+import { boxMethods } from './boxes.js';
+import { paymentMethods } from './payments.js';
+import { holdMethods } from './holds.js';
+import { recipeMethods } from './recipes.js';
+import { scheduleMethods } from './schedules.js';
+import { grantMethods } from './grants.js';
+import { claimMethods } from './claims.js';
 
 export {
   checkSponsored,
@@ -130,12 +130,12 @@ function onCluster(client) {
  * be made again from the wallet's signature is kept, encrypted (`browserStore()` in a browser; null keeps keys in memory
  * only).
  *
- * @returns {{ project: any, readonly address: any } & ReturnType<typeof addBoxes> & ReturnType<typeof addPayments>
- *  & ReturnType<typeof addLotteries> & ReturnType<typeof addGates> & ReturnType<typeof addFarms>
- *  & ReturnType<typeof addRecipes> & ReturnType<typeof addHolds> & ReturnType<typeof addContests>
- *  & ReturnType<typeof addAuctions> & ReturnType<typeof addSchedules> & ReturnType<typeof addListings>
- *  & ReturnType<typeof addSending> & ReturnType<typeof addGrants> & ReturnType<typeof addClaims>
- *  & ReturnType<typeof addNfts> & ReturnType<typeof addReads>}
+ * @returns {{ project: any, readonly address: any } & ReturnType<typeof boxMethods>
+ *  & ReturnType<typeof paymentMethods> & ReturnType<typeof lotteryMethods> & ReturnType<typeof gateMethods>
+ *  & ReturnType<typeof farmMethods> & ReturnType<typeof recipeMethods> & ReturnType<typeof holdMethods>
+ *  & ReturnType<typeof contestMethods> & ReturnType<typeof auctionMethods> & ReturnType<typeof scheduleMethods>
+ *  & ReturnType<typeof listingMethods> & ReturnType<typeof sendingMethods> & ReturnType<typeof grantMethods>
+ *  & ReturnType<typeof claimMethods> & ReturnType<typeof nftMethods> & ReturnType<typeof readMethods>}
  *   The app: its project, the wallet's address, and the methods of each part (the modules beside this one).
  */
 export function solanaApp({
@@ -205,9 +205,9 @@ export function solanaApp({
   };
   /**
    * What the app's parts share (the modules beside this one): the spec, the RPC, the wallet, the clock and the reads
-   * above. Each part's factory adds the helpers a later part uses, in the order they run here, and returns its methods;
-   * the state the parts keep (the project's record, the standing tables, a link voucher waiting) lives on it, one copy
-   * an app.
+   * above. Each part's `add…` factory puts its helpers on it, in the order they run here, for the parts after it; then
+   * each part's `…Methods` factory returns its methods. The state the parts keep (the project's record, the standing
+   * tables, a link voucher waiting) lives on it, one copy an app.
    */
   const ctx = {
     spec,
@@ -231,24 +231,32 @@ export function solanaApp({
     read,
     readMaybe,
   };
-  const nfts = addNfts(ctx);
-  const gates = addGates(ctx);
-  const reads = addReads(ctx);
-  const sending = addSending(ctx);
+  addNfts(ctx);
+  addGates(ctx);
+  addReads(ctx);
+  addSending(ctx);
   addRolls(ctx);
   addLeftovers(ctx);
-  const farms = addFarms(ctx);
-  const lotteries = addLotteries(ctx);
-  const auctions = addAuctions(ctx);
-  const contests = addContests(ctx);
-  const listings = addListings(ctx);
-  const boxes = addBoxes(ctx);
-  const payments = addPayments(ctx);
-  const holds = addHolds(ctx);
-  const recipes = addRecipes(ctx);
-  const schedules = addSchedules(ctx);
-  const grants = addGrants(ctx);
-  const claims = addClaims(ctx);
+  addFarms(ctx);
+  addLotteries(ctx);
+  addAuctions(ctx);
+  addContests(ctx);
+  const nfts = nftMethods(ctx);
+  const gates = gateMethods(ctx);
+  const reads = readMethods(ctx);
+  const sending = sendingMethods(ctx);
+  const farms = farmMethods(ctx);
+  const lotteries = lotteryMethods(ctx);
+  const auctions = auctionMethods(ctx);
+  const contests = contestMethods(ctx);
+  const listings = listingMethods(ctx);
+  const boxes = boxMethods(ctx);
+  const payments = paymentMethods(ctx);
+  const holds = holdMethods(ctx);
+  const recipes = recipeMethods(ctx);
+  const schedules = scheduleMethods(ctx);
+  const grants = grantMethods(ctx);
+  const claims = claimMethods(ctx);
 
   return {
     project,

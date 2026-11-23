@@ -4,8 +4,11 @@ import { computeUnitLimit, withSolWrap } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { MPL_CORE, NO_OPTIONS, only } from './common.js';
 
-/** Returns the recipe methods. */
-export function addRecipes(ctx) {
+/**
+ * The recipe methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function recipeMethods(ctx) {
   const {
     spec,
     wallet,

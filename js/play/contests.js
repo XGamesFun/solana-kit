@@ -3,23 +3,12 @@ import { withSolWrap } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { NO_OPTIONS, only, units } from './common.js';
 
-/** Adds to `ctx` a contest's NFTs, and returns the contest method. */
+/**
+ * Puts on `ctx` a contest's NFTs. Returns `ctx`.
+ * @param {ReturnType<typeof import('./auctions.js').addAuctions>} ctx
+ */
 export function addContests(ctx) {
-  const {
-    wallet,
-    programs,
-    project,
-    tokens,
-    mintOf,
-    read,
-    nftOf,
-    heldEach,
-    passing,
-    listProofOf,
-    send,
-    clearLeftovers,
-    closesFirst,
-  } = ctx;
+  const { heldEach } = ctx;
 
   /** How many of the losers' NFTs left a winner's claim reads to choose its picks among. */
   const PICKS_READ = 8;
@@ -50,7 +39,28 @@ export function addContests(ctx) {
     out.push(...picks.slice(0, Math.min(share, 4)));
     return out.map(x => ({ j: x.j, nft: x.nft, gone: isGone(x) }));
   }
-  Object.assign(ctx, { contestNfts });
+  return Object.assign(ctx, { contestNfts });
+}
+
+/**
+ * The contest method: `enter`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function contestMethods(ctx) {
+  const {
+    wallet,
+    programs,
+    project,
+    tokens,
+    mintOf,
+    read,
+    nftOf,
+    passing,
+    listProofOf,
+    send,
+    clearLeftovers,
+    closesFirst,
+  } = ctx;
 
   return {
     /**

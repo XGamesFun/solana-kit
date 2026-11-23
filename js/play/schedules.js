@@ -4,8 +4,11 @@ import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { NO_OPTIONS, only } from './common.js';
 
-/** Returns the schedule method. */
-export function addSchedules(ctx) {
+/**
+ * The schedule method: `runSchedule`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function scheduleMethods(ctx) {
   const { wallet, programs, client, project, part, read, projectNow, send, chainNow, holdersOf } = ctx;
 
   return {

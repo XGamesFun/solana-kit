@@ -7,9 +7,12 @@ import { slotHashes } from '../chain/lookup.js';
 import * as loot from '../client/index.js';
 import { show } from './common.js';
 
-/** Adds to `ctx` the project's record, the slot and the clock, a token's hook accounts and settings; returns `balances`. */
+/**
+ * Puts on `ctx` the project's record, the slot and the clock, a token's hook accounts and settings. Returns `ctx`.
+ * @param {ReturnType<typeof import('./gates.js').addGates>} ctx
+ */
 export function addReads(ctx) {
-  const { wallet, now, client, project, tokens, mintOf, programOf, read } = ctx;
+  const { now, client, project, read } = ctx;
 
   /**
    * A token's own settings that let whoever is to be paid turn a payment away, for a page to say before a player puts
@@ -69,7 +72,15 @@ export function addReads(ctx) {
     }
     return [...out.values()];
   }
-  Object.assign(ctx, { tokenSettings, projectNow, slotNow, recentSlots, chainNow, hookTail });
+  return Object.assign(ctx, { tokenSettings, projectNow, slotNow, recentSlots, chainNow, hookTail });
+}
+
+/**
+ * The read method: `balances`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function readMethods(ctx) {
+  const { wallet, client, tokens, mintOf, programOf } = ctx;
 
   return {
     /** What the player holds of each of the economy's tokens, in whole units. */

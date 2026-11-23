@@ -11,7 +11,10 @@ import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { MPL_CORE, only } from './common.js';
 
-/** Adds to `ctx` a prize's inputs, the ask for a roll and the collecting of an order. */
+/**
+ * Puts on `ctx` a prize's inputs, the ask for a roll and the collecting of an order. Returns `ctx`.
+ * @param {ReturnType<typeof import('./sending.js').addSending>} ctx
+ */
 export function addRolls(ctx) {
   const {
     wallet,
@@ -528,5 +531,5 @@ export function addRolls(ctx) {
       ...(await asksFor(wallet.address, orderAddress, await read('Order', orderAddress), undefined, shown)),
     ]);
   }
-  Object.assign(ctx, { prizeInputs, sendRolling, collect, freshNonce, itemsOf, poolMintsOf, asksFor, askRoll });
+  return Object.assign(ctx, { prizeInputs, sendRolling, collect, freshNonce, itemsOf, poolMintsOf, asksFor, askRoll });
 }

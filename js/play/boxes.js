@@ -8,8 +8,11 @@ import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { freshKey, MPL_CORE, only, show } from './common.js';
 
-/** Returns the shop and box methods. */
-export function addBoxes(ctx) {
+/**
+ * The shop and box methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function boxMethods(ctx) {
   const {
     spec,
     wallet,

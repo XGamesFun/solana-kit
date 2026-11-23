@@ -22,8 +22,11 @@ const BATCHED = new Set(['contest', 'release', 'lookup-table', 'close-leaf', ...
 /** A table made this many slots ago whose transaction never landed was never sent: its blockhashes ran out long since. */
 const TABLE_UNSENT_SLOTS = 300n;
 
-/** Returns the claim methods. */
-export function addClaims(ctx) {
+/**
+ * The claim methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function claimMethods(ctx) {
   const {
     spec,
     wallet,

@@ -7,8 +7,11 @@ import { sendPlan } from '../chain/lookup.js';
 import * as loot from '../client/index.js';
 import { isProveLeaf, MPL_CORE, NO_OPTIONS, only } from './common.js';
 
-/** Returns the hold and loan methods. */
-export function addHolds(ctx) {
+/**
+ * The hold and loan methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function holdMethods(ctx) {
   const {
     wallet,
     programs,

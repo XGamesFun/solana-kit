@@ -6,8 +6,11 @@ import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { NO_OPTIONS, only, units } from './common.js';
 
-/** Returns the grant methods. */
-export function addGrants(ctx) {
+/**
+ * The grant methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function grantMethods(ctx) {
   const {
     spec,
     wallet,

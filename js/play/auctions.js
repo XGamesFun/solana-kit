@@ -12,39 +12,28 @@ import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { isProveLeaf, MPL_CORE, NO_OPTIONS, only, show, units } from './common.js';
 
-/** Adds to `ctx` an auction's address and its end, and returns the auction methods. */
+/**
+ * Puts on `ctx` an auction's address and its end. Returns `ctx`.
+ * @param {ReturnType<typeof import('./lotteries.js').addLotteries>} ctx
+ */
 export function addAuctions(ctx) {
   const {
-    spec,
     wallet,
     programs,
-    now,
     client,
     project,
     jobKey,
-    ours,
-    tokens,
-    currencyKey,
-    decimalsOf,
-    part,
     read,
     collectionOf,
-    nftOf,
     heldNow,
     leaving,
-    releaseOwed,
-    tokenSettings,
     projectNow,
-    passing,
-    listProofOf,
     send,
     sendAs,
     keyFor,
     dryRun,
     emptyKey,
     sendRolling,
-    clearLeftovers,
-    closesFirst,
     holdersOf,
     hookTail,
   } = ctx;
@@ -58,6 +47,9 @@ export function addAuctions(ctx) {
   /**
    * An auction's end, as `endAuction` and `callOffSale` send it (`a`: the auction's part of the spec). Each step is
    * checked before the wallet signs: a dry run when it is one legacy transaction, the size otherwise.
+
+   * @param {any} a
+   * @param {{ holders?: any, callOff?: boolean }} [options]
    */
   async function endSale(a, { holders, callOff = false } = {}) {
     const at = auctionAt(a);
@@ -342,7 +334,42 @@ export function addAuctions(ctx) {
     await emptyKey(key);
     return { signature, releases };
   }
-  Object.assign(ctx, { auctionAt });
+  return Object.assign(ctx, { auctionAt, endSale });
+}
+
+/**
+ * The auction methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function auctionMethods(ctx) {
+  const {
+    spec,
+    wallet,
+    programs,
+    now,
+    client,
+    project,
+    ours,
+    tokens,
+    currencyKey,
+    decimalsOf,
+    part,
+    read,
+    collectionOf,
+    nftOf,
+    leaving,
+    releaseOwed,
+    tokenSettings,
+    projectNow,
+    auctionAt,
+    passing,
+    listProofOf,
+    send,
+    endSale,
+    clearLeftovers,
+    closesFirst,
+    hookTail,
+  } = ctx;
 
   return {
     /**

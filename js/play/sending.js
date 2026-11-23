@@ -28,7 +28,10 @@ const SPONSORED_UNITS = 1_400_000;
 /** A system account must keep this much (rent for 0 bytes) or be emptied. */
 const RENT_EMPTY = 890_880n;
 
-/** Adds to `ctx` the ways a step is sent (`send`, `sendBatch`, `sendAs`), a dry run and a throwaway key's funding and refund; returns `unwrap`. */
+/**
+ * Puts on `ctx` the ways a step is sent (`send`, `sendBatch`, `sendAs`), a dry run, and a throwaway key's funding and refund. Returns `ctx`.
+ * @param {ReturnType<typeof import('./reads.js').addReads>} ctx
+ */
 export function addSending(ctx) {
   const { spec, wallet, sponsor, client, project, keys } = ctx;
 
@@ -357,7 +360,15 @@ export function addSending(ctx) {
     // A key kept in storage is dropped once it holds nothing.
     if (key.name && !(BigInt(await client.balance(key.address).catch(() => 1n)) > 0n)) keys?.forget(key.name);
   }
-  Object.assign(ctx, { standing, send, sendNow, sendBatch, sendAs, keyFor, dryRun, emptyKey });
+  return Object.assign(ctx, { standing, send, sendNow, sendBatch, sendAs, keyFor, dryRun, emptyKey });
+}
+
+/**
+ * The sending method: `unwrap`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function sendingMethods(ctx) {
+  const { wallet, client, send } = ctx;
 
   return {
     /** Turns what waits in the player's wrapped-SOL account (a bid that was topped) into plain SOL. */

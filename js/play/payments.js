@@ -3,8 +3,11 @@ import { withSolWrap } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { NO_OPTIONS, only, units } from './common.js';
 
-/** Returns the payment methods. */
-export function addPayments(ctx) {
+/**
+ * The payment methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function paymentMethods(ctx) {
   const { spec, wallet, programs, client, project, mintOf, decimalsOf, part, nftOf, projectNow, send, holdersOf } = ctx;
 
   return {

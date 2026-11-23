@@ -7,8 +7,11 @@ import { withSolWrap } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { MPL_CORE, NO_OPTIONS, only, units } from './common.js';
 
-/** Returns the listing and raffle methods. */
-export function addListings(ctx) {
+/**
+ * The listing and raffle methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function listingMethods(ctx) {
   const {
     wallet,
     programs,

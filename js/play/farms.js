@@ -10,39 +10,22 @@ import { compileMessage, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { isProveLeaf, MPL_CORE, NO_OPTIONS, only, show, units } from './common.js';
 
-/** Adds to `ctx` where an NFT is staked and a farm's ends, and returns the farm methods. */
+/**
+ * Puts on `ctx` a farm's token accounts, where an NFT is staked and a farm's ends. Returns `ctx`.
+ * @param {ReturnType<typeof import('./leftovers.js').addLeftovers>} ctx
+ */
 export function addFarms(ctx) {
-  const {
-    spec,
-    wallet,
-    programs,
-    live,
-    client,
-    project,
-    tokens,
-    mintOf,
-    decimalsOf,
-    part,
-    read,
-    readMaybe,
-    nftOf,
-    prizeInputs,
-    ownerOf,
-    passing,
-    send,
-    dryRun,
-    sendRolling,
-    freshNonce,
-    chainNow,
-    clearLeftovers,
-    closesFirst,
-  } = ctx;
+  const { spec, wallet, programs, client, project, readMaybe, nftOf, prizeInputs, ownerOf, chainNow } = ctx;
 
   /** Farm hooks shared by all actions. Static lists resolve automatically. For dynamic hooks,
    * transfers[mint] describes every actual transfer, including fee-adjusted reward credit/payout, and in a farm that
    * shares its pool the move's last one when a seat gave rewards back in it (an early exit, a watched
    * NFT gone): from the farm's rewards vault back to its pool, the project the authority.
-   * Explicit extra replaces resolution and must include all token hook/memo and Core adapter accounts. */
+   * Explicit extra replaces resolution and must include all token hook/memo and Core adapter accounts.
+   * @param {any} mints
+   * @param {any} create
+   * @param {{ extra?: any, transfers?: Record<string, any> }} [options]
+   */
   const farmTokens = async (mints, create, { extra, transfers = {} } = {}) => {
     const selected = [...new Set(mints)];
     const resolved = await Promise.all(
@@ -213,7 +196,42 @@ export function addFarms(ctx) {
       `“${f.name ?? f.key}” ends at ${ends}, and lock tier ${tier} would run past it: stake at a tier with a shorter lock.`,
     );
   }
-  Object.assign(ctx, { escrowedIn, lockedIn, endsOf });
+  return Object.assign(ctx, { farmTokens, escrowedIn, lockedIn, refreshOf, exitFits, endsOf, walking, openFor });
+}
+
+/**
+ * The farm methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function farmMethods(ctx) {
+  const {
+    wallet,
+    live,
+    client,
+    project,
+    tokens,
+    mintOf,
+    decimalsOf,
+    part,
+    read,
+    readMaybe,
+    farmTokens,
+    nftOf,
+    prizeInputs,
+    refreshOf,
+    passing,
+    send,
+    exitFits,
+    dryRun,
+    sendRolling,
+    freshNonce,
+    chainNow,
+    endsOf,
+    walking,
+    openFor,
+    clearLeftovers,
+    closesFirst,
+  } = ctx;
 
   return {
     /**

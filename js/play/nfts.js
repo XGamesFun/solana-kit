@@ -7,7 +7,10 @@ import { computeUnitLimit } from '../chain/programs.js';
 import * as loot from '../client/index.js';
 import { MPL_CORE } from './common.js';
 
-/** Adds to `ctx` what reads and moves an NFT: its kind, its holder, the proof it is gone; returns `collectibles`. */
+/**
+ * Puts on `ctx` what reads and moves an NFT: its kind, its holder, the proof it is gone. Returns `ctx`.
+ * @param {import('./common.js').Base} ctx
+ */
 export function addNfts(ctx) {
   const { spec, wallet, client, project, collections, ours } = ctx;
 
@@ -57,6 +60,10 @@ export function addNfts(ctx) {
    * which the page's RPC must offer, and proven first in the same transaction (`before`). `to`: the wallet the route
    * hands it to, when it hands it to one: a Token Metadata NFT then names the account it goes into (`nftInto`), a fresh
    * one opened by `payer` (the signer by default).
+
+   * @param {any} asset
+   * @param {any} [signer]
+   * @param {{ to?: any, payer?: any }} [options]
    */
   async function nftOf(asset, signer = wallet.address, { to, payer = signer } = {}) {
     const account = await client.account(asset);
@@ -156,6 +163,10 @@ export function addNfts(ctx) {
    * An NFT a record of the project's is to send on (`nftOf`, to `to`), or, when it is proven gone from the project
    * (`goneProof`), what shows that, with `gone` true: the instruction then finishes without it and nothing is sent.
    * `now`: what `heldNow` read of it already.
+
+   * @param {any} asset
+   * @param {any} [signer]
+   * @param {{ to?: any, payer?: any, now?: any }} [options]
    */
   async function leaving(asset, signer = wallet.address, { to, payer = signer, now = null } = {}) {
     const proof = await goneProof(asset, signer, { now });
@@ -207,7 +218,7 @@ export function addNfts(ctx) {
     for (const s of shares) if (s.to.Holder) holders[s.to.Holder[0]] = await ownerOf(s.to.Holder[0]).catch(() => null);
     return holders;
   }
-  Object.assign(ctx, {
+  return Object.assign(ctx, {
     collectionOf,
     nftOf,
     coreHeld,
@@ -221,6 +232,14 @@ export function addNfts(ctx) {
     kindOnly,
     holdersOf,
   });
+}
+
+/**
+ * The NFT method: `collectibles`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function nftMethods(ctx) {
+  const { owned } = ctx;
 
   return {
     /** The player's collectibles of this project: [{ asset, item, itemId, name, uri, attributes, frozen }]. `item` is its key in the spec. */

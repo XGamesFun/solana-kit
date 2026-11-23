@@ -7,7 +7,10 @@ import { compileFitting, transactionLocks } from '../chain/lookup.js';
 import * as loot from '../client/index.js';
 import { isProveLeaf } from './common.js';
 
-/** Adds to `ctx` the records an NFT left behind and the closes that go before a deposit of it. */
+/**
+ * Puts on `ctx` the records an NFT left behind and the closes that go before a deposit of it. Returns `ctx`.
+ * @param {ReturnType<typeof import('./rolls.js').addRolls>} ctx
+ */
 export function addLeftovers(ctx) {
   const {
     wallet,
@@ -247,5 +250,5 @@ export function addLeftovers(ctx) {
     await send(closes);
     return instructions;
   }
-  Object.assign(ctx, { recordsOf, stashesOf, closesOf, clearLeftovers, closesFirst });
+  return Object.assign(ctx, { recordsOf, stashesOf, closesOf, clearLeftovers, closesFirst });
 }

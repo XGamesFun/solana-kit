@@ -7,11 +7,12 @@ import { compileFitting, sendPlan, transactionLocks } from '../chain/lookup.js';
 import * as loot from '../client/index.js';
 import { isProveLeaf, NO_OPTIONS, only, show } from './common.js';
 
-/** Adds to `ctx` a lottery's rounds, draws and pulls, and returns the lottery methods. */
+/**
+ * Puts on `ctx` a lottery's rounds, draws and pulls. Returns `ctx`.
+ * @param {ReturnType<typeof import('./farms.js').addFarms>} ctx
+ */
 export function addLotteries(ctx) {
   const {
-    spec,
-    wallet,
     programs,
     now,
     client,
@@ -19,24 +20,14 @@ export function addLotteries(ctx) {
     tokens,
     currencyKey,
     mintOf,
-    decimalsOf,
-    part,
     read,
-    personFor,
-    nftOf,
     leaving,
     releaseOwed,
     prizeInputs,
     projectNow,
-    passing,
-    listProofOf,
     standing,
-    send,
-    kindOnly,
     dryRun,
     chainNow,
-    clearLeftovers,
-    closesFirst,
     holdersOf,
     hookTail,
   } = ctx;
@@ -379,7 +370,41 @@ export function addLotteries(ctx) {
     }
     return { instructions: out, rolls, heap, partial };
   }
-  Object.assign(ctx, { roundOf, drawStep, roundNfts, cancelPulls, pullSettles, pulls });
+  return Object.assign(ctx, { ticketCurrencyOf, roundOf, drawStep, roundNfts, cancelPulls, pullSettles, pulls });
+}
+
+/**
+ * The lottery methods.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function lotteryMethods(ctx) {
+  const {
+    spec,
+    wallet,
+    programs,
+    now,
+    client,
+    project,
+    tokens,
+    currencyKey,
+    decimalsOf,
+    part,
+    personFor,
+    ticketCurrencyOf,
+    nftOf,
+    projectNow,
+    passing,
+    listProofOf,
+    send,
+    kindOnly,
+    chainNow,
+    clearLeftovers,
+    closesFirst,
+    holdersOf,
+    roundOf,
+    hookTail,
+    drawStep,
+  } = ctx;
 
   return {
     /**

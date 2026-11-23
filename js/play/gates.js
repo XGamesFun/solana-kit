@@ -6,7 +6,10 @@ import { ownedAssetFilters, parseCoreAsset } from '../chain/core.js';
 import * as loot from '../client/index.js';
 import { MPL_CORE, show } from './common.js';
 
-/** Adds to `ctx` the link voucher waiting, the person a limit counts and what passes a gate; returns `proveTraits`, `link`. */
+/**
+ * Puts on `ctx` the link voucher waiting, the person a limit counts and what passes a gate. Returns `ctx`.
+ * @param {ReturnType<typeof import('./nfts.js').addNfts>} ctx
+ */
 export function addGates(ctx) {
   const { spec, wallet, now, client, project, ours, tokens, decimalsOf, read, readMaybe, owned } = ctx;
 
@@ -152,7 +155,15 @@ export function addGates(ctx) {
     // The list as the plan wrote its root: filled to a power of two (`gateList`).
     return loot.gateList(list).proofOf(wallet.address);
   }
-  Object.assign(ctx, { personFor, passing, listProofOf });
+  return Object.assign(ctx, { personFor, passing, listProofOf });
+}
+
+/**
+ * The gate methods: `proveTraits` and `link`.
+ * @param {import('./common.js').Ctx} ctx
+ */
+export function gateMethods(ctx) {
+  const { spec, wallet, now, project, send } = ctx;
 
   return {
     /**
@@ -162,7 +173,7 @@ export function addGates(ctx) {
      * Sheet already has are left as they are.
      */
     async proveTraits(nft, attributes, proof, key = spec.traits?.[0]?.collection) {
-      return ctx.send([loot.proveTraitsIx({ signer: wallet.address, project, key, nft, attributes, proof })]);
+      return send([loot.proveTraitsIx({ signer: wallet.address, project, key, nft, attributes, proof })]);
     },
 
     /**
