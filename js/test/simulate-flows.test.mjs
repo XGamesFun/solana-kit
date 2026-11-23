@@ -241,11 +241,10 @@ test('the “in all” cost of a price that rises is at its listed price, whatev
     assert.equal(box.realCost.totalSol, inAll);
     assert.equal(open.inAllSol, inAll);
     assert.ok(
-      open.inAll.startsWith(
-        `about ${inAll} SOL in all at its listed price, which rises 0.01% with each sale (the price, the player fee, `,
-      ),
+      open.inAll.startsWith(`about ${inAll} SOL in all at its listed price (the price, the player fee, `),
       open.inAll,
     );
+    assert.match(open.inAll, /\), and the price rises 0\.01% with each sale/, open.inAll);
   }
   // What the scenario's sales pay on average is still what the money flows count, and it is named as that.
   const [, hundred, thousand] = runs.map(r => r.box.averagePrice);
@@ -282,7 +281,8 @@ test('the “in all” cost of a price that rises is at its listed price, whatev
   const buy = explainEconomy(shop, { now: NOW })
     .text.split('\n')
     .find(l => l.includes('Buy “Hat”'));
-  assert.ok(buy.includes(`SOL in all at its listed price, ${moves} (the price, `), buy);
+  assert.ok(buy.includes(`SOL in all at its listed price (the price, `), buy);
+  assert.ok(buy.includes(`, and the price ${moves.replace(/^which /, '')}`), buy);
   assert.equal(buy.split('rises').length, 2, buy);
   // A price in another token is not in the SOL figure: what it adds says how the price moves.
   const priced = {
@@ -291,7 +291,7 @@ test('the “in all” cost of a price that rises is at its listed price, whatev
   };
   assert.match(
     explain(sim(priced), priced),
-    /Shop “Hat”: 10 GLD; [\d.]+ SOL on top of the price, which rises 5% with each sale \(the player fee, the network\)\./,
+    /Shop “Hat”: 10 GLD; [\d.]+ SOL on top of the price \(the player fee, the network\), and the price rises 5% with each sale\./,
   );
 });
 

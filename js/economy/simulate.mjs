@@ -1773,10 +1773,12 @@ export function inAll(c) {
   ]
     .filter(Boolean)
     .join(', ');
+  // after what the figure is made of, so the parentheses read as the figure's and not the rise's
+  const moved = c.priceMoves ? `, and the price ${c.priceMoves.replace(/^which /, '')}` : '';
   const head =
     c.totalSol !== undefined
-      ? `about ${numeral(c.totalSol)} SOL in all${c.atLeast ? ' at the least amount' : ''}${c.priceMoves ? ` at its listed price, ${c.priceMoves}` : ''} (${c.priceBack ? '' : 'the price, '}${parts})`
-      : `${numeral(c.extrasSol)} SOL on top of the price${c.priceMoves ? `, ${c.priceMoves}` : ''} (${parts})`;
+      ? `about ${numeral(c.totalSol)} SOL in all${c.atLeast ? ' at the least amount' : ''}${c.priceMoves ? ' at its listed price' : ''} (${c.priceBack ? '' : 'the price, '}${parts})${moved}`
+      : `${numeral(c.extrasSol)} SOL on top of the price (${parts})${moved}`;
   return c.holdSol > (c.totalSol ?? c.extrasSol) + 1e-9
     ? `${head}; the wallet needs about ${numeral(c.holdSol)} SOL when it signs, and the rest${c.heldIs ? ` (${c.heldIs})` : ''} comes back`
     : head;
