@@ -26,8 +26,8 @@ const start = (env = {}) => {
     env: { ...mine, ...env },
   });
 };
-/** The temp folders the test file said it made. */
-const made = out => [...out.matchAll(/^temp (.+)$/gm)].map(m => m[1]);
+/** The temp folders the test file said it made (Node 22's TAP output prints a test's own lines as `# temp …`). */
+const made = out => [...out.matchAll(/^(?:# )?temp (.+)$/gm)].map(m => m[1]);
 // A program checkout that is not there: the chain tests can't run with it (`cannotRun`), whatever is installed here.
 const NO_BUILD = { XSOLANA_PROGRAM_DIR: path.join(tmpdir(), 'xsolana-no-such-checkout') };
 
