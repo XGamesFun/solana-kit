@@ -48,7 +48,8 @@ import { compileMessage, MAX_TRANSACTION_BYTES, transactionSize } from '../chain
 import { sha256 } from '../chain/sha256.js';
 import { utf8 } from '../chain/bytes.js';
 import * as loot from '../client/index.js';
-import { check, MAX_COMPUTE_UNITS } from './check.mjs';
+import { check } from './check.mjs';
+import { MAX_COMPUTE_UNITS } from './sizes.mjs';
 import {
   DAY,
   ACCOUNT_OVERHEAD,

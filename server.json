@@ -3,7 +3,7 @@
   "name": "io.github.XGamesFun/solana-kit",
   "title": "xsolana",
   "description": "Design, check, simulate and review game economies for Solana: a JSON spec, no contract to write.",
-  "version": "0.29.8",
+  "version": "0.29.9",
   "repository": {
     "url": "https://github.com/XGamesFun/solana-kit",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@xgamesfun/solana",
-      "version": "0.29.8",
+      "version": "0.29.9",
       "transport": {
         "type": "stdio"
       },
