@@ -17,7 +17,7 @@ import { check } from '../economy/check.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { simulate } from '../economy/simulate.mjs';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
@@ -32,16 +32,6 @@ const spec = split => ({
   collection: { name: 'Referral entry' },
   items: [{ key: 'plot', name: 'Plot', price: 0.01, supply: 10 }],
   payments: [{ key: 'entry', name: 'Entry', amount: 0.01, split }],
-});
-
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
 });
 
 async function goLive(w, owner, economy) {

@@ -14,25 +14,34 @@ import { metadataAddress } from '../chain/metadata.js';
 import { parseMint, tokenEntry } from '../chain/mint.js';
 import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
-import { decodeAny } from '../client/accounts.js';
+import { accountKind, decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
 import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
-import { check, describe } from '../economy/check.mjs';
+import { check, describe, withoutRepeats } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
+import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
-import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
+import { example, examples, ideas, ideasRated, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
-import { describeReview, review } from '../economy/review.mjs';
+import { describeReview, review, signedRoutes } from '../economy/review.mjs';
 import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
+import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tellLines } from '../economy/walk.mjs';
-import { design, describeDesign, designAsks, requirementProblems, REQUIREMENTS } from '../economy/design.mjs';
+import {
+  design,
+  describeDesign,
+  designAsks,
+  noDesignWords,
+  requirementProblems,
+  REQUIREMENTS,
+} from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -141,6 +150,7 @@ function projectFile(rel, ctx) {
     const r = path.relative(root, p);
     return r !== '' && !r.startsWith('..') && !path.isAbsolute(r);
   };
+  if (file === root) throw new Error(`${rel} is the project folder itself (${root}): name a spec file in it.`);
   if (!inside(file) || !inside(realPath(file)))
     throw new Error(`${rel} is outside the project folder (${root}): a spec file must be inside it.`);
   if (path.extname(file).toLowerCase() !== '.json') throw new Error(`${rel} is not a .json file: a spec file is JSON.`);
@@ -153,8 +163,6 @@ const plainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v
 /** A file's spec: the JSON as it is, or what it holds under `economy` when that is its only key. */
 const specOf = value =>
   plainObject(value) && Object.keys(value).length === 1 && plainObject(value.economy) ? value.economy : value;
-/** The spec to read: what a file holds under `economy` (a game file keeps it beside its own keys), else the JSON. */
-const economyOf = value => (plainObject(value) && plainObject(value.economy) ? value.economy : value);
 /**
  * Whether a file's JSON is an economy spec, so xsolana_save may write over it: version 2 with its tokens (every spec that
  * checks has them), a currency if it names one (a spec of one token checks without: that token is its currency)
@@ -189,7 +197,11 @@ const SOURCE = {
   },
 };
 
-async function load(input, ctx) {
+/**
+ * The economy a call names, and where it came from: the spec passed whole, a worked example by name, or a file in the
+ * project folder (xsolana.json when none is named). A game file's spec is what it keeps under `economy`.
+ */
+export async function load(input, ctx) {
   if (input.spec) return { economy: economyOf(input.spec), from: 'the spec given' };
   if (input.example) return { economy: example(input.example).spec, from: `the example ${input.example}` };
   // A hosted server (js/mcp/http.mjs) reads no file: the machine it runs on is not the person's.
@@ -201,14 +213,33 @@ async function load(input, ctx) {
   const file = projectFile(rel, ctx);
   if (!existsSync(file)) {
     if (input.file) throw new Error(`${rel} does not exist.`);
+    // (a terminal gives a spec as a file, never whole: its words say how to get one)
     throw new Error(
-      `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write a spec (xsolana_guide, xsolana_examples) and pass it as "spec", or save it with xsolana_save.`,
+      ctx?.terminal
+        ? `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write one (xsolana_guide says what it holds, and xsolana_examples finds a worked one to start from), or name the file that holds your spec.`
+        : `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write a spec (xsolana_guide, xsolana_examples) and pass it as "spec", or save it with xsolana_save.`,
+    );
+  }
+  let text;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (e) {
+    throw new Error(
+      e.code === 'EISDIR'
+        ? `${rel} is a folder, not a spec file.`
+        : `${rel} can’t be read (${e.code ?? 'error'}): check that it is a file this user may read.`,
+      { cause: e },
     );
   }
   let value;
   try {
-    value = JSON.parse(await readFile(file, 'utf8'));
+    value = parseFile(text);
   } catch (e) {
+    // (text in another encoding reads as UTF-8 with a zero byte between its letters)
+    if (text.includes('\u0000'))
+      throw new Error(`${rel} is not UTF-8 text (it reads as UTF-16): save it as UTF-8, then try again.`, {
+        cause: e,
+      });
     // The parser's message quotes the file: say only where it stopped.
     const at = /position \d+/.exec(e.message)?.[0];
     throw new Error(`${rel} is not valid JSON${at ? ` (at ${at})` : ''}.`, { cause: e });
@@ -216,11 +247,12 @@ async function load(input, ctx) {
   return { economy: economyOf(value), from: rel, file };
 }
 
+// (a finding that repeats for thousands of parts is listed in part, in the words and in the lists alike)
 const refused = (verdict, from) => ({
   ok: false,
   from,
-  refusals: verdict.refusals,
-  warnings: verdict.warnings,
+  refusals: withoutRepeats(verdict.refusals),
+  warnings: withoutRepeats(verdict.warnings),
   text: `${describe({ refusals: verdict.refusals, warnings: [] })}\n\n${plural(verdict.refusals.length, 'refusal')} in ${from}: fix ${verdict.refusals.length === 1 ? 'it' : 'them'} (each says how), then run xsolana_check again.`,
 });
 
@@ -259,6 +291,12 @@ export function carryIds(previous, next) {
 }
 
 // ---------------------------------------------------------------- the tools
+
+/** Which loot the rated economies were rated against, in words: this one, or an earlier one whose ratings may be out of date. */
+const ratedWords = () =>
+  ideasRated() === VERSION
+    ? 'rated against this version of loot'
+    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION}), so some are out of date`;
 
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
 function flagsToTell(economy, now) {
@@ -340,8 +378,7 @@ export const tools = [
     name: 'xsolana_examples',
     title: 'Find a worked economy to start from',
     annotations: READ,
-    hosted:
-      'Worked economies to start from. With `query` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of 112 real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With `name`, returns that example’s whole spec. With neither, lists every example.',
+    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
     description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
     inputSchema: {
       type: 'object',
@@ -361,7 +398,8 @@ export const tools = [
           name: ex.name,
           spec: ex.spec,
           checks: verdict.ok ? 'clean' : verdict.refusals.map(r => r.code),
-          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${footer()}`,
+          // (a terminal shows the words alone, so there they carry the spec, and how to start a file from it)
+          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
         };
       }
       if (!query) {
@@ -391,7 +429,7 @@ export const tools = [
         r.hows.length ? '\nThese look impossible but are one field or a short combination (build them):' : '',
         ...r.hows.map(h => `- ${h.what}: ${h.how}.`),
         r.ideas.length
-          ? '\nRated economies (rated against this version of loot: a rating is a hint, the parts in xsolana_guide decide):'
+          ? `\nRated economies (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
           : '',
         ...r.ideas.map(i => `- #${i.n} ${i.name} (${i.fit}): ${i.how}`),
         r.limits.length
@@ -472,8 +510,8 @@ export const tools = [
       return {
         ok: verdict.ok,
         from,
-        refusals: verdict.refusals,
-        warnings: verdict.warnings,
+        refusals: withoutRepeats(verdict.refusals),
+        warnings: withoutRepeats(verdict.warnings),
         text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
     },
@@ -582,7 +620,9 @@ export const tools = [
       const highs = r.findings.filter(f => f.severity === 'high').length;
       const tail = highs
         ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'} (or have the person accept ${highs === 1 ? 'it' : 'them'} in plain words) before going live, then review again.`
-        : '\nNo high finding. Tell the person which level each signed route uses and what a cheater gets (the trade-offs above), as written: they choose the trade-off.';
+        : signedRoutes(r.routes).length
+          ? '\nNo high finding. Tell the person which level each signed route uses and what a cheater gets (the trade-offs above), as written: they choose the trade-off.'
+          : '\nNo high finding. Tell the person what a cheater gets on each route (the trade-offs above), as written.';
       // What to settle with the person before calling it ready, at the moment the agent does.
       const ready = [
         'Before you call it ready:',
@@ -634,11 +674,25 @@ export const tools = [
       // A requirement the search cannot read is said in words before anything is tried: the schema names only the kind.
       const wrong = requirementProblems(input.requirements);
       if (wrong.length) return { isError: true, text: `Nothing was designed: ${wrong.join(' ')}${footer()}` };
-      const r = design(economy, input.requirements, { now: nowOf(ctx) });
+      // A route is its part's key, bare or as xsolana_review and a scenario write it ("lottery:weekly"): a key has no
+      // colon, so what comes before one is the kind.
+      const requirements = input.requirements.map(q =>
+        typeof q.route === 'string' && q.route.includes(':')
+          ? { ...q, route: q.route.slice(q.route.indexOf(':') + 1) }
+          : q,
+      );
+      const r = design(economy, requirements, { now: nowOf(ctx) });
+      const unknown = r.routes.filter(x => x.unknown).map(x => `“${x.route}”`);
+      if (unknown.length)
+        return {
+          isError: true,
+          text: `Nothing was designed: the spec has no lottery, item, grant, farm or contest with the key ${unknown.join(' or ')}. A requirement’s route is the key of the part it is about ("weekly", or "lottery:weekly"): give the spec that part first, as a skeleton, then try again.${footer()}`,
+        };
       if (!r.candidates.length)
         return {
           isError: true,
-          text: `No design checks: give the spec its draw (a lottery whose key is the route), the tokens each requirement names and the prize, then try again.${footer()}`,
+          // (what the check refuses the spec for, when that is why; else what a design needs to start from)
+          text: `${noDesignWords(r) ?? 'No design checks: give the spec its draw (a lottery whose key is the route), the tokens each requirement names and the prize, then try again.'}${footer()}`,
         };
       return {
         ok: true,
@@ -654,8 +708,8 @@ export const tools = [
           removes: c.plan.removes ?? null,
           spec: c.spec,
         })),
-        askFirst: designAsks(r, input.requirements, { top }),
-        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. The JSON says the same as this text: each design's "needs" and "removes", and "askFirst" (whether to stop for their choice, the two designs that differ in a way out, what each other reward a server signs needs from them, and what the asking comes before: saving a spec, a draft too). Added or changed a route? Run this again.${footer()}`,
+        askFirst: designAsks(r, requirements, { top }),
+        text: `${describeDesign(r, requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. The JSON says the same as this text: each design's "needs" and "removes", and "askFirst" (whether to stop for their choice, the two designs that differ in a way out, what each other reward a server signs needs from them, and what the asking comes before: saving a spec, a draft too). Added or changed a route? Run this again.${footer()}`,
       };
     },
   },
@@ -694,7 +748,7 @@ export const tools = [
       let previous = null;
       if (existsSync(file)) {
         try {
-          previous = JSON.parse(await readFile(file, 'utf8'));
+          previous = parseFile(await readFile(file, 'utf8'));
         } catch {
           previous = null;
         }
@@ -851,6 +905,9 @@ export const tools = [
     inputSchema: { type: 'object', properties: { spec: SOURCE.spec, file: SOURCE.file }, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
+      // Checked first, as every tool that reads a spec does: the addresses read below come from the spec's own parts.
+      const verdict = check(economy, { now: nowOf(ctx) });
+      if (!verdict.ok) return refused(verdict, from);
       if (!economy.live?.project)
         return {
           ok: false,
@@ -880,6 +937,17 @@ export const tools = [
           .map(a => [`auction:${a.key}`, pda.auction(project, a.seller, a.id)]),
       ];
       const accounts = await rpc.accounts(wanted.map(([, a]) => a));
+      // The project itself: without it nothing of the economy is on this cluster, and publishing again cannot add it
+      // (going live refuses a file that names a project the chain does not have).
+      const [found] = accounts;
+      if (!found || found.owner !== lootProgram() || accountKind(found.data) !== 'Project') {
+        const other = cluster() === 'devnet' ? 'mainnet' : 'devnet';
+        return {
+          ok: false,
+          project,
+          text: `${economy.name ?? 'The economy'} on ${cluster()}: there is no loot project at ${project}, the address the live section of ${from} names. Nothing of this economy can be read there, and publishing again would not add it: going live refuses a file whose project the chain does not have. If it went live on ${other}, the file must say "network": "${other}" (a file is read on the cluster it names, devnet when it names none). Otherwise this live section is not the one going live wrote: use the file as \`xsolana approve\` left it.${footer()}`,
+        };
+      }
       const rows = wanted.map(([part, address], i) => {
         const a = accounts[i];
         if (!a) return { part, address, found: false };
@@ -929,9 +997,9 @@ export const tools = [
     title: 'Read a token made elsewhere',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     hosted:
-      'A token made elsewhere, as the chain has it: given its mint’s address, returns its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers`: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Reads devnet: the mint and its name record only, not the link the record names.',
+      'A token made elsewhere, as the chain has it: given its mint’s address, returns its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers`: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Reads the cluster this server works on, which its answer names: the mint and its name record only, not the link the record names.',
     description:
-      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads devnet (or XSOLANA_RPC_URL): the mint and its name record only, never the link the record names.',
+      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads the cluster of the economy in this folder (devnet unless its xsolana.json says "network": "mainnet"): devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL, which must then name a mainnet RPC. It reads the mint and its name record only, never the link the record names.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1016,24 +1084,14 @@ export const tools = [
         token.symbol || token.name
           ? `calls itself ${[token.name && `“${token.name}”`, token.symbol && `ticker “${token.symbol}”`].filter(Boolean).join(', ')} (its own record’s words: a label anyone can write, not a fact)`
           : 'has no name record, so wallets show it as an unknown token';
-      // What each power lets whoever holds it do, in the checker's words (check.mjs W-MINT-POWERS).
+      // What each power lets whoever holds it do (mint-words.mjs: the words going live uses for the same powers).
       const can = [
         p.mintAuthority === 'someone else' && `mint more of it whenever they want (${read.mintAuthority} can)`,
-        p.mintAuthority === 'project' && null,
-        p.freeze && 'freeze any account holding it, an economy’s pools and vaults included',
-        p.permanentDelegate && 'move or burn it out of any account',
-        p.transferHook && 'run a program of their own on every transfer, which can refuse one',
+        ...Object.entries(POWER_SAYS).map(([power, says]) => powerCounts(power, p) && says),
         p.transferFeePercent > 0 && `keep ${p.transferFeePercent}% of every transfer`,
-        p.feeChangeable && 'raise its transfer fee, up to all of a transfer',
-        p.closeAuthority && 'close the mint and make it again with other powers',
-        p.pausable && 'pause every transfer of it',
-        p.defaultFrozen && 'have every new account of it start frozen',
-        !p.defaultFrozen && p.defaultState && p.freeze && 'switch every new account of it to start frozen',
       ].filter(Boolean);
       const also = [
-        p.nonTransferable && 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
-        p.confidentialTransfers &&
-          'Its holders can turn plain transfers into their account away (confidential transfers).',
+        ...Object.entries(MINT_SAYS).map(([power, says]) => p[power] && says),
         state.paused && 'It is paused now: nothing of it moves until its issuer ends the pause.',
         state.scaled &&
           `Wallets show its amounts multiplied by a rate its mint carries${state.scaler ? ', which its issuer can change' : ''}: an economy counts the amounts under it, so a price in a spec is not the number a wallet shows.`,

@@ -2,7 +2,7 @@
   "version": 2,
   "network": "devnet",
   "name": "Scorched Treasury",
-  "prompt": "A schedule burns 1% of the treasury pool every day. Players can slow it down by depositing tokens into the flame guard pool, which the next season pays back with a bonus. Doing nothing costs something.",
+  "prompt": "A schedule burns 1% of the treasury pool every day. Players deposit tokens into the flame guard pool, and when the season ends the game pays each deposit back with a bonus out of what the treasury has left: the longer the season runs, the less there is to share.",
   "currency": "main",
   "tokens": [
     {
@@ -12,7 +12,7 @@
       "symbol": "MAIN",
       "decimals": 6,
       "mint": "4ikj24Byduo7WZGhnxNYkqstpm9xUVeZH7eLQbjGDL7N",
-      "venue": "games.fun",
+      "venue": "xgames.fun",
       "powers": {
         "mintAuthority": "someone else",
         "freeze": false

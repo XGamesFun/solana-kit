@@ -17,15 +17,23 @@ npm run format     # Prettier, before you commit (npm run lint checks it)
 Nothing in the tests deploys or spends SOL: they run the real program in LiteSVM. They send every instruction the
 client builds, and every example's whole setup.
 
+`npm test` starts the suite through `js/test/run.mjs`, and takes what `node --test` takes: `npm test --
+js/test/results.test.mjs` runs one file, and `npm test -- js/test/results.test.mjs --test-name-pattern=voucher` its
+tests of that name. A run started this way removes the temp folders its tests made. It also stops before any test
+when the tests of the real program can't run (no fixtures, or a LiteSVM that does not load), with why and the command
+that fixes it: those tests skip themselves, so the run would otherwise pass with nearly half the suite skipped. To run
+the others without them on purpose, set `XSOLANA_SKIP_CHAIN_TESTS=1`.
+
 To try the tools in your own agent from a clone, `node bin/xsolana.mjs connect --local` registers this checkout's MCP
 server and the skill with Claude Code and Codex (`--remove` takes them out again).
 
-| Variable              | What it does                                                                                                                                                                           |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `XSOLANA_RPC_URL`     | an RPC of your own for `xsolana approve` and `xsolana status`, on the economy's cluster (one that names another is refused); mainnet has no default, so an economy on mainnet needs it |
-| `XSOLANA_NO_OPEN`     | `xsolana approve --browser` prints its link without opening a browser                                                                                                                  |
-| `XSOLANA_DEBUG`       | the CLI prints a failure's whole stack, not one line                                                                                                                                   |
-| `XSOLANA_PROGRAM_DIR` | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it                                                                                               |
+| Variable                   | What it does                                                                                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `XSOLANA_RPC_URL`          | an RPC of your own for `xsolana approve` and `xsolana status`, on the economy's cluster (one that names another is refused); mainnet has no default, so an economy on mainnet needs it |
+| `XSOLANA_NO_OPEN`          | `xsolana approve --browser` prints its link without opening a browser                                                                                                                  |
+| `XSOLANA_DEBUG`            | the CLI prints a failure's whole stack, not one line                                                                                                                                   |
+| `XSOLANA_PROGRAM_DIR`      | the tests run that program build's `target/deploy/loot.so`, and check the IDL against it                                                                                               |
+| `XSOLANA_SKIP_CHAIN_TESTS` | `npm test` goes on without the tests of the real program when they can't run here (no fixtures, no LiteSVM build for this machine), in place of stopping                               |
 
 ## Layout
 
@@ -52,7 +60,8 @@ server and the skill with Claude Code and Codex (`--remove` takes them out again
 - Changes to tool texts, the skill or the plugin are best measured with the evals before and after
   ([evals/README.md](evals/README.md)). Write general rules, never a fix that names one scenario or product.
 - Plain ES modules, no build step. `js/chain`, `js/client`, `js/play` and `js/results` stay browser-safe: lint refuses
-  a `node:` import, `Buffer`, `process` or `require` there.
+  a Node import there (`node:fs` or `fs`, with `import` or `import()`) and Node's own globals (`Buffer`, `process`,
+  `require`, `__dirname`…), also behind `globalThis`.
 - Formatting is Prettier's (`.prettierrc.json`): `npm run format`, and your editor can
   follow `.editorconfig`. The code was reformatted in one commit; `git config blame.ignoreRevsFile
 .git-blame-ignore-revs` makes `git blame` look past it (GitHub does on its own).

@@ -133,7 +133,7 @@ export function claimMethods(ctx) {
      * What this player can finish now, themselves: a box to settle or refund, a contest entry to claim, a held
      * collectible to take home, a hold of theirs or a loan they made or took whose NFT the project no longer holds (its
      * collection took it back or burned it: listed at any time, also while the hold runs, as a `release` flagged
-     * `gone`, whose claim closes the hold and sends nothing), an auction they won (or one off by the clock: their bid back), a lottery place they
+     * `gone`, whose claim closes the hold and moves no NFT), an auction they won (or one off by the clock: their bid back), a lottery place they
      * won, a draw that is due (anyone may reveal it, or ask again when the oracle never answered; it takes 0.0008
      * SOL), and a drawn lottery's unpaid places, which anyone may pay so the next round can open. [{ kind, says, … }];
      * a winner's first claim of a contest of tokens carries `potUnits` and `prizeUnits`, its part as the decision wrote
@@ -491,7 +491,7 @@ export function claimMethods(ctx) {
 
     /**
      * Finishes one of `claims()`, signed by this player. Returns the signature. A `release` flagged `gone` closes its
-     * hold on the proof that the project no longer holds the NFT: nothing is sent, the hold's rent goes back to whoever
+     * hold on the proof that the project no longer holds the NFT: no NFT moves, the hold's rent goes back to whoever
      * paid it, and a loan's debt ends unpaid. A winner of a contest of NFTs picks
      * which loser's NFT they take (`{ take: asset }`, the NFT of a losing entry that still holds one; by default the
      * first found that the project still holds): only the winner can, while any are left.
@@ -534,7 +534,7 @@ export function claimMethods(ctx) {
         const kinds = {};
         // The NFTs of this claim that are proven gone from the project, each with what shows it and who staked it.
         // The contest only hands an NFT out and reads nothing, so each is passed as its hold (`["hold", nft, 0]`, made
-        // for this player, who gets it), and that hold closes on the proof right after the claim: nothing is sent.
+        // for this player, who gets it), and that hold closes on the proof right after the claim: no NFT moves.
         const lost = new Map();
         if (contest.nft) {
           const proofs = {};
@@ -578,7 +578,7 @@ export function claimMethods(ctx) {
       }
       if (c.kind === 'release') {
         const hold = await read('Hold', c.hold);
-        // Its NFT proven gone from the project: the hold closes on that proof, at any time, and nothing is sent. Its
+        // Its NFT proven gone from the project: the hold closes on that proof, at any time, and no NFT moves. Its
         // rent goes back to whoever paid it; a loan's debt ends unpaid.
         const proof = await goneProof(c.asset, me);
         if (proof)

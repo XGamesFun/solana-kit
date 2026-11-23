@@ -11,7 +11,7 @@
     },
     {
       "key": "gem",
-      "source": "game",
+      "source": "project",
       "name": "Gem",
       "symbol": "GEM",
       "decimals": 6

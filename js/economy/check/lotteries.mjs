@@ -13,7 +13,7 @@ import {
   prizePool,
   prizeToken,
   prizeWords,
-  toTime,
+  SpecError,
   toUnits,
 } from '../model.mjs';
 // plan.mjs imports check() in turn: each module only calls the other's functions, never at load time.
@@ -39,10 +39,12 @@ export function checkLotteries(c) {
     warn,
     m,
     units,
-    seconds,
+    fromNowSeconds,
+    timeAt,
     farTime,
     tooMany,
     percent,
+    built,
     token,
     prizeCheck,
     holdsUp,
@@ -50,6 +52,7 @@ export function checkLotteries(c) {
     rule,
     thenCheck,
     split,
+    perWalletWindow,
   } = c;
   // ---- lotteries (lottery.rs)
   for (const l of m.lotteries) {
@@ -179,7 +182,9 @@ export function checkLotteries(c) {
     units(l.seed, potToken, `${where}.seed`, `${label(l)}’s seed`);
     if (l.roundRent !== undefined)
       units(l.roundRent, { decimals: 9, symbol: 'SOL' }, `${where}.roundRent`, `${label(l)}’s round rent`);
-    if (seconds(l.every, `${where}.every`) <= 0 && !l.firstDraw)
+    // Its rhythm and its first draw are times the program keeps in 8 bytes.
+    const every = fromNowSeconds(l.every, `${where}.every`);
+    if (every <= 0 && !l.firstDraw)
       warn(
         'W-LOTTERY',
         `${where}.every`,
@@ -187,22 +192,16 @@ export function checkLotteries(c) {
         'Give it a "firstDraw" (like "publish+1d"), or an "every" to draw again and again.',
       );
     // A draw far off is taken, and warned of with its date: the tickets wait until then.
-    const every = seconds(l.every, `${where}.every`);
-    let firstDraw = now + every;
-    try {
-      if (l.firstDraw) firstDraw = toTime(l.firstDraw, now);
-      farTime(
-        firstDraw,
-        l.firstDraw ? `${where}.firstDraw` : `${where}.every`,
-        `${label(l)}’s first draw`,
-        l.firstDraw ?? l.every,
-        'its tickets and their money wait in it',
-      );
-    } catch (err) {
-      refuse(err.code, `${where}.firstDraw`, err.message, err.fix);
-    }
+    const firstDraw = l.firstDraw ? timeAt(l.firstDraw, `${where}.firstDraw`) : now + every;
+    farTime(
+      firstDraw,
+      l.firstDraw ? `${where}.firstDraw` : `${where}.every`,
+      `${label(l)}’s first draw`,
+      l.firstDraw ?? l.every,
+      'its tickets and their money wait in it',
+    );
     // Sales close this long before each draw (lottery.rs `closes_before`): never a whole rhythm or more before it.
-    const closesBefore = seconds(l.closesBefore, `${where}.closesBefore`);
+    const closesBefore = fromNowSeconds(l.closesBefore, `${where}.closesBefore`);
     if (every > 0 && closesBefore >= every)
       refuse(
         'E-LOTTERY',
@@ -252,6 +251,8 @@ export function checkLotteries(c) {
           `${label(l)} limits each buyer to ${l[round]} tickets a round and to ${l[each].count} every ${l[each].every ?? '1h'}: a lottery keeps one of them, never both, and the program would keep only the second.`,
           `Keep "${round}" (tickets in a round) or "${each}" (tickets in a window of time).`,
         );
+    // (a lottery's window is the same 4 bytes as any part's)
+    perWalletWindow(l, where);
     const placed = (l.places ?? [100]).map(placeOf);
     tooMany(
       placed.length,
@@ -285,9 +286,9 @@ export function checkLotteries(c) {
     }
     // A round's header (two bits a place, a copy of its terms…) and its widest first entry are written by one
     // instruction, within 10,240 bytes (lottery.rs; plan.mjs `roundSize`).
-    try {
-      const { head } = roundSize(l, m);
-      const widest = head + 6 + entryWidth(...entryShape(l));
+    {
+      const head = built(() => roundSize(l, m).head, where, `${label(l)}’s round`);
+      const widest = head === null ? 0 : head + 6 + entryWidth(...entryShape(l));
       if (widest > LOTTERY_ROUND_GROW)
         refuse(
           'E-LOTTERY',
@@ -295,8 +296,6 @@ export function checkLotteries(c) {
           `${label(l)}’s round header and its first entry come to ${widest.toLocaleString('en-US')} bytes, past the ${LOTTERY_ROUND_GROW.toLocaleString('en-US')} one instruction writes (BadLottery): every place adds two bits, every run of tokens 59 bytes.`,
           'Give it fewer places, or fewer runs.',
         );
-    } catch {
-      // A lottery whose args don't build is refused where its fields are checked.
     }
     for (const [i, p] of placed.entries()) {
       const raw = (l.places ?? [])[i];
@@ -339,8 +338,9 @@ export function checkLotteries(c) {
       let each = 0n;
       try {
         each = t ? toUnits(p.prize.amount, t.decimals ?? 0) : 0n;
-      } catch {
+      } catch (error) {
         // An amount that doesn't read is refused where the prize is checked.
+        if (!(error instanceof SpecError)) throw error;
       }
       if (each * BigInt(p.times ?? 1) > U64_MAX)
         refuse(

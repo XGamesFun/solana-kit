@@ -5,14 +5,16 @@
 // checks each one (the checker and its analyses) and tests every requirement on it, then ranks them: the specs that keep
 // the most, then the ones that play best (fewest approvals, fewest tokens to learn), then the cleanest, then the most
 // secure. When none keeps them all, it says which requirements can't hold
-// together and what giving up each one costs. Pure.
+// together and what giving up each one costs. Each combination is checked (check.mjs), so a design works on the
+// process's cluster as the check does, and reads the clock when no `now` is given.
 //
 // Routes come in families (FAMILIES): a draw (a lottery or a raffle) and how it is paid, a sale of an item, a reward
 // (a grant), staking (a farm) and a contest. More join the same way: a requirement as a test, a bridge as a build.
 import { NO_ADDRESS } from '../chain/base58.js';
-import { check } from './check.mjs';
+import { check, describe } from './check.mjs';
+import { splitWords, toWords, treasuryWordsOf } from './explain.mjs';
 import { flows } from './flows.mjs';
-import { farmCeiling, model } from './model.mjs';
+import { destination, farmCeiling, keepsPot, lotterySplit, model, placeOf } from './model.mjs';
 import { journeyOf } from './walk.mjs';
 
 const num = x => Number(x ?? 0);
@@ -290,9 +292,46 @@ export const REQUIREMENTS = {
 };
 
 /**
+ * Where what a player pays to enter a draw goes, read from the drafted spec `s` and worded as the explanation words
+ * it (explain.mjs `toWords`, `splitWords`), to follow "what they pay": "goes to your treasury", "is split: 10% to your
+ * treasury, 90% into the pot its winners are paid from". An entry token's price goes where its recipe sends it. A
+ * ticket's price goes by its lottery's own terms: its split's shares and its cut, then the rest into its pot, or, for a
+ * round paid from its own money, to its winners, what their places leave going to its "rest". Null where the spec does
+ * not say it in a line (a ticket paid in a token of its own, or with an NFT): then no sentence claims it.
+ */
+function paidGoes(x, s, m) {
+  const treasury = treasuryWordsOf(m);
+  const goes = to => (to === 'burned' ? 'is burned' : `goes ${to}`);
+  if (x.plan.entry) {
+    const to = [
+      ...new Set(s.recipes.filter(r => r.key.startsWith(`${x.route}-buy-`)).map(r => r.in[0].to ?? 'treasury')),
+    ];
+    if (to.length > 1 && to.every(t => destination(t).kind === 'pool'))
+      return 'goes into a pool the project holds, one for each currency';
+    return to.length === 1 ? goes(toWords(destination(to[0]), treasury)) : null;
+  }
+  const l = s.lotteries.find(q => q.key === x.plan.draw);
+  if (!l || l.ticketNft || l.ticketCurrency) return null;
+  if (l.noLoss) return 'comes back to them once the round is drawn';
+  const left = keepsPot(l) ? null : toWords(destination(l.rest), treasury);
+  // What the places of a round paid from its own money take of it, in all.
+  const won = (l.places ?? [100]).map(placeOf).reduce((n, p) => n + num(p.percent) * num(p.times), 0);
+  const rest = keepsPot(l)
+    ? 'into the pot its winners are paid from'
+    : won <= 0
+      ? left
+      : won >= 100
+        ? 'to the round’s winners'
+        : `to the round’s winners, who take ${won}% of it, the rest ${left === 'burned' ? 'burned' : `going ${left}`}`;
+  const shares = lotterySplit(l);
+  return shares.length ? `is split: ${splitWords(shares, treasury, rest)}` : goes(rest);
+}
+
+/**
  * The bridges, as choices the search combines: how the draw is paid (`pay`), where the payment burns (`burn`), how a
  * cancel gives it back (`refund`), and what a free entry is (`free`). Each `build(spec, ctx)` changes the candidate and
- * says what it did; one that can't apply to the choices made before it returns false.
+ * says what it did; one that can't apply to the choices made before it returns false. `plain(ctx, spec, model)` is its
+ * part of the sentence handed to the person, said of the candidate once every bridge is built.
  */
 const DRAW_BRIDGES = {
   pay: [
@@ -368,8 +407,12 @@ const DRAW_BRIDGES = {
   burn: [
     {
       id: 'none',
-      says: 'the payment goes to the treasury',
-      plain: () => 'what they pay goes to your treasury',
+      says: 'the payment is not burned',
+      // Nothing is changed here, so where the payment goes is the drafted spec's own to say.
+      plain: (x, s, m) => {
+        const goes = paidGoes(x, s, m);
+        return goes && `what they pay ${goes}`;
+      },
       build: (s, x) => ((x.plan.burn = null), true),
     },
     {
@@ -406,7 +449,13 @@ const DRAW_BRIDGES = {
     {
       id: 'at-settle',
       says: 'the payment is held until the draw and burned then ("rest": "burn"), so a cancel refunds it',
-      plain: () => 'what they pay is burned when the draw happens, and refunded instead if it is cancelled',
+      // All of it is burned only when nothing takes a share first (a split, a cut, a place's percent).
+      plain: (x, s, m) => {
+        const goes = paidGoes(x, s, m);
+        return goes === 'is burned'
+          ? 'what they pay is burned when the draw happens, and refunded instead if it is cancelled'
+          : goes && `what they pay ${goes}; a cancelled draw refunds it instead`;
+      },
       build: (s, x) => {
         if (x.plan.entry) return false;
         for (const l of s.lotteries.filter(l => x.plan.draws.includes(l.key))) {
@@ -895,7 +944,8 @@ const FAMILIES = {
           const d = spec.tokens.find(t => t.key === f.rewards)?.decimals ?? 0;
           return Math.floor((budget / days) * 10 ** d) / 10 ** d;
         })(),
-        lock: requirements.find(r => r.kind === 'locked')?.lock ?? '7d',
+        // (the lock a locked design is offered with)
+        lock: '7d',
         farm: s => s.farms.find(q => q.key === route),
         plan: { routes: [route] },
       };
@@ -982,11 +1032,14 @@ function* combos(dims, at = 0, picked = []) {
 
 /**
  * Every spec the family's bridges build for one route under its requirements, checked and tested, best first:
- * { route, family, candidates, conflicts, inPart, allKept }.
+ * { route, family, candidates, conflicts, inPart, allKept, refusals }. `refusals`: with no candidate, what the check
+ * refuses the spec as it stands for, as the check gives it (every design is built on that spec); empty otherwise,
+ * and when the spec itself checks.
  */
 function searchRoute(base, route, family, requirements, now) {
   const fam = FAMILIES[family];
   const candidates = [];
+  const ownRefusals = () => check(base, { now }).refusals;
   for (const picked of combos(fam.dims)) {
     const spec = clone(base);
     for (const k of ['tokens', 'recipes', 'grants', 'boxes', 'pools', 'lotteries', 'farms', 'contests', 'items'])
@@ -997,17 +1050,21 @@ function searchRoute(base, route, family, requirements, now) {
         if (c.token === 'sol' && !spec.tokens.some(t => t.key === 'sol'))
           spec.tokens.push({ key: 'sol', source: 'sol' });
     const x = fam.init(spec, route, requirements);
-    if (!x) return { route, family, candidates: [], conflicts: [], inPart: [], allKept: false };
+    if (!x)
+      return {
+        route,
+        family,
+        candidates: [],
+        conflicts: [],
+        inPart: [],
+        allKept: false,
+        refusals: ownRefusals(),
+      };
     if (fam.skip?.(picked, x)) continue;
     fam.prepare?.(picked, x);
     if (!picked.every(step => step.build(spec, x) !== false)) continue;
-    let verdict;
-    try {
-      verdict = check(spec, { now });
-    } catch {
-      continue;
-    }
     // (a combination the program refuses is no design)
+    const verdict = check(spec, { now });
     if (!verdict.ok) continue;
     const m = model(spec, { now });
     const fl = flows(m, { now });
@@ -1036,7 +1093,7 @@ function searchRoute(base, route, family, requirements, now) {
         0,
       ),
       experience: fam.experience(c),
-      plain: picked.map(step => step.plain?.(x)).filter(Boolean),
+      plain: picked.map(step => step.plain?.(x, spec, m)).filter(Boolean),
       needs: x.plan.needs ?? [],
       fl,
       plan: x.plan,
@@ -1086,7 +1143,15 @@ function searchRoute(base, route, family, requirements, now) {
       .join('+');
     if (!inPart.some(y => y.partial === partial)) inPart.push({ partial, best: c });
   }
-  return { route, family, candidates, conflicts, allKept: all, inPart };
+  return {
+    route,
+    family,
+    candidates,
+    conflicts,
+    allKept: all,
+    inPart,
+    refusals: candidates.length ? [] : ownRefusals(),
+  };
 }
 
 const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
@@ -1146,7 +1211,16 @@ export function design(base, requirements, { now = Math.floor(Date.now() / 1000)
     const family = familyOf(spec, route, requirements);
     const reqs = requirements.filter(r => (r.route ?? first) === route);
     if (!family) {
-      routes.push({ route, family: null, candidates: [], conflicts: [], inPart: [], allKept: false, unknown: true });
+      routes.push({
+        route,
+        family: null,
+        candidates: [],
+        conflicts: [],
+        inPart: [],
+        allKept: false,
+        refusals: [],
+        unknown: true,
+      });
       continue;
     }
     const result = searchRoute(spec, route, family, reqs, now);
@@ -1168,6 +1242,16 @@ function sayIt(c) {
   const gave = c.results.filter(q => q.kept !== true);
   const what = c.plain.join('; ');
   return `“${what.charAt(0).toUpperCase()}${what.slice(1)}.${gave.length ? ` The catch: ${gave.map(q => q.why).join('; ')}.` : ''}”`;
+}
+
+/**
+ * Why a route has no design, in words, when the check refuses the spec it would be built on (`refusals`): each
+ * refusal as the check gives it, with its code, what is wrong and the fix. Null when the spec itself checks (the
+ * route's part is not in it, or no known way builds the wants on it).
+ */
+export function noDesignWords(result) {
+  if (result.candidates?.length || !result.refusals?.length) return null;
+  return `No design checks: the check refuses the spec as it stands, and every design is built on it.\n${describe({ refusals: result.refusals, warnings: [] })}\nFix ${result.refusals.length === 1 ? 'that' : 'each of those'} in the spec, then run this again.`;
 }
 
 /** Each family of routes in words. */
@@ -1259,7 +1343,7 @@ function describeRoute(result, requirements, { top = 3, last = true } = {}) {
       '  (The burn counts as a want only if they asked for it in their own words. If you added it, ask them first, with the version that keeps a way out.)',
     );
   if (!result.candidates.length)
-    return `${lines.join('\n')}\n\nNo design checks: none of the known ways builds this on the spec as it is (the tokens it names, the item, grant, farm, lottery or contest it is for). Fix the spec and run it again, or draft it by hand.`;
+    return `${lines.join('\n')}\n\n${noDesignWords(result) ?? 'No design checks: none of the known ways builds this on the spec as it is (the tokens it names, the item, grant, farm, lottery or contest it is for). Fix the spec and run it again, or draft it by hand.'}`;
   const wayOut = wayOutChoice(result, top);
   if (result.allKept && wayOut)
     lines.push(

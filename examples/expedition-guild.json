@@ -11,14 +11,14 @@
     },
     {
       "key": "dust",
-      "source": "game",
+      "source": "project",
       "name": "Dust",
       "symbol": "DUST",
       "decimals": 6
     },
     {
       "key": "ticket",
-      "source": "game",
+      "source": "project",
       "name": "Relic Ticket",
       "symbol": "TICKET",
       "decimals": 0

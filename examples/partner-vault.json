@@ -2,11 +2,11 @@
   "version": 2,
   "network": "devnet",
   "name": "Partner Vault",
-  "prompt": "We hold NFTs from a partner collection and want to give them out: a paid crate with a 5% chance at one, a free daily chest for anyone, a raffle whose winner takes the rare one, a one-day expedition that brings back a chest, and an auction of a mystery lot.",
+  "prompt": "We hold NFTs from a partner collection and want to give them out: a paid crate with a 5% chance at one, a free daily chest for holders of our pass, a raffle whose winner takes the rare one (the runner-up takes 90% of the ticket money), a one-day expedition that brings back a chest, and an auction of a mystery lot.",
   "currency": "sol",
   "tokens": [
     { "key": "sol", "source": "sol" },
-    { "key": "shards", "source": "game", "name": "Shards", "symbol": "SHRD", "decimals": 6 }
+    { "key": "shards", "source": "project", "name": "Shards", "symbol": "SHRD", "decimals": 6 }
   ],
   "collection": { "name": "Partner Vault" },
   "items": [
@@ -81,6 +81,7 @@
       "key": "daily",
       "name": "Free daily chest",
       "prize": { "gives": "roll", "box": "daily-chest" },
+      "gate": { "item": "pass" },
       "limits": { "perWalletEach": { "count": 1, "every": "1d" }, "perDay": 200 },
       "fund": 0.5
     }

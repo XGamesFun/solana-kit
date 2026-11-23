@@ -333,6 +333,121 @@ test('a contest with no trust in the owner’s key: a decider key, kept only in 
   assert.deepEqual(r.candidates[0].spec.contests.find(c => c.key === 'duel').deciders, [VOUCHER]);
 });
 
+/** A spec of one lottery `terms` (where its ticket money goes), with a pool for it to name. */
+const drawSpec = terms => ({
+  version: 2,
+  network: 'devnet',
+  name: 'Draw',
+  collection: false,
+  currency: 'gold',
+  tokens: [{ key: 'gold', source: 'project', name: 'Gold', symbol: 'GOLD', decimals: 0 }],
+  pools: [{ key: 'prizes', currency: 'gold', seed: 100 }],
+  lotteries: [{ key: 'weekly', name: 'Weekly', price: 10, every: '7d', ...terms }],
+  scenario: { days: 28, players: 100, perDay: { 'lottery:weekly': 50 } },
+});
+
+test('the sentence for the person says where the payment goes as the drafted spec sends it, and as the explanation says', async () => {
+  const { explainEconomy } = await import('../economy/explain.mjs');
+  const wants = [{ kind: 'one-approval', route: 'weekly' }];
+  /** The sentence of the design that prices the draw in the currency itself, and what the explanation says of its spec. */
+  const said = terms => {
+    const direct = design(drawSpec(terms), wants, { now: NOW }).candidates.find(c => c.bridges[0] === 'direct');
+    const text = describeDesign({ ...direct, candidates: [direct], allKept: true, conflicts: [], inPart: [] }, wants);
+    return [/Say: “(.*)”/.exec(text)[1], explainEconomy(direct.spec, { now: NOW }).text];
+  };
+  // Winners and a pool: nothing of it reaches the treasury (the sentence once said it all did).
+  let [say, explained] = said({ rest: 'pool:prizes', places: [50, 30] });
+  assert.equal(
+    say,
+    'Players pay 10 GOLD a ticket; what they pay goes to the round’s winners, who take 80% of it, the rest going to the pool “prizes”; there is no free entry.',
+  );
+  assert.match(explained, /what the places leave, and the part of places nobody won, goes to the pool “prizes”/);
+  assert.doesNotMatch(say, /treasury/);
+  // A pot, with a cut: the split is the explanation's own words.
+  [say, explained] = said({ pot: 0, cutPercent: 10, places: [50, 30] });
+  assert.match(say, /what they pay is split: 10% to your treasury, 90% into the pot its winners are paid from;/);
+  assert.match(explained, /10% of ticket money goes to your treasury, the rest into the pot\./);
+  // A pot alone, every place of a round's own money, a prize with nothing of the money, a burn of what is left.
+  assert.match(said({ pot: 0, places: [60, 40] })[0], /what they pay goes into the pot its winners are paid from;/);
+  assert.match(said({ rest: 'treasury', places: [100] })[0], /what they pay goes to the round’s winners;/);
+  assert.match(
+    said({ rest: 'treasury', places: [{ percent: 0, prize: { gives: 'tokens', amount: 5, from: 'pool:prizes' } }] })[0],
+    /what they pay goes to your treasury;/,
+  );
+  assert.match(
+    said({ rest: 'burn', places: [50], split: [{ to: 'pool:prizes', percent: 25 }] })[0],
+    /what they pay is split: 25% to the pool “prizes”, 75% to the round’s winners, who take 50% of it, the rest burned;/,
+  );
+  // No loss: it comes back. Another wallet as the treasury is named as the explanation names it.
+  assert.match(
+    said({ pot: 0, noLoss: true, seed: 10, places: [100] })[0],
+    /what they pay comes back to them once the round is drawn;/,
+  );
+  const elsewhere = { ...drawSpec({ rest: 'treasury', places: [50] }), treasury: `wallet:${VOUCHER}` };
+  const direct = design(elsewhere, wants, { now: NOW }).candidates.find(c => c.bridges[0] === 'direct');
+  assert.match(direct.plain.join('; '), /the rest going to the treasury \(the wallet HUQP…5VpD\)/);
+  // A burn at the draw burns all of it only when no place takes a share first.
+  const burning = [
+    { kind: 'burn', route: 'weekly' },
+    { kind: 'refund-as-paid', route: 'weekly' },
+  ];
+  const atSettle = terms =>
+    design(drawSpec(terms), burning, { now: NOW })
+      .candidates.find(c => c.bridges[1] === 'at-settle')
+      .plain.join('; ');
+  assert.match(
+    atSettle({
+      rest: 'treasury',
+      places: [{ percent: 0, prize: { gives: 'tokens', amount: 5, from: 'pool:prizes' } }],
+    }),
+    /what they pay is burned when the draw happens, and refunded instead if it is cancelled/,
+  );
+  assert.match(
+    atSettle({ rest: 'treasury', places: [50, 30] }),
+    /what they pay goes to the round’s winners, who take 80% of it, the rest burned; a cancelled draw refunds it instead/,
+  );
+});
+
+test('with no design that checks, the answer is what the check refuses, with its code, its place and its fix', async () => {
+  const wants = [{ kind: 'one-approval', route: 'weekly' }];
+  // The spec itself is refused: one field no token takes.
+  const base = drawSpec({ rest: 'treasury', places: [50] });
+  base.tokens[0].bogus = 1;
+  const result = design(base, wants, { now: NOW });
+  assert.equal(result.candidates.length, 0);
+  assert.deepEqual(result.refusals, check(base, { now: NOW }).refusals);
+  assert.deepEqual(
+    result.refusals.map(r => `${r.code} ${r.where}`),
+    ['E-SCHEMA economy.tokens[0].bogus'],
+  );
+  const text = describeDesign(result, wants);
+  assert.match(
+    text,
+    /No design checks: the check refuses the spec as it stands, and every design is built on it\.\n✗ E-SCHEMA economy\.tokens\[0\]\.bogus is not a field/,
+  );
+  assert.match(text, /Fix: economy\.tokens\[0\] takes key, source, name/);
+  // The tool answers the same.
+  const { tools } = await import('../mcp/tools.mjs');
+  const tool = tools.find(t => t.name === 'xsolana_design');
+  const answer = await tool.handler({ spec: base, requirements: wants }, {});
+  assert.equal(answer.isError, true);
+  assert.match(
+    answer.text,
+    /^No design checks: the check refuses the spec as it stands[^\n]*\n✗ E-SCHEMA economy\.tokens\[0\]\.bogus/,
+  );
+  // The spec checks, and no known way builds the want on it (a currency it does not have): no refusal is the spec's.
+  const paying = [{ kind: 'pay-in', route: 'weekly', currencies: [{ token: 'silver', amount: 1 }] }];
+  const none = design(drawSpec({ rest: 'treasury', places: [50] }), paying, { now: NOW });
+  assert.equal(none.candidates.length, 0);
+  assert.deepEqual(none.refusals, []);
+  assert.match(
+    describeDesign(none, paying),
+    /No design checks: none of the known ways builds this on the spec as it is/,
+  );
+  // A design that checks carries no refusals.
+  assert.deepEqual(design(drawSpec({ rest: 'treasury', places: [50] }), wants, { now: NOW }).refusals, []);
+});
+
 test('a requirement the search cannot read is said in words, before anything is tried', async () => {
   const { requirementProblems } = await import('../economy/design.mjs');
   const { tools } = await import('../mcp/tools.mjs');
@@ -383,4 +498,22 @@ test('a requirement the search cannot read is said in words, before anything is 
   const cap = await ask([{ kind: 'emission-cap', total: 1000 }]);
   assert.match(cap.text, /It pays out at most 1000 in all\./);
   assert.doesNotMatch(cap.text, /Cannot read properties/);
+});
+
+test('a route is the key of its part, bare or as xsolana_review writes it; a key the spec has not is said so', async () => {
+  const { tools } = await import('../mcp/tools.mjs');
+  const tool = tools.find(t => t.name === 'xsolana_design');
+  const ask = route =>
+    tool.handler({ example: 'coin-flip-arena', requirements: [{ kind: 'one-approval', route }] }, {});
+  const bare = await ask('weekly');
+  assert.ok(!bare.isError, bare.text);
+  const kinded = await ask('lottery:weekly');
+  assert.ok(!kinded.isError, kinded.text);
+  assert.equal(kinded.text, bare.text);
+  const missing = await ask('lottery:monthly');
+  assert.equal(missing.isError, true);
+  assert.match(
+    missing.text,
+    /^Nothing was designed: the spec has no lottery, item, grant, farm or contest with the key “monthly”/,
+  );
 });

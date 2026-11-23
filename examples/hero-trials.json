@@ -2,11 +2,11 @@
   "version": 2,
   "network": "devnet",
   "name": "Hero Trials",
-  "prompt": "Heroes can be enchanted for 20 GEM: 70% a level up, 25% a level down, 5% the hero is destroyed, better odds the higher its level. A 1-day expedition can fail: 60% it brings back a relic, 30% the hero comes back hurt (-2 affection), 10% the hero is captured and goes to the treasury. A risky forge: 50 GEM burned for a 70% chance at a level, or the hero breaks. Merging two heroes costs the kept one a level.",
+  "prompt": "GEM is the game's own token, which the game hands out itself (its owner's key mints it). Heroes can be enchanted for 20 GEM: 70% a level up, 25% a level down, 5% the hero is destroyed, better odds the higher its level. A 1-day expedition can fail: 60% it brings back a relic, 30% the hero comes back hurt (-2 affection), 10% the hero is captured and goes to the treasury. A risky forge: 50 GEM burned for a 70% chance at a level, or the hero breaks. Merging two heroes costs the kept one a level.",
   "currency": "sol",
   "tokens": [
     { "key": "sol", "source": "sol" },
-    { "key": "gem", "source": "game", "name": "Gem", "symbol": "GEM", "decimals": 6 }
+    { "key": "gem", "source": "project", "name": "Gem", "symbol": "GEM", "decimals": 6 }
   ],
   "collection": { "name": "Hero Trials" },
   "items": [

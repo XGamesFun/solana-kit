@@ -28,7 +28,20 @@ import { isCollectible } from '../sizes.mjs';
 
 /** Checks the tokens and the currency; true when the check stops here. Adds the shared checks to `c`. */
 export function checkTokens(c) {
-  const { economy, refusals, refuse, warn, m, units, seconds, fourByteSeconds, percent, boostPercent, quietUnits } = c;
+  const {
+    economy,
+    refusals,
+    refuse,
+    warn,
+    m,
+    units,
+    seconds,
+    fourByteSeconds,
+    timeAt,
+    percent,
+    boostPercent,
+    quietUnits,
+  } = c;
   // ---- tokens and the game's currency
   const sols = (economy.tokens ?? []).filter(t => t.source === 'sol');
   if (sols.length > 1)
@@ -404,7 +417,7 @@ export function checkTokens(c) {
           `Leave "currency" out: a pool’s prize is in what it holds.`,
         );
       // A prize of 0 tokens is given with nothing moved, on every route.
-      if (t && units(line.amount, t, `${at}.amount`, `What ${what} gives`) === 0n)
+      if (t && units(line.amount, t, `${at}.amount`, `What ${what[0].toLowerCase()}${what.slice(1)} gives`) === 0n)
         warn(
           'W-ZERO',
           `${at}.amount`,
@@ -997,9 +1010,16 @@ export function checkTokens(c) {
         'Fine for a game; a higher price makes the fee a smaller part of it.',
       );
   };
-  /** A part's "perWalletEach": its window (a day when it names none) in 4 bytes. */
+  /** A part's limit in each window of time, by wallet ("perWalletEach") or by person ("perPersonEach"): its window (a
+   * day when it names none) in 4 bytes. */
   const perWalletWindow = (part, where) => {
-    if (part.perWalletEach) fourByteSeconds(part.perWalletEach.every ?? '1d', `${where}.perWalletEach.every`);
+    for (const each of ['perWalletEach', 'perPersonEach'])
+      if (part[each]) fourByteSeconds(part[each].every ?? '1d', `${where}.${each}.every`);
+  };
+  /** When a part sells, crafts or is claimed: its "opens" and its "closes" (a grant's "until"), each a time. */
+  const opensAndCloses = (part, where, closes = 'closes') => {
+    timeAt(part.opens, `${where}.opens`);
+    timeAt(part[closes], `${where}.${closes}`);
   };
   const prices = (part, tok, where) => {
     if (part.rise) {
@@ -1022,6 +1042,7 @@ export function checkTokens(c) {
           `${label(part)}’s price falls by 0: it never falls.`,
           'Give the fall a step above 0, or leave "fall" out.',
         );
+      timeAt(part.fall.start, `${where}.fall.start`);
       const floor = units(part.fall.floor, tok, `${where}.fall.floor`, `${label(part)}’s floor`);
       if (floor === 0n)
         warn(
@@ -1051,6 +1072,7 @@ export function checkTokens(c) {
     split,
     feeNote,
     perWalletWindow,
+    opensAndCloses,
     prices,
   });
 }

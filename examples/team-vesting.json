@@ -7,7 +7,7 @@
   "tokens": [
     {
       "key": "share",
-      "source": "game",
+      "source": "project",
       "name": "Share",
       "symbol": "SHARE",
       "decimals": 6

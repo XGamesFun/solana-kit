@@ -214,6 +214,15 @@ function partBytes(spec, now) {
   return out;
 }
 
+/** `partBytes`, or null for a spec whose steps cannot be built. */
+function partBytesOrNull(spec, now) {
+  try {
+    return partBytes(spec, now);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * What a change to a live economy publishes: the parts that are new or differ from what is on chain (`live.published`),
  * as the part ids setupSteps takes (`only`), and in words what cannot change. `settings`: the project's own settings
@@ -262,16 +271,18 @@ export function changedParts(economy) {
   // A part the spec leaves as it was can still be written otherwise: what it reads from another part changed (a
   // lottery's pot, which a sale's share is paid into; an item's life, which each recipe that takes it enforces). Each
   // part whose instructions now build otherwise than the published spec's is published too, or said fixed.
-  try {
+  {
     const now = Math.floor(Date.now() / 1000);
-    const was = partBytes(published, now);
-    for (const [id, bytes] of partBytes(economy, now)) {
+    // A published spec this version can no longer build (an older file): its parts are compared as written, above.
+    const was = partBytesOrNull(published, now);
+    // The spec itself is built the same way by the check (check/setup.mjs builds these steps), which refuses one
+    // that cannot be: no plan is made of a spec whose parts could not be compared here.
+    const built = was && partBytesOrNull(economy, now);
+    for (const [id, bytes] of built ?? []) {
       if (!was.has(id) || was.get(id) === bytes || only.has(id) || fixed.includes(id)) continue;
       if (isFixed(...id.split(':'))) fixed.push(id);
       else only.add(id);
     }
-  } catch {
-    // A published spec this version can no longer build (an older file): its parts are compared as written, above.
   }
   // A token is made once. One whose name, ticker or link the spec now gives otherwise than it was published with
   // (`renames`; by what they come to, not how they are spelled: model.mjs tokenLabels) has its name record written

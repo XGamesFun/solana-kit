@@ -11,7 +11,7 @@
 // A host server that pays its winners itself, with no server of ours in the way (the owner names the host key among
 // the grant's voucher keys; the program checks every voucher):
 //   const voucher = await signVoucher({ signer: key, game, grant: 1, incarnation, wallet, round, now: clusterNow })
-//   the winner's page: app.claimGrant('prize', { voucher })
+//   await app.claimGrant('prize', { voucher })     // on the winner's page (js/play)
 //
 // A giveaway host (a player the owner appointed, signed in with the play host; their page):
 //   const session = await newKey()
@@ -199,7 +199,7 @@ export async function signVoucher({
   round,
   now,
   seconds = 7 * 86_400,
-  personHash = null,
+  personHash = /** @type {string | null} */ (null),
   amount = 0n,
 }) {
   if (!(Number(seconds) > 0))
@@ -288,7 +288,16 @@ const fetchJson = async (server, path, fetchImpl, cluster = onCluster()) =>
  * (its signMessage) or a host key's sign; `by` its address; `cert` the owner's host certificate when `by` is a host key.
  */
 export const draws = {
-  open: async ({ server, signMessage, by, cert = null, rates = null, fetchImpl = globalThis.fetch, ...spec }) => {
+  open: async ({
+    server,
+    signMessage,
+    by,
+    cert = null,
+    rates = null,
+    cluster = onCluster(),
+    fetchImpl = globalThis.fetch,
+    ...spec
+  }) => {
     const ratesHash = rates
       ? Array.from(
           new Uint8Array(
@@ -297,7 +306,7 @@ export const draws = {
           b => b.toString(16).padStart(2, '0'),
         ).join('')
       : 'default';
-    const text = drawText({ ...spec, rates: ratesHash });
+    const text = drawText({ ...spec, cluster, rates: ratesHash });
     return post(
       server,
       '/v1/draws',
@@ -309,6 +318,7 @@ export const draws = {
         ...(rates ? { rates } : {}),
       },
       fetchImpl,
+      cluster,
     );
   },
   /** A player enters with their play-host token, or with their wallet's signature (`wallet`, `signMessage`). */
@@ -369,19 +379,31 @@ export const draws = {
     );
   },
   /** The draw as anyone may check it; settled, with its result, once its beacon round is out. */
-  get: async ({ server, game, draw, fetchImpl = globalThis.fetch }) =>
-    (await fetchJson(server, `/v1/draws/${seg(game)}/${seg(draw)}`, fetchImpl)).draw,
+  get: async ({ server, game, draw, cluster = onCluster(), fetchImpl = globalThis.fetch }) =>
+    (await fetchJson(server, `/v1/draws/${seg(game)}/${seg(draw)}`, fetchImpl, cluster)).draw,
 };
 
 /** A giveaway, from its appointed host's page. */
 export const giveaways = {
   /** Opens one: `cert` the owner's appointment, `token` the host's play-host sign-in, `session` a key from newKey(). */
-  open: async ({ server, game, cert, token, giveaway, winners, endsBy, session, fetchImpl = globalThis.fetch }) =>
+  open: async ({
+    server,
+    game,
+    cert,
+    token,
+    giveaway,
+    winners,
+    endsBy,
+    session,
+    cluster = onCluster(),
+    fetchImpl = globalThis.fetch,
+  }) =>
     post(
       server,
       `/v1/giveaways/${seg(game)}`,
       { cert, token, giveaway, winners, endsBy, session: session.address },
       fetchImpl,
+      cluster,
     ),
   /** Reports its result, signed by its session key. `grant`: the host's grant (each winner is paid from it). */
   report: async ({

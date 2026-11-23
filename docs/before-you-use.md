@@ -52,9 +52,10 @@ version; this is the whole of it.
   likelier), or keeps selling and gives nothing for a miss (`giveNothing`, never refunded). Both sides of an exchange
   move together: an auction's seller is paid only when the lot reaches the winner, and a loan's repayment brings its NFT
   home.
-- **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls wait. An
-  order still unanswered after 7 days can be refunded. Once a roll has waited 10 minutes, a buyer who sees a late
-  answer coming can take a refund instead.
+- **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls
+  wait. A purchase whose roll has not been answered 10 minutes after it was asked can be refunded, so a buyer who sees
+  a late answer coming can take the refund instead. A roll won another way holds no payment and is asked again; one
+  that holds a payment or an NFT (an auction's mystery lot) can be refunded 7 days after its first ask.
 - **Fees and rent.** The platform sets two flat fees: a player action 0.002 SOL on devnet and 0.0005 SOL on mainnet
   (the default is 0.002), and a project action 0.00001 SOL. Each is capped at 0.01 SOL, and a raise waits 7 days. Accounts cost rent: going live, and each settle that
   opens or mints something. `xsolana cost` gives the totals. The platform can suspend purchases, but it never stops

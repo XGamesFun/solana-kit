@@ -118,8 +118,12 @@ const RARITIES = Object.freeze(['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary
 
 // ---------------------------------------------------------------- units
 
-/** A refusal raised while reading a value; the checker turns it into a refusal with a code. */
-class SpecError extends Error {
+/**
+ * A refusal raised while reading a value the spec writes (an amount, a duration, a time): its `code`, what is wrong and
+ * the `fix`. The checker turns it into a refusal where the value is written. Whatever catches an error to go on
+ * without a value tests for this class, so that any other error is still thrown.
+ */
+export class SpecError extends Error {
   constructor(code, message, fix) {
     super(message);
     this.code = code;
@@ -134,7 +138,12 @@ function decimalText(amount) {
     throw new SpecError('E-AMOUNT', `${amount} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
   const text = String(amount);
   if (!/e/i.test(text)) return text;
-  return amount.toFixed(20).replace(/\.?0+$/, '');
+  // Written with an exponent: 1e21 or more is past anything the program holds, and one below 0.000001 is spelled out
+  // digit for digit ("1.5e-7" is 0.00000015), so it is refused for its decimals and never read as 0.
+  const [digits, exponent] = text.split('e');
+  if (Number(exponent) > 0)
+    throw new SpecError('E-AMOUNT', `${text} is too large for the program.`, 'Use a smaller amount.');
+  return `0.${'0'.repeat(-Number(exponent) - 1)}${digits.replace('.', '')}`;
 }
 
 /** "0.1" of a currency with 9 decimals → 100000000n. Refuses more decimals than the currency has. */
@@ -173,7 +182,8 @@ function keptRate(f, rewardsToken, tokens) {
     return kept === units
       ? f.rate
       : { ...f.rate, perDay: fromUnits(kept, rewards.decimals ?? 0), perDaySaid: f.rate.perDay };
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SpecError)) throw error;
     return f.rate;
   }
 }
@@ -931,9 +941,8 @@ export function prizeWords(p, m) {
 
 /**
  * What one box outcome gives (catalog.rs), each in the box's own words: "item", "pay" (a fixed amount from a pool),
- * "stash" (an NFT of a stash at random), "mint"
- * (tokens minted), "nft" (one NFT a stash lists) or "roll" (a roll of another box). A bundle gives its `prizes`; "burn"
- * and "nothing" give none.
+ * "stash" (an NFT of a stash at random), "mint" (tokens minted), "nft" (one NFT a stash lists) or "roll" (a roll of
+ * another box). A bundle gives its `prizes`; "nothing" gives none.
  */
 export function outcomeParts(o) {
   if (!o) return [];
@@ -957,20 +966,22 @@ export const holdsRent = (p, m) =>
   p.gives === 'item' && (!p.compressed || (m?.item.get(p.item)?.drawn ?? []).length > 0);
 
 /**
- * The units of `SETTLE_RENT_UNIT` a settle of box `b`'s order may spend (`loot.settleRent`), which js/play funds its
- * throwaway settle key with and gets back unspent: for each draw, each part of the richest outcome that opens an
- * account (a collectible, a fresh compressed NFT's Sheet, a stash's NFT); once an order, each source of tokens it may
- * pay, and the fate of the NFT it rolls on.
+ * How many times `SETTLE_RENT_UNIT` of rent a settle of box `b`'s order may spend, as the client counts it
+ * (`loot.settleRent`, which js/play funds its throwaway settle key with and gets back unspent): for each draw, each
+ * part of the richest outcome that opens an account (a collectible, a fresh compressed NFT's Sheet, a stash's NFT);
+ * once an order, each source of tokens it may pay (each pool, and each token it mints, the project's currency when
+ * an outcome names none), and the fate of the NFT it rolls on.
  */
-export function settleUnits(b, m) {
+export function settleRentUnits(b, m) {
   const opens = p => holdsRent(p, m) || p.gives === 'stash' || p.gives === 'nft';
   const parts = (b.outcomes ?? []).map(o => outcomeParts(o));
   const most = Math.max(0, ...parts.map(ps => ps.filter(opens).length));
   const sources = new Set(
     parts
       .flat()
-      .filter(p => ['tokens', 'pay', 'mint'].includes(p.gives))
-      .map(p => prizePool(p) ?? `mint:${p.currency ?? ''}`),
+      .flatMap(p =>
+        p.gives === 'pay' ? [`pool:${p.pool}`] : p.gives === 'mint' ? [`mint:${p.currency ?? m?.currencyKey}`] : [],
+      ),
   );
   return drawsOf(b) * most + sources.size + (b.rollsOn ? 1 : 0);
 }

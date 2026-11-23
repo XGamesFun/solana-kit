@@ -161,7 +161,7 @@ export function addNfts(ctx) {
   }
   /**
    * An NFT a record of the project's is to send on (`nftOf`, to `to`), or, when it is proven gone from the project
-   * (`goneProof`), what shows that, with `gone` true: the instruction then finishes without it and nothing is sent.
+   * (`goneProof`), what shows that, with `gone` true: the instruction then finishes without it and no NFT moves.
    * `now`: what `heldNow` read of it already.
 
    * @param {any} asset
@@ -179,7 +179,7 @@ export function addNfts(ctx) {
    * The release of a hold a route just made of `asset`, an NFT it owed and could only hand out (`kind`: from
    * `leaving`). The program makes such a hold at `["hold", asset, 0]` for `player`, the route's `signer` paying its
    * rent and `rentTo` named for its NFT's account's (`hold::owe`). The release right after it, by the same signer,
-   * ends it: for an NFT proven gone from the project it closes the hold on the proof and nothing is sent (`NftGone`);
+   * ends it: for an NFT proven gone from the project it closes the hold on the proof and no NFT moves (`NftGone`);
    * for any other it sends the NFT on to `player` (`Released`). Either way the hold's rent comes back to the signer.
    * `g`: the project, for a hold owed to the treasury.
    */

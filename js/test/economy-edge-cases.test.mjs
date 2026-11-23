@@ -3,11 +3,13 @@
 // ordinary words.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { TOKEN_2022_PROGRAM } from '../chain/pda.js';
 import { check } from '../economy/check.mjs';
+import { example } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { changedParts, recordLanded } from '../economy/live.mjs';
 import { model } from '../economy/model.mjs';
-import { contestArgs } from '../economy/plan.mjs';
+import { contestArgs, plan, setupContext } from '../economy/plan.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 
@@ -328,4 +330,76 @@ test('a mission’s roll is explained from its box’s own outcomes', () => {
     /rolled on “Quest” \(its result: \+1 level and 5 GOLD, minted; nothing changes; or the NFT burned\)/,
   );
   assert.doesNotMatch(text, /a stat lost/);
+});
+
+test('a plan leaves the context it was given as it was, and still names each Token-2022 mint’s program', () => {
+  // The Blind Forge's coin is a Token-2022 mint: its lottery's write names that program for it.
+  const { spec } = example('blind-forge');
+  const m = model(spec, { now: NOW });
+  const keys = { 'new:collection': A };
+  const given = setupContext(m, { owner: '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T', keys, rent: () => 0n });
+  const before = JSON.stringify(given, (_, v) => (typeof v === 'bigint' ? String(v) : v));
+  // (frozen: a write to it would throw)
+  const ctx = Object.freeze({ ...given, slot: 1n });
+  const planned = plan(spec, { now: NOW, ctx });
+  assert.equal(planned.ok, true);
+  assert.equal(
+    JSON.stringify({ ...ctx, slot: undefined }, (_, v) => (typeof v === 'bigint' ? String(v) : v)),
+    before,
+  );
+  assert.equal(ctx.tokenPrograms, undefined);
+  const programs = planned.transactions.flatMap(t =>
+    t.instructions.flatMap(ix => (ix.accounts ?? ix.keys ?? []).map(a => String(a.address ?? a.pubkey))),
+  );
+  assert.ok(programs.includes(TOKEN_2022_PROGRAM), 'an instruction names the Token-2022 program');
+  // With the same context given twice, the two plans are the same.
+  const again = plan(spec, { now: NOW, ctx });
+  assert.deepEqual(
+    again.transactions.map(t => t.bytes),
+    planned.transactions.map(t => t.bytes),
+  );
+});
+
+test('an amount written with an exponent is read as the number it is: too large refused, too fine refused, never 0', () => {
+  const crate = amount =>
+    check(
+      base({
+        boxes: [
+          {
+            key: 'crate',
+            name: 'Crate',
+            price: amount,
+            outcomes: [{ gives: 'tokens', from: 'mint', currency: 'gold', amount, chance: 100 }],
+          },
+        ],
+      }),
+      { now: NOW },
+    ).refusals.map(r => r.message);
+  for (const big of [1e30, 9e99])
+    assert.deepEqual(crate(big), [
+      `“Crate”’s price: ${big} is too large for the program.`,
+      `What an outcome of “Crate” gives: ${big} is too large for the program.`,
+    ]);
+  // (gold has 2 decimals: 1e-30 and 1.5e-7 are spelled out and refused for theirs, never read as free)
+  assert.deepEqual(crate(1e-30), [
+    `“Crate”’s price: 0.${'0'.repeat(29)}1 has more decimals than its currency (2).`,
+    `What an outcome of “Crate” gives: 0.${'0'.repeat(29)}1 has more decimals than its currency (2).`,
+  ]);
+  assert.match(crate(1.5e-7)[0], /: 0\.00000015 has more decimals than its currency \(2\)\.$/);
+});
+
+test('a pool drained by one box through several outcomes names the box once', () => {
+  const s = base({
+    pools: [{ key: 'p', currency: 'gold', seed: 10 }],
+    boxes: [
+      {
+        key: 'crate',
+        name: 'Crate',
+        price: 1,
+        outcomes: [1, 2, 3].map(n => ({ gives: 'pay', pool: 'p', amount: n * 10, chance: n === 3 ? 34 : 33 })),
+      },
+    ],
+  });
+  const [drained] = check(s, { now: NOW }).warnings.filter(w => w.code === 'W-ASSUMPTION');
+  assert.match(drained.message, /a day \(box:crate\) and takes in 0/);
 });

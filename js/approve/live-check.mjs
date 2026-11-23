@@ -19,6 +19,7 @@ import { mintState, powersOf } from '../chain/token2022.js';
 import { accountKind, decode } from '../client/accounts.js';
 import { ata, BUBBLEGUM_PROGRAM, lootProgram, pda } from '../client/pda.js';
 import { METAPLEX_METADATA_PROGRAM, SYSTEM_PROGRAM } from '../chain/pda.js';
+import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
 import { fromUnits, lockedChanges, stashNfts, tokenLabels } from '../economy/model.mjs';
 import { madeSoFar } from '../economy/plan.mjs';
 
@@ -327,22 +328,6 @@ export async function readRenames({ live, m, chain, owner, published = null }) {
 /** A token the spec names by its mint address that is not that mint on chain: the message says what differs. */
 export class MintMismatch extends Error {}
 
-/** What each power of a mint's own keys lets its holder do, in the checker's words (check.mjs W-MINT-POWERS). */
-const POWER_SAYS = {
-  freeze: 'freeze any account holding it, the economy’s pools and vaults included',
-  permanentDelegate: 'move or burn it out of any account',
-  transferHook: 'run a program of their own on every transfer, which can refuse one',
-  feeChangeable: 'raise its transfer fee, up to all of a transfer',
-  closeAuthority: 'close the mint and make it again with other powers',
-  pausable: 'pause every transfer of it',
-  defaultFrozen: 'have every new account of it start frozen',
-  defaultState: 'switch every new account of it to start frozen',
-};
-/** What the mint itself does, whoever controls it: said as a sentence of its own. */
-const MINT_SAYS = {
-  nonTransferable: 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
-  confidentialTransfers: 'Its holders can turn plain transfers into their account away (confidential transfers).',
-};
 /** What a spec says of a power when it denies it, for the refusal. */
 const POWER_NAMES = {
   freeze: 'no freeze authority',
@@ -380,14 +365,12 @@ function powersAgainst(t, what, onChain, said = {}, { state = {}, project = null
     throw new MintMismatch(
       `The spec says ${what} keeps ${said.transferFeePercent}% of every transfer; on chain its mint ${t.mint} keeps ${fee}%, so pools, prizes and stakes receive less than the page shows. ${fix}`,
     );
-  // A default state only matters with someone who can freeze: with no freeze authority nobody can switch it.
-  const can = power => (power === 'defaultState' ? !onChain.defaultFrozen && onChain.freeze : true);
   const unsaid = [
     onChain.mintAuthority === 'someone else' &&
       said.mintAuthority === undefined &&
       'mint more of it whenever they want',
     ...Object.entries(POWER_SAYS).map(
-      ([power, says]) => onChain[power] && said[power] === undefined && can(power) && says,
+      ([power, says]) => powerCounts(power, onChain) && said[power] === undefined && says,
     ),
     fee > 0 && said.transferFeePercent === undefined && `keep ${fee}% of every transfer`,
   ].filter(Boolean);

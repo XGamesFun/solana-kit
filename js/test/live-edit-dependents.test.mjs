@@ -4,11 +4,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { check } from '../economy/check.mjs';
 import { changedParts, recordLanded } from '../economy/live.mjs';
 import { model } from '../economy/model.mjs';
-import { placeholderContext } from '../economy/plan.mjs';
+import { placeholderContext, plan, setupContext } from '../economy/plan.mjs';
 
 const NOW = 1_800_000_000;
+const OWNER = '5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T';
 const live = name => {
   const spec = JSON.parse(readFileSync(new URL(`../../examples/${name}.json`, import.meta.url), 'utf8'));
   // A copy, as a file read again is: the record and its published spec share their parts.
@@ -35,6 +37,36 @@ test('an item’s life changed publishes each recipe that enforces it', () => {
   e.items[0].life.uses = Number(e.items[0].life.uses ?? 0) + 1;
   const only = [...changedParts(e).only];
   assert.ok(only.includes('item:mare') && only.includes('recipe:breed'), only.join(', '));
+});
+
+test('a change to a spec whose steps cannot be built is refused, never published without the parts that read what changed', () => {
+  // Live for a real wallet (the check refuses the plan's stand-in for one).
+  const spec = JSON.parse(readFileSync(new URL('../../examples/stakers-draw.json', import.meta.url), 'utf8'));
+  const m = model(spec, { now: NOW });
+  const keys = Object.fromEntries(
+    ['new:collection', ...[...m.tokens.keys()].map(key => `new:mint/${key}`)].map((name, i) => [
+      name,
+      `So1111111111111111111111111111111111111111${i + 3}`,
+    ]),
+  );
+  const ctx = setupContext(m, { owner: OWNER, keys, rent: () => 0n });
+  const e = JSON.parse(JSON.stringify(recordLanded(spec, { ctx, now: NOW })));
+  assert.deepEqual(check(e, { now: NOW }).refusals, []);
+  // Its pot moves, which the badge's sale reads. And what the lottery would hold for its rounds' rent, were it put
+  // live anew, passes what 8 bytes count: its steps cannot be built, so the parts cannot be compared as they build.
+  e.lotteries[0].pot = 1;
+  e.lotteries[0].every = '640000000w';
+  e.scenario.perDay['lottery:draw'] = 1_000_000;
+  const { only } = changedParts(e);
+  assert.deepEqual([...only], ['lottery:draw'], 'the sale that reads the pot could not be found');
+  // A change is planned only from a spec the check passes, and the check builds the same steps.
+  const verdict = check(e, { now: NOW });
+  assert.deepEqual(
+    verdict.refusals.map(r => `${r.code} ${r.where}`),
+    ['E-BUILD economy.lotteries.draw'],
+  );
+  assert.match(verdict.refusals[0].message, /could not be built for the program: \d+ does not fit in 8 bytes\./);
+  assert.equal(plan(e, { now: NOW, only, live: e.live }).ok, false);
 });
 
 test('a live grant keeps how its claim records are split, whatever its wallets become, edit after edit', async () => {

@@ -10,6 +10,7 @@ import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { closeTokenAccount, computeUnitLimit, meta } from '../chain/programs.js';
 import { mintToIx, setAuthorityIx } from '../chain/token.js';
+import IDL from '../client/idl/loot.js';
 import * as loot from '../client/index.js';
 import { newAddress } from '../sim/chain.mjs';
 import { boxArgs, cannotRun, collectible, drop, FEES, fromPool, itemDrop, PRICE, world } from './helpers/world.mjs';
@@ -115,6 +116,20 @@ describe("a project's settings and records", () => {
     const closed = w.chain.send(w.creator, [loot.closeRecordIx({ owner: w.creator, project: w.project, target })]);
     assert.deepEqual(names(closed), ['RecordClosed']);
     assert.equal(w.chain.get(target), null);
+  });
+
+  test('a change to a project names each setting as an option of its own: named, it is sent; left out, nothing changes', () => {
+    const [owner, project, key] = [SYSTEM_PROGRAM, MPL_CORE_PROGRAM, loot.lootProgram()];
+    const settings = { authority: key, treasury: key, paused: true, collections: [key], issuer: key };
+    // every setting the program takes (`ProjectUpdate`) is one of them
+    assert.deepEqual(
+      IDL.types.find(t => t.name === 'ProjectUpdate').type.fields.map(f => f.name),
+      Object.keys(settings),
+    );
+    const none = loot.updateProjectIx({ owner, project });
+    for (const [name, value] of Object.entries(settings))
+      assert.notDeepEqual(loot.updateProjectIx({ owner, project, [name]: value }).data, none.data, name);
+    assert.equal(none.data.length, 1 + Object.keys(settings).length, 'the instruction, and no setting');
   });
 });
 

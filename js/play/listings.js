@@ -254,7 +254,7 @@ export function listingMethods(ctx) {
     /**
      * Takes a listed NFT home (its maker). While a rental runs it only stops the listing; call again once it is over.
      * A listing whose NFT the project no longer holds (its collection took it back or burned it) closes without it, on
-     * that proof: nothing is sent, and the listing's rent comes back to its maker. While a rental of it still runs,
+     * that proof: no NFT moves, and the listing's rent comes back to its maker. While a rental of it still runs,
      * that close too only stops the listing, and closes it once the rental has run.
      */
     async unlist(asset) {
@@ -270,11 +270,11 @@ export function listingMethods(ctx) {
      * Closes what this project still records of an NFT it no longer holds (`asset`: whoever controls its collection
      * took it out of the project's hands or burned it): each hold of it (`release`), its listing (`take_listing`),
      * and its row on each of the project's stashes that lists it (`stash`, out), on the proof that it is gone. Anyone
-     * may, at any time, also while a hold runs and for a loan before it is due: nothing is sent or paid, and a loan's
-     * debt ends unpaid. The sender pays the transaction's fee only; each record's rent goes to whoever that record
-     * names (a hold's payer, a listing's maker), never to the sender, and a stash keeps the rent its row no longer
-     * needs (it goes to the sender only when that is one of the project's keys). With its row off a stash, no roll
-     * draws the NFT, and a prize that names it is passed over in place of failing on an NFT that can't move.
+     * may, at any time, also while a hold runs and for a loan before it is due: no NFT moves, nothing is paid, and a
+     * loan's debt ends unpaid. The sender pays the transaction's fee only; each record's rent goes to whoever that
+     * record names (a hold's payer, a listing's maker), never to the sender, and a stash keeps the rent its row no
+     * longer needs (it goes to the sender only when that is one of the project's keys). With its row off a stash, no
+     * roll draws the NFT, and a prize that names it is passed over in place of failing on an NFT that can't move.
      * What is left is in `waits`: a listing whose rental still runs (the program keeps a running rental, and the
      * listing closes once it has run), and a lottery's own stash that lists the NFT (`kind` 'lottery-stash', with its
      * `lottery`, the lottery's id): only the project's keys take a row out of that one (`unraffle`), gone or not.
@@ -362,7 +362,7 @@ export function listingMethods(ctx) {
     /**
      * The raffle's owner takes the NFT back out of lottery `id`'s own stash once nothing promises it (the lottery
      * ended, or no place names it). When the project no longer holds the NFT (its collection took it back or burned
-     * it), only its row comes off the stash, on that proof: nothing is sent, and the owner gets no NFT back. Only the
+     * it), only its row comes off the stash, on that proof: no NFT moves, and the owner gets none back. Only the
      * project's owner or authority may, gone or not: a lottery's own stash is theirs alone (`NotAuthority` for anyone
      * else; `closeGone` leaves it and says so). Returns the signature.
      */

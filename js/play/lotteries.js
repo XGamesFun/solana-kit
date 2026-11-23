@@ -362,7 +362,7 @@ export function addLotteries(ctx) {
       });
       out.push(pull);
       // Each hold this pull makes (a pull that stops short carries only some) is released at once: one whose NFT is
-      // gone closes on the proof and nothing is sent, any other goes on to its winner, and the hold's rent comes back
+      // gone closes on the proof and no NFT moves, any other goes on to its winner, and the hold's rent comes back
       // to the signer, who paid it.
       for (const [nft, { kind, player, rentTo }] of holdsMade)
         if (pull.keys.some(x => x.pubkey === loot.pda.hold(nft, 0)))

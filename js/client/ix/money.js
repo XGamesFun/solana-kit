@@ -44,6 +44,8 @@ import { piece } from './piece.js';
 /**
  * `player` (or a sponsor, or the project's own keys funding a pool) pays `amount` of `mint`, split at once by `shares`.
  * The rest goes to the project's `treasury` wallet. The player opens any account this pays into that is not there.
+ * @param {{ player: any, project: any, mint: any, treasury: any, amount: any, shares?: any[], reference?: any,
+ *   playerToken?: any, holders?: any, programs?: any, extra?: any[] }} options
  */
 export function payIx({
   player,
@@ -88,6 +90,10 @@ export function payIx({
  * even of a box with nothing random (which sells in one step with `buyIx`, when it rolls on no NFT).
  * The player opens the project's vault for the price's mint, and for each prize's, when it is not there. A box that
  * limits each wallet counts the purchase in the player's counts (`pda.counts`, its rent theirs).
+ * @param {{ player: any, project: any, box: any, nonce: any, boxAddress?: any, maxPrice?: any, count?: number,
+ *   items?: Record<string, any>, shown?: any, profile?: any, listProof?: any, subject?: any, chosenRecipient?: any,
+ *   chosen?: any, settler?: string, poolMints?: any, playerToken?: any, programs?: any, extra?: any[],
+ *   person?: any }} options
  */
 export function openBoxIx({
   player,

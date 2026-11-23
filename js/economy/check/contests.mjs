@@ -11,7 +11,7 @@ export function checkContests(c) {
     warn,
     m,
     units,
-    seconds,
+    fromNowSeconds,
     farTime,
     tooMany,
     quietUnits,
@@ -38,8 +38,9 @@ export function checkContests(c) {
     // Entries close no later than the result is due, and with deciders before it: a decider's verdict is taken only
     // once entries close (contest.rs, BadContest). With deciders, a side left out is an hour from the other (plan.mjs
     // `contestArgs`).
-    const closes = seconds(c.entriesClose, `${where}.entriesClose`);
-    const due = seconds(c.resultDue, `${where}.resultDue`);
+    // Each is counted from its opening into a time the program keeps in 8 bytes.
+    const closes = fromNowSeconds(c.entriesClose, `${where}.entriesClose`);
+    const due = fromNowSeconds(c.resultDue, `${where}.resultDue`);
     if (c.entriesClose !== undefined && c.resultDue !== undefined && closes > due)
       refuse(
         'E-CONTEST',

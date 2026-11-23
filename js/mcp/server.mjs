@@ -6,10 +6,10 @@
 //
 // stdout is the protocol: everything else goes to stderr.
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { fieldsAt, schemaAt, validate } from '../economy/validate.mjs';
 import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
-import { PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
+import { load, PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
 import { withCluster } from './with-cluster.mjs';
 
 /** Where loot runs, for every agent that connects. */
@@ -90,22 +90,57 @@ function inputProblems(schema, input) {
   });
 }
 
-/** Runs one tool by name: the same checks and answer on the server and in the terminal. */
+/**
+ * A tool's words as a terminal reads them: each tool they name becomes the command that runs it there, since nobody
+ * at a terminal calls a tool with a JSON object. `commands`: each command that runs the tool xsolana_<command>, with
+ * the tool's arguments its words stand for ({ guide: ['part'], check: ['file'], … }). So xsolana_check is
+ * "xsolana check" and xsolana_guide {"part": "boxes"} is "xsolana guide boxes"; a tool with no command of its own is
+ * "xsolana tool <its name>", with any arguments as the JSON they are.
+ */
+export function terminalWords(text, commands) {
+  return (
+    String(text)
+      // (a hint written for a terminal says what the words around it now say)
+      .replace(/ \(terminal: [^)]*\)/g, '')
+      .replace(/\bxsolana_([a-z]+)\b(?: (\{"([a-z]+)": ?("[^"]*"|…)\}))?/g, (all, tool, json, arg, value) => {
+        const words = Object.hasOwn(commands, tool) ? commands[tool] : null;
+        if (!json) return words ? `xsolana ${tool}` : `xsolana tool xsolana_${tool}`;
+        if (!words?.includes(arg)) return `xsolana tool xsolana_${tool} '${json}'`;
+        return `xsolana ${tool} ${value === '…' ? `<${arg}>` : value.slice(1, -1)}`;
+      })
+  );
+}
+
+/**
+ * Runs one tool by name: the same checks and answer on the server and in the terminal. `ctx.terminal` (the command
+ * line's: `terminalWords`' commands) has the answer worded for a terminal; the answer is otherwise the same.
+ */
 export async function runTool(name, input = {}, ctx = {}) {
-  const tool = tools.find(t => t.name === name);
+  const tool = typeof name === 'string' ? tools.find(t => t.name === name) : null;
   if (!tool) {
-    const near = tools.filter(t => t.name.includes(String(name).replace(/^xsolana_/, ''))).map(t => t.name);
+    const all = `Tools: ${tools.map(t => t.name).join(', ')}.`;
+    if (typeof name !== 'string' || !name)
+      return { isError: true, text: `The call names no tool: give the tool’s name as "name". ${all}` };
+    const near = tools.filter(t => t.name.includes(name.replace(/^xsolana_/, ''))).map(t => t.name);
     return {
       isError: true,
-      text: `No tool ${name}.${near.length ? ` Did you mean ${near.join(', ')}?` : ''} Tools: ${tools.map(t => t.name).join(', ')}.`,
+      text: `No tool ${name}.${near.length ? ` Did you mean ${near.join(', ')}?` : ''} ${all}`,
     };
   }
-  if (ctx.remote && !REMOTE_TOOLS.has(name))
+  const answer = await answerOf(tool, input, ctx);
+  return ctx.terminal && typeof answer?.text === 'string'
+    ? { ...answer, text: terminalWords(answer.text, ctx.terminal) }
+    : answer;
+}
+
+/** One tool's answer to `input`, or the refusal (`isError`) of an input it cannot take. */
+async function answerOf(tool, input, ctx) {
+  if (ctx.remote && !REMOTE_TOOLS.has(tool.name))
     return {
       isError: true,
-      text: `${name} works on the person’s own files, so it runs only in the local server (npx -y --package=@xgamesfun/solana@${PACKAGE_VERSION} xsolana mcp).`,
+      text: `${tool.name} works on the person’s own files, so it runs only in the local server (npx -y --package=@xgamesfun/solana@${PACKAGE_VERSION} xsolana mcp).`,
     };
-  if (ctx.remote && 'file' in input)
+  if (ctx.remote && input && typeof input === 'object' && 'file' in input)
     return { isError: true, text: 'This hosted server reads no files: pass the whole spec as "spec".' };
   const bad = inputProblems(tool.inputSchema, input);
   if (bad.length) return { isError: true, text: bad.join('; ') };
@@ -113,32 +148,51 @@ export async function runTool(name, input = {}, ctx = {}) {
     // Each tool runs on the cluster of the economy it is given, so one server answers for devnet and mainnet alike.
     return await withCluster(await clusterOfInput(input, ctx), () => tool.handler(input, ctx));
   } catch (e) {
+    // (lists inside lists, thousands deep: the checker walks every level, and the runtime stops it)
+    if (e instanceof RangeError && /call stack/i.test(e.message))
+      return {
+        isError: true,
+        text: 'What was given is nested too deeply to read: an economy is a few levels of lists and objects.',
+      };
     return { isError: true, text: e.message };
   }
 }
 
-/**
- * The cluster a tool's call is for: the "network" of the economy it is given (passed whole as `spec`, or read from its
- * `file`, which is xsolana.json when none is named), devnet when the economy names none. With no economy to read (no
- * file there, a file that is not JSON, a tool that takes none) or a network loot does not know, it is the server's
- * own cluster, and the tool says what is wrong in its own words.
- */
-async function clusterOfInput(input, ctx) {
-  let economy = input?.spec && typeof input.spec === 'object' ? input.spec : null;
-  if (!economy && !ctx.remote) {
-    try {
-      const file = path.resolve(
-        ctx.cwd ?? process.cwd(),
-        typeof input?.file === 'string' ? input.file : 'xsolana.json',
-      );
-      economy = JSON.parse(await readFile(file, 'utf8'));
-    } catch {
-      economy = null;
-    }
-  }
+/** The network an economy names when loot runs there (devnet when it names none), else null. */
+const knownNetwork = economy => {
   const named = economy && typeof economy === 'object' ? networkOf(economy) : null;
-  return named && Object.hasOwn(CLUSTERS, named) ? named : cluster();
+  return named && Object.hasOwn(CLUSTERS, named) ? named : null;
+};
+
+/**
+ * The network of the economy a tool's call is given, read where the tool itself reads it (tools.mjs `load`: passed
+ * whole as `spec`, a worked example by name, or its `file`, which is xsolana.json when none is named; a game file's
+ * spec is under its `economy`): devnet when the economy names none. Null with no economy to read (no file there, a
+ * file that is not JSON, a hosted server given none) or a network loot does not know: the tool says what is wrong in
+ * its own words.
+ */
+export async function networkOfInput(input, ctx = {}) {
+  try {
+    return knownNetwork((await load(input ?? {}, ctx)).economy);
+  } catch {
+    return null;
+  }
 }
+
+/**
+ * The network of the economy in `file`, wherever the file is (`xsolana approve` takes any path): null when it is
+ * missing, not JSON, or names a network loot does not know.
+ */
+export async function networkOfFile(file) {
+  try {
+    return knownNetwork(economyOf(parseFile(await readFile(file, 'utf8'))));
+  } catch {
+    return null;
+  }
+}
+
+/** The cluster a tool's call is for: its economy's (`networkOfInput`), else the server's own. */
+const clusterOfInput = async (input, ctx) => (await networkOfInput(input, ctx)) ?? cluster();
 
 const jsonable = value =>
   JSON.parse(
@@ -152,6 +206,12 @@ export async function handle(message, ctx = {}) {
   const { id, method, params } = message ?? {};
   const reply = result => (id === undefined ? null : { jsonrpc: '2.0', id, result });
   const fail = (code, text) => (id === undefined ? null : { jsonrpc: '2.0', id, error: { code, message: text } });
+  // What names no method is no request. A reply to something this server never asked is let go; anything else is
+  // answered as the protocol says, under its id when it has one.
+  if (typeof method !== 'string') {
+    if (message && typeof message === 'object' && ('result' in message || 'error' in message)) return null;
+    return { jsonrpc: '2.0', id: id ?? null, error: { code: -32600, message: 'Not a request: it names no method.' } };
+  }
   switch (method) {
     case 'initialize': {
       const asked = params?.protocolVersion;
@@ -182,7 +242,7 @@ export async function handle(message, ctx = {}) {
       });
     }
     default:
-      if (method?.startsWith('notifications/')) return null;
+      if (method.startsWith('notifications/')) return null;
       return fail(-32601, `No method ${method}.`);
   }
 }
@@ -230,5 +290,6 @@ export async function serveStdio({
     // (the last reply is written out before the process goes)
     output.write('', () => exit());
   });
-  console.error(`xsolana MCP server ${VERSION}: ${tools.length} tools (${tools.map(t => t.name).join(', ')})`);
+  // (the package's version, as `serverInfo` says it: the program's is in the instructions)
+  console.error(`xsolana MCP server ${PACKAGE_VERSION}: ${tools.length} tools (${tools.map(t => t.name).join(', ')})`);
 }

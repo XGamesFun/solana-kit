@@ -158,6 +158,25 @@ test('an open grant that pays something anyone can sell is high; gated, medium',
   assert.deepEqual(ids(g, 'high'), []);
 });
 
+test('a free item anyone takes is high when what it earns in a farm is minted; medium when it earns nothing', () => {
+  const free = {
+    version: 2,
+    network: 'devnet',
+    name: 'Free pets',
+    currency: 'gold',
+    tokens: [{ key: 'gold', source: 'project', name: 'Gold', symbol: 'GOLD', decimals: 0 }],
+    collection: { name: 'Pets' },
+    items: [{ key: 'pet', name: 'Pet', kind: 'collectible', free: true }],
+    farms: [{ key: 'kennel', name: 'Kennel', stakes: 'collectibles', item: 'pet', rate: { perDay: 1, minted: true } }],
+  };
+  const severities = s =>
+    review(s, { now: NOW })
+      .findings.filter(f => f.id === 'R-FREE')
+      .map(f => `${f.severity} ${f.route}`);
+  assert.deepEqual(severities(free), ['high item:pet']);
+  assert.deepEqual(severities(edit(free, s => delete s.farms)), ['medium item:pet']);
+});
+
 test('the authority and every voucher key are named plainly', () => {
   const r = review(spec('review-bounds'), { now: NOW });
   const authority = r.findings.find(f => f.id === 'R-AUTHORITY');
@@ -239,4 +258,19 @@ test('xsolana_review answers the review; the command exits 1 on a high finding',
   const ok = spawnSync(process.execPath, [bin, 'review', 'fine.json', '--json'], { cwd, encoding: 'utf8' });
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(JSON.parse(ok.stdout).ok, true);
+});
+
+test('the table of how far a signed result can be trusted is shown only when a server signs one', async () => {
+  // coin-flip-arena: a box and a lottery on the oracle's roll, a farm; no grant paid on a voucher.
+  const unsigned = await runTool('xsolana_review', { example: 'coin-flip-arena' }, { now: NOW });
+  assert.ok(!unsigned.isError, unsigned.text);
+  assert.doesNotMatch(unsigned.text, /How far a result the server signs can be trusted|\| Level \|/);
+  assert.doesNotMatch(unsigned.text, /which level each signed route uses|Tell players which level/);
+  assert.match(unsigned.text, /\*\*In this economy\*\*/);
+  assert.match(unsigned.text, /No high finding\. Tell the person what a cheater gets on each route/);
+  // A grant paid on vouchers: the levels, and what the next one up costs.
+  const signed = review(spec('review-bounds'), { now: NOW });
+  assert.match(signed.tradeoffs, /^\*\*How far a result the server signs can be trusted\*\*/);
+  assert.match(signed.tradeoffs, /\*\*What the next level up costs\*\*/);
+  assert.match(signed.tradeoffs, /Tell players which level each reward uses\./);
 });

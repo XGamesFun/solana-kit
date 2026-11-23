@@ -11,7 +11,7 @@
     },
     {
       "key": "ticket",
-      "source": "game",
+      "source": "project",
       "name": "Raffle ticket",
       "symbol": "TICKET",
       "decimals": 0

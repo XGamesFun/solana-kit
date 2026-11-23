@@ -9,8 +9,8 @@ export function checkAnalyses(c) {
   // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
   if (!refusals.length) challenge(m, warn, now, economy, simulated);
 
-  // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY above names a pool nothing fills): one that is filled
-  // but pays out faster drains, and then skips or fails what it owes.
+  // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY, check/pools.mjs, names
+  // a pool nothing fills): one that is filled but pays out faster drains, and then skips or fails what it owes.
   if (!refusals.length) {
     const sim = simulated();
     for (const p of sim?.pools ?? []) {
@@ -19,7 +19,7 @@ export function checkAnalyses(c) {
       const days = sim.scenario.days;
       const short = p.outPerDay - p.inPerDay;
       const need = !p.outs.some(o => o.percentPerDay !== undefined) && short > 0 ? +(short * days).toFixed(6) : null;
-      const takersText = p.outs.map(o => o.by).join(', ');
+      const takersText = [...new Set(p.outs.map(o => o.by))].join(', ');
       warn(
         'W-ASSUMPTION',
         `economy.pools.${p.key}`,

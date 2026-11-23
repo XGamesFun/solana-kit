@@ -445,6 +445,8 @@ test('where each rule is kept: a contest’s decider, what it gains, and when th
 
 test('the largest holder takes part: the owner’s fixed supply staked in a farm shared by stake', () => {
   const coin = JSON.parse(readFileSync(new URL('../../examples/community-coin.json', import.meta.url), 'utf8'));
+  // (the example's scenario says who holds the coin: without it, the holding is worked out from the supply and the seeds)
+  delete coin.scenario;
   const w = check(coin, { now: NOW }).warnings.find(x => x.message.startsWith('The largest holder takes part'));
   assert.ok(w, 'the owner’s holding is followed into the farm');
   assert.match(w.message, /60% of its supply/);

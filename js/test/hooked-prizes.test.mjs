@@ -10,6 +10,7 @@ import { check } from '../economy/check.mjs';
 import { example } from '../economy/examples.mjs';
 import { salePrices } from '../economy/simulate.mjs';
 import { runTool } from '../mcp/server.mjs';
+import { quick } from './helpers/quick.mjs';
 
 const NOW = 1_800_000_000;
 
@@ -102,13 +103,6 @@ const rising = (days, perDay, rise = { growthPercent: 1 }) => ({
   boxes: flip.boxes.map(b => ({ ...b, rise })),
   scenario: { ...flip.scenario, days, perDay: { ...flip.scenario.perDay, 'box:flip': perDay } },
 });
-const quick = async (what, run) => {
-  const t = Date.now();
-  const out = await run();
-  // A pathological input loops for seconds; a slow CI runner is given more room than a laptop.
-  assert.ok(Date.now() - t < (process.env.CI ? 5000 : 1000), `${what} answered in ${Date.now() - t} ms`);
-  return out;
-};
 
 test('the schema bounds the scenario’s days and counts a day', async () => {
   const v = await quick('check', () => check(rising(1e6, 1e7), { now: NOW }));

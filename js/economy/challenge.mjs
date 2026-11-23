@@ -27,10 +27,10 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  * Runs the analyses. `warn(code, where, message, fix, extra)` as check() calls it, `extra` { severity, ask }; `now`
  * in seconds; `economy`, the spec, for the quick simulation's burns. Returns the model, for the caller to show.
  * `simulation`: the caller's own run of the simulation (check.mjs: run once for the whole check, and said once when it
- * cannot run); without one it is run here, and a run that fails gives no numbers.
+ * cannot run); without one it is run here, and an error in it is thrown on.
  */
 export function challenge(m, warnTo, now, economy, simulation = null) {
-  const simulated = () => (simulation ? simulation() : simulateOrNull(economy, now));
+  const simulated = () => (simulation ? simulation() : economy ? simulate(economy, { now }) : null);
   // (every grant cap a question is about, so the caps nobody was asked about are asked once, together, at the end)
   const askedCaps = new Set();
   const warn = (code, where, message, fix, extra) => {
@@ -940,13 +940,4 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
       { severity: 'medium' },
     );
   return fl;
-}
-
-/** The quick simulation at the spec's scenario, or null when it can't run. */
-function simulateOrNull(economy, now) {
-  try {
-    return economy ? simulate(economy, { now }) : null;
-  } catch {
-    return null;
-  }
 }

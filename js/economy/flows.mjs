@@ -18,16 +18,26 @@ import {
   toSeconds,
   toTime,
 } from './model.mjs';
-import { DEFAULT_PER_DAY } from './simulate.mjs';
+import { dateWords } from './check/dates.mjs';
+import { LOTTERY_TIMEOUT_SECONDS, STALE_SECONDS } from '../client/policy.js';
 
-/** A draw the oracle hasn't answered this long after its ask is cancelled at the next ask (LOTTERY_TIMEOUT_SECONDS). */
-const ORACLE_TIMEOUT_DAYS = 7;
+/** A draw the oracle hasn't answered this long after its first ask is cancelled at the next ask, and an asked roll that
+ * holds a payment or an NFT may be refunded (the client's LOTTERY_TIMEOUT_SECONDS). */
+const ORACLE_TIMEOUT_DAYS = Number(LOTTERY_TIMEOUT_SECONDS) / DAY;
+/** A purchase whose roll the oracle hasn't answered this long after it was asked may be refunded, and a roll another
+ * route gave asked again (the client's STALE_SECONDS). */
+const ORACLE_STALE_MINUTES = Number(STALE_SECONDS) / 60;
 export const num = x => Number(x ?? 0);
-export const at = seconds =>
-  new Date(seconds * 1000)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/:\d\d\.\d+Z$/, ' UTC');
+/** A Unix time as a date and time ("2026-11-01 18:00 UTC"); past what a date holds, the year alone (`dateWords`). */
+export const at = seconds => {
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime())
+    ? dateWords(seconds)
+    : date
+        .toISOString()
+        .replace('T', ' ')
+        .replace(/:\d\d\.\d+Z$/, ' UTC');
+};
 export const named = part => `“${part?.name ?? part?.key}”`;
 export const words = list => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
 export const span = seconds =>
@@ -425,7 +435,7 @@ export function flows(m, { now }) {
             rolls
               ? {
                   by: 'anyone',
-                  says: "A roll the oracle hasn't answered is asked again once it is stale, by its player or your keys; nothing times it out. A prize out of stock is never set aside for a roll.",
+                  says: `${on(source) ? `A purchase whose roll the oracle hasn't answered ${ORACLE_STALE_MINUTES} minutes after it was asked can be refunded: anyone sends the refund, and the payment goes back to its buyer. ` : ''}A roll another route gave (a prize, a mission, a recipe) is asked again once ${ORACLE_STALE_MINUTES} minutes pass with no answer, by its player or your keys, with no deadline; one that holds a payment or an NFT can be refunded ${ORACLE_TIMEOUT_DAYS} days after its first ask. A prize out of stock is never set aside for a roll.`,
                 }
               : { by: 'player', says: 'A purchase that can’t give what it sells fails whole: nothing is taken.' },
           ],
@@ -802,5 +812,3 @@ function inWords(r, m, sym) {
     ) || 'nothing'
   );
 }
-
-export { DEFAULT_PER_DAY };
