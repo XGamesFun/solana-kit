@@ -14,14 +14,15 @@ import { metadataAddress } from '../chain/metadata.js';
 import { parseMint, tokenEntry } from '../chain/mint.js';
 import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
-import { decodeAny } from '../client/accounts.js';
+import { accountKind, decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
 import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
 import { check, describe } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
+import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
-import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
+import { example, examples, ideas, ideasRated, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
 import { describeReview, review } from '../economy/review.mjs';
@@ -260,6 +261,12 @@ export function carryIds(previous, next) {
 
 // ---------------------------------------------------------------- the tools
 
+/** Which loot the rated economies were rated against, in words: this one, or an earlier one whose ratings may be out of date. */
+const ratedWords = () =>
+  ideasRated() === VERSION
+    ? 'rated against this version of loot'
+    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION}), so some are out of date`;
+
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
 function flagsToTell(economy, now) {
   const flags = legalFlags(check(economy, { now }));
@@ -340,8 +347,7 @@ export const tools = [
     name: 'xsolana_examples',
     title: 'Find a worked economy to start from',
     annotations: READ,
-    hosted:
-      'Worked economies to start from. With `query` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of 112 real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With `name`, returns that example’s whole spec. With neither, lists every example.',
+    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
     description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
     inputSchema: {
       type: 'object',
@@ -391,7 +397,7 @@ export const tools = [
         r.hows.length ? '\nThese look impossible but are one field or a short combination (build them):' : '',
         ...r.hows.map(h => `- ${h.what}: ${h.how}.`),
         r.ideas.length
-          ? '\nRated economies (rated against this version of loot: a rating is a hint, the parts in xsolana_guide decide):'
+          ? `\nRated economies (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
           : '',
         ...r.ideas.map(i => `- #${i.n} ${i.name} (${i.fit}): ${i.how}`),
         r.limits.length
@@ -851,6 +857,9 @@ export const tools = [
     inputSchema: { type: 'object', properties: { spec: SOURCE.spec, file: SOURCE.file }, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
+      // Checked first, as every tool that reads a spec does: the addresses read below come from the spec's own parts.
+      const verdict = check(economy, { now: nowOf(ctx) });
+      if (!verdict.ok) return refused(verdict, from);
       if (!economy.live?.project)
         return {
           ok: false,
@@ -880,6 +889,17 @@ export const tools = [
           .map(a => [`auction:${a.key}`, pda.auction(project, a.seller, a.id)]),
       ];
       const accounts = await rpc.accounts(wanted.map(([, a]) => a));
+      // The project itself: without it nothing of the economy is on this cluster, and publishing again cannot add it
+      // (going live refuses a file that names a project the chain does not have).
+      const [found] = accounts;
+      if (!found || found.owner !== lootProgram() || accountKind(found.data) !== 'Project') {
+        const other = cluster() === 'devnet' ? 'mainnet' : 'devnet';
+        return {
+          ok: false,
+          project,
+          text: `${economy.name ?? 'The economy'} on ${cluster()}: there is no loot project at ${project}, the address the live section of ${from} names. Nothing of this economy can be read there, and publishing again would not add it: going live refuses a file whose project the chain does not have. If it went live on ${other}, the file must say "network": "${other}" (a file is read on the cluster it names, devnet when it names none). Otherwise this live section is not the one going live wrote: use the file as \`xsolana approve\` left it.${footer()}`,
+        };
+      }
       const rows = wanted.map(([part, address], i) => {
         const a = accounts[i];
         if (!a) return { part, address, found: false };
@@ -929,9 +949,9 @@ export const tools = [
     title: 'Read a token made elsewhere',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     hosted:
-      'A token made elsewhere, as the chain has it: given its mint’s address, returns its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers`: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Reads devnet: the mint and its name record only, not the link the record names.',
+      'A token made elsewhere, as the chain has it: given its mint’s address, returns its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers`: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Reads the cluster this server works on, which its answer names: the mint and its name record only, not the link the record names.',
     description:
-      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads devnet (or XSOLANA_RPC_URL): the mint and its name record only, never the link the record names.',
+      'A token made elsewhere, as the chain has it, for an economy that uses it: give its mint’s address and get its ready `tokens` entry (`source: "existing"`) with its name, ticker, decimals and token program, and `powers` filled in: what the mint’s own keys can do (mint more, freeze, a transfer fee, a transfer hook, a permanent delegate, a pause…), in words too. Use it instead of asking the person to look the mint up. Reads the cluster of the economy in this folder (devnet unless its xsolana.json says "network": "mainnet"): devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL, which must then name a mainnet RPC. It reads the mint and its name record only, never the link the record names.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1016,24 +1036,14 @@ export const tools = [
         token.symbol || token.name
           ? `calls itself ${[token.name && `“${token.name}”`, token.symbol && `ticker “${token.symbol}”`].filter(Boolean).join(', ')} (its own record’s words: a label anyone can write, not a fact)`
           : 'has no name record, so wallets show it as an unknown token';
-      // What each power lets whoever holds it do, in the checker's words (check.mjs W-MINT-POWERS).
+      // What each power lets whoever holds it do (mint-words.mjs: the words going live uses for the same powers).
       const can = [
         p.mintAuthority === 'someone else' && `mint more of it whenever they want (${read.mintAuthority} can)`,
-        p.mintAuthority === 'project' && null,
-        p.freeze && 'freeze any account holding it, an economy’s pools and vaults included',
-        p.permanentDelegate && 'move or burn it out of any account',
-        p.transferHook && 'run a program of their own on every transfer, which can refuse one',
+        ...Object.entries(POWER_SAYS).map(([power, says]) => powerCounts(power, p) && says),
         p.transferFeePercent > 0 && `keep ${p.transferFeePercent}% of every transfer`,
-        p.feeChangeable && 'raise its transfer fee, up to all of a transfer',
-        p.closeAuthority && 'close the mint and make it again with other powers',
-        p.pausable && 'pause every transfer of it',
-        p.defaultFrozen && 'have every new account of it start frozen',
-        !p.defaultFrozen && p.defaultState && p.freeze && 'switch every new account of it to start frozen',
       ].filter(Boolean);
       const also = [
-        p.nonTransferable && 'It cannot be transferred at all: nothing can be paid, staked or given as a prize in it.',
-        p.confidentialTransfers &&
-          'Its holders can turn plain transfers into their account away (confidential transfers).',
+        ...Object.entries(MINT_SAYS).map(([power, says]) => p[power] && says),
         state.paused && 'It is paused now: nothing of it moves until its issuer ends the pause.',
         state.scaled &&
           `Wallets show its amounts multiplied by a rate its mint carries${state.scaler ? ', which its issuer can change' : ''}: an economy counts the amounts under it, so a price in a spec is not the number a wallet shows.`,

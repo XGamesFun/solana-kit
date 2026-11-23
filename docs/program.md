@@ -7,53 +7,39 @@ signed for one (a voucher, a verdict, a link) counts on the other. What follows 
 keeps there. Records written under 0.28.0 don't load under 0.29.0's layouts: make fresh economies. **Not independently
 audited**.
 
-This page describes 0.29.0, the build its IDL comes from. What 0.29.0 added: **persons** (a project's issuer links
-wallets to one person, and any limit can count by person: [Persons and links](#persons-and-links)), **tickets a grant
-gives** ([Tickets a grant gives](#tickets-a-grant-gives)), a lottery's limit per round or per window, and a cap on the
-tokens a grant gives in all (`tokens`).
-
-0.26's rule: **the program restricts a project only where it
-must**; a project's own risky setup gets a warning from `xsolana_check`, in plain words, not a refusal. The limits that
-only guarded a project against itself are out (token screens, time limits, caps on lists, values of 0), each bounded by
-what the chain allows ([Limits](#limits)). **Both sides of an exchange move in one instruction**: an auction's seller is
-paid only with the lot (`end_auction`'s three endings), and a loan's repayment brings its NFT home (`repay(home)`). A
-box may give nothing on a miss (`GiveNothing`); a lottery may close its sales before the draw (`closes_before`), weigh a
-no-loss lottery's tickets by the time they are held (`time_weighted`), and say what a short pool pays (`when_short`);
-a roll's odds are read at its first ask, from its player's profile and an NFT they show.
-
-0.25.0's rule: **a prize never shifts to a later round**. A
-lottery names where its places are paid from (`PaysFrom`): each round's own ticket money, what the places leave going
-where the project says, or a pot kept from round to round (16 at most a lottery, `["pot", lottery, id]`), whose next
-ask always moves in what the round before left it (`Lottery::owing`); a contest's winners share what the decision wrote
-(`pot_won`, `prize_won`), whatever reaches its accounts later; a box that stops selling covers each purchase by the most
-any entry sharing an account takes in one draw; a free roll never loses draws to what it emptied itself; and a token
-seat's booster can be a recipe's kept `Use`.
-
-0.24.0's rules are strict (the program's CHANGELOG): **a seat past its end is paid exactly** (`["ends", farm]`, `walk_farm`), **a prize is a fixed amount** on every route, **a draw is on the written weights** and one that can't be given gives back its worth, **an edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, and **a seller who can't be paid is owed**.
-
-What 0.23 changed, in short: who claimed what is kept in **lists of records** (a wallet's counts, a grant's claims and
-rounds in shards), so one claim pays **several rounds**; a **lottery round is a record of its own**, its money fixed at
-its draw's ask and each part pulled by itself, in any order (`pull`), with **places as runs** and a **raffle of many
-NFTs**; a **contest's entries are one list**, its winners sharing the losers' NFTs and its losers sending nothing; a
-route's extra accounts are its **tail**, from the Memo program on; **several NFTs a call** on stakes, harvests,
-stashes, holds, releases and makes; a farm seat **earns until** its tier's term
-or its NFT's fuel; **every box opened asks the oracle**, and a box with nothing random sells with `buy`, a `count` at a
-time; **whoever settles an order pays what the settle opens or mints**; an item's life is lines of the recipes that
-take it. 0.22 made packs, tables, fresh and compressed items, stashes drawn by weight and profiles. Measured costs below
-that were not measured again are marked as 0.20's.
-
 This page says what the program does, who signs what, what it holds and what it costs, for anyone building on it
-with `js/client` or the `xsolana_*` tools. **The IDL in `js/client/idl/loot.json` is the authority for every account
-layout, argument and error code**; where this page and the IDL differ, the IDL is right. Client builder names are
-given in `code` where they help (`openBoxIx`). To build an economy, start with the `xsolana-economy` skill and
-`xsolana_guide`, not here.
+with `js/client` or the `xsolana_*` tools. It describes 0.29.0, the build its IDL comes from. **The IDL in
+`js/client/idl/loot.json` is the authority for every account layout, argument and error code**; where this page and
+the IDL differ, the IDL is right. Client builder names are given in `code` where they help (`openBoxIx`). A cost
+measured on an earlier build says which. What each version changed is in the [changelog](../CHANGELOG.md). To build an
+economy, start with the `xsolana-economy` skill and `xsolana_guide`, not here.
+
+## The rules it keeps
+
+- **It restricts a project only where it must.** A project's own risky setup gets a warning from `xsolana_check`, in
+  plain words, not a refusal. It keeps no limit that only guards a project against itself (a screen on tokens, a limit
+  on times, a cap on a list, a value of 0 refused): each is bounded by what the chain allows ([Limits](#limits)).
+- **Both sides of an exchange move in one instruction.** An auction's seller is paid only with the lot (`end_auction`'s
+  three endings), and a loan's repayment brings its NFT home (`repay(home)`).
+- **A prize never shifts to a later round.** A lottery names where its places are paid from (`PaysFrom`): each round's
+  own ticket money, what the places leave going where the project says, or a pot kept from round to round (16 at most
+  a lottery, `["pot", lottery, id]`), whose next ask always moves in what the round before left it
+  (`Lottery::owing`). A contest's winners share what the decision wrote (`pot_won`, `prize_won`), whatever reaches its
+  accounts later. A box that stops selling covers each purchase by the most any entry sharing an account takes in one
+  draw, and a free roll never loses draws to what it emptied itself.
+- **A prize is a fixed amount** on every route, and **a draw is on the written weights**: one that can't be given gives
+  back its worth. A roll's odds are read at its first ask, from its player's profile and an NFT they show.
+- **An edit never loses what was spent**, **deadlines count in seconds**, **a run missed is missed**, **a seat past its
+  end is paid exactly** (`["ends", farm]`, `walk_farm`), and **a seller who can't be paid is owed**.
+- **Whoever settles an order pays what the settle opens or mints**, and every box opened asks the oracle: a box with
+  nothing random sells with `buy`.
 
 ## The whole program in one screen
 
 loot is one Solana program every project shares. A **project** is one record owned by any wallet, numbered among
 that wallet's own (`["project", creator, id]`; a wallet may have any number). It has no token or collection of its
 own: each mechanic names the mint it takes, each item the Core collection it is minted into, and the project names
-the Core collections it has authority over (any number). 59 instructions, each general enough for many uses.
+the Core collections it has authority over (any number). 60 instructions, each general enough for many uses.
 
 A signature proves only what the chain can't see. Whoever sets something up signs once (the owner a mechanic, a
 seller an auction, a player a purchase); after that, what the chain can check (a roll, a time, a stake, a bid) runs
@@ -278,6 +264,7 @@ player passes a **gate** with the first remaining accounts (after a box's prize 
 |                | `prove_traits` (`proveTraitsIx`)                                           | anyone (pays the Sheet's growth)                                                                                                                                                   | free                                          | writes vouched traits into a Sheet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Grants         | `claim_grant` (`claimGrantIx`, `js/client/grant.js`)                       | the wallet always, plus a `signer` who pays (may be the wallet)                                                                                                                    | P, from the signer                            | gives the grant's prize for each round not paid yet; a voucher is an Ed25519 instruction right before (`ed25519Ix`)                                                                                                                                                                                                                                                                                                                                                                                                       |
 |                | `close_shard` (`closeShardIx`)                                             | anyone                                                                                                                                                                             | free                                          | a shard of a grant gone or made again, rent to the owner (`GrantLive` before)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Persons        | `link_wallet` (`linkWalletIx`, `js/client/grant.js`)                       | the wallet, which pays the link's rent                                                                                                                                             | free                                          | links the wallet to a person until `expires` ([Persons and links](#persons-and-links)); the issuer's signature of `linkBytes` is an Ed25519 instruction right before (`ed25519Ix`)                                                                                                                                                                                                                                                                                                                                        |
 
 ## Money in, and where it goes
 
@@ -1816,25 +1803,25 @@ project's vault for a mint never closes either.
 where token moves cost less: `pay` with 4 shares 41,065, a collectible's settle with 4 shares 93,862, `open_box`
 58,088, `refund` 22,004):
 
-| Instruction                                                                                                                              |                                    CU |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------: |
-| `pay`: all to the treasury / 4 shares                                                                                                    |                       23,540 / 69,563 |
-| `open_box` / 8 entries                                                                                                                   |                       64,056 / 73,759 |
-| `open_box` with a collectible shown for odds                                                                                             |                                76,869 |
-| `callback_roll` (8 entries)                                                                                                              |                                26,861 |
-| `settle`: a collectible, a pool, a burn / 4 shares                                                                                       |                      96,949 / 122,713 |
-| `refund`                                                                                                                                 |                                28,072 |
-| `roll` / `callback_random`                                                                                                               |                        24,292 / 3,313 |
-| `draw_lottery` / `callback_lottery` (3 places, 60 contributions)                                                                         |                       25,763 / 11,503 |
-| `buy_tickets` / `finish_lottery_contribution` / a winner's place (0.20's; 0.23 has `draw_lottery` and `pull` instead, not measured here) |        43,079 / 45,819 / about 38,500 |
-| `open_farm`: tokens / NFTs                                                                                                               |                       58,817 / 48,293 |
-| `stake_tokens` / `stake_nft` frozen / escrowed                                                                                           | about 51,500–54,400 / 74,846 / 68,765 |
-| `open_contest` / `decide` (2 shares)                                                                                                     |                       54,098 / 43,869 |
-| `open_auction` / `bid` / `end_auction`                                                                                                   |              50,919 / 45,646 / 67,113 |
-| `hold` / `release`                                                                                                                       |                       32,663 / 28,677 |
-| `craft`: 1 burned for 1                                                                                                                  |                                75,043 |
-| `claim_grant`: voucher, an item / open, a stash NFT                                                                                      |                       76,390 / 64,580 |
-| `stash` in or out                                                                                                                        |                   about 31,500–36,100 |
+| Instruction                                                      |                                    CU |
+| ---------------------------------------------------------------- | ------------------------------------: |
+| `pay`: all to the treasury / 4 shares                            |                       23,540 / 69,563 |
+| `open_box` / 8 entries                                           |                       64,056 / 73,759 |
+| `open_box` with a collectible shown for odds                     |                                76,869 |
+| `callback_roll` (8 entries)                                      |                                26,861 |
+| `settle`: a collectible, a pool, a burn / 4 shares               |                      96,949 / 122,713 |
+| `refund`                                                         |                                28,072 |
+| `roll` / `callback_random`                                       |                        24,292 / 3,313 |
+| `draw_lottery` / `callback_lottery` (3 places, 60 contributions) |                       25,763 / 11,503 |
+| `buy_tickets`                                                    |                                43,079 |
+| `open_farm`: tokens / NFTs                                       |                       58,817 / 48,293 |
+| `stake_tokens` / `stake_nft` frozen / escrowed                   | about 51,500–54,400 / 74,846 / 68,765 |
+| `open_contest` / `decide` (2 shares)                             |                       54,098 / 43,869 |
+| `open_auction` / `bid` / `end_auction`                           |              50,919 / 45,646 / 67,113 |
+| `hold` / `release`                                               |                       32,663 / 28,677 |
+| `craft`: 1 burned for 1                                          |                                75,043 |
+| `claim_grant`: voucher, an item / open, a stash NFT              |                       76,390 / 64,580 |
+| `stash` in or out                                                |                   about 31,500–36,100 |
 
 A pNFT stake takes about 191,000 CU and a compressed proof and stake about 162,000, past the 200,000 default only
 narrowly: set a higher limit. A grant claim whose receipt held 256 rounds used 142,439 (0.20). Third-party transfer hooks can

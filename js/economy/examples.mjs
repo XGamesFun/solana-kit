@@ -1,5 +1,5 @@
 // The worked examples (whole specs in examples/ that check, simulate and go live in the tests), the ideas (real
-// economies rated against the current loot, in examples/ideas.json) and what loot can't do exactly (with its nearest
+// economies rated against the loot version examples/ideas.json names) and what loot can't do exactly (with its nearest
 // versions), searchable by a person's own words. Node only (reads the files).
 import { readdirSync, readFileSync } from 'node:fs';
 import { CANNOT, HOW } from './guide.mjs';
@@ -8,7 +8,8 @@ import { CANNOT, HOW } from './guide.mjs';
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
 
 const DIR = new URL('../../examples/', import.meta.url);
-const IDEAS = JSON.parse(readFileSync(new URL('ideas.json', DIR), 'utf8')).ideas;
+const IDEAS_FILE = JSON.parse(readFileSync(new URL('ideas.json', DIR), 'utf8'));
+const IDEAS = IDEAS_FILE.ideas;
 
 /** Every worked example: { name, spec }. */
 export function examples() {
@@ -27,6 +28,8 @@ export function example(name) {
 }
 
 export const ideas = () => IDEAS;
+/** The loot version the ideas were rated against (ideas.json `rated`). */
+export const ideasRated = () => IDEAS_FILE.rated;
 
 const SYNONYMS = {
   gacha: ['box', 'boxes', 'pull'],

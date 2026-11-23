@@ -96,5 +96,14 @@
         }
       ]
     }
-  ]
+  ],
+  "scenario": {
+    "holders": {
+      "ember": {
+        "supply": 100000000,
+        "owner": 36000000,
+        "largest": 24000000
+      }
+    }
+  }
 }

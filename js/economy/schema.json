@@ -322,6 +322,7 @@
       "type": "object",
       "required": ["to", "percent"],
       "additionalProperties": false,
+      "description": "One share of a payment: where it goes, and its percent of the payment.",
       "properties": {
         "to": {
           "$ref": "#/$defs/destination"
@@ -336,7 +337,7 @@
       "items": {
         "$ref": "#/$defs/share"
       },
-      "description": "Up to four shares of each payment. What they leave goes to the game's treasury."
+      "description": "The shares of each payment. A split kept to be paid later (a box's, a shop item's, a lottery's, a contest's, an auction's) holds at most 8 shares; a payment's own split is paid at once and has no such cap. What they leave goes to the game's treasury."
     },
     "rise": {
       "type": "object",
@@ -841,7 +842,7 @@
         "prizes": {
           "type": "array",
           "minItems": 1,
-          "description": "For bundle: what it gives together, any number: each { gives: item | pay | share | stash | tokens | nft | roll, … } as an outcome of one says.",
+          "description": "For bundle: what it gives together, any number: each { gives: item | pay | stash | tokens | nft | roll, … } as an outcome of one says.",
           "items": {
             "type": "object",
             "required": ["gives"],
@@ -1134,7 +1135,7 @@
         },
         "compressed": {
           "type": "boolean",
-          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound, and not in a box's outcomes. Once the tree is full, no more are given."
+          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound. Once the tree is full, no more are given."
         },
         "amount": {
           "$ref": "#/$defs/amount"
@@ -1813,7 +1814,7 @@
         },
         "split": {
           "$ref": "#/$defs/split",
-          "description": "Up to four shares of the winning bid (the seller's own account, a creator's, a pool, a burn). What they leave goes to the treasury."
+          "description": "Shares of the winning bid (the seller's own account, a creator's, a pool, a burn). What they leave goes to the treasury."
         },
         "gate": {
           "$ref": "#/$defs/gate"
@@ -1981,7 +1982,7 @@
         },
         "holders": {
           "type": "object",
-          "description": "Token key → who holds it: { \"supply\": all there is, \"owner\": what the owner's wallet holds, \"largest\": what the largest other holder holds }. For a token the project doesn't mint (an outside one), so the largest holder can be followed in.",
+          "description": "Token key → who holds it: { \"supply\": all there is, \"owner\": what the owner's wallet holds, \"largest\": what the largest other holder holds }, so the largest holder can be followed in. A token made elsewhere needs it: the tools can't know who holds it. For a token the project makes with a fixed `supply`, it takes the place of what the tools work out (the supply less what its pools and farms are seeded with).",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
@@ -2903,7 +2904,7 @@
       "type": "object",
       "required": ["gives"],
       "additionalProperties": false,
-      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). share: `percent` of what `pool` holds then (a jackpot). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`). ticket (a grant's only): `count` free tickets (default 1) in the current round of `lottery`, one claim, no token; they count in its sales and draw, and a cancel gives nothing back for them.",
+      "description": "A prize, given the same way on every route that gives one (a grant, a lottery's place, a contest's winners, a mission's tier, a recipe's line), in the transaction that wins it; only a roll is settled after, by the oracle. item: one of `item` (a collectible minted to the winner, or with `compressed` a compressed NFT of it; a normal item is the game's backend's to deliver). tokens: `amount`, minted (`from`: \"mint\", in `currency`, a token the game mints) or paid from a pool (\"pool:<key>\", in what it holds). nft: the NFT `nft`, which the stash `stash` lists (given once: the first winner takes it). roll: a roll of `box` for the winner: chance (a box can give a stash's NFT at random). raffled (a lottery's place only, of a lottery that draws once): one NFT drawn at random from the lottery's own stash (its `nfts`). ticket (a grant's only): `count` free tickets (default 1) in the current round of `lottery`, one claim, no token; they count in its sales and draw, and a cancel gives nothing back for them.",
       "properties": {
         "gives": {
           "enum": ["item", "tokens", "nft", "roll", "raffled", "ticket"]
@@ -2913,7 +2914,7 @@
         },
         "compressed": {
           "type": "boolean",
-          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound, and not in a box's outcomes. Once the tree is full, no more are given."
+          "description": "For item: a compressed NFT of the collectible (Bubblegum v2), minted into the project's tree (`compressedTree`) instead of a Core asset. No rent for each one (a Core collectible's is about 0.003 SOL, paid by whoever sends the claim), so a badge or an airdrop can be given by the thousand. The item's collection must take compressed NFTs: the setup's collection does when the spec gives one before it goes live; one made without it never can. Not soulbound. Once the tree is full, no more are given."
         },
         "amount": {
           "$ref": "#/$defs/amount"

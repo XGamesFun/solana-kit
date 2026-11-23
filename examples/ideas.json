@@ -1,4 +1,5 @@
 {
+  "rated": "0.20.1",
   "about": "100 real Solana economies and 12 patterns of 2025–2026, rated against loot 0.20.1 with no contract change. great: maps directly (what stays off chain is only what the game itself knows, such as who finished a quest); some: works, with a defining part off chain; a-lot: a recognizable adaptation; cannot: a defining piece is missing. \"how\" says what carries it, what stays off chain, or what is missing. The parts in xsolana_guide decide.",
   "ideas": [
     {
@@ -12,14 +13,14 @@
       "n": 2,
       "name": "Aurory",
       "fit": "great",
-      "how": "Recipes burn the sacrifices and `raise` XP on the kept creature (`raises`, `upTo`); `show` lines take creatures of other collections, their stats in the project’s Sheet.",
+      "how": "Recipes burn the sacrifices and raise XP on the kept creature (`raises`, `upTo`); `show` lines take creatures of other collections, their stats in the project’s Sheet.",
       "section": "Games, competitions and wagering"
     },
     {
       "n": 3,
       "name": "Genopets",
       "fit": "great",
-      "how": "Rentals are native: a holder lists a Genopet or a habitat for rent (`app.listForRent`: a price per period, up to `maxPeriods`); the renter pays and is its user until the end, and the game reads who that is (`app.rentedTo`). Crafting is recipes that `use` the habitat with a `cooldown`; steps are vouched by a voucher grant the app’s server signs. On-chain gates and farms don’t read rentals: the game checks them.",
+      "how": "Rentals are native: a holder lists a Genopet or a habitat for rent (`app.listForRent`: a price a period, for as many periods as the listing allows); the renter pays and is its user until the end, and the game reads who that is (`app.rentedTo`). Crafting is recipes that `use` the habitat with a `cooldown`; steps are vouched by a voucher grant the app’s server signs. On-chain gates and farms don’t read rentals: the game checks them.",
       "section": "Games, competitions and wagering"
     },
     {
@@ -271,7 +272,7 @@
       "n": 39,
       "name": "Nosana",
       "fit": "some",
-      "how": "Farm tiers give an xNOS-like duration multiplier, and `unbond` a wait before unstaked tokens come out. Job matching stays off chain, and the stake isn’t a liquid receipt.",
+      "how": "Farm tiers give an xNOS-like duration multiplier. There is no wait before unstaked tokens come out: a tier’s lock holds them, and its `exitFee` lets a staker leave early for a fee. Job matching stays off chain, and the stake isn’t a liquid receipt.",
       "section": "Physical work, services and external assets"
     },
     {
@@ -411,7 +412,7 @@
       "n": 59,
       "name": "Audius",
       "fit": "some",
-      "how": "Tips are payments with `any` (the listener picks the amount, split up to four ways), but each carries loot’s 0.002 SOL player fee, heavy for micro-payments. Streaming rewards are voucher grants; play counts stay off chain.",
+      "how": "Tips are payments with `any` (the listener picks the amount, split among the artists as it is paid), but each carries loot’s 0.002 SOL player fee, heavy for micro-payments. Streaming rewards are voucher grants; play counts stay off chain.",
       "section": "Distribution, access, coordination and payments"
     },
     {
@@ -495,14 +496,14 @@
       "n": 71,
       "name": "Marinade",
       "fit": "cannot",
-      "how": "Same as 70.",
+      "how": "A farm is not validator delegation.",
       "section": "Capital markets, lending and financial claims"
     },
     {
       "n": 72,
       "name": "BlazeStake",
       "fit": "cannot",
-      "how": "Same as 70.",
+      "how": "A farm is not validator delegation.",
       "section": "Capital markets, lending and financial claims"
     },
     {
@@ -565,14 +566,14 @@
       "n": 81,
       "name": "marginfi",
       "fit": "cannot",
-      "how": "Same as 80.",
+      "how": "No debt or liquidation by price: loot’s only loan is a fixed-term loan against an NFT.",
       "section": "Capital markets, lending and financial claims"
     },
     {
       "n": 82,
       "name": "Mango",
       "fit": "cannot",
-      "how": "Same as 80.",
+      "how": "No debt or liquidation by price: loot’s only loan is a fixed-term loan against an NFT.",
       "section": "Capital markets, lending and financial claims"
     },
     {
@@ -586,7 +587,7 @@
       "n": 84,
       "name": "Zeta (ZEX staking)",
       "fit": "some",
-      "how": "Lock-tier-weighted rewards are farm tiers, and `unbond` a wait before unstaked tokens come out. Gradual unlock and weighted governance stay off chain.",
+      "how": "Lock-tier-weighted rewards are farm tiers. There is no wait before unstaked tokens come out: a tier’s lock holds them, and its `exitFee` lets a staker leave early for a fee. Gradual unlock and weighted governance stay off chain.",
       "section": "Capital markets, lending and financial claims"
     },
     {
@@ -677,7 +678,7 @@
       "n": 97,
       "name": "Hadeswap",
       "fit": "cannot",
-      "how": "No two-sided pool on a price curve. Nearest: a standing bid for N NFTs that pass a rule at one price (an offer with `left`) and listings at fixed prices, made by players from the game’s page.",
+      "how": "No two-sided pool on a price curve. Nearest: a standing bid for N NFTs that pass a rule at one price (an offer, opened with how many it buys) and listings at fixed prices, made by players from the game’s page.",
       "section": "Capital markets, lending and financial claims"
     },
     {
@@ -734,7 +735,7 @@
       "name": "Creator revenue split to collaborators",
       "section": "Trending (2025–2026)",
       "fit": "some",
-      "how": "A payment or box splits up to four ways, one of them to whoever holds a named collectible. More than four recipients needs a pool and a schedule or decisions."
+      "how": "A payment or a box splits among several payees as it is paid, one of them whoever holds a named collectible."
     },
     {
       "n": 106,

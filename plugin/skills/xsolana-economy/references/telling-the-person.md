@@ -4,7 +4,7 @@ The person reads your words, not the spec. After every change, run `xsolana_expl
 into short lines, in this order, every number kept. Describe what is in the spec, not what you meant to put there: when your words
 and the spec differ (a limit, an amount, a key not set yet), change one of them before you answer. Use the tools' numbers; round them sensibly; name currencies by symbol.
 
-1. **What each play costs and is worth.** Lead with the tools' "in all" number: "A cast costs about 0.0234 SOL in
+1. **What each play costs and is worth.** Lead with the tools' "in all" number: "A cast costs about 0.0237 SOL in
    all (0.02 SOL, the player fee, the oracle and the network, and the Perch's rent when one is caught), and
    gives back 0.01 SOL in prizes on average (50%), plus a Perch 3 casts in 10." For a box of items, the odds; for a
    lottery, where its places are paid from (its pot, which gifts and what earlier rounds left fill, or each round's own
@@ -16,7 +16,7 @@ and the spec differ (a limit, an amount, a key not set yet), change one of them 
    4 SOL a week: start it with about 12.5 SOL rather than 2, or a bad week stops casts until it refills." A pool that
    runs dry is the first thing to say. A prize bigger than its pool is left out of the roll until the pool fills, so
    the odds players are shown don't hold until then (`W-PRIZE-SEED`).
-4. **What going live costs, and who signs it.** "About 12.51 SOL on devnet: 12.5 SOL is the pond's seed, the rest is
+4. **What going live costs, and who signs it.** "About 12.77 SOL on devnet: 12.5 SOL is the pond's seed, the rest is
    rent and fees. A key file on your computer signs it, once you have read what it sends and said yes." Then what the
    key file is, once: "That key owns the project, so whoever can read its file controls it, and it is the key for
    good: every later change is signed by it. Keep the file where it is and never paste it anywhere. Copy it yourself

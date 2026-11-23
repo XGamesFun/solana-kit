@@ -11,7 +11,7 @@
     },
     {
       "key": "play",
-      "source": "game",
+      "source": "project",
       "name": "Play",
       "symbol": "PLAY",
       "decimals": 6

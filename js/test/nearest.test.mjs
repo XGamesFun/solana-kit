@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { check } from '../economy/check.mjs';
 import { cost, setupCost } from '../economy/cost.mjs';
-import { example, hows, limits, search } from '../economy/examples.mjs';
+import { example, hows, ideas, limits, search } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { CANNOT, guideText, HOW } from '../economy/guide.mjs';
 import { simulate } from '../economy/simulate.mjs';
@@ -99,21 +99,34 @@ function schemaNames() {
   return names;
 }
 
+/** The fields a text names in code: the keys of a JSON snippet (`{ "noLoss": true }`) and a bare field or path
+ * (`perWalletEach`, `life.uses`); runtime calls (`openListingIx`, `app.buy(…)`) are not fields. */
+function fieldsNamed(text) {
+  const named = new Set();
+  for (const [, code] of text.matchAll(/`([^`]+)`/g)) {
+    for (const [, key] of code.matchAll(/"([A-Za-z]+)":/g)) named.add(key);
+    if (/^[a-z][A-Za-z]*(\.[a-z][A-Za-z]*)*$/.test(code) && !/Ix$/.test(code) && !code.startsWith('app.'))
+      for (const part of code.split('.')) named.add(part);
+  }
+  return named;
+}
+
 test('every field a “looks impossible but isn’t” answer names in code is in the schema', () => {
   const names = schemaNames();
-  for (const h of HOW) {
-    const named = new Set();
-    for (const [, code] of h.how.matchAll(/`([^`]+)`/g)) {
-      // the keys of a JSON snippet (`{ "noLoss": true }`) and a bare field or path (`perWalletEach`, `life.uses`);
-      // runtime calls (`openListingIx`, `app.buy(…)`) are not fields
-      for (const [, key] of code.matchAll(/"([A-Za-z]+)":/g)) named.add(key);
-      if (/^[a-z][A-Za-z]*(\.[a-z][A-Za-z]*)*$/.test(code) && !/Ix$/.test(code) && !code.startsWith('app.'))
-        for (const part of code.split('.')) named.add(part);
-    }
-    for (const n of named) assert.ok(names.has(n), `${h.what}: the schema has no “${n}”`);
-  }
+  for (const h of HOW)
+    for (const n of fieldsNamed(h.how)) assert.ok(names.has(n), `${h.what}: the schema has no “${n}”`);
   // the check reads what it should: a field that is gone is caught
   assert.ok(names.has('minPot') && names.has('perWalletEach') && names.has('use') && !names.has('perWalletDaily'));
+});
+
+test('every field a rated idea names in code is in the schema, and each idea says its own', () => {
+  const names = schemaNames();
+  for (const idea of ideas()) {
+    for (const n of fieldsNamed(idea.how))
+      assert.ok(names.has(n), `idea #${idea.n} (${idea.name}): the schema has no “${n}”`);
+    // (a search shows an idea alone: one that points at another says nothing)
+    assert.doesNotMatch(idea.how, /^Same as \d+\.?$/, `idea #${idea.n} (${idea.name})`);
+  }
 });
 
 test('a referral share reads as the buyer’s choice, and a list grant that repeats is warned about', () => {

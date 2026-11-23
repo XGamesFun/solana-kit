@@ -11,14 +11,14 @@
     },
     {
       "key": "ore",
-      "source": "game",
+      "source": "project",
       "name": "Ore",
       "symbol": "ORE",
       "decimals": 0
     },
     {
       "key": "fuel",
-      "source": "game",
+      "source": "project",
       "name": "Fuel",
       "symbol": "FUEL",
       "decimals": 0

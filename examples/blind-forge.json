@@ -120,7 +120,7 @@
   "scenario": {
     "days": 30,
     "perDay": {
-      "box:forge-box": 200,
+      "box:forge-box": 10,
       "lottery:buyers-draw": 50
     }
   }

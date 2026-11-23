@@ -11,7 +11,7 @@
     },
     {
       "key": "attempt",
-      "source": "game",
+      "source": "project",
       "name": "Starforce attempt",
       "symbol": "TRY",
       "decimals": 0

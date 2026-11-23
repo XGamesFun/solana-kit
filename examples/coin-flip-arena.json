@@ -2,7 +2,7 @@
   "version": 2,
   "network": "devnet",
   "name": "Coin-flip arena",
-  "prompt": "Make me a coin-flip arena: 2% house edge to people who stake, and a weekly lottery with three places fed by 10% of every flip.",
+  "prompt": "Make me a coin-flip arena: 2% house edge to people who stake ARENA, our own token that we hand out ourselves, and a weekly lottery with three places fed by 10% of every flip.",
   "keys": {
     "authority": "owner"
   },
@@ -14,7 +14,7 @@
     },
     {
       "key": "arena",
-      "source": "game",
+      "source": "project",
       "name": "Arena",
       "symbol": "ARENA",
       "decimals": 6

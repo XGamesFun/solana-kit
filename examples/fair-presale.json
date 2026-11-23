@@ -11,7 +11,7 @@
     },
     {
       "key": "spark",
-      "source": "game",
+      "source": "project",
       "name": "Spark",
       "symbol": "SPARK",
       "decimals": 6

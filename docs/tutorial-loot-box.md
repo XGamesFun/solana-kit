@@ -130,8 +130,8 @@ collect the item) with no Solana SDK:
 npm install @xgamesfun/solana
 ```
 
-The roll is asked of the oracle when the box is opened and settled once it answers. If the oracle never answers, an
-order still waiting after 7 days can be refunded.
+The roll is asked of the oracle when the box is opened and settled once it answers. If the oracle has not answered
+10 minutes after it was asked, the purchase can be refunded.
 
 ## Where to go next
 

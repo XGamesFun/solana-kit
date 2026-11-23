@@ -2,7 +2,7 @@
   "version": 2,
   "network": "devnet",
   "name": "Stud Farm",
-  "prompt": "Studs earn a cover fee for their holder, foals are ready 7 days after breeding, mares have 6 foals in their life, hay rots in 3 days, and a mare can be rested to breed again.",
+  "prompt": "The Stud earns a cover fee for whoever holds it, foals are ready 7 days after breeding, mares have 6 foals in their life, hay rots in 3 days, and a mare can be rested to breed again. The game writes each mare's age and coat on her: she breeds from age 2, and her foal keeps her coat.",
   "currency": "usdc",
   "tokens": [
     {
@@ -119,6 +119,15 @@
         }
       ],
       "out": []
+    }
+  ],
+  "decisions": [
+    {
+      "key": "groom",
+      "when": "a mare turns a year older in the game, or is given her coat",
+      "does": "set",
+      "item": "mare",
+      "signedBy": "page"
     }
   ],
   "scenario": {

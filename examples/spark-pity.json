@@ -11,14 +11,14 @@
     },
     {
       "key": "pull",
-      "source": "game",
+      "source": "project",
       "name": "Banner pull",
       "symbol": "PULL",
       "decimals": 0
     },
     {
       "key": "spark",
-      "source": "game",
+      "source": "project",
       "name": "Spark",
       "symbol": "SPARK",
       "decimals": 0
