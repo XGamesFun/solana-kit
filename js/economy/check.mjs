@@ -1,5 +1,8 @@
 // The economy checker. Refusals stop an economy from going live: each has a code, what it means for the owner and
-// the fix. Warnings are what the owner should know before going live. Pure.
+// the fix. Warnings are what the owner should know before going live. It changes nothing it is given and talks to no
+// chain. It reads the clock when no `now` is given, and it holds one thing for the process, its cluster: the first
+// economy checked names it when nothing did before (js/client/cluster.js), and an economy on the other one is then
+// refused (E-NETWORK), unless that piece of work was given a cluster of its own (js/mcp/with-cluster.mjs).
 //
 // Most refusals are the program's own (cited by the program's source file), caught here so the owner hears about
 // them in words before a wallet is ever asked. The rest are traps the program's notes name: a farm that empties a
@@ -12,12 +15,12 @@ import { cluster, CLUSTERS, networkOf, useCluster } from '../client/pda.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { utf8 } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
-import { DAY, model, toBps, toSeconds, toUnits, writtenDurations } from './model.mjs';
+import { DAY, model, SpecError, toBps, toSeconds, toTime, toUnits, writtenDurations } from './model.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
 import { PARTS } from './guide.mjs';
 import { fieldsAt, schemaAt, shapeOf, validate } from './validate.mjs';
-import { dateWords, FAR_SECONDS } from './check/dates.mjs';
+import { dateWords, FAR_SECONDS, LAST_DATE_SECONDS } from './check/dates.mjs';
 import { checkKeys } from './check/keys.mjs';
 import { checkTokens } from './check/tokens.mjs';
 import { checkLiveParts } from './check/live-parts.mjs';
@@ -85,7 +88,8 @@ export function check(
     warnings.push({ code, where, message, ...(fix ? { fix } : {}), ...(extra ?? {}) });
   const result = () => ({ ok: refusals.length === 0, refusals, warnings });
 
-  for (const where of findSecrets(economy))
+  const secrets = findSecrets(economy);
+  for (const where of secrets)
     refuse(
       'E-SECRET',
       where,
@@ -106,13 +110,16 @@ export function check(
     refuse(
       'E-NETWORK',
       'economy.network',
-      `The economy names the network “${named}”. loot runs on ${Object.keys(CLUSTERS).join(' and on ')}.`,
+      // (a value refused as a secret is not read back)
+      `The economy names ${secrets.includes('economy.network') ? 'a network (not read back: it may be a secret)' : `the network “${named}”`}. loot runs on ${Object.keys(CLUSTERS).join(' and on ')}.`,
       'Set the network to "devnet", or to "mainnet".',
     );
   else
     try {
       useCluster(named);
-    } catch {
+    } catch (error) {
+      // The one refusal expected of it: this process (or this piece of a server's work) is on the other cluster.
+      if (cluster() === named) throw error;
       refuse(
         'E-NETWORK',
         'economy.network',
@@ -228,20 +235,25 @@ export function check(
     const each = simulated()?.grants?.find(x => x.key === key)?.fundsPerClaimSol;
     return each > 0 ? each : null;
   };
+  /** Refuses at `where` what a value that doesn't read says of itself (a `SpecError`); any other error is thrown on. */
+  const refuseUnread = (error, where, what) => {
+    if (!(error instanceof SpecError)) throw error;
+    refuse(error.code, where, what ? `${what}: ${error.message}` : error.message, error.fix);
+  };
   const units = (amount, token, where, what = 'This amount') => {
     if (!token) return null;
     try {
       return toUnits(amount ?? 0, token.decimals ?? 0);
-    } catch (err) {
-      refuse(err.code ?? 'E-AMOUNT', where, `${what}: ${err.message}`, err.fix ?? 'Fix the amount.');
+    } catch (error) {
+      refuseUnread(error, where, what);
       return null;
     }
   };
   const seconds = (duration, where) => {
     try {
       return toSeconds(duration);
-    } catch (err) {
-      refuse(err.code, where, err.message, err.fix);
+    } catch (error) {
+      refuseUnread(error, where);
       return 0;
     }
   };
@@ -265,12 +277,14 @@ export function check(
     return s;
   };
   /**
-   * A duration counted from go-live into a time the program keeps (a farm's end, a schedule's next run): its seconds,
-   * refused in words when go-live plus it is past what a count of seconds holds exactly.
+   * A duration counted from go-live into a time the program keeps in 8 bytes (a farm's end, a schedule's next run, a
+   * lottery's draw, an auction's end, a contest's result): its seconds, refused in words when go-live plus it is past
+   * what a count of seconds holds exactly. `from`: the time it is counted from when that is later than go-live (an
+   * auction's start).
    */
-  const fromNowSeconds = (duration, where) => {
+  const fromNowSeconds = (duration, where, from = now) => {
     const s = seconds(duration, where);
-    if (now + s > Number.MAX_SAFE_INTEGER)
+    if (Math.max(from, now) + s > Number.MAX_SAFE_INTEGER)
       refuse(
         'E-TIME',
         where,
@@ -278,6 +292,31 @@ export function check(
         'Use a shorter time.',
       );
     return s;
+  };
+  /**
+   * A time the spec writes ("publish", "publish+7d", a date: a window's side, a start, a first draw): its Unix
+   * seconds, refused in words when it is no time at all (a date the calendar doesn't have) or lands after the last
+   * date a spec can write, which a time from go-live becomes once the economy is live. Go-live for one refused, and
+   * for none written.
+   */
+  const timeAt = (time, where) => {
+    let at;
+    try {
+      at = toTime(time, now);
+    } catch (error) {
+      refuseUnread(error, where);
+      return now;
+    }
+    if (!(at <= LAST_DATE_SECONDS)) {
+      refuse(
+        'E-TIME',
+        where,
+        `${time} lands after the year 9999, the last a date here can say: a time is kept as a date once the economy is live.`,
+        'Use a nearer time.',
+      );
+      return now;
+    }
+    return at;
   };
   /**
    * A time that lands far off: the program takes it, and what waits on it (bids, tickets, NFTs, a vault) is
@@ -331,7 +370,23 @@ export function check(
   const quietUnits = (amount, token) => {
     try {
       return toUnits(amount ?? 0, token?.decimals ?? 0);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof SpecError)) throw error;
+      return null;
+    }
+  };
+  /**
+   * What a builder of the setup plan makes of a part (a box's args, an order's bytes, a round's size), built here to
+   * be measured: its value, or null when it can't be built. A value that doesn't read (a `SpecError`) is refused where
+   * it is written, by that field's own check. Any other error is kept (`unbuilt`) and said once nothing else is
+   * refused (check/setup.mjs): it stops the plan too, and a check that hid it would read as a clean spec.
+   */
+  const unbuilt = [];
+  const built = (build, where, what) => {
+    try {
+      return build();
+    } catch (error) {
+      if (!(error instanceof SpecError)) unbuilt.push({ where, what, error });
       return null;
     }
   };
@@ -354,11 +409,14 @@ export function check(
     seconds,
     fourByteSeconds,
     fromNowSeconds,
+    timeAt,
     farTime,
     tooMany,
     percent,
     boostPercent,
     quietUnits,
+    built,
+    unbuilt,
     get simRun() {
       return simRun;
     },
@@ -414,8 +472,8 @@ export {
   MAX_COMPUTE_UNITS,
   openBoxSize,
   settleAccounts,
+  settleComputeUnits,
   settleSize,
-  settleUnits,
 } from './sizes.mjs';
 
 export { dateWords, FAR_SECONDS } from './check/dates.mjs';

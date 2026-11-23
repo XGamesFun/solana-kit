@@ -1,38 +1,34 @@
 // The checks of schedules (schedule.rs).
 import { addressBytes } from '../../chain/base58.js';
 import { isOnCurve } from '../../chain/curve.js';
-import { destination, isAddress, keepsPot, toTime } from '../model.mjs';
+import { destination, isAddress, keepsPot, SpecError, toTime } from '../model.mjs';
 import { label } from '../format.mjs';
 
 /** Checks the schedules. */
 export function checkSchedules(c) {
-  const { now, refuse, warn, m, units, seconds, fromNowSeconds, farTime, percent, token, pool, gameVault } = c;
+  const { now, refuse, warn, m, units, seconds, fromNowSeconds, timeAt, farTime, percent, token, pool, gameVault } = c;
   // ---- schedules (schedule.rs)
   for (const s of m.schedules) {
     const where = `economy.schedules.${s.key}`;
     if (fromNowSeconds(s.every, `${where}.every`) <= 0)
       refuse('E-SCHEDULE', `${where}.every`, `${label(s)} never comes round (every 0).`, 'Give it a time like "1d".');
-    try {
-      farTime(toTime(s.start, now), `${where}.start`, `${label(s)}’s start`, s.start, 'it runs nothing');
-      // A vault is funded only for a sealed schedule: anywhere else "fund" puts nothing in.
-      if (!s.sealed && (s.fund !== undefined || s.fundFrom !== undefined))
-        warn(
-          'W-SCHEDULE',
-          `${where}.${s.fund !== undefined ? 'fund' : 'fundFrom'}`,
-          `${label(s)} names what goes into a vault of its own, but it is not sealed: it pays from its pool, and "fund" puts nothing in.`,
-          'Seal it ("sealed": true) to pay from a vault of its own, or leave "fund" out and fill its pool.',
-        );
-      if (!s.sealed)
-        farTime(
-          now + seconds(s.every, `${where}.every`),
-          `${where}.every`,
-          `${label(s)}’s next run`,
-          s.every,
-          'it runs nothing',
-        );
-    } catch (err) {
-      refuse(err.code, `${where}.start`, err.message, err.fix);
-    }
+    farTime(timeAt(s.start, `${where}.start`), `${where}.start`, `${label(s)}’s start`, s.start, 'it runs nothing');
+    // A vault is funded only for a sealed schedule: anywhere else "fund" puts nothing in.
+    if (!s.sealed && (s.fund !== undefined || s.fundFrom !== undefined))
+      warn(
+        'W-SCHEDULE',
+        `${where}.${s.fund !== undefined ? 'fund' : 'fundFrom'}`,
+        `${label(s)} names what goes into a vault of its own, but it is not sealed: it pays from its pool, and "fund" puts nothing in.`,
+        'Seal it ("sealed": true) to pay from a vault of its own, or leave "fund" out and fill its pool.',
+      );
+    if (!s.sealed)
+      farTime(
+        now + seconds(s.every, `${where}.every`),
+        `${where}.every`,
+        `${label(s)}’s next run`,
+        s.every,
+        'it runs nothing',
+      );
     const byShare = s.percent !== undefined;
     if (s.does !== 'issue' && byShare && s.amount !== undefined)
       refuse('E-SCHEDULE', where, `${label(s)} names both a percent and an amount.`, 'Keep one.');
@@ -131,8 +127,9 @@ export function checkSchedules(c) {
         let first = now + seconds(s.every, `${where}.every`);
         try {
           if (s.start) first = Math.max(now, toTime(s.start, now));
-        } catch {
+        } catch (error) {
           // A start that doesn't read is refused where the schedule's times are checked.
+          if (!(error instanceof SpecError)) throw error;
         }
         const last = first + seconds(s.every, `${where}.every`) * (s.maxRuns - 1);
         if (last > Number.MAX_SAFE_INTEGER / 1000)

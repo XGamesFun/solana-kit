@@ -1,5 +1,7 @@
 // What an economy costs: going live (each account's rent, the program's fees, network fees, the seeds), and each
-// action while it runs, for whoever signs it. In SOL unless a seed is in another token. Pure.
+// action while it runs, for whoever signs it. In SOL unless a seed is in another token. The cost is of the spec's
+// plan (plan.mjs), which checks it first: so it works on the process's cluster as the check does, and reads the clock
+// when no `now` is given.
 //
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
@@ -26,7 +28,7 @@ import {
   boxBuys,
   COLLECTIBLE_RENT,
   drawsOf,
-  settleUnits,
+  settleRentUnits,
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
@@ -170,11 +172,11 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
     drawsOf(b) * Math.max(0, ...(b.outcomes ?? []).map(o => outcomeParts(o).filter(p => holdsRent(p, m)).length));
   const order = b => [
     back('the order', rent(boxOrderBytes(b, m, 1, { opened: true })), 'at settle or refund'),
-    ...(settleUnits(b, m)
+    ...(settleRentUnits(b, m)
       ? [
           back(
-            `the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleUnits(b, m)} × ${sol(SETTLE_RENT_UNIT)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`,
-            SETTLE_RENT_UNIT * BigInt(settleUnits(b, m)),
+            `the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleRentUnits(b, m)} × ${sol(SETTLE_RENT_UNIT)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`,
+            SETTLE_RENT_UNIT * BigInt(settleRentUnits(b, m)),
             `once the key has settled, less what it opened (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it when the roll fails`,
           ),
         ]

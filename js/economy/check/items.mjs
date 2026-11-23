@@ -6,7 +6,21 @@ import { isCollectible } from '../sizes.mjs';
 
 /** Checks the collection and the items. */
 export function checkItems(c) {
-  const { refuse, warn, m, units, fourByteSeconds, tooMany, game, rule, split, feeNote, perWalletWindow, prices } = c;
+  const {
+    refuse,
+    warn,
+    m,
+    units,
+    fourByteSeconds,
+    tooMany,
+    game,
+    rule,
+    split,
+    feeNote,
+    perWalletWindow,
+    opensAndCloses,
+    prices,
+  } = c;
   // ---- the collections and items
   if (m.collection && toBps(m.collection.royaltyPercent) === null)
     refuse(
@@ -16,7 +30,7 @@ export function checkItems(c) {
       'Round it to two decimals.',
     );
   // A project takes the one collection it makes and the owner's others: as many as `create_project`'s transaction carries
-  // (about 25; no cap of the program's own), which the setup's size check below refuses past (E-TX-SIZE).
+  // (about 25; no cap of the program's own), which the setup's size check (check/setup.mjs) refuses past (E-TX-SIZE).
   tooMany(
     m.collections.length + (m.collection ? 1 : 0),
     LIMITS.collections,
@@ -225,6 +239,7 @@ export function checkItems(c) {
     const price = units(it.price, game, `${where}.price`, `${label(it)}’s price`);
     prices(it, game, where);
     perWalletWindow(it, where);
+    opensAndCloses(it, where);
     // A collectible's life, each time in 4 bytes (a normal item's is dropped, warned of below).
     if (isCollectible(it) && it.life)
       // (a cooldown is written into each recipe as a raise, whose amount is a signed number: half as much fits)

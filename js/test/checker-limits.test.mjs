@@ -119,6 +119,89 @@ test('a time the program keeps in 4 bytes, or counts from go-live, is refused in
   assert.deepEqual(at(checkAndPlan(e)), [`economy.schedules.${e.schedules[0].key}.every`]);
 });
 
+test('every time and window a part writes is refused in words past what the program keeps: an auction’s, a lottery’s, a contest’s, a sale’s', () => {
+  const at = r => r.refusals.filter(x => x.code === 'E-TIME').map(x => x.where);
+  // In 4 bytes: what a late bid pushes an auction's end by, and a limit's window by person.
+  let e = example('artwork-auction');
+  const auction = `economy.auctions.${e.auctions[0].key}`;
+  e.auctions[0].extendBy = '5000000000s';
+  let r = checkAndPlan(e);
+  assert.deepEqual(at(r), [`${auction}.extendBy`]);
+  assert.match(r.refusals[0].message, /^5000000000s is 5,000,000,000 seconds, more than the program keeps here/);
+  e = example('shelter-fair');
+  e.keys = { ...e.keys, issuer: W };
+  const box = e.boxes.find(b => b.perWalletEach);
+  box.perPersonEach = { ...box.perWalletEach, every: '8000w' };
+  delete box.perWalletEach;
+  assert.deepEqual(at(checkAndPlan(e)), [`economy.boxes.${box.key}.perPersonEach.every`]);
+  e = example('coin-flip-arena');
+  const lottery = `economy.lotteries.${e.lotteries[0].key}`;
+  delete e.lotteries[0].perWallet;
+  e.lotteries[0].perWalletEach = { count: 5, every: 4_294_967_296 };
+  assert.deepEqual(at(checkAndPlan(e)), [`${lottery}.perWalletEach.every`]);
+  // In 8 bytes, counted from go-live: an auction's end, a lottery's rhythm and close of sales, a contest's result.
+  e = example('artwork-auction');
+  e.auctions[0].runs = 1e21;
+  assert.deepEqual(at(checkAndPlan(e)), [`${auction}.runs`]);
+  e = example('coin-flip-arena');
+  e.lotteries[0].every = 1e21;
+  assert.deepEqual(at(checkAndPlan(e)), [`${lottery}.every`]);
+  e = example('nft-raffle');
+  e.lotteries[0].closesBefore = 1e21;
+  assert.deepEqual(at(checkAndPlan(e)), [`economy.lotteries.${e.lotteries[0].key}.closesBefore`]);
+  e = example('fair-presale');
+  e.contests[0].resultDue = 1e21;
+  assert.deepEqual(at(checkAndPlan(e)), [`economy.contests.${e.contests[0].key}.resultDue`]);
+  // A time: a date the calendar doesn't have, and one after the last a date can say, wherever a part writes one.
+  const times = [
+    ['blind-forge', x => x.boxes[0], 'opens', x => `economy.boxes.${x.boxes[0].key}.opens`],
+    ['blind-forge', x => x.boxes[0], 'closes', x => `economy.boxes.${x.boxes[0].key}.closes`],
+    ['elements-set', x => x.recipes[0], 'closes', x => `economy.recipes.${x.recipes[0].key}.closes`],
+    [
+      'falling-drop',
+      x => x.items.find(it => it.fall),
+      'opens',
+      x => `economy.items.${x.items.find(it => it.fall).key}.opens`,
+    ],
+    [
+      'falling-drop',
+      x => x.items.find(it => it.fall).fall,
+      'start',
+      x => `economy.items.${x.items.find(it => it.fall).key}.fall.start`,
+    ],
+    ['event-badges', x => (x.grants[0].limits ??= {}), 'until', x => `economy.grants.${x.grants[0].key}.limits.until`],
+    ['artwork-auction', x => x.auctions[0], 'start', () => `${auction}.start`],
+    ['nft-raffle', x => x.lotteries[0], 'firstDraw', x => `economy.lotteries.${x.lotteries[0].key}.firstDraw`],
+    ['halving-seasons', x => x.schedules[0], 'start', x => `economy.schedules.${x.schedules[0].key}.start`],
+  ];
+  for (const [name, part, field, where] of times)
+    for (const [time, says] of [
+      ['2026-13-45T25:61Z', /is not a time\.$/],
+      ['publish+99999999w', /lands after the year 9999/],
+    ]) {
+      e = example(name);
+      part(e)[field] = time;
+      r = checkAndPlan(e);
+      assert.deepEqual(at(r), [where(e)], `${name} ${field} ${time}`);
+      assert.match(r.refusals.find(x => x.code === 'E-TIME').message, says);
+    }
+});
+
+test('the most tokens a grant gives is an amount of its prize’s token', () => {
+  const e = example('stakers-draw');
+  const grant = e.grants.find(g => g.prize?.gives === 'tokens' || g.gives?.pool);
+  const where = `economy.grants.${grant.key}.limits.tokens`;
+  for (const [tokens, says] of [
+    ['99999999999999999999', /is too large for the program/],
+    ['0.000000000000000001', /has more decimals than its currency/],
+  ]) {
+    grant.limits = { ...grant.limits, tokens };
+    const r = checkAndPlan(e);
+    assert.deepEqual(codes(r), [`E-AMOUNT ${where}`], tokens);
+    assert.match(r.refusals[0].message, says);
+  }
+});
+
 test('a sealed schedule gets the checks an unsealed one gets: its amounts in its token, and where it pays', () => {
   const spec = (schedule, extra = {}) =>
     sol({

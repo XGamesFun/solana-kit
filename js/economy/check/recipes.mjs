@@ -36,6 +36,8 @@ export function checkRecipes(c) {
     split,
     feeNote,
     perWalletWindow,
+    opensAndCloses,
+    built,
   } = c;
   // ---- payments
   for (const p of m.payments) {
@@ -54,19 +56,13 @@ export function checkRecipes(c) {
     const where = `economy.recipes.${r.key}`;
     const ins = r.in ?? [];
     // Each kind of line has its cap, a collectible's life adding its own needs and raises.
-    const lines = (() => {
-      try {
-        return recipeArgs(r, m);
-      } catch {
-        return {
-          inputs: ins,
-          outputs: r.out ?? [],
-          needs: r.needs ?? [],
-          keeps: r.keeps ?? [],
-          raises: r.raises ?? [],
-        };
-      }
-    })();
+    const lines = built(() => recipeArgs(r, m), where, label(r)) ?? {
+      inputs: ins,
+      outputs: r.out ?? [],
+      needs: r.needs ?? [],
+      keeps: r.keeps ?? [],
+      raises: r.raises ?? [],
+    };
     // A recipe takes any number of lines; what one craft can carry is measured: past it, the recipe is written
     // and never crafts.
     {
@@ -111,6 +107,7 @@ export function checkRecipes(c) {
         'Add what it takes and what it gives.',
       );
     perWalletWindow(r, where);
+    opensAndCloses(r, where);
     let taken = 0;
     const kept = [];
     for (const [i, line] of ins.entries()) {
@@ -292,7 +289,8 @@ export function checkRecipes(c) {
       // A keep writes onto a collectible the craft makes as a Core asset (prize.rs `makes`): a compressed one is not one.
       if (given?.gives === 'item' && !given.compressed) made += 1;
     }
-    // A roll it makes (craft.rs, order.rs): at most one, on a collectible it keeps.
+    // The rolls it makes (craft.rs, order.rs), each on a collectible it keeps (`on`) or a prize of its own: the places
+    // of what it takes, for the rolls that name one.
     const places = ins.flatMap(l =>
       l.takes === 'burn' ? Array(l.count ?? 1).fill('burn') : l.takes === 'pay' ? [] : [l.takes],
     );

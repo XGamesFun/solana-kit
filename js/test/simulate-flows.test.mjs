@@ -295,3 +295,32 @@ test('explain names each lottery place by its percent, written as a plain number
     "place 1 40% of the round's ticket money, places 2–3 each 20% of the round's ticket money and place 4 10% of the round's ticket money",
   );
 });
+
+test('a box’s house edge is the part of its price that does not come back, and the return the part that does', () => {
+  // 40% of opens pay back the price, the rest nothing: 40% comes back, the project keeps 60%.
+  const spec = {
+    ...gold,
+    pools: [{ key: 'prizes', currency: 'gold', seed: 100_000 }],
+    boxes: [
+      {
+        key: 'flip',
+        name: 'Flip',
+        price: 10,
+        perWallet: 5,
+        outcomes: [
+          { gives: 'tokens', from: 'pool:prizes', amount: 10, chance: 40 },
+          { gives: 'nothing', chance: 60 },
+        ],
+      },
+    ],
+  };
+  const box = sim(spec).boxes[0];
+  assert.equal(box.expectedBack, 4);
+  assert.equal(box.returnPercent, 40);
+  assert.equal(box.houseEdgePercent, 60);
+  assert.match(explain(simulate(spec, { now: NOW }), spec), /the game keeps 60% of each price/);
+  // The shipped coin flip keeps 12% of each flip.
+  const flip = sim(exampleSpec('coin-flip-arena')).boxes.find(b => b.key === 'flip');
+  assert.equal(flip.houseEdgePercent, 12);
+  assert.equal(flip.returnPercent + flip.houseEdgePercent, 100);
+});

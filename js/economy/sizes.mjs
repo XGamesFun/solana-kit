@@ -416,7 +416,7 @@ export const MAX_COMPUTE_UNITS = 1_400_000;
  * transfer hook. Three pNFTs of stashes, the NFT rolled on and four holders' shares (measured 942,389 to 985,942)
  * come out at about 1,170,000.
  */
-export function settleUnits(b, o, m) {
+export function settleComputeUnits(b, o, m) {
   const hooked = c => (m.tokens.get(c)?.powers?.transferHook ? 2 : 1);
   const currency = b.currency ?? m.currencyKey;
   let units = 60_000;

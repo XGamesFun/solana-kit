@@ -20,7 +20,7 @@ import {
   boxBuys,
   COLLECTIBLE_RENT as COLLECTIBLE_RENT_LAMPORTS,
   drawsOf,
-  settleUnits,
+  settleRentUnits,
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
@@ -40,6 +40,7 @@ import {
   prizeWords,
   releaseWords,
   sharesOf,
+  SpecError,
   toBps,
   toSeconds,
   toTime,
@@ -683,7 +684,7 @@ export function simulate(economy, { now = 0 } = {}) {
       signatures,
       rent: collectibles * COLLECTIBLE_RENT,
       rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent',
-      held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleUnits(b, m) + orderRent(b, m, true),
+      held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleRentUnits(b, m) + orderRent(b, m, true),
     });
     const extrasSol = realCost.extrasSol;
     priceNote(b, sold);
@@ -1083,7 +1084,8 @@ export function simulate(economy, { now = 0 } = {}) {
       const units = v => {
         try {
           return toUnits(v ?? 0, decimals);
-        } catch {
+        } catch (error) {
+          if (!(error instanceof SpecError)) throw error;
           return 0n;
         }
       };

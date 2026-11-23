@@ -1,5 +1,5 @@
 // The checks of holds (hold.rs) and grants (grant.rs).
-import { isAddress, listOf, byPerson, limitsPlayers, prizePool, prizeToken, toTime } from '../model.mjs';
+import { isAddress, listOf, byPerson, limitsPlayers, prizePool, prizeToken } from '../model.mjs';
 import { label } from '../format.mjs';
 import { isCollectible } from '../sizes.mjs';
 
@@ -15,11 +15,13 @@ export function checkGrants(c) {
     grantClaimSol,
     units,
     seconds,
+    timeAt,
     farTime,
     item,
     prizeCheck,
     rule,
     perWalletWindow,
+    opensAndCloses,
   } = c;
   // ---- holds (hold.rs)
   for (const h of m.holds) {
@@ -45,18 +47,12 @@ export function checkGrants(c) {
       where,
       `${label(h)}: while a hold runs, the project’s authority alone decides where its NFT goes, and it runs as long as the project sets. Players trust the project with the NFT until then.`,
     );
-    if (h.until !== undefined) {
-      try {
-        if (toTime(h.until, now) < now)
-          warn(
-            'W-HOLD',
-            `${where}.until`,
-            `${label(h)}’s holds end before the economy goes live: each one is over at once, and anyone can send its NFT home.`,
-          );
-      } catch (err) {
-        refuse(err.code, `${where}.until`, err.message, err.fix);
-      }
-    }
+    if (h.until !== undefined && timeAt(h.until, `${where}.until`) < now)
+      warn(
+        'W-HOLD',
+        `${where}.until`,
+        `${label(h)}’s holds end before the economy goes live: each one is over at once, and anyone can send its NFT home.`,
+      );
   }
 
   // ---- grants (grant.rs)
@@ -112,6 +108,14 @@ export function checkGrants(c) {
         `${where}.limits.tokens`,
         `${label(g)} caps the tokens it gives, but gives ${gives.gives === 'item' ? 'an item' : `a ${gives.gives}`}: the cap counts tokens only (BadLimits).`,
         'Remove "tokens", or bound the grant with "total" and "perDay".',
+      );
+    // The most tokens it gives in all (grant.rs `Limits.tokens`), counted in its prize's token.
+    else if (g.limits?.tokens != null && gives.gives === 'tokens')
+      units(
+        g.limits.tokens,
+        prizeToken(gives, m),
+        `${where}.limits.tokens`,
+        `${label(g)}’s cap on the tokens it gives`,
       );
     const vouchers = g.vouchers ?? [];
     const keys = g.keys ?? [];
@@ -260,14 +264,7 @@ export function checkGrants(c) {
         'Give "count" (how many claims a wallet makes in each window) and "every" (like "1d").',
       );
     perWalletWindow(l, `${where}.limits`);
-    for (const at of ['until', 'opens']) {
-      if (!l[at]) continue;
-      try {
-        toTime(l[at], now);
-      } catch (err) {
-        refuse(err.code, `${where}.limits.${at}`, err.message, err.fix);
-      }
-    }
+    opensAndCloses(l, `${where}.limits`, 'until');
     // Its funds are SOL, which pays each claim's rent.
     const funds = g.fund === undefined ? 0n : units(g.fund, { decimals: 9 }, `${where}.fund`, `${label(g)}’s funds`);
     const perClaim = grantClaimSol(g.key);

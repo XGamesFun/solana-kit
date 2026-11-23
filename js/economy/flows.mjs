@@ -18,7 +18,7 @@ import {
   toSeconds,
   toTime,
 } from './model.mjs';
-import { DEFAULT_PER_DAY } from './simulate.mjs';
+import { dateWords } from './check/dates.mjs';
 import { LOTTERY_TIMEOUT_SECONDS, STALE_SECONDS } from '../client/policy.js';
 
 /** A draw the oracle hasn't answered this long after its first ask is cancelled at the next ask, and an asked roll that
@@ -28,11 +28,16 @@ const ORACLE_TIMEOUT_DAYS = Number(LOTTERY_TIMEOUT_SECONDS) / DAY;
  * route gave asked again (the client's STALE_SECONDS). */
 const ORACLE_STALE_MINUTES = Number(STALE_SECONDS) / 60;
 export const num = x => Number(x ?? 0);
-export const at = seconds =>
-  new Date(seconds * 1000)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/:\d\d\.\d+Z$/, ' UTC');
+/** A Unix time as a date and time ("2026-11-01 18:00 UTC"); past what a date holds, the year alone (`dateWords`). */
+export const at = seconds => {
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime())
+    ? dateWords(seconds)
+    : date
+        .toISOString()
+        .replace('T', ' ')
+        .replace(/:\d\d\.\d+Z$/, ' UTC');
+};
 export const named = part => `“${part?.name ?? part?.key}”`;
 export const words = list => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
 export const span = seconds =>
@@ -807,5 +812,3 @@ function inWords(r, m, sym) {
     ) || 'nothing'
   );
 }
-
-export { DEFAULT_PER_DAY };
