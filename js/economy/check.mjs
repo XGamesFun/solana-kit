@@ -12,6 +12,7 @@ import { cluster, CLUSTERS, networkOf, useCluster } from '../client/pda.js';
 import { encodeBase58 } from '../chain/base58.js';
 import { utf8 } from '../chain/bytes.js';
 import { sha256 } from '../chain/sha256.js';
+import { numeral } from './format.mjs';
 import { DAY, model, toBps, toSeconds, toUnits, writtenDurations } from './model.mjs';
 import { findSecrets } from './secrets.mjs';
 import { simulate } from './simulate.mjs';
@@ -63,7 +64,7 @@ function schemaFix(path) {
     ? `It takes ${shown(shapeOf(at.node))}.`
     : `${place} takes ${shown(fieldsAt(at.node).join(', ')) || 'no fields'}.`;
   const part = at.steps[0] && Object.hasOwn(PARTS, at.steps[0]) ? at.steps[0] : null;
-  return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and {"part": …} gives one with its fields.'}`;
+  return `${expected} ${part ? `xsolana_guide {"part": "${part}"} gives every field of it with what each means.` : 'xsolana_guide lists every part, and xsolana_guide {"part": …} gives one with its fields.'}`;
 }
 
 /**
@@ -386,11 +387,43 @@ export function check(
 /** The order of the questions: by how much their finding weighs. */
 const ASK_ORDER = { high: 0, medium: 1, low: 2 };
 
-/** A one-line summary for each refusal and warning, as a person reads them. */
+/** The most findings of one kind that are listed one by one: the rest of them are counted. */
+export const MOST_ALIKE = 10;
+
+/**
+ * `findings` (refusals, or warnings) without the repeats: of each kind (one code, one message but for the names and
+ * numbers in it), the first MOST_ALIKE as they are, then one finding in the place of all the others that says how
+ * many they are. A spec of thousands of parts with one flaw each is then a few lines, not a line for each part.
+ */
+export function withoutRepeats(findings) {
+  const kinds = new Map();
+  const out = [];
+  for (const f of findings) {
+    const kind = `${f.code} ${String(f.message)
+      .replace(/“[^”]*”/g, '“”')
+      .replace(/\d[\d.,]*/g, '0')}`;
+    const seen = kinds.get(kind) ?? { listed: 0, rest: null };
+    kinds.set(kind, seen);
+    if (seen.listed < MOST_ALIKE) {
+      seen.listed++;
+      out.push(f);
+    } else if (seen.rest) seen.rest.more++;
+    else {
+      seen.rest = { code: f.code, where: 'economy', more: 1, ...(f.fix ? { fix: 'The same fix as theirs.' } : {}) };
+      out.push(seen.rest);
+    }
+  }
+  for (const { rest } of kinds.values())
+    if (rest)
+      rest.message = `${numeral(rest.more)} more like the ${MOST_ALIKE} ${rest.code} above, each for another part of the spec: they are not listed one by one.`;
+  return out;
+}
+
+/** A one-line summary for each refusal and warning, as a person reads them: a kind that repeats is listed in part. */
 export function describe({ refusals, warnings }) {
   return [
-    ...refusals.map(r => `✗ ${r.code} ${r.message}\n    Fix: ${r.fix}`),
-    ...warnings.map(
+    ...withoutRepeats(refusals).map(r => `✗ ${r.code} ${r.message}\n    Fix: ${r.fix}`),
+    ...withoutRepeats(warnings).map(
       w => `! ${w.code}${w.severity ? ` (${w.severity})` : ''} ${w.message}${w.fix ? `\n    ${w.fix}` : ''}`,
     ),
     // (the questions whose finding weighs most first: a builder puts the first few to the person)

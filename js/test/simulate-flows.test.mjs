@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { check } from '../economy/check.mjs';
+import { cost } from '../economy/cost.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { feesOf } from '../economy/model.mjs';
@@ -211,6 +212,87 @@ test('a price that falls on a shared clock keeps falling however often it sells'
   assert.ok(shared.price < 0.5, `the shared clock reaches its floor within the day: ${shared.price}`);
   assert.match(shared.note, /clock of its own, sales or not/);
   assert.doesNotMatch(shared.note, /restarts the countdown/);
+});
+
+test('the “in all” cost of a price that rises is at its listed price, whatever the scenario sells, and says how it moves', () => {
+  const forge = (opens, rise) =>
+    solSpec({
+      items: [{ key: 'blade', name: 'Blade', value: 0.01 }],
+      boxes: [
+        {
+          key: 'forge',
+          name: 'Forge',
+          price: 0.02,
+          ...(rise ? { rise } : {}),
+          outcomes: [{ gives: 'item', item: 'blade', chance: 100 }],
+        },
+      ],
+      scenario: { days: 30, perDay: { 'box:forge': opens } },
+    });
+  const at = opens => {
+    const spec = forge(opens, { growthPercent: 0.01 });
+    return { box: sim(spec).boxes[0], open: cost(spec, { now: NOW }).actions.find(a => a.part === 'box:forge') };
+  };
+  const runs = [1, 100, 1000].map(at);
+  // What one open costs at 0.02 SOL: the same box with a price that stays.
+  const inAll = sim(forge(100, null)).boxes[0].realCost.totalSol;
+  assert.ok(inAll > 0.02 && inAll < 0.03, String(inAll));
+  for (const { box, open } of runs) {
+    assert.equal(box.realCost.totalSol, inAll);
+    assert.equal(open.inAllSol, inAll);
+    assert.ok(
+      open.inAll.startsWith(
+        `about ${inAll} SOL in all at its listed price, which rises 0.01% with each sale (the price, the player fee, `,
+      ),
+      open.inAll,
+    );
+  }
+  // What the scenario's sales pay on average is still what the money flows count, and it is named as that.
+  const [, hundred, thousand] = runs.map(r => r.box.averagePrice);
+  assert.ok(hundred > 0.02 && thousand > hundred, `${hundred}, ${thousand}`);
+  // A return counted against that average says so, beside the listed price it is not counted against.
+  const rising = forge(100, { growthPercent: 0.01 });
+  const box = explain(sim(rising), rising)
+    .split('\n')
+    .find(l => l.startsWith('Box “Forge”'));
+  assert.match(
+    box,
+    /^Box “Forge”: costs 0\.02 SOL .*gives back 0\.01 SOL on average \(\d+(\.\d+)?% of the 0\.0233\d* SOL an open pays on average over the scenario\); the game keeps [\d.]+% of what an open pays, on average\.$/,
+  );
+  const steady = forge(100, null);
+  assert.match(
+    explain(sim(steady), steady),
+    /gives back 0\.01 SOL on average \(50%\); the game keeps 50% of each price\./,
+  );
+
+  // A shop item says the same, once: its rise and its fall, with the fall's floor.
+  const shop = solSpec({
+    items: [
+      {
+        key: 'hat',
+        name: 'Hat',
+        price: 2,
+        rise: { step: 0.5 },
+        fall: { step: 0.05, every: '10m', floor: 0.2 },
+      },
+    ],
+  });
+  const moves = 'which rises 0.5 SOL with each sale and falls 0.05 SOL every 10m, to at least 0.2 SOL';
+  assert.ok(sim(shop).items[0].realCost.priceMoves === moves, sim(shop).items[0].realCost.priceMoves);
+  const buy = explainEconomy(shop, { now: NOW })
+    .text.split('\n')
+    .find(l => l.includes('Buy “Hat”'));
+  assert.ok(buy.includes(`SOL in all at its listed price, ${moves} (the price, `), buy);
+  assert.equal(buy.split('rises').length, 2, buy);
+  // A price in another token is not in the SOL figure: what it adds says how the price moves.
+  const priced = {
+    ...gold,
+    items: [{ key: 'hat', name: 'Hat', kind: 'normal', price: 10, rise: { growthPercent: 5 } }],
+  };
+  assert.match(
+    explain(sim(priced), priced),
+    /Shop “Hat”: 10 GLD; [\d.]+ SOL on top of the price, which rises 5% with each sale \(the player fee, the network\)\./,
+  );
 });
 
 test('a lottery that draws once is one round until its draw, with one oracle fee, and no return said for a prize with no price', () => {

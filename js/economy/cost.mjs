@@ -42,6 +42,7 @@ import {
   rent,
   toUnits,
 } from './model.mjs';
+import { asWritten, numeral, plural } from './format.mjs';
 import { inAll, round, simulate } from './simulate.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
@@ -173,9 +174,9 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
     ...(settleUnits(b, m)
       ? [
           back(
-            `the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleUnits(b, m)} × ${sol(SETTLE_RENT_UNIT)} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`,
+            `the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleUnits(b, m)} × ${numeral(sol(SETTLE_RENT_UNIT))} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`,
             SETTLE_RENT_UNIT * BigInt(settleUnits(b, m)),
-            `once the key has settled, less what it opened (a collectible’s rent is about ${sol(COLLECTIBLE_RENT)} SOL); all of it when the roll fails`,
+            `once the key has settled, less what it opened (a collectible’s rent is about ${numeral(sol(COLLECTIBLE_RENT))} SOL); all of it when the roll fails`,
           ),
         ]
       : []),
@@ -187,7 +188,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
           back(
             `${itemsOf(b)} new collectible${itemsOf(b) > 1 ? 's' : ''}`,
             COLLECTIBLE_RENT * BigInt(itemsOf(b)),
-            `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`,
+            `never: it is the collectible’s own rent (about ${numeral(sol(COLLECTIBLE_RENT))} SOL each)`,
           ),
         ]
       : [];
@@ -234,7 +235,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
             back(
               `${made} new collectible${made > 1 ? 's' : ''}`,
               COLLECTIBLE_RENT * BigInt(made),
-              `never: it is the collectible’s own rent (about ${sol(COLLECTIBLE_RENT)} SOL each)`,
+              `never: it is the collectible’s own rent (about ${numeral(sol(COLLECTIBLE_RENT))} SOL each)`,
             ),
           ]
         : [],
@@ -263,7 +264,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
             ),
           ],
       funded
-        ? `A round’s record, its token accounts and each purchase’s entry are paid from the SOL the lottery holds for them (${sol(held)} SOL), back to it when the round closes: a buyer pays no program rent. When that runs short, a buyer pays their entry’s bytes (about ${sol(entry)} SOL, to the treasury at the close) and a round’s first buyer fronts its header, back to them at the close.`
+        ? `A round’s record, its token accounts and each purchase’s entry are paid from the SOL the lottery holds for them (${numeral(sol(held))} SOL), back to it when the round closes: a buyer pays no program rent. When that runs short, a buyer pays their entry’s bytes (about ${numeral(sol(entry))} SOL, to the treasury at the close) and a round’s first buyer fronts its header, back to them at the close.`
         : 'A round’s first buyer also fronts its record’s header and token accounts (about 0.003 SOL and up, more with many places), back to them when the round closes, once every part is pulled; `roundRent` (on by default) has the lottery pay them, and each entry too.',
     );
   }
@@ -418,7 +419,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
       who,
       0n,
       [back('the roll’s order', rent(boxOrderBytes(m.box.get(r.box), m)), 'to the winner when it is settled')],
-      `Then the winner or the project’s keys ask the oracle for the roll (its fee, below) and settle it${mints ? `, paying the collectible’s rent when it gives one (about ${sol(COLLECTIBLE_RENT)} SOL)` : ''}.`,
+      `Then the winner or the project’s keys ask the oracle for the roll (its fee, below) and settle it${mints ? `, paying the collectible’s rent when it gives one (about ${numeral(sol(COLLECTIBLE_RENT))} SOL)` : ''}.`,
     );
     row(
       r.by,
@@ -511,33 +512,31 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
 /** The cost in plain words. */
 export function explainCost(c) {
   const s = c.setup;
-  const lines = [
-    `Going live takes ${s.transactions} transaction${s.transactions === 1 ? '' : 's'} and about ${s.totalSol} SOL:`,
-  ];
+  const lines = [`Going live takes ${plural(s.transactions, 'transaction')} and about ${numeral(s.totalSol)} SOL:`];
   lines.push(
-    `  rent ${s.rentSol} SOL for ${s.accounts.length} accounts; program fees ${s.programFeesSol} SOL; network fees ${s.networkFeesSol} SOL${
-      s.metadataFeesSol ? `; Token Metadata’s fees ${s.metadataFeesSol} SOL (a token’s name on chain)` : ''
+    `  rent ${numeral(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}; program fees ${numeral(s.programFeesSol)} SOL; network fees ${numeral(s.networkFeesSol)} SOL${
+      s.metadataFeesSol ? `; Token Metadata’s fees ${numeral(s.metadataFeesSol)} SOL (a token’s name on chain)` : ''
     }${
       Object.keys(s.seeds).length
         ? `; seeds ${Object.entries(s.seeds)
-            .map(([k, v]) => `${v} ${k}`)
+            .map(([k, v]) => `${asWritten(v)} ${k}`)
             .join(', ')}`
         : ''
     }.`,
   );
   for (const a of s.accounts)
     lines.push(
-      `  ${a.approx ? 'about ' : ''}${a.sol} SOL: ${a.what} (${a.bytes} bytes)${a.feeSol ? `, and ${a.feeSol} SOL Token Metadata keeps for it` : ''}`,
+      `  ${a.approx ? 'about ' : ''}${numeral(a.sol)} SOL: ${a.what} (${plural(a.bytes, 'byte')})${a.feeSol ? `, and ${numeral(a.feeSol)} SOL Token Metadata keeps for it` : ''}`,
     );
   lines.push('While it runs (for a player, quote the “in all” number: it is what leaves their wallet for good):');
   for (const r of c.actions) {
-    const deposits = r.deposits.map(d => `${d.sol} SOL for ${d.what} (back: ${d.back})`).join('; ');
+    const deposits = r.deposits.map(d => `${numeral(d.sol)} SOL for ${d.what} (back: ${d.back})`).join('; ');
     if (r.inAll) {
       lines.push(`  ${r.action} (${r.who}): ${r.inAll}${r.note ? `. ${r.note}` : ''}`);
       continue;
     }
     lines.push(
-      `  ${r.action} (${r.who}): ${r.feeSol ? `${r.feeSol} SOL fee + ` : ''}${r.oracleSol ? `${r.oracleSol} SOL to the oracle + ` : ''}${r.networkSol} SOL network${deposits ? `; ${deposits}` : ''}${r.note ? `. ${r.note}` : ''}`,
+      `  ${r.action} (${r.who}): ${r.feeSol ? `${numeral(r.feeSol)} SOL fee + ` : ''}${r.oracleSol ? `${numeral(r.oracleSol)} SOL to the oracle + ` : ''}${numeral(r.networkSol)} SOL network${deposits ? `; ${deposits}` : ''}${r.note ? `. ${r.note}` : ''}`,
     );
   }
   for (const n of s.notes) lines.push(n);

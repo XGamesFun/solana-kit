@@ -266,6 +266,14 @@ describe('the MCP protocol', () => {
       params: { protocolVersion: PROTOCOLS[0], capabilities: {}, clientInfo: { name: 't', version: '0' } },
     });
     assert.deepEqual(result.serverInfo, { name: 'xsolana', version: pkg.version });
+    // The line it starts with on stderr names the same version.
+    const child = spawn(process.execPath, [bin, 'mcp'], { stdio: ['pipe', 'ignore', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', c => (err += c));
+    const exited = new Promise(resolve => child.on('exit', resolve));
+    child.stdin.end();
+    assert.equal(await exited, 0);
+    assert.match(err, new RegExp(`^xsolana MCP server ${pkg.version.replaceAll('.', '\\.')}: \\d+ tools`));
   });
 
   test('a request sent just before stdin closes is still answered', async () => {

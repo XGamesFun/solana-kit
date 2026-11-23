@@ -329,3 +329,47 @@ test('a mission’s roll is explained from its box’s own outcomes', () => {
   );
   assert.doesNotMatch(text, /a stat lost/);
 });
+
+test('an amount written with an exponent is read as the number it is: too large refused, too fine refused, never 0', () => {
+  const crate = amount =>
+    check(
+      base({
+        boxes: [
+          {
+            key: 'crate',
+            name: 'Crate',
+            price: amount,
+            outcomes: [{ gives: 'tokens', from: 'mint', currency: 'gold', amount, chance: 100 }],
+          },
+        ],
+      }),
+      { now: NOW },
+    ).refusals.map(r => r.message);
+  for (const big of [1e30, 9e99])
+    assert.deepEqual(crate(big), [
+      `“Crate”’s price: ${big} is too large for the program.`,
+      `What an outcome of “Crate” gives: ${big} is too large for the program.`,
+    ]);
+  // (gold has 2 decimals: 1e-30 and 1.5e-7 are spelled out and refused for theirs, never read as free)
+  assert.deepEqual(crate(1e-30), [
+    `“Crate”’s price: 0.${'0'.repeat(29)}1 has more decimals than its currency (2).`,
+    `What an outcome of “Crate” gives: 0.${'0'.repeat(29)}1 has more decimals than its currency (2).`,
+  ]);
+  assert.match(crate(1.5e-7)[0], /: 0\.00000015 has more decimals than its currency \(2\)\.$/);
+});
+
+test('a pool drained by one box through several outcomes names the box once', () => {
+  const s = base({
+    pools: [{ key: 'p', currency: 'gold', seed: 10 }],
+    boxes: [
+      {
+        key: 'crate',
+        name: 'Crate',
+        price: 1,
+        outcomes: [1, 2, 3].map(n => ({ gives: 'pay', pool: 'p', amount: n * 10, chance: n === 3 ? 34 : 33 })),
+      },
+    ],
+  });
+  const [drained] = check(s, { now: NOW }).warnings.filter(w => w.code === 'W-ASSUMPTION');
+  assert.match(drained.message, /a day \(box:crate\) and takes in 0/);
+});

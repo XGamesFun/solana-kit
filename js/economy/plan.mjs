@@ -1011,12 +1011,12 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
           id: i ? `table:${i}` : 'table',
           part: 'project',
           says: i
-            ? `Add ${group.length} more addresses to the project’s lookup table`
+            ? `Add ${group.length} more address${group.length === 1 ? '' : 'es'} to the project’s lookup table`
             : `Make the project’s lookup table of the ${named.length} addresses its transactions name most, so a large one takes one approval`,
           creates: i
             ? [
                 {
-                  what: `room for ${group.length} addresses in the lookup table`,
+                  what: `room for ${group.length} address${group.length === 1 ? '' : 'es'} in the lookup table`,
                   bytes: 32 * group.length,
                   grows: true,
                 },

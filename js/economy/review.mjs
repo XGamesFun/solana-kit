@@ -9,7 +9,7 @@
 // (what it checks, which person it names, the limits it is given) and the economy's own design (emission without an
 // end, prizes worth farming). The findings are about those.
 import { check } from './check.mjs';
-import { label } from './format.mjs';
+import { asWritten, label, numeral } from './format.mjs';
 import { gateWords, ruleWords } from './explain.mjs';
 import {
   DAY,
@@ -36,8 +36,6 @@ import { walkThrough } from './walk.mjs';
 export const SEVERITIES = Object.freeze(['high', 'medium', 'low', 'info']);
 export { TRUST_LEVELS, TRUST_WORDS };
 
-const fmt = x =>
-  Number.isFinite(Number(x)) ? Number(x).toLocaleString('en-US', { maximumFractionDigits: 6 }) : String(x);
 const short = a => `${String(a).slice(0, 4)}…${String(a).slice(-4)}`;
 const days = d => toSeconds(d) / DAY;
 
@@ -150,8 +148,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         : `${what} takes a share of what lands in ${label(f)}`;
     const shared = f.rate.shared ? ' (the whole farm’s, shared by weight: all of it while alone)' : '';
     return e.life === null
-      ? `${what} earns up to ${fmt(e.perDay)} ${t} a day in ${label(f)}${shared} (${fmt(e.perDay * 30)} in 30 days, ${fmt(e.perDay * 365)} a year), for as long as it stays staked, with no end`
-      : `${what} earns up to ${fmt(e.perDay)} ${t} a day in ${label(f)}${shared}, at most about ${fmt(e.perDay * e.life)} over ${fmt(e.life)} days`;
+      ? `${what} earns up to ${numeral(e.perDay)} ${t} a day in ${label(f)}${shared} (${numeral(e.perDay * 30)} in 30 days, ${numeral(e.perDay * 365)} a year), for as long as it stays staked, with no end`
+      : `${what} earns up to ${numeral(e.perDay)} ${t} a day in ${label(f)}${shared}, at most about ${numeral(e.perDay * e.life)} over ${numeral(e.life)} days`;
   };
 
   // ---------------------------------------------------------------- grants
@@ -192,15 +190,15 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const assumed = level ?? (vouchers.length ? 'bounds' : null);
 
     const enforced = [
-      l.perWallet && `${l.perWallet} per wallet`,
-      l.perWalletEach?.count && `${l.perWalletEach.count} per wallet every ${l.perWalletEach.every ?? '1d'}`,
+      l.perWallet && `${asWritten(l.perWallet)} per wallet`,
+      l.perWalletEach?.count && `${asWritten(l.perWalletEach.count)} per wallet every ${l.perWalletEach.every ?? '1d'}`,
       l.perPerson &&
-        `${l.perPerson} per person (every wallet the issuer linked to them; a claim that names nobody is refused)`,
+        `${asWritten(l.perPerson)} per person (every wallet the issuer linked to them; a claim that names nobody is refused)`,
       l.perPersonEach?.count &&
-        `${l.perPersonEach.count} per person every ${l.perPersonEach.every ?? '1d'} (every wallet the issuer linked to them; a claim that names nobody is refused)`,
-      l.perKey && `${l.perKey} per key`,
-      l.perDay && `${l.perDay} a day, all wallets together`,
-      l.total && `${l.total} in all`,
+        `${asWritten(l.perPersonEach.count)} per person every ${l.perPersonEach.every ?? '1d'} (every wallet the issuer linked to them; a claim that names nobody is refused)`,
+      l.perKey && `${asWritten(l.perKey)} per key`,
+      l.perDay && `${asWritten(l.perDay)} a day, all wallets together`,
+      l.total && `${asWritten(l.total)} in all`,
       l.opens && `not before ${l.opens}`,
       l.until && `not after ${l.until}`,
       g.gate && gateWords(g.gate, 'claim it', m).replace(/^Only/, 'only'),
@@ -210,8 +208,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ].filter(Boolean);
     const trusts = [
       ...vouchers.map(v => `the voucher key ${short(v)} (whatever it signs is paid, within the limits)`),
-      ...(keys.length ? [`${keys.length} code keys (whoever has a code claims with it)`] : []),
-      ...(list.length ? [`the list of ${list.length} wallets in the spec`] : []),
+      ...(keys.length ? [`${asWritten(keys.length)} code keys (whoever has a code claims with it)`] : []),
+      ...(list.length ? [`the list of ${asWritten(list.length)} wallets in the spec`] : []),
     ];
     const trigger = open
       ? `any wallet${
@@ -232,18 +230,18 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     // The most one cheater gets.
     const perWallet = limitPhrases(l)[0] ?? 'no limit per wallet';
     const cap = l.perDay
-      ? `up to ${l.perDay} a day (everyone’s daily total)${l.total ? ` and ${l.total} in all` : ', with no total: without end'}`
+      ? `up to ${asWritten(l.perDay)} a day (everyone’s daily total)${l.total ? ` and ${asWritten(l.total)} in all` : ', with no total: without end'}`
       : l.total
-        ? `up to ${l.total} in all (everyone’s total)`
+        ? `up to ${asWritten(l.total)} in all (everyone’s total)`
         : 'with no daily or overall cap: until the prize or its funds run out';
     const many = list.length
-      ? `only the ${list.length} listed wallets: ${perWallet}, each round once`
+      ? `only the ${asWritten(list.length)} listed wallets: ${perWallet}, each round once`
       : keys.length && !vouchers.length
         ? l.perKey
-          ? `${l.perKey} per code, ${fmt(keys.length * l.perKey)} with every code; ${cap}`
+          ? `${asWritten(l.perKey)} per code, ${numeral(keys.length * l.perKey)} with every code; ${cap}`
           : `a shared code pays every wallet that uses it; ${cap}`
         : l.perPerson
-          ? `${l.perPerson} per person, as the issuer says who is who (a person hash of an outside sign-in such as X, linking each wallet once); a claim that names nobody is refused, ${cap}`
+          ? `${asWritten(l.perPerson)} per person, as the issuer says who is who (a person hash of an outside sign-in such as X, linking each wallet once); a claim that names nobody is refused, ${cap}`
           : `${perWallet}, and wallets are free: ${cap}`;
     const how = {
       decides: 'Playing for real (a bot that plays well): ',
@@ -272,7 +270,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         'R-CLAIM-COMPOUNDS',
         severity,
         id,
-        `${label(g)} is ${level ? `"${level}"` : 'read as "bounds"'}: ${TRUST_WORDS[assumed]}. What it gives keeps earning: ${minting.map(f => earnsWords(f, prize?.gives === 'item' ? prize.item : null)).join('; ')}. So a cheater’s claim mints tokens ${forGood ? 'for good' : 'for as long as the farm runs'}, ${l.total ? `from up to ${l.total} claims in all` : 'and the grant has no "total"'}${l.perPerson ? '' : ', one claim for every free wallet'}.`,
+        `${label(g)} is ${level ? `"${level}"` : 'read as "bounds"'}: ${TRUST_WORDS[assumed]}. What it gives keeps earning: ${minting.map(f => earnsWords(f, prize?.gives === 'item' ? prize.item : null)).join('; ')}. So a cheater’s claim mints tokens ${forGood ? 'for good' : 'for as long as the farm runs'}, ${l.total ? `from up to ${asWritten(l.total)} claims in all` : 'and the grant has no "total"'}${l.perPerson ? '' : ', one claim for every free wallet'}.`,
         `Pick one, and tell the person the trade-off: have the server decide or replay the result (${assumed === 'bounds' ? 'the strongest fix' : 'decide it, for the strongest'}); give ${minting.map(label).join(', ')} an end ("runs") or a term on every tier ("earnsFor"); ${[!l.total && '"total"', !l.perPerson && '"perPerson"'].filter(Boolean).length ? `set the grant’s ${[!l.total && '"total"', !l.perPerson && '"perPerson"'].filter(Boolean).join(' and ')}; ` : ''}or pay a rate from the farm’s vault (no "minted"), so it can only pay what it holds.`,
       );
     } else if ((assumed === 'bounds' || assumed === 'replays') && earning.length)
@@ -289,7 +287,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         'R-CLAIM-UNCAPPED',
         assumed === 'bounds' ? 'medium' : 'low',
         id,
-        `${label(g)} is ${level ? `"${level}"` : 'read as "bounds"'} and has no "total": a cheater claims ${gives} ${l.perDay ? `every day, up to ${l.perDay} a day,` : ''} for as long as it runs.`,
+        `${label(g)} is ${level ? `"${level}"` : 'read as "bounds"'} and has no "total": a cheater claims ${gives} ${l.perDay ? `every day, up to ${asWritten(l.perDay)} a day,` : ''} for as long as it runs.`,
         'Set "total" (the most it ever pays), keep "perDay" small, or have the server decide or replay the result.',
       );
 
@@ -314,7 +312,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         'R-GRANT-PERSON',
         g.gate ? 'low' : 'medium',
         id,
-        `${label(g)} counts no person ("perPerson"): its limits are per wallet, and wallets are free, so one person with many wallets claims ${gives} once for each, up to ${l.perDay ? `${l.perDay} a day` : l.total ? `${l.total} in all` : 'its funds or prize'}${g.gate ? ', each wallet holding what its gate asks' : ''}.`,
+        `${label(g)} counts no person ("perPerson"): its limits are per wallet, and wallets are free, so one person with many wallets claims ${gives} once for each, up to ${l.perDay ? `${asWritten(l.perDay)} a day` : l.total ? `${asWritten(l.total)} in all` : 'its funds or prize'}${g.gate ? ', each wallet holding what its gate asks' : ''}.`,
         'Have the server sign only for players signed in with an outside account (X), naming that person in each voucher (a person hash, never a wallet), and set "perPerson". For a wallet-only player, keep the prize small and capped a day.',
       );
 
@@ -376,8 +374,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ),
     ];
     const enforced = [
-      price > 0 ? `the price, ${fmt(price)} ${t}` : 'no price: free',
-      it?.supply && `${it.supply} exist`,
+      price > 0 ? `the price, ${asWritten(price)} ${t}` : 'no price: free',
+      it?.supply && `${asWritten(it.supply)} exist`,
       ...limitPhrases(b),
       b.opens && `from ${b.opens}`,
       b.closes && `until ${b.closes}`,
@@ -388,13 +386,13 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     const ceiling = free
       ? byPerson(b)
         ? `${limitPhrases(b).join(', ')}, as far as the issuer tells one person from another, for only the fees.`
-        : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${it.supply}` : 'as many as they like'}, for only the fees.`
+        : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${asWritten(it.supply)}` : 'as many as they like'}, for only the fees.`
       : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
       key,
       name: it?.name ?? b.name,
-      trigger: `any wallet${free ? ', for only the fees' : ` that pays ${fmt(price)} ${t}`}`,
+      trigger: `any wallet${free ? ', for only the fees' : ` that pays ${asWritten(price)} ${t}`}`,
       enforced,
       trusts: rolls ? ['MagicBlock’s oracle (the roll)'] : [],
       trust: null,
@@ -429,7 +427,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       key: p.key,
       name: p.name,
       trigger: 'any wallet that pays',
-      enforced: [`${p.any ? 'at least ' : ''}${fmt(p.amount)} ${sym(p.currency ?? m.currencyKey)}`],
+      enforced: [`${p.any ? 'at least ' : ''}${asWritten(p.amount)} ${sym(p.currency ?? m.currencyKey)}`],
       trusts: ['your server, which reads the receipt and gives off the chain what was paid for'],
       trust: null,
       ceiling: 'What your server gives for a receipt: the program only takes the money. Count each receipt once.',
@@ -472,7 +470,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
         : `only ${sym(f.stakes)}`,
       'one seat per NFT, ever; nobody else harvests or unstakes a seat',
       f.rate
-        ? `${f.rate.shared ? 'the whole farm’s' : 'a fixed'} ${fmt(f.rate.perDay)} ${sym(f.rewardsToken)} a day${f.rate.shared ? '' : ' per unit at x1'}, ${f.rate.minted ? 'minted' : 'from its vault while it lasts'}`
+        ? `${f.rate.shared ? 'the whole farm’s' : 'a fixed'} ${asWritten(f.rate.perDay)} ${sym(f.rewardsToken)} a day${f.rate.shared ? '' : ' per unit at x1'}, ${f.rate.minted ? 'minted' : 'from its vault while it lasts'}`
         : 'a share of what lands in its vault',
       `locks ${(f.tiers ?? [{ lock: 0 }]).map(t => `${t.lock ?? 0} (x${t.multiplier ?? 1})`).join(', ')}`,
       f.maxBoostPercent !== undefined && `boosts at most +${f.maxBoostPercent}%`,
@@ -513,7 +511,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       kind: 'lottery',
       key: l.key,
       name: l.name,
-      trigger: `any wallet that buys a ticket${l.ticketNft ? ' (with an NFT)' : ` (${fmt(l.price ?? 0)} ${t})`}`,
+      trigger: `any wallet that buys a ticket${l.ticketNft ? ' (with an NFT)' : ` (${asWritten(l.price ?? 0)} ${t})`}`,
       enforced: [
         ...limitPhrases(l, { what: ' tickets', after: ' a round', every: '1h' }),
         l.gate && gateWords(l.gate, 'buy a ticket', m).replace(/^Only/, 'only'),
@@ -545,9 +543,9 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       name: c.name,
       trigger: 'the authority opens it; any wallet enters',
       enforced: [
-        c.stake && `every entry ${fmt(c.stake)} ${sym(c.currency ?? m.currencyKey)}`,
+        c.stake && `every entry ${asWritten(c.stake)} ${sym(c.currency ?? m.currencyKey)}`,
         c.gate && gateWords(c.gate, 'enter', m).replace(/^Only/, 'only'),
-        c.minPot && `at least ${fmt(c.minPot)} in the pot, or everyone is paid back`,
+        c.minPot && `at least ${asWritten(c.minPot)} in the pot, or everyone is paid back`,
         'no result before entries close; a result overdue pays everyone back',
       ].filter(Boolean),
       trusts: deciders.length
@@ -567,7 +565,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       name: a.name,
       trigger: 'any wallet that bids',
       enforced: [
-        a.reserve !== undefined && `a reserve of ${fmt(a.reserve)}`,
+        a.reserve !== undefined && `a reserve of ${asWritten(a.reserve)}`,
         a.minRaise !== undefined && `each bid ${a.minRaise} over the last`,
         `runs ${a.runs}`,
         'an outbid is paid back at once',
@@ -589,8 +587,8 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       name: s.name ?? s.key,
       trigger: s.sealed ? 'whoever it pays, when it is due' : 'the project’s keys (or whoever it pays), when it is due',
       enforced: [
-        `${s.does} ${s.amount !== undefined ? fmt(s.amount) : `${s.percent}%`} every ${s.every}`,
-        s.maxRuns && `${s.maxRuns} runs at most`,
+        `${s.does} ${s.amount !== undefined ? asWritten(s.amount) : `${s.percent}%`} every ${s.every}`,
+        s.maxRuns && `${asWritten(s.maxRuns)} runs at most`,
         s.halveEvery && `halving every ${s.halveEvery} runs`,
         s.sealed && 'sealed: nobody, the owner included, changes or stops it',
       ].filter(Boolean),
@@ -726,20 +724,31 @@ const UP = {
   decides: 'Already the strongest: a bot that plays well still earns, so keep its limits and "perPerson".',
 };
 
-/** The trade-off in short markdown, for the agent to show the person: the levels, this economy's routes, the costs. */
+/** The routes a server signs the result of: the grants paid on a voucher. */
+export const signedRoutes = routes =>
+  routes.filter(r => r.kind === 'grant' && r.trusts.some(t => t.startsWith('the voucher key')));
+
+/**
+ * The trade-off in short markdown, for the agent to show the person: this economy's routes, and, when a server signs
+ * the result of one, the levels such a result can be trusted to and what the next one up costs.
+ */
 function tradeoffs(routes, findings) {
+  const signed = signedRoutes(routes);
   const lines = [
-    '**How far a result the server signs can be trusted**',
-    '',
-    '| Level | What the server does | What it costs to build | What a cheater gets |',
-    '| --- | --- | --- | --- |',
-    '| decides | runs the game or match itself; the page sends only inputs | the most: the rules run on the server, and every move waits on it | what a bot that plays well earns; nothing forged |',
-    '| replays | re-runs the page’s inputs from randomness it keeps, reads the result | a deterministic game (fixed time step, seeded randomness) and CPU for each replay | what a bot that plays well earns; with the seed up front, the best run found offline |',
-    '| bounds | starts each run, takes checkpoints in order, refuses what is too fast, caps a day | the least: a clock and counters | every reward a script claims at human speed, up to the limits |',
-    '',
+    ...(signed.length
+      ? [
+          '**How far a result the server signs can be trusted**',
+          '',
+          '| Level | What the server does | What it costs to build | What a cheater gets |',
+          '| --- | --- | --- | --- |',
+          '| decides | runs the game or match itself; the page sends only inputs | the most: the rules run on the server, and every move waits on it | what a bot that plays well earns; nothing forged |',
+          '| replays | re-runs the page’s inputs from randomness it keeps, reads the result | a deterministic game (fixed time step, seeded randomness) and CPU for each replay | what a bot that plays well earns; with the seed up front, the best run found offline |',
+          '| bounds | starts each run, takes checkpoints in order, refuses what is too fast, caps a day | the least: a clock and counters | every reward a script claims at human speed, up to the limits |',
+          '',
+        ]
+      : []),
     '**In this economy**',
   ];
-  const signed = routes.filter(r => r.kind === 'grant' && r.trusts.some(t => t.startsWith('the voucher key')));
   for (const r of signed) {
     const top = findings.find(f => f.route === `grant:${r.key}` && f.severity !== 'info');
     lines.push(
@@ -761,11 +770,14 @@ function tradeoffs(routes, findings) {
   if (!signed.length && !open.length && !chance.length && !contests.length)
     lines.push('- No route pays on a result from off the chain.');
   const levels = [...new Set(signed.map(r => r.trust ?? 'bounds'))];
-  if (levels.length) lines.push('', '**What the next level up costs**', ...levels.map(l => `- From ${l}: ${UP[l]}`));
-  lines.push(
-    '',
-    'Pay a bounded or replayed result only what you would accept losing to a patient script (small, capped a day), and keep entry fees and prize pools for results the server decides and for chance. A wallet is not a person: count people only through vouchers that name an X account. Tell players which level each reward uses.',
-  );
+  if (levels.length)
+    lines.push(
+      '',
+      '**What the next level up costs**',
+      ...levels.map(l => `- From ${l}: ${UP[l]}`),
+      '',
+      'Pay a bounded or replayed result only what you would accept losing to a patient script (small, capped a day), and keep entry fees and prize pools for results the server decides and for chance. A wallet is not a person: count people only through vouchers that name an X account. Tell players which level each reward uses.',
+    );
   return lines.join('\n');
 }
 

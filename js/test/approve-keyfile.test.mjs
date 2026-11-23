@@ -1,7 +1,7 @@
 // `xsolana keygen` and `xsolana approve --keypair`: a key file made on this machine, and going live signed by it with
 // no browser, against the real program in LiteSVM.
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -13,6 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
@@ -399,6 +400,50 @@ describe('xsolana approve --keypair', () => {
       const rest = await run({ yes: old.code });
       assert.equal(rest.done, true);
       assert.ok(saved().live.project && !saved().live.partial);
+    },
+  );
+
+  test(
+    'a game file that keeps its spec under `economy` goes live there, and keeps every key beside it',
+    { skip: skip ?? false },
+    async () => {
+      const beside = { title: 'Arena', scripts: { start: 'vite' } };
+      const fails = { send: 2, on: true };
+      const { w, address, run, saved, file } = await setup(
+        { ...beside, economy: example('coin-flip-arena') },
+        { fails },
+      );
+      const asWritten = readFileSync(file, 'utf8');
+      const shown = await run();
+      assert.equal(readFileSync(file, 'utf8'), asWritten, 'showing writes nothing');
+      // Cut short: what landed is recorded where the spec is, and the rest of the file is as it was.
+      const cut = await run({ yes: shown.code });
+      assert.equal(cut.sent, 1);
+      assert.deepEqual(Object.keys(saved()), ['title', 'scripts', 'economy']);
+      assert.deepEqual({ ...saved(), economy: null }, { ...beside, economy: null });
+      assert.equal(saved().economy.live.partial, true);
+      fails.on = false;
+      const rest = await run({ yes: (await run()).code });
+      assert.equal(rest.done, true, rest.text);
+      const live = saved();
+      assert.deepEqual(Object.keys(live), ['title', 'scripts', 'economy']);
+      assert.deepEqual({ ...live, economy: null }, { ...beside, economy: null });
+      assert.ok(live.economy.live.project && !live.economy.live.partial, 'live, and not partial');
+      assert.equal(live.economy.version, 2);
+      assert.equal(w.read('Project', live.economy.live.project).owner, address);
+      // A change to it is read from the same place, and written back there.
+      writeFileSync(
+        file,
+        JSON.stringify({
+          ...live,
+          economy: { ...live.economy, pools: [...live.economy.pools, { key: 'bonus', currency: 'sol' }] },
+        }),
+      );
+      const change = await run();
+      assert.match(change.text, /a change to a live economy/);
+      assert.equal((await run({ yes: change.code })).done, true);
+      assert.deepEqual({ ...saved(), economy: null }, { ...beside, economy: null });
+      assert.ok(saved().economy.live.published.pools.some(p => p.key === 'bonus'));
     },
   );
 
@@ -1413,6 +1458,62 @@ describe('the command line', () => {
     assert.equal(again.status, 1);
     assert.match(again.stderr, /already there/);
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), bytes);
+  });
+
+  test('approve --keypair exits 0 when it shows what it would send, and 1 when nothing can be sent', async () => {
+    const dir = folder();
+    writeFileSync(path.join(dir, 'xsolana.json'), JSON.stringify(example('coin-flip-arena')));
+    const funded = await makeKeyFile(path.join(folder(), 'funded.json'));
+    const empty = await makeKeyFile(path.join(folder(), 'empty.json'));
+    // A stand-in RPC on this machine: nothing is on chain but the funded key's SOL, and every call is noted.
+    const calls = [];
+    const held = address =>
+      address === funded.address
+        ? { lamports: 100_000_000_000, owner: '1'.repeat(32), data: ['', 'base64'], executable: false, rentEpoch: 0 }
+        : null;
+    const rpc = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => (body += chunk));
+      req.on('end', () => {
+        const { id, method, params } = JSON.parse(body);
+        calls.push(method);
+        const result =
+          method === 'getMinimumBalanceForRentExemption'
+            ? 1_000_000
+            : { context: { slot: 1 }, value: method === 'getMultipleAccounts' ? params[0].map(held) : null };
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ jsonrpc: '2.0', id, result }));
+      });
+    });
+    await new Promise(resolve => rpc.listen(0, '127.0.0.1', resolve));
+    const approve = (...args) =>
+      new Promise(resolve =>
+        execFile(
+          process.execPath,
+          [path.join(ROOT, 'bin/xsolana.mjs'), 'approve', 'xsolana.json', ...args],
+          {
+            cwd: dir,
+            env: { ...process.env, XSOLANA_RPC_URL: `http://127.0.0.1:${rpc.address().port}` },
+            timeout: 30_000,
+          },
+          (error, out, err) => resolve({ status: error ? error.code : 0, out, err }),
+        ),
+      );
+    try {
+      const shown = await approve('--keypair', funded.file);
+      assert.equal(shown.status, 0, shown.err);
+      assert.match(shown.out, /Nothing was sent\. .*--yes \S+\n$/s);
+      const wrong = await approve('--keypair', funded.file, '--yes', 'deadbeef');
+      assert.equal(wrong.status, 1);
+      assert.match(wrong.out, /Nothing was sent: "deadbeef" is not the code of what is above/);
+      const broke = await approve('--keypair', empty.file);
+      assert.equal(broke.status, 1);
+      assert.match(broke.out, /Nothing was sent: the key holds no SOL/);
+      assert.ok(calls.length > 0, 'the chain was read through the stand-in');
+      assert.ok(!calls.includes('sendTransaction'), 'nothing was sent');
+    } finally {
+      rpc.close();
+    }
   });
 
   test('a key file that is missing is said in one line, before anything is read from the chain', () => {

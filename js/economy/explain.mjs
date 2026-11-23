@@ -5,7 +5,7 @@ import { LEGAL } from './legal.mjs';
 import { walkThrough } from './walk.mjs';
 import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
-import { plural } from './format.mjs';
+import { asWritten, numeral, percentage, plural } from './format.mjs';
 import {
   boostReadsGrowth,
   boxBuys,
@@ -31,10 +31,8 @@ import {
 } from './model.mjs';
 import { farmEnds, playSteps } from './plan.mjs';
 import { TRUST_WORDS } from './trust.mjs';
-import { inAll, poolFate, round, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
+import { inAll, poolFate, priceBasis, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 import { realMoney } from '../client/cluster.js';
-
-const num = x => (Number.isFinite(x) ? String(round(x, 6)) : String(x));
 
 /**
  * Where a split's shares send the money, and where what they leave goes: to the treasury (`treasury`: how to name it),
@@ -46,7 +44,7 @@ function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, 
   if (!shares.length) return `all of it ${rest}`;
   const left = 100 - shares.reduce((n, s) => n + Number(s.percent), 0);
   const to = s => toWords(s, treasury, payer);
-  return `${shares.map(s => `${s.percent}% ${to(s)}`).join(', ')}${left > 0 ? `, ${num(left)}% ${rest}` : ''}`;
+  return `${shares.map(s => `${s.percent}% ${to(s)}`).join(', ')}${left > 0 ? `, ${percentage(left, 6)}% ${rest}` : ''}`;
 }
 
 /** Where one destination (model `destination`) sends money, in words. */
@@ -82,7 +80,7 @@ const paysWords = (l, treasury) =>
 
 export const ruleWords = r => {
   if (!r) return '';
-  if (r.wallets) return `they are one of the ${r.wallets.length} wallets it names`;
+  if (r.wallets) return `they are one of the ${asWritten(r.wallets.length)} wallets it names`;
   if (r.items) return `any of ${r.items.map(k => `“${k}”`).join(', ')}`;
   const what = r.item
     ? `a “${r.item}”`
@@ -108,9 +106,9 @@ export const gateWords = (gate, verb, m) =>
   !gate
     ? ''
     : gate.wallets
-      ? `Only the ${gate.wallets.length} wallets it names can ${verb}`
+      ? `Only the ${asWritten(gate.wallets.length)} wallets it names can ${verb}`
       : gate.list
-        ? `Only the ${gate.list.length} wallets on its list can ${verb} (each passes their proof)`
+        ? `Only the ${asWritten(gate.list.length)} wallets on its list can ${verb} (each passes their proof)`
         : gate.staked
           ? `Only wallets with ${stakeWords(gate.staked, m)} can ${verb}`
           : `Only players who show ${ruleWords(gate)} can ${verb}`;
@@ -216,16 +214,16 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       .filter(t => t.source === 'game' && !economy.live?.mints?.[t.key])
       .map(
         t =>
-          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${num(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later: change them here and approve again.`,
+          `${t.symbol}${t.name !== t.symbol ? ` (“${t.name}”)` : ''}: ${t.fixedSupply ? `a fixed supply of ${asWritten(t.supply)}, all of it to your wallet, and no more ever` : 'minted by the project as its rules say'}. It is named on chain as it is made, so wallets show ${t.uri ? 'its name, its ticker and the picture its link gives' : 'its name and ticker and no picture: for one, give it a `uri` (a link to a JSON file that names its `image`) before going live'}. Only your wallet can change the name, ticker and link later: change them here and approve again.`,
       ),
   );
 
-  const fee = num(sim.fees.playerSol);
+  const fee = numeral(sim.fees.playerSol);
   const actions = [];
   for (const it of sim.items) {
     const src = m.item.get(it.key);
     actions.push(
-      `Buy “${it.name}”: ${num(it.price)} ${sym(it.token)}, ${inAll(it.realCost)}${src.supply ? `; ${src.supply} exist` : ''}${src.rise ? '; the price rises after every sale' : ''}${src.fall ? `; the price falls ${src.fall.step} every ${src.fall.every}${src.fall.floor !== undefined ? ` to at least ${src.fall.floor}` : ''}` : ''}${src.soulbound ? '; soulbound' : ''}${limitPhrases(
+      `Buy “${it.name}”: ${asWritten(it.price)} ${sym(it.token)}, ${inAll(it.realCost)}${src.supply ? `; ${asWritten(src.supply)} exist` : ''}${src.soulbound ? '; soulbound' : ''}${limitPhrases(
         src,
       )
         .map(x => `; at most ${x}`)
@@ -238,19 +236,19 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const src = m.box.get(b.key);
     const edge =
       b.houseEdgePercent !== null
-        ? `; the game keeps ${num(b.houseEdgePercent)}%`
+        ? `; the game keeps ${percentage(b.houseEdgePercent)}%`
         : b.unpriced.length
           ? `, plus what ${b.unpriced.join(', ')} ${b.unpriced.length === 1 ? 'is' : 'are'} worth`
           : '';
     const back =
       b.returnPercent !== null
-        ? `gives back ${num(b.expectedBack)} ${sym(b.token)} on average (${num(b.returnPercent)}% of its price${edge})`
+        ? `gives back ${numeral(b.expectedBack)} ${sym(b.token)} on average (${percentage(b.returnPercent)}% of ${b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : 'its price'}${edge})`
         : 'gives back what its items are worth to the player';
     const part = o =>
       o.gives === 'pay'
-        ? `${num(o.amount)} ${sym(o.token)} from “${o.pool}”`
+        ? `${asWritten(o.amount)} ${sym(o.token)} from “${o.pool}”`
         : o.gives === 'mint'
-          ? `${num(o.amount)} ${sym(o.token)}, minted`
+          ? `${asWritten(o.amount)} ${sym(o.token)}, minted`
           : o.gives === 'stash'
             ? `an NFT of “${m.stash.get(o.stash)?.name ?? o.stash}”, picked at random`
             : o.gives === 'nft'
@@ -263,7 +261,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
                     ? 'burned'
                     : 'nothing';
     const outs = b.outcomes
-      .map(o => `${num(o.chance)}% ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`)
+      .map(o => `${percentage(o.chance, 6)}% ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`)
       .join(', ');
     const odds = (src.odds ?? []).map(
       o => `outcome ${o.outcome} ${effectWords(o.add)} for a player who shows ${ruleWords(o.when)}`,
@@ -333,12 +331,12 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       ? ' It sells in one step: the price is split and what it gives handed over in the same transaction.'
       : '';
     actions.push(
-      `${verb} “${b.name}”: ${num(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some(o => o.gives === 'pay') ? (boxBuys(src, m) ? ' It sells only while its pools hold every fixed prize.' : ' A prize won is set aside for its winner at once.') : ''}${b.limitedStock ? ` ${whenOutWords(src)}.` : ''}${!boxBuys(src, m) ? ' An edit of the box’s roll fails a purchase still waiting, for its refund.' : ''}${oneStep}`,
+      `${verb} “${b.name}”: ${asWritten(b.price)} ${sym(b.token)}, ${inAll(b.realCost)}; ${back}. ${boxBuys(src, m) ? 'It gives' : 'Odds'}: ${outs}${odds.length ? `; ${odds.join('; ')}` : ''}${src.gate ? `. ${gateWords(src.gate, 'open it', m)}` : ''}.${rolls} The money: ${splitOf(src.split)}.${limitWords(src)}${src.outcomes.flatMap(outcomeParts).some(o => o.gives === 'pay') ? (boxBuys(src, m) ? ' It sells only while its pools hold every fixed prize.' : ' A prize won is set aside for its winner at once.') : ''}${b.limitedStock ? ` ${whenOutWords(src)}.` : ''}${!boxBuys(src, m) ? ' An edit of the box’s roll fails a purchase still waiting, for its refund.' : ''}${oneStep}`,
     );
   }
   for (const p of sim.payments)
     actions.push(
-      `Pay “${p.name}”: ${p.atLeast ? `whatever the player chooses, at least ${num(p.amount)} ${sym(p.token)} (the page keeps the least; the chain takes any amount)` : `${num(p.amount)} ${sym(p.token)}`}, ${inAll(p.realCost)}. The money: ${splitOf(m.payments.find(x => x.key === p.key)?.split, ['payer', 'payment'])}.`,
+      `Pay “${p.name}”: ${p.atLeast ? `whatever the player chooses, at least ${asWritten(p.amount)} ${sym(p.token)} (the page keeps the least; the chain takes any amount)` : `${asWritten(p.amount)} ${sym(p.token)}`}, ${inAll(p.realCost)}. The money: ${splitOf(m.payments.find(x => x.key === p.key)?.split, ['payer', 'payment'])}.`,
     );
   for (const r of sim.recipes)
     actions.push(
@@ -356,7 +354,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
         ? 'held until the round is drawn, then goes back to its buyer (no loss)'
         : `${!src.ticketNft.then || src.ticketNft.then === 'burn' ? 'burned' : src.ticketNft.then.stash ? `put in the stash “${src.ticketNft.then.stash}”` : 'given on'} once the round is drawn (back to its buyer only if the draw is cancelled)`;
       actions.push(
-        `Buy a ticket for “${l.name}” with one NFT that is ${ruleWords(src.ticketNft.rule)} (+ ${fee} SOL player fee): it is ${goes}. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${keepsPot(src) ? 'the pot is what the owner seeds and others send it, and what its places give' : 'no ticket money reaches the places, so they give only their prizes'}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
+        `Buy a ticket for “${l.name}” with one NFT that is ${ruleWords(src.ticketNft.rule)} (+ ${fee} SOL player fee): it is ${goes}. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${numeral(l.roundDays)} days`}; ${keepsPot(src) ? 'the pot is what the owner seeds and others send it, and what its places give' : 'no ticket money reaches the places, so they give only their prizes'}.${src.gate ? ` ${gateWords(src.gate, 'buy tickets', m)}.` : ''}`,
       );
       continue;
     }
@@ -368,14 +366,14 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     ].filter(Boolean);
     const short = (l.shortPools ?? []).map(
       x =>
-        `its places paid from “${x.pool}” win ${num(x.wins)} and the pool starts with ${num(x.holds)}: a pool is read once, when the draw is asked, and the project can spend it until then; short, they get ${x.each.map(num).join(', ')} each ("whenShort": "${x.whenShort}")`,
+        `its places paid from “${x.pool}” win ${numeral(x.wins)} and the pool starts with ${numeral(x.holds)}: a pool is read once, when the draw is asked, and the project can spend it until then; short, they get ${x.each.map(v => numeral(v)).join(', ')} each ("whenShort": "${x.whenShort}")`,
     );
     const late =
       src.noLoss && !src.timeWeighted
         ? ` (tickets are not weighted by time: someone may buy most of them ${src.closesBefore ? 'just before sales close' : 'right before the draw'} and risk only the fees)`
         : '';
     actions.push(
-      `Buy tickets for “${l.name}”: ${num(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${num(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${num(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map((v, i) => `${num(v)}${l.placeTimes?.[i] > 1 ? ` ×${l.placeTimes[i]}` : ''}`).join(' / ')}${l.firstPrizes ? ` (its first draw, with the seed, ${l.firstPrizes.map(num).join(' / ')})` : ''}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${num(l.expectedPerTicket)} on average on top of its price coming back${late}` : `a ticket is worth ${num(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${num(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${num(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${limitPhrases(
+      `Buy tickets for “${l.name}”: ${asWritten(l.price)} ${sym(l.token)} a ticket; one ticket bought alone is ${inAll(l.realCost)}, and the fee is per purchase, so several tickets at once share it. ${l.drawsOnce ? 'Drawn once, then it ends' : `Drawn every ${numeral(l.roundDays)} days`}; ${paysWords(src, treasuryWords)}. ${keepsPot(src) ? 'The pot reaches' : 'A round’s money comes to'} about ${numeral(l.potBeforeDraw)} ${sym(l.potToken)} and pays ${l.prizes.map((v, i) => `${numeral(v)}${l.placeTimes?.[i] > 1 ? ` ×${l.placeTimes[i]}` : ''}`).join(' / ')}${l.firstPrizes ? ` (its first draw, with the seed, ${l.firstPrizes.map(v => numeral(v)).join(' / ')})` : ''}; ${src.noLoss ? `no loss: every ticket comes back to its buyer once the round is drawn (anyone can pull it), and the winners take only the pot, what is paid into it, so a ticket wins ${numeral(l.expectedPerTicket)} on average on top of its price coming back${late}` : `a ticket is worth ${numeral(l.expectedPerTicket)} on average${l.unpricedPrizes ? ', plus its chance at the places’ prizes' : ''}${l.returnPercent !== null ? ` (${percentage(l.returnPercent)}%)` : ''}`}${l.cutPercent && !(src.split ?? []).length ? `; ${percentage(l.cutPercent)}% of ticket money goes to ${treasuryWords}, the rest ${rest}` : ''}${others}${limitPhrases(
         src,
         { what: ' tickets', after: ' a round', every: '1h' },
       )
@@ -403,12 +401,12 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       f.rate && !(Number(f.rate.perDay) > 0)
         ? 'no tokens'
         : f.rate
-          ? `${num(f.rate.perDay)} ${sym(f.rewardsToken)} a day ${f.rate.shared ? 'for the whole farm, shared by weight while anything is staked' : `for each ${f.unit ?? (src.stakes === 'collectibles' ? 'collectible' : sym(src.stakes))} at x1, whoever else is in`}${f.rate.halveEvery ? `, halving every ${f.rate.halveEvery}` : ''} (${f.rate.minted ? 'minted when a seat is paid while the mint has room for it, never owed later past that' : 'from its rewards vault while it lasts'}); what a seat gives back (a forfeit, a watched NFT sold) is ${f.rate.minted ? 'never minted' : 'left free in its vault'}, never to the other seats`
-          : `${num(f.rewardsPerDay)} ${sym(f.rewardsToken)} a day, what lands in its rewards vault, shared by weight${f.perUnitPerDay !== undefined ? ` (${num(f.perUnitPerDay)} a day for each ${f.unit} at x1${f.yearlyPercent !== undefined ? `, ${num(f.yearlyPercent)}% a year` : ''})` : ''}`;
+          ? `${asWritten(f.rate.perDay)} ${sym(f.rewardsToken)} a day ${f.rate.shared ? 'for the whole farm, shared by weight while anything is staked' : `for each ${f.unit ?? (src.stakes === 'collectibles' ? 'collectible' : sym(src.stakes))} at x1, whoever else is in`}${f.rate.halveEvery ? `, halving every ${f.rate.halveEvery}` : ''} (${f.rate.minted ? 'minted when a seat is paid while the mint has room for it, never owed later past that' : 'from its rewards vault while it lasts'}); what a seat gives back (a forfeit, a watched NFT sold) is ${f.rate.minted ? 'never minted' : 'left free in its vault'}, never to the other seats`
+          : `${numeral(f.rewardsPerDay)} ${sym(f.rewardsToken)} a day, what lands in its rewards vault, shared by weight${f.perUnitPerDay !== undefined ? ` (${numeral(f.perUnitPerDay)} a day for each ${f.unit} at x1${f.yearlyPercent !== undefined ? `, ${percentage(f.yearlyPercent)}% a year` : ''})` : ''}`;
     const grows = (f.growth ?? [])
       .map(
         g =>
-          `; staying in earns ${g.perDay} ${g.attribute} a day at x1, written on the collectible${g.levels ? ` with its ${g.level} (${g.levels.map(l => `${l.level} after ${num(l.days)} days`).join(', ')})` : ''}${g.streak ? ', back to 0 when it leaves' : ', kept when it leaves'}`,
+          `; staying in earns ${asWritten(g.perDay)} ${g.attribute} a day at x1, written on the collectible${g.levels ? ` with its ${g.level} (${g.levels.map(l => `${l.level} after ${numeral(l.days)} days`).join(', ')})` : ''}${g.streak ? ', back to 0 when it leaves' : ', kept when it leaves'}`,
       )
       .join('');
     const gates = listOf(src.gate);
@@ -471,12 +469,12 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
         : `the NFT ${src.lot?.asset?.slice(0, 4)}…`;
     if (src.bidNfts) {
       actions.push(
-        `Bid on “${a.name}”, which sells ${lot}, with bundles of up to three Core or Token Metadata NFTs that are ${ruleWords(src.bidNfts)} (+ ${fee} SOL player fee a bid): the bundle with the most wins (at least ${src.reserve ?? 1}); a bundle that is topped goes back to its bidder at once, and the winning NFTs go to ${src.lot?.asset ? 'the seller' : treasuryWords}. It runs ${src.runs}.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
+        `Bid on “${a.name}”, which sells ${lot}, with bundles of up to three Core or Token Metadata NFTs that are ${ruleWords(src.bidNfts)} (+ ${fee} SOL player fee a bid): the bundle with the most wins (at least ${asWritten(src.reserve ?? 1)}); a bundle that is topped goes back to its bidder at once, and the winning NFTs go to ${src.lot?.asset ? 'the seller' : treasuryWords}. It runs ${src.runs}.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
       );
       continue;
     }
     actions.push(
-      `Bid on “${a.name}”, which sells ${lot}: bids in ${sym(a.token)}${a.reserve ? ` from ${num(a.reserve)}` : ''}, each topping the last by at least ${src.minRaise ?? 5}% (+ ${fee} SOL player fee a bid); a bid that is topped goes back to its bidder at once. It runs ${src.runs}${toSeconds(src.extendBy ?? '10m') > 0 ? `, and a bid in the last ${src.extendBy ?? '10m'} moves the end to ${src.extendBy ?? '10m'} after it` : ''}; anyone ends it then, the lot goes to the highest bidder and the money: ${splitOf(src.split)}.${src.lot?.asset ? ' The end pays the seller and gives the lot together; while the lot can’t move (its collection froze it) the end waits and the winning bid stays in the project’s vault, until the lot can move or the project’s keys call the sale off (the bid back to its bidder, the lot home); a lot its collection took back or burned sends the bid back. A seller whose account can’t take the money doesn’t hold up the winner: the lot goes, the auction stays open owing it, and the next end pays and closes it.' : ''} With no bid the lot goes home; an auction nobody ends waits, and sells to the highest bidder whenever anyone ends it.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
+      `Bid on “${a.name}”, which sells ${lot}: bids in ${sym(a.token)}${a.reserve ? ` from ${asWritten(a.reserve)}` : ''}, each topping the last by at least ${src.minRaise ?? 5}% (+ ${fee} SOL player fee a bid); a bid that is topped goes back to its bidder at once. It runs ${src.runs}${toSeconds(src.extendBy ?? '10m') > 0 ? `, and a bid in the last ${src.extendBy ?? '10m'} moves the end to ${src.extendBy ?? '10m'} after it` : ''}; anyone ends it then, the lot goes to the highest bidder and the money: ${splitOf(src.split)}.${src.lot?.asset ? ' The end pays the seller and gives the lot together; while the lot can’t move (its collection froze it) the end waits and the winning bid stays in the project’s vault, until the lot can move or the project’s keys call the sale off (the bid back to its bidder, the lot home); a lot its collection took back or burned sends the bid back. A seller whose account can’t take the money doesn’t hold up the winner: the lot goes, the auction stays open owing it, and the next end pays and closes it.' : ''} With no bid the lot goes home; an auction nobody ends waits, and sells to the highest bidder whenever anyone ends it.${src.gate ? ` ${gateWords(src.gate, 'bid', m)}.` : ''}`,
     );
   }
   for (const h of m.holds)
@@ -492,16 +490,16 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     const l = src.limits ?? {};
     const limits = [
       ...limitPhrases(l),
-      l.perKey && `${l.perKey} per key`,
-      l.perDay && `${l.perDay} a day`,
-      l.total && `${l.total} in all`,
+      l.perKey && `${asWritten(l.perKey)} per key`,
+      l.perDay && `${asWritten(l.perDay)} a day`,
+      l.total && `${asWritten(l.total)} in all`,
     ]
       .filter(Boolean)
       .join(', ');
     const signers = [
       (src.vouchers ?? []).length && 'a voucher key says earned it',
-      (src.keys ?? []).length && `one of its ${src.keys.length} keys (codes) signed for`,
-      (src.list ?? []).length && `on the list of ${src.list.length}`,
+      (src.keys ?? []).length && `one of its ${asWritten(src.keys.length)} keys (codes) signed for`,
+      (src.list ?? []).length && `on the list of ${asWritten(src.list.length)}`,
     ].filter(Boolean);
     const who = signers.length ? signers.join(' or ') : 'that asks (it is open to any wallet)';
     // A grant of a fixed amount of tokens, paid by voucher or list: each claim may name its own amount, up to the grant's.
@@ -513,7 +511,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
         ? ' What its server checks before it signs is not said ("trust"): xsolana_review reads it as the weakest, a server that only bounds what the page reports.'
         : '';
     actions.push(
-      `Claim “${g.name}” (only the winning wallet claims, signing it; anyone may pay its fees): gives ${g.gives}, to a wallet ${who}${limits ? `; limits ${limits}` : '; no limits'}${src.gate ? (src.gate.wallets ? `; only the ${src.gate.wallets.length} wallets it names` : src.gate.list || src.gate.staked ? `; ${gateWords(src.gate, 'claim it', m).replace(/^Only/, 'only')}` : `; the wallet must hold ${ruleWords(src.gate)}${!signers.length ? ', and each one of those claims once too' : ''}`) : ''}${named ? `; a voucher or the list can name each claim’s own amount, up to that (a reward by rank or share)` : ''}. Each claim costs the grant’s funds about ${num(g.fundsPerClaimSol)} SOL of rent, and whoever sends it the ${fee} SOL player fee.${trust}`,
+      `Claim “${g.name}” (only the winning wallet claims, signing it; anyone may pay its fees): gives ${g.gives}, to a wallet ${who}${limits ? `; limits ${limits}` : '; no limits'}${src.gate ? (src.gate.wallets ? `; only the ${asWritten(src.gate.wallets.length)} wallets it names` : src.gate.list || src.gate.staked ? `; ${gateWords(src.gate, 'claim it', m).replace(/^Only/, 'only')}` : `; the wallet must hold ${ruleWords(src.gate)}${!signers.length ? ', and each one of those claims once too' : ''}`) : ''}${named ? `; a voucher or the list can name each claim’s own amount, up to that (a reward by rank or share)` : ''}. Each claim costs the grant’s funds about ${numeral(g.fundsPerClaimSol)} SOL of rent, and whoever sends it the ${fee} SOL player fee.${trust}`,
     );
   }
   for (const st of sim.stashes ?? []) {
@@ -526,7 +524,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       .filter(p => p.prize.gives === 'nft' && p.prize.stash === st.key)
       .map(p => `${p.by} (${prizeWords(p.prize, m)}, given at once)`);
     actions.push(
-      `The stash “${st.name}” holds ${plural(nfts.length, 'NFT')} the game gives away${boxes.length ? ` through ${boxes.join(', ')}` : ''}${direct.length ? `${boxes.length ? ' and' : ' through'} ${direct.join(', ')}` : ''}, put in by your wallet when it goes live${st.takenInPerDay ? ` and by what players pay with an NFT (about ${num(st.takenInPerDay)} a day in the scenario)` : ''}: a roll that lands on it picks one at random and takes it out at once, so two winners never get the same one, and the roll is then settled to hand it over; a prize that names an NFT hands it over in the instruction that wins it. Empty, a roll that lands on it makes no draw, and gives back that draw’s worth. Your wallet (or the authority) can put more in, or take one out, any time.${st.lastsDays !== undefined ? ` At the scenario’s rate it lasts about ${num(st.lastsDays)} days.` : ''}`,
+      `The stash “${st.name}” holds ${plural(nfts.length, 'NFT')} the game gives away${boxes.length ? ` through ${boxes.join(', ')}` : ''}${direct.length ? `${boxes.length ? ' and' : ' through'} ${direct.join(', ')}` : ''}, put in by your wallet when it goes live${st.takenInPerDay ? ` and by what players pay with an NFT (about ${numeral(st.takenInPerDay)} a day in the scenario)` : ''}: a roll that lands on it picks one at random and takes it out at once, so two winners never get the same one, and the roll is then settled to hand it over; a prize that names an NFT hands it over in the instruction that wins it. Empty, a roll that lands on it makes no draw, and gives back that draw’s worth. Your wallet (or the authority) can put more in, or take one out, any time.${st.lastsDays !== undefined ? ` At the scenario’s rate it lasts about ${numeral(st.lastsDays)} days.` : ''}`,
     );
   }
   // Prizes that are a roll of a box: made for the winner, then asked of the oracle and settled by the winner or the project’s keys.
@@ -555,11 +553,11 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
         rows
           .map(r =>
             r.percentPerDay !== undefined
-              ? `${r.by} ${num(r.percentPerDay)}% of what it holds a day`
-              : `${r.by} ${num(r.perDay)} a day`,
+              ? `${r.by} ${percentage(r.percentPerDay)}% of what it holds a day`
+              : `${r.by} ${numeral(r.perDay)} a day`,
           )
           .join(', ') || 'nothing';
-      return `${p.pot ? `The pot of “${p.pot}”` : `“${p.key}”`} (${sym(p.token)}): starts at ${num(p.seed)}; in: ${by(p.ins)}; out: ${by(p.outs)}; it ${poolFate(p, sim.scenario.days)}.`;
+      return `${p.pot ? `The pot of “${p.pot}”` : `“${p.key}”`} (${sym(p.token)}): starts at ${asWritten(p.seed)}; in: ${by(p.ins)}; out: ${by(p.outs)}; it ${poolFate(p, sim.scenario.days)}.`;
     }),
   );
   section('What runs on a timer', [
@@ -569,7 +567,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     }),
     ...sim.lotteries.map(
       l =>
-        `“${l.name}” is drawn ${l.drawsOnce ? 'once' : `every ${num(l.roundDays)} days`} by MagicBlock’s oracle; anyone can ask for the draw (${num(sim.fees.oracleSol)} SOL to the oracle), move the drawn round on and pull what each entry is owed.`,
+        `“${l.name}” is drawn ${l.drawsOnce ? 'once' : `every ${numeral(l.roundDays)} days`} by MagicBlock’s oracle; anyone can ask for the draw (${numeral(sim.fees.oracleSol)} SOL to the oracle), move the drawn round on and pull what each entry is owed.`,
     ),
   ]);
   const authority = play.filter(s => s.signer.startsWith('authority'));
@@ -585,12 +583,12 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   const s = c.setup;
   lines.push('', 'What setting it up costs');
   lines.push(
-    `- About ${num(s.totalSol)} SOL in all, in ${plural(s.transactions, 'transaction')}: rent ${num(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${num(s.programFeesSol)} SOL, network fees ${num(s.networkFeesSol)} SOL${
-      s.metadataFeesSol ? `, Token Metadata’s fees ${num(s.metadataFeesSol)} SOL (a token’s name on chain)` : ''
+    `- About ${numeral(s.totalSol)} SOL in all, in ${plural(s.transactions, 'transaction')}: rent ${numeral(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${numeral(s.programFeesSol)} SOL, network fees ${numeral(s.networkFeesSol)} SOL${
+      s.metadataFeesSol ? `, Token Metadata’s fees ${numeral(s.metadataFeesSol)} SOL (a token’s name on chain)` : ''
     }${
       Object.keys(s.seeds).length
         ? `, seeds ${Object.entries(s.seeds)
-            .map(([k, v]) => `${num(v)} ${k}`)
+            .map(([k, v]) => `${asWritten(v)} ${k}`)
             .join(', ')}`
         : ''
     }.`,
@@ -600,21 +598,21 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   const d = sim.perDay;
   const list = map =>
     Object.entries(map)
-      .map(([k, v]) => `${num(v)} ${sym(k)}`)
+      .map(([k, v]) => `${numeral(v)} ${sym(k)}`)
       .join(', ') || 'nothing';
   const named = Object.entries(sim.scenario.perDay)
-    .map(([k, v]) => `${v} × ${k}`)
+    .map(([k, v]) => `${numeral(v)} × ${k}`)
     .join(', ');
   const except = unnamedExceptions(sim);
   lines.push(
     '',
-    `Each day, if ${named ? `${named} happen (anything else: ${unnamedWords(sim)})` : `${sim.scenario.defaultPerDay} of each thing happen${except.length ? ` (${except.join(', ')})` : ''}`}`,
+    `Each day, if ${named ? `${named} happen (anything else: ${unnamedWords(sim)})` : `${asWritten(sim.scenario.defaultPerDay)} of each thing happen${except.length ? ` (${except.join(', ')})` : ''}`}`,
   );
   lines.push(
-    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average, plus ${num(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${num(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
+    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average, plus ${numeral(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
   );
   lines.push(
-    `- Your treasury gets ${list(d.creator.treasury)}; burned: ${list(d.burned)}; the platform’s fees: ${num(d.platform.totalSol)} SOL.`,
+    `- Your treasury gets ${list(d.creator.treasury)}; burned: ${list(d.burned)}; the platform’s fees: ${numeral(d.platform.totalSol)} SOL.`,
   );
   for (const n of sim.notes) lines.push(`- ${n}`);
 

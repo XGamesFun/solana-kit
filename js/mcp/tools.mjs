@@ -17,19 +17,20 @@ import { mintState } from '../chain/token2022.js';
 import { decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
 import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
-import { check, describe } from '../economy/check.mjs';
+import { check, describe, withoutRepeats } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
 import { example, examples, ideas, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
-import { describeReview, review } from '../economy/review.mjs';
+import { describeReview, review, signedRoutes } from '../economy/review.mjs';
 import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
+import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tellLines } from '../economy/walk.mjs';
 import { design, describeDesign, designAsks, requirementProblems, REQUIREMENTS } from '../economy/design.mjs';
@@ -141,6 +142,7 @@ function projectFile(rel, ctx) {
     const r = path.relative(root, p);
     return r !== '' && !r.startsWith('..') && !path.isAbsolute(r);
   };
+  if (file === root) throw new Error(`${rel} is the project folder itself (${root}): name a spec file in it.`);
   if (!inside(file) || !inside(realPath(file)))
     throw new Error(`${rel} is outside the project folder (${root}): a spec file must be inside it.`);
   if (path.extname(file).toLowerCase() !== '.json') throw new Error(`${rel} is not a .json file: a spec file is JSON.`);
@@ -153,8 +155,6 @@ const plainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v
 /** A file's spec: the JSON as it is, or what it holds under `economy` when that is its only key. */
 const specOf = value =>
   plainObject(value) && Object.keys(value).length === 1 && plainObject(value.economy) ? value.economy : value;
-/** The spec to read: what a file holds under `economy` (a game file keeps it beside its own keys), else the JSON. */
-const economyOf = value => (plainObject(value) && plainObject(value.economy) ? value.economy : value);
 /**
  * Whether a file's JSON is an economy spec, so xsolana_save may write over it: version 2 with its tokens (every spec that
  * checks has them), a currency if it names one (a spec of one token checks without: that token is its currency)
@@ -189,7 +189,11 @@ const SOURCE = {
   },
 };
 
-async function load(input, ctx) {
+/**
+ * The economy a call names, and where it came from: the spec passed whole, a worked example by name, or a file in the
+ * project folder (xsolana.json when none is named). A game file's spec is what it keeps under `economy`.
+ */
+export async function load(input, ctx) {
   if (input.spec) return { economy: economyOf(input.spec), from: 'the spec given' };
   if (input.example) return { economy: example(input.example).spec, from: `the example ${input.example}` };
   // A hosted server (js/mcp/http.mjs) reads no file: the machine it runs on is not the person's.
@@ -201,14 +205,33 @@ async function load(input, ctx) {
   const file = projectFile(rel, ctx);
   if (!existsSync(file)) {
     if (input.file) throw new Error(`${rel} does not exist.`);
+    // (a terminal gives a spec as a file, never whole: its words say how to get one)
     throw new Error(
-      `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write a spec (xsolana_guide, xsolana_examples) and pass it as "spec", or save it with xsolana_save.`,
+      ctx?.terminal
+        ? `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write one (xsolana_guide says what it holds, and xsolana_examples finds a worked one to start from), or name the file that holds your spec.`
+        : `There is no ${DEFAULT_FILE} in ${cwdOf(ctx)} yet. Write a spec (xsolana_guide, xsolana_examples) and pass it as "spec", or save it with xsolana_save.`,
+    );
+  }
+  let text;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (e) {
+    throw new Error(
+      e.code === 'EISDIR'
+        ? `${rel} is a folder, not a spec file.`
+        : `${rel} can’t be read (${e.code ?? 'error'}): check that it is a file this user may read.`,
+      { cause: e },
     );
   }
   let value;
   try {
-    value = JSON.parse(await readFile(file, 'utf8'));
+    value = parseFile(text);
   } catch (e) {
+    // (text in another encoding reads as UTF-8 with a zero byte between its letters)
+    if (text.includes('\u0000'))
+      throw new Error(`${rel} is not UTF-8 text (it reads as UTF-16): save it as UTF-8, then try again.`, {
+        cause: e,
+      });
     // The parser's message quotes the file: say only where it stopped.
     const at = /position \d+/.exec(e.message)?.[0];
     throw new Error(`${rel} is not valid JSON${at ? ` (at ${at})` : ''}.`, { cause: e });
@@ -216,11 +239,12 @@ async function load(input, ctx) {
   return { economy: economyOf(value), from: rel, file };
 }
 
+// (a finding that repeats for thousands of parts is listed in part, in the words and in the lists alike)
 const refused = (verdict, from) => ({
   ok: false,
   from,
-  refusals: verdict.refusals,
-  warnings: verdict.warnings,
+  refusals: withoutRepeats(verdict.refusals),
+  warnings: withoutRepeats(verdict.warnings),
   text: `${describe({ refusals: verdict.refusals, warnings: [] })}\n\n${plural(verdict.refusals.length, 'refusal')} in ${from}: fix ${verdict.refusals.length === 1 ? 'it' : 'them'} (each says how), then run xsolana_check again.`,
 });
 
@@ -361,7 +385,8 @@ export const tools = [
           name: ex.name,
           spec: ex.spec,
           checks: verdict.ok ? 'clean' : verdict.refusals.map(r => r.code),
-          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${footer()}`,
+          // (a terminal shows the words alone, so there they carry the spec, and how to start a file from it)
+          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
         };
       }
       if (!query) {
@@ -472,8 +497,8 @@ export const tools = [
       return {
         ok: verdict.ok,
         from,
-        refusals: verdict.refusals,
-        warnings: verdict.warnings,
+        refusals: withoutRepeats(verdict.refusals),
+        warnings: withoutRepeats(verdict.warnings),
         text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
     },
@@ -582,7 +607,9 @@ export const tools = [
       const highs = r.findings.filter(f => f.severity === 'high').length;
       const tail = highs
         ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'} (or have the person accept ${highs === 1 ? 'it' : 'them'} in plain words) before going live, then review again.`
-        : '\nNo high finding. Tell the person which level each signed route uses and what a cheater gets (the trade-offs above), as written: they choose the trade-off.';
+        : signedRoutes(r.routes).length
+          ? '\nNo high finding. Tell the person which level each signed route uses and what a cheater gets (the trade-offs above), as written: they choose the trade-off.'
+          : '\nNo high finding. Tell the person what a cheater gets on each route (the trade-offs above), as written.';
       // What to settle with the person before calling it ready, at the moment the agent does.
       const ready = [
         'Before you call it ready:',
@@ -634,7 +661,20 @@ export const tools = [
       // A requirement the search cannot read is said in words before anything is tried: the schema names only the kind.
       const wrong = requirementProblems(input.requirements);
       if (wrong.length) return { isError: true, text: `Nothing was designed: ${wrong.join(' ')}${footer()}` };
-      const r = design(economy, input.requirements, { now: nowOf(ctx) });
+      // A route is its part's key, bare or as xsolana_review and a scenario write it ("lottery:weekly"): a key has no
+      // colon, so what comes before one is the kind.
+      const requirements = input.requirements.map(q =>
+        typeof q.route === 'string' && q.route.includes(':')
+          ? { ...q, route: q.route.slice(q.route.indexOf(':') + 1) }
+          : q,
+      );
+      const r = design(economy, requirements, { now: nowOf(ctx) });
+      const unknown = r.routes.filter(x => x.unknown).map(x => `“${x.route}”`);
+      if (unknown.length)
+        return {
+          isError: true,
+          text: `Nothing was designed: the spec has no lottery, item, grant, farm or contest with the key ${unknown.join(' or ')}. A requirement’s route is the key of the part it is about ("weekly", or "lottery:weekly"): give the spec that part first, as a skeleton, then try again.${footer()}`,
+        };
       if (!r.candidates.length)
         return {
           isError: true,
@@ -654,8 +694,8 @@ export const tools = [
           removes: c.plan.removes ?? null,
           spec: c.spec,
         })),
-        askFirst: designAsks(r, input.requirements, { top }),
-        text: `${describeDesign(r, input.requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. The JSON says the same as this text: each design's "needs" and "removes", and "askFirst" (whether to stop for their choice, the two designs that differ in a way out, what each other reward a server signs needs from them, and what the asking comes before: saving a spec, a draft too). Added or changed a route? Run this again.${footer()}`,
+        askFirst: designAsks(r, requirements, { top }),
+        text: `${describeDesign(r, requirements, { top })}\n\nNext: read the requirements back to the person, put the choice to them with your pick, then take the chosen design's spec from "designs" and run xsolana_check on it. Where a want removes a way out (a burn, a token that can't move, a payment taken before the outcome), name the version that keeps it first. The JSON says the same as this text: each design's "needs" and "removes", and "askFirst" (whether to stop for their choice, the two designs that differ in a way out, what each other reward a server signs needs from them, and what the asking comes before: saving a spec, a draft too). Added or changed a route? Run this again.${footer()}`,
       };
     },
   },
@@ -694,7 +734,7 @@ export const tools = [
       let previous = null;
       if (existsSync(file)) {
         try {
-          previous = JSON.parse(await readFile(file, 'utf8'));
+          previous = parseFile(await readFile(file, 'utf8'));
         } catch {
           previous = null;
         }

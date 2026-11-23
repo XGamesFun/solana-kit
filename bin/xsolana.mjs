@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // xsolana: the command line of @xgamesfun/solana. Every tool the MCP server has runs here too, with the same arguments and
-// the same answer, for an agent (or a person) without MCP.
+// the same answer, for an agent (or a person) without MCP: a tool's words name each tool as the command that runs it
+// here (`xsolana check`, where the server says xsolana_check).
 //
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
 //   xsolana mcp --http [--port n] [--host h]   serve the hosted tools over HTTP at /mcp (127.0.0.1:8787 by default)
 //   xsolana guide [part] [--json]        the guide's index; with a part or a topic (writing, cheating, asks, cannot), that one
 //   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
+//   xsolana examples <name> [--save <file>]   one worked example whole; --save writes its spec into a new file
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
+//   xsolana client [--json]               the program and its calls, for an app
 //   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
 //   xsolana keygen <file>                 make a key file for a project's owner (outside any repository; the key is never printed)
 //   xsolana approve [file] --keypair <keyfile> [--yes <code>]   put the economy live, signed by a key file: no browser, no page
@@ -15,51 +18,39 @@
 //   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
 //   xsolana version
+//   xsolana help [command], xsolana <command> --help (or -h)   the commands, or one command's words, flags and all
 //
 // A flag with a value is written either way: --agent claude or --agent=claude; a flag the command doesn't take is
-// refused. A command that fails says why on stderr and exits 1: a usage error in one line (XSOLANA_DEBUG=1 prints the
-// whole stack), a tool's refusal with the tool's own answer. `--json` prints a tool's whole answer on stdout, whatever
-// it is, and the exit code still says whether it failed.
+// refused, and so is a word more than it takes. A command that fails says why on stderr and exits 1: a usage error in
+// one line (XSOLANA_DEBUG=1 prints the whole stack), a tool's refusal with the tool's own answer. `--json` prints a
+// tool's whole answer on stdout, whatever it is, and the exit code still says whether it failed.
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-
-const USAGE = `xsolana: the tools for loot, one shared Solana program for game and community economies.
-
-  xsolana guide [part]            what an economy can be made of: an index, then one part or topic
-  xsolana examples [words…]       where to start
-  xsolana check [file]            refusals and warnings (default xsolana.json)
-  xsolana simulate [file]         the quick simulation
-  xsolana cost [file]             what going live and each action cost
-  xsolana explain [file]          the economy in plain words
-  xsolana review [file]           what a cheater gets on each route, and what to fix before going live
-  xsolana publish [file]          what going live does, and how to approve it
-  xsolana keygen <file>           make a key file for the project’s owner, outside any repository (prints its address, never the key)
-  xsolana approve [file] --keypair <keyfile>   what going live sends, then (--yes <code>) send it, signed by that key file
-                                  (--mint-key <token>=<keyfile>: that token’s new mint at the address of a key file you have)
-  xsolana approve [file] --browser             the same on a local page, signed in a browser wallet (--port n, --no-open)
-  xsolana status [file]           a live economy on chain
-  xsolana token <mint>            a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do
-  xsolana connect                 add the xsolana tools to Claude Code or Codex (--agent claude|codex, --scope user|project, --local, --remove, --dry-run)
-  xsolana mcp                     serve the tools over MCP (stdio)
-  xsolana mcp --http              serve the hosted tools over HTTP at http://127.0.0.1:8787/mcp (--port n, --host h)
-  xsolana tool --list             every tool; xsolana tool <name> '<json>' runs one (--args-file f)
-  xsolana version                 this package's xsolana version and program
-
-  A tool's command (guide, examples, check … status, token, tool) takes --json for its whole answer as JSON.
-  review exits 1 when it finds something high.`;
+import path from 'node:path';
 
 /** A failure the person caused (a bad flag, a missing file): said in one line, without a stack. */
 class UsageError extends Error {}
 
 /** The flags that take a value: `--name value` or `--name=value`. */
-const VALUED = new Set(['--args-file', '--agent', '--scope', '--port', '--host', '--keypair', '--yes', '--mint-key']);
+const VALUED = new Set([
+  '--args-file',
+  '--agent',
+  '--scope',
+  '--port',
+  '--host',
+  '--keypair',
+  '--yes',
+  '--mint-key',
+  '--save',
+]);
 /** The valued flags that may be given more than once: each value is kept, in order (`lists`). */
 const REPEATED = new Set(['--mint-key']);
-/** The flags each command takes; any other is refused. */
+/** The flags each command takes; any other is refused (`--help`, or `-h`, is every command's). */
 const TOOL_FLAGS = ['--json'];
 const FLAGS = {
   mcp: ['--http', '--port', '--host'],
   guide: TOOL_FLAGS,
-  examples: TOOL_FLAGS,
+  examples: ['--save', ...TOOL_FLAGS],
   check: TOOL_FLAGS,
   simulate: TOOL_FLAGS,
   cost: TOOL_FLAGS,
@@ -67,6 +58,7 @@ const FLAGS = {
   review: TOOL_FLAGS,
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
+  client: TOOL_FLAGS,
   token: TOOL_FLAGS,
   keygen: [],
   approve: ['--keypair', '--yes', '--mint-key', '--browser', '--port', '--no-open'],
@@ -75,9 +67,221 @@ const FLAGS = {
   version: [],
 };
 
+const JSON_FLAG = '--json   the whole answer as JSON on stdout; the exit code still says whether it failed';
+const FILE_WORD = 'file     the spec file, in this folder or one below it (xsolana.json when left out)';
+/** A command that runs one tool on a spec file: its help, but for what the tool says. */
+const onFile = (command, does, more) => ({
+  lines: [[`xsolana ${command} [file]`, does]],
+  words: [1, 'one file'],
+  tool: ['file'],
+  more: [more, FILE_WORD, JSON_FLAG],
+});
+
+/**
+ * Every command, in the order the help lists them. `lines`: what the help's first screen says of it, as [what is
+ * typed, what it does]. `words`: the most words it takes after its name, and what they are (more are refused).
+ * `tool`: for a command that runs the tool xsolana_<command>, the tool's arguments its words stand for, so a tool's
+ * answer can name that tool as this command. `more`: what its own help adds, every flag it takes among it.
+ */
+const COMMANDS = {
+  guide: {
+    lines: [['xsolana guide [part]', 'what an economy can be made of: an index, then one part or topic']],
+    words: [1, 'one part or topic'],
+    tool: ['part'],
+    more: [
+      'With no part, the index: how to go about it, and every part and topic with when to read it.',
+      'part     a part of an economy (tokens, items, boxes, lotteries, farms…) or a topic (writing, cheating, asks,\n         cannot): the index names them all',
+      JSON_FLAG,
+    ],
+  },
+  examples: {
+    lines: [
+      ['xsolana examples [words…]', 'where to start: the worked examples and rated economies nearest your words'],
+      ['xsolana examples <name>', 'one worked example whole; --save <file> writes its spec into a new file'],
+    ],
+    words: [Infinity],
+    tool: ['name', 'query'],
+    more: [
+      'With no words, every worked example by name. With words, the nearest examples, the nearest of the rated\neconomies, and what loot does not do in them with the nearest versions it does.',
+      'name          one word that is an example’s name: that example, with its whole spec',
+      '--save <file> with a name: write that example’s spec into <file> (xsolana.json, say), to change and then check.\n              A file that is there already is never written over',
+      JSON_FLAG,
+    ],
+  },
+  check: onFile(
+    'check',
+    'refusals and warnings (default xsolana.json)',
+    'Refusals keep a spec from going live, each with its fix; warnings are what its owner should hear. Exits 1 when\nit refuses.',
+  ),
+  simulate: onFile(
+    'simulate',
+    'the quick simulation',
+    'Expected values from the spec and its scenario: what each box, ticket and craft gives back against its price,\neach pool’s money in and out, and what players, the treasury and the platform get a day.',
+  ),
+  cost: onFile(
+    'cost',
+    'what going live and each action cost',
+    'What going live takes (rent, fees, seeds, how many transactions) and what each action costs whoever signs it.\nNothing is sent.',
+  ),
+  explain: onFile(
+    'explain',
+    'the economy in plain words',
+    'What players do and what it costs and is worth, how the pools fill and drain, what runs by itself and what the\nauthority signs.',
+  ),
+  review: onFile(
+    'review',
+    'what a cheater gets on each route, and what to fix before going live',
+    'For every route that pays or gives value: who can trigger it, what the program enforces, what it trusts off the\nchain and the most one cheater gets. A report: printed on stdout whatever it finds, and it exits 1 when a\nfinding is high.',
+  ),
+  publish: onFile(
+    'publish',
+    'what going live does, and how to approve it',
+    'Every step going live takes, in order, with its cost, and the commands that do it. It sends nothing: `xsolana\napprove` does.',
+  ),
+  keygen: {
+    lines: [
+      [
+        'xsolana keygen <file>',
+        'make a key file for the project’s owner, outside any repository (prints its address, never the key)',
+      ],
+    ],
+    words: [1, 'one path'],
+    tooMany: 'xsolana keygen <file> makes one key file: give one path (in quotes when it has a space).',
+    more: [
+      'file     where the key file goes, outside any repository: ~/.config/xsolana/my-game.json, say. It is made for\n         its user alone, and a file that is there already is never written over',
+      'The key is the project’s owner for good: back the file up yourself, and never paste it anywhere.',
+    ],
+  },
+  approve: {
+    lines: [
+      [
+        'xsolana approve [file] --keypair <keyfile>',
+        'what going live sends, then (--yes <code>) send it, signed by that key file (--mint-key <token>=<keyfile>: that token’s new mint at the address of a key file you have)',
+      ],
+      [
+        'xsolana approve [file] --browser',
+        'the same on a local page, signed in a browser wallet (--port n, --no-open)',
+      ],
+    ],
+    words: [1, 'one file'],
+    // (`more` is HOW_TO_SIGN's, below)
+  },
+  status: onFile(
+    'status',
+    'a live economy on chain',
+    'The project, each pool’s balance and every record the spec names, found or missing. It reads the economy’s own\ncluster: devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL.',
+  ),
+  token: {
+    lines: [
+      [
+        'xsolana token <mint>',
+        'a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do',
+      ],
+    ],
+    words: [1, 'one mint address'],
+    tool: ['mint'],
+    more: [
+      'mint     the token’s mint address. It is read on the cluster of the economy in this folder: devnet, unless\n         xsolana.json says "network": "mainnet"',
+      JSON_FLAG,
+    ],
+  },
+  client: {
+    lines: [['xsolana client', 'the program and its calls, for an app that uses a live economy']],
+    words: [0],
+    tool: [],
+    more: [
+      'The program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own\nwallet.',
+      JSON_FLAG,
+    ],
+  },
+  connect: {
+    lines: [
+      [
+        'xsolana connect',
+        'add the xsolana tools and the skill to Claude Code and Codex (--agent, --scope, --local, --remove, --dry-run)',
+      ],
+    ],
+    words: [0],
+    more: [
+      'It runs each agent’s own commands, and never edits an agent’s config file.',
+      '--agent claude|codex   that agent alone (both when left out)',
+      '--scope user|project   for every project of this user (the default), or for the folder it runs in only',
+      '--local                run the server from this checkout, not from npm',
+      '--remove               take the tools and the skill out again',
+      '--dry-run              print what would be run, and run nothing',
+    ],
+  },
+  mcp: {
+    lines: [
+      ['xsolana mcp', 'serve the tools over MCP (stdio)'],
+      ['xsolana mcp --http', 'serve the hosted tools over HTTP at http://127.0.0.1:8787/mcp (--port n, --host h)'],
+    ],
+    words: [0],
+    more: [
+      'Over stdio it is what an agent’s MCP config runs. Over HTTP it serves the tools that read no file of yours.',
+      '--http        serve over HTTP, at /mcp',
+      '--port <n>    with --http: the port (8787)',
+      '--host <h>    with --http: the address to listen on (127.0.0.1)',
+    ],
+  },
+  tool: {
+    lines: [
+      [
+        'xsolana tool --list',
+        "every tool by name; xsolana tool <name> '<json>' runs one (--args-file f; --help for its arguments). xsolana_design (the specs that do what a person wants) and xsolana_save (save a spec given whole) have no command of their own",
+      ],
+    ],
+    words: [2, 'a tool’s name and its arguments as one word of JSON, in quotes (\'{"file":"xsolana.json"}\')'],
+    more: [
+      'name               a tool’s name, as --list gives it. With --help: that tool’s arguments',
+      "'<json>'           its arguments, one JSON object in quotes ({} when left out)",
+      '--args-file <f>    read the arguments from a JSON file',
+      '--list             every tool, with the command that runs it when it has one',
+      JSON_FLAG,
+    ],
+  },
+  version: {
+    lines: [['xsolana version', 'this package’s version, the loot program it is built for, and the cluster']],
+    words: [0],
+    more: [],
+  },
+};
+
+/** `text` in lines of at most `width` columns, cut between words. */
+function wrapped(text, width) {
+  const lines = [];
+  for (const word of text.split(' ')) {
+    const last = lines.at(-1);
+    if (last !== undefined && last.length + 1 + word.length <= width) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(word);
+  }
+  return lines;
+}
+
+/** One [what is typed, what it does] of the help: the second from column 34, on the same line when the first leaves room. */
+function helpLine([typed, does]) {
+  const [first, ...rest] = wrapped(does, 84);
+  const under = ' '.repeat(34);
+  return [
+    typed.length < 32 ? `  ${typed.padEnd(32)}${first}` : `  ${typed}\n${under}${first}`,
+    ...rest.map(l => under + l),
+  ].join('\n');
+}
+
+const USAGE = `xsolana: the tools for loot, one shared Solana program for game and community economies.
+
+${Object.values(COMMANDS)
+  .flatMap(c => c.lines.map(helpLine))
+  .join('\n')}
+  xsolana help [command]          this screen, or one command’s words and flags (also: xsolana <command> --help)
+
+  A tool’s command (guide, examples, check … status, token, client, tool) takes --json for its whole answer as
+  JSON. review exits 1 when it finds something high.`;
+
 /**
  * The arguments after the command: { flags (every --name given), values (--name → value), lists (--name → every
- * value of a flag that may be given more than once), positional }.
+ * value of a flag that may be given more than once), positional }. `-h` is `--help`; after a bare `--`, every
+ * argument is a word, whatever it starts with.
  */
 function parseArgs(rest) {
   const flags = new Set();
@@ -90,8 +294,17 @@ function parseArgs(rest) {
   };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    // (a bare -- is the shell's own end of flags, not a file's name)
-    if (a === '--') continue;
+    if (a === '--') {
+      positional.push(...rest.slice(i + 1));
+      break;
+    }
+    if (a === '-h') {
+      flags.add('--help');
+      continue;
+    }
+    // (a short flag is not a file's name: read as one, "-v" would be "not a .json file")
+    if (/^-[A-Za-z]/.test(a))
+      throw new UsageError(`There is no ${a} flag: flags are written whole (--json), and -h is --help.`);
     if (!a.startsWith('--')) {
       positional.push(a);
       continue;
@@ -112,10 +325,8 @@ function parseArgs(rest) {
   return { flags, values, lists, positional };
 }
 
-/** What `xsolana approve` says when it is not told how the setup is signed. */
-const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
-
-  --keypair <keyfile>   a key file on this machine signs (the usual way: no browser, no page). It shows everything that
+/** The two ways going live is signed, each with its flags. */
+const WAYS_TO_SIGN = `  --keypair <keyfile>   a key file on this machine signs (the usual way: no browser, no page). It shows everything that
                         would be sent, with a code, and sends nothing; run again with --yes <code>, it sends exactly
                         that. \`xsolana keygen <file>\` makes a new project's key file; one that is live is signed
                         only by the key it went live with.
@@ -125,6 +336,54 @@ const HOW_TO_SIGN = `xsolana approve: say how going live is signed.
                         address on that cluster; on another cluster it still can, so keep it safe until then.
   --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
                         when the person whose economy it is asks for that; they run it themselves.`;
+/** What `xsolana approve` says when it is not told how the setup is signed. */
+const HOW_TO_SIGN = `xsolana approve: say how going live is signed.\n\n${WAYS_TO_SIGN}`;
+COMMANDS.approve.more = [
+  'file     the spec file (xsolana.json when left out). What lands is written back into it',
+  WAYS_TO_SIGN.replace(/^ {2}/gm, ''),
+  '--yes <code>          with --keypair: send what was shown, by the code that printout ended with',
+  '--port <n>            with --browser: the port the page is served on (any free one when left out)',
+  '--no-open             with --browser: print the link, and open no browser',
+];
+
+/** One command's own help: what is typed, what it does, and each word and flag it takes. */
+function helpFor(command) {
+  const c = COMMANDS[command];
+  return [...c.lines.map(helpLine), ...(c.more.length ? ['', ...c.more.map(m => m.replace(/^/gm, '  '))] : [])].join(
+    '\n',
+  );
+}
+
+/**
+ * One tool's help, for `xsolana tool <name> --help`: what it is, the command that runs it when it has one, and its
+ * arguments as its input schema names them.
+ */
+function toolHelp(t, terminalWords) {
+  const command = t.name.slice('xsolana_'.length);
+  const fields = Object.entries(t.inputSchema.properties ?? {});
+  const required = new Set(t.inputSchema.required ?? []);
+  return [
+    `xsolana tool ${t.name} '<json>'   ${t.title}${COMMANDS[command]?.tool ? ` (also: xsolana ${command})` : ''}`,
+    '',
+    terminalWords(t.description, TERMINAL),
+    '',
+    fields.length ? 'Its arguments, as one JSON object:' : 'It takes no arguments.',
+    ...fields.map(
+      ([name, f]) =>
+        `  ${name} (${f.type ?? 'any'}${required.has(name) ? ', needed' : ''})${f.description ? `: ${f.description}` : ''}`,
+    ),
+  ].join('\n');
+}
+
+/**
+ * How a tool's answer is worded in a terminal (server.mjs `terminalWords`): each command that runs a tool, with the
+ * tool's arguments its words stand for.
+ */
+const TERMINAL = Object.fromEntries(
+  Object.entries(COMMANDS)
+    .filter(([, c]) => c.tool)
+    .map(([name, c]) => [name, c.tool]),
+);
 
 /** The port `xsolana approve --browser` listens on: a whole number from 1 to 65535, or undefined for any free one. */
 function portOf(value) {
@@ -138,48 +397,80 @@ function portOf(value) {
 async function main(argv) {
   const [command, ...rest] = argv;
   const { flags, values, lists, positional } = parseArgs(rest);
-  const takes = Object.hasOwn(FLAGS, command) ? FLAGS[command] : null;
+  const known = Object.hasOwn(FLAGS, command);
+  // A command's own help: `xsolana <command> --help` (or -h), and `xsolana help <command>`.
+  const helped = command === 'help' ? positional[0] : known && flags.has('--help') ? command : null;
+  if (helped !== null && helped !== undefined) {
+    if (!Object.hasOwn(COMMANDS, helped))
+      throw new UsageError(`There is no command “${helped}”: xsolana help lists them all.`);
+    if (helped === 'tool' && command === 'tool' && positional[0]) {
+      const { tools } = await import('../js/mcp/tools.mjs');
+      const { terminalWords } = await import('../js/mcp/server.mjs');
+      const t = tools.find(x => x.name === positional[0]);
+      if (!t) throw new UsageError(`There is no tool “${positional[0]}”: xsolana tool --list names them all.`);
+      console.log(toolHelp(t, terminalWords));
+      return;
+    }
+    console.log(helpFor(helped));
+    return;
+  }
+  const takes = known ? FLAGS[command] : null;
   const unknown = takes && [...flags].find(f => !takes.includes(f));
   if (unknown)
     throw new UsageError(
       `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).`,
     );
+  // A word more than the command takes is refused: dropped, it would look as if it had been read.
+  const [most, what] = known ? COMMANDS[command].words : [Infinity];
+  if (positional.length > most) {
+    const extra = positional.slice(most).map(w => `“${w}”`);
+    throw new UsageError(
+      COMMANDS[command].tooMany ??
+        `xsolana ${command} takes ${what ?? 'nothing after its name'}: ${extra.join(', ')} ${extra.length === 1 ? 'is' : 'are'} more than that.`,
+    );
+  }
 
-  async function tool(name, input) {
-    const { runTool } = await import('../js/mcp/server.mjs');
-    const r = await runTool(name, input, { cwd: process.cwd() });
+  /**
+   * Names the cluster this command works on: the network of the economy it is given, as `what` names it. A cluster
+   * the environment names otherwise is refused, for every command alike. With no economy to read (`network` null),
+   * the command works on the process's own cluster.
+   */
+  async function onCluster(network, what) {
+    if (!network) return;
+    const { useCluster } = await import('../js/client/cluster.js');
+    try {
+      useCluster(network);
+    } catch {
+      throw new UsageError(
+        `${what} is on ${network}, and XSOLANA_CLUSTER says ${process.env.XSOLANA_CLUSTER}: unset it, or change the economy’s "network".`,
+      );
+    }
+  }
+
+  /**
+   * Runs one tool and prints its answer, in a terminal's words: the tool's own refusal on stderr, with exit 1.
+   * `done`: what to say in place of the tool's words when it went well.
+   */
+  async function tool(name, input, done = null) {
+    const { networkOfInput, runTool } = await import('../js/mcp/server.mjs');
+    const ctx = { cwd: process.cwd(), terminal: TERMINAL };
+    // The economy's cluster is read as the tool reads it (a spec given whole, an example, a file).
+    const given = input && typeof input === 'object' ? input : {};
+    await onCluster(
+      await networkOfInput(given, ctx),
+      given.spec ? 'The economy' : given.example ? `The example ${given.example}` : (given.file ?? 'xsolana.json'),
+    );
+    const r = await runTool(name, input, ctx);
     const failed = Boolean(r.isError || r.ok === false);
     // A review is a report whatever it finds: printed on stdout, its exit code saying whether a finding is high.
     const report = name === 'xsolana_review' && !r.isError && !r.refusals;
     if (flags.has('--json')) console.log(JSON.stringify(r, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2));
+    else if (done && !failed) console.log(done);
     else (failed && !report ? console.error : console.log)(r.text ?? JSON.stringify(r, null, 2));
     if (failed) process.exitCode = 1;
   }
 
   const fileInput = () => (positional[0] ? { file: positional[0] } : {});
-
-  /**
-   * Names the cluster this command works on from the economy it is given (a file, or a spec passed whole): its
-   * "network", devnet when it names none. A file that is missing or not JSON, and a network loot does not know, are
-   * left to the tool, which says so in its own words.
-   */
-  async function clusterOf({ file = 'xsolana.json', spec = null } = {}) {
-    const { CLUSTERS, networkOf, useCluster } = await import('../js/client/cluster.js');
-    let network;
-    try {
-      network = networkOf(spec ?? JSON.parse(await readFile(file, 'utf8')));
-    } catch {
-      return;
-    }
-    if (!Object.hasOwn(CLUSTERS, network)) return;
-    try {
-      useCluster(network);
-    } catch {
-      throw new UsageError(
-        `${spec ? 'The economy' : file} is on ${network}, and XSOLANA_CLUSTER says ${process.env.XSOLANA_CLUSTER}: unset it, or change the economy’s "network".`,
-      );
-    }
-  }
 
   switch (command) {
     case 'mcp': {
@@ -193,11 +484,47 @@ async function main(argv) {
       await serveStdio();
       break;
     }
-    case 'guide':
+    case 'guide': {
+      if (positional[0]) {
+        // (a word that is no part is refused in the command's own words: the tool would say "arguments.part")
+        const { tools } = await import('../js/mcp/tools.mjs');
+        const parts = tools.find(t => t.name === 'xsolana_guide').inputSchema.properties.part.enum;
+        if (!parts.includes(positional[0]))
+          throw new UsageError(
+            `xsolana guide: there is no part or topic “${positional[0]}”. It takes one of: ${parts.join(', ')}.`,
+          );
+      }
       await tool('xsolana_guide', positional[0] ? { part: positional[0] } : {});
       break;
-    case 'examples':
-      await tool('xsolana_examples', positional.length ? { query: positional.join(' ') } : {});
+    }
+    case 'examples': {
+      // One word that is an example's name is that example, whole; any other words are searched for.
+      const { examples } = await import('../js/economy/examples.mjs');
+      const named = positional.length === 1 ? examples().find(e => e.name === positional[0]) : null;
+      const into = values.get('--save');
+      if (into === undefined) {
+        await tool(
+          'xsolana_examples',
+          named ? { name: named.name } : positional.length ? { query: positional.join(' ') } : {},
+        );
+        break;
+      }
+      if (!named)
+        throw new UsageError(
+          '--save goes with one example’s name: xsolana examples <name> --save <file> (xsolana examples lists the names).',
+        );
+      // A start from an example is a new file: one that is there may be somebody's economy, live or not.
+      if (existsSync(path.resolve(into)))
+        throw new UsageError(`${into} is there already, and --save writes only a new file: name another.`);
+      await tool(
+        'xsolana_save',
+        { spec: named.spec, file: into },
+        `${into} now holds the worked example “${named.name}”, whole. Change it to your own economy (xsolana guide says what each part takes), then run: xsolana check${into === 'xsolana.json' ? '' : ` ${into}`}`,
+      );
+      break;
+    }
+    case 'client':
+      await tool('xsolana_client', {});
       break;
     case 'check':
     case 'simulate':
@@ -206,7 +533,6 @@ async function main(argv) {
     case 'review':
     case 'publish':
     case 'status':
-      await clusterOf(fileInput());
       await tool(`xsolana_${command}`, fileInput());
       break;
     case 'token':
@@ -241,7 +567,9 @@ async function main(argv) {
     }
     case 'approve': {
       const file = positional[0] ?? 'xsolana.json';
-      await clusterOf({ file });
+      // (a file that is missing or not JSON is left to the approval, which says so in its own words)
+      const { networkOfFile } = await import('../js/mcp/server.mjs');
+      await onCluster(await networkOfFile(file), file);
       const keyFile = values.get('--keypair');
       const page = flags.has('--browser');
       if (keyFile !== undefined && page)
@@ -294,7 +622,17 @@ async function main(argv) {
     case 'tool': {
       const { tools } = await import('../js/mcp/tools.mjs');
       if (flags.has('--list') || !positional[0]) {
-        for (const t of tools) console.log(`${t.name}\n  ${t.description.split('. ')[0]}.`);
+        // Each tool by its title (what a client shows a person), with the command that runs it when it has one.
+        const list = tools.map(t => {
+          const command = t.name.slice('xsolana_'.length);
+          return {
+            name: t.name,
+            title: t.title,
+            ...(COMMANDS[command]?.tool ? { command: `xsolana ${command}` } : {}),
+          };
+        });
+        if (flags.has('--json')) console.log(JSON.stringify(list, null, 2));
+        else for (const t of list) console.log(`${t.name}\n  ${t.title}${t.command ? ` (${t.command})` : ''}`);
         break;
       }
       const from = values.get('--args-file');
@@ -308,7 +646,6 @@ async function main(argv) {
           { cause: e },
         );
       }
-      if (input && typeof input === 'object' && (input.file !== undefined || input.spec)) await clusterOf(input);
       await tool(positional[0], input);
       break;
     }
@@ -344,7 +681,9 @@ function oneLine(e) {
 try {
   await main(process.argv.slice(2));
 } catch (e) {
+  // (a line that already starts with the command it is about is not named twice)
+  const line = oneLine(e);
   if (process.env.XSOLANA_DEBUG) console.error(e);
-  else console.error(`xsolana: ${oneLine(e)}`);
+  else console.error(/^xsolana[ :]/.test(line) ? line : `xsolana: ${line}`);
   process.exitCode = 1;
 }

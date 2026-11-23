@@ -384,3 +384,21 @@ test('a requirement the search cannot read is said in words, before anything is 
   assert.match(cap.text, /It pays out at most 1000 in all\./);
   assert.doesNotMatch(cap.text, /Cannot read properties/);
 });
+
+test('a route is the key of its part, bare or as xsolana_review writes it; a key the spec has not is said so', async () => {
+  const { tools } = await import('../mcp/tools.mjs');
+  const tool = tools.find(t => t.name === 'xsolana_design');
+  const ask = route =>
+    tool.handler({ example: 'coin-flip-arena', requirements: [{ kind: 'one-approval', route }] }, {});
+  const bare = await ask('weekly');
+  assert.ok(!bare.isError, bare.text);
+  const kinded = await ask('lottery:weekly');
+  assert.ok(!kinded.isError, kinded.text);
+  assert.equal(kinded.text, bare.text);
+  const missing = await ask('lottery:monthly');
+  assert.equal(missing.isError, true);
+  assert.match(
+    missing.text,
+    /^Nothing was designed: the spec has no lottery, item, grant, farm or contest with the key “monthly”/,
+  );
+});

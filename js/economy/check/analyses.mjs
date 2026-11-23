@@ -19,7 +19,7 @@ export function checkAnalyses(c) {
       const days = sim.scenario.days;
       const short = p.outPerDay - p.inPerDay;
       const need = !p.outs.some(o => o.percentPerDay !== undefined) && short > 0 ? +(short * days).toFixed(6) : null;
-      const takersText = p.outs.map(o => o.by).join(', ');
+      const takersText = [...new Set(p.outs.map(o => o.by))].join(', ');
       warn(
         'W-ASSUMPTION',
         `economy.pools.${p.key}`,
