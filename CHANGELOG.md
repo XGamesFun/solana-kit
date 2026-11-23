@@ -4,6 +4,86 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.11: what the tools say is what they can do (loot 0.29.0, unchanged)
+
+Fixes from a read of the whole kit: places where a tool said Ready, ok or a number it could not stand behind, text
+that taught forms `check` refuses, and printed output nobody had read as a reader. Two changes can refuse what 0.29.10
+took; they are marked.
+
+**Check, design and status**
+
+- **Changed: `xsolana check` no longer says Ready for a spec that `cost`, `explain` or going live cannot build.** Every
+  duration, window and time a part writes is held to what the program keeps (an auction's `extendBy` and `runs`, a
+  lottery's rhythm, close of sales and window per wallet, a contest's deadlines, every `perPersonEach`, `opens`,
+  `closes`, `until` and `start`). Anything else that still cannot be built is refused as `E-BUILD`. A changed live spec
+  whose steps could not be built was published without the parts that read what changed; it is now refused.
+- `xsolana_design` gives the spec's own refusals, each with its code, place and fix, when no design checks because of
+  them. Its sentence for the person says where ticket money goes (winners, a pot, a pool, a split, a burn), as
+  `explain` says it, where it always said "your treasury". It takes a route as `lottery:weekly` or `weekly`.
+- `xsolana_status` checks the spec first, and says when the project a file names is not on chain. It answered
+  `ok: true` and "publish again", which could not add it.
+- `xsolana cost` counts each pool a box pays from and each token it mints in what an open lends its settle key, as the
+  client funds it (a box paying from two pools was quoted 0.006 SOL short).
+- A refused value that may be a secret is never read back, and a long value only by its first characters.
+
+**Printed output**
+
+- Numbers print grouped and rounded to six significant digits (percents to four), and a price as it was written.
+- A box or item whose price rises or falls is quoted at its listed price, with how it moves, so the "in all" figure is
+  the same at any number of sales a day. A return counted against the scenario's average price says so.
+- Every command answers `--help` and `-h`, and `xsolana help <command>`; `xsolana tool <name> --help` lists a tool's
+  arguments; `xsolana client` is a command; a word a command does not take is refused.
+- In a terminal, the tools name the commands you type (`xsolana guide boxes`), not the MCP calls.
+- `xsolana examples <name>` prints the example's spec, and `--save <file>` starts a new file from it, so the README's
+  terminal quick start works from an empty folder.
+- Clearer failures: the folder itself, a folder, an unreadable file and a UTF-16 file are each named; a byte-order mark
+  is accepted; a finding repeated for many parts is listed ten times and the rest counted (60,000 items answered in
+  12 MB). `review` shows the server trust table only when a reward is paid on a server's voucher.
+- `XSOLANA_CLUSTER` that disagrees with the economy is refused by every command alike, `xsolana tool` included.
+
+**Going live**
+
+- `xsolana approve` writes a spec kept under `economy` back there, with every key beside it as it was; it wrote the
+  bare spec and lost them. A wrapped spec that says mainnet is worked on mainnet.
+- The approval page's local server answers a malformed request with 400 instead of stopping.
+
+**The guide, the skill and the examples**
+
+- The guide and the skill teach only forms `check` takes, and a test runs each one through it. A lottery place's or a
+  contest's roll is the prize `{ "gives": "roll", "box": key }`; nothing offers a share of a pool as a prize; a box's
+  outcome takes `"compressed": true`. A split takes at most 8 shares in a box, shop item, lottery, contest or auction,
+  and has no cap of its own in a payment. Mainnet is listed with what loot does, not with what it cannot.
+- `xsolana guide <part>` shows every shape the part's fields name (`life`, `oddsEffect`, `nftPrice` and others were
+  named and shown nowhere).
+- Every bundled example passes `check` and `review` and simulates to numbers a person can read, held by a test:
+  `partner-vault`'s daily chest is for pass holders (it was an open grant), `community-coin` says who holds the coin,
+  and `blind-forge` and `falling-drop` simulate at sales their rising prices can meet (they printed values of 10^13).
+  Each does what its description says, and they write `"source": "project"`, as the skill teaches.
+- `xsolana examples` names the loot version its rated ideas were rated against (0.20.1); two that cited a field loot
+  no longer has, and four that read "Same as 70.", are corrected.
+- The deadlines for a roll the oracle never answers are the client's everywhere: a purchase can be refunded after 10
+  minutes, a roll holding a payment or an NFT after 7 days. The tutorial said 7 days for a purchase.
+- `docs/program.md` opens with what the program does and lists all 60 instructions (`link_wallet` was missing).
+- `xsolana_token` says it reads the economy's own cluster.
+
+**The library**
+
+- **Changed: `units(amount, decimals)` refuses decimals that are left out or are not a whole number from 0 to 255.**
+  `units('1.5')` returned `15n`; decimals given as text (`'6'`) are refused too.
+- A refusal of an RPC on the wrong cluster names its host alone, never the path or query where a paid RPC's key is.
+- `@xgamesfun/solana/results`: `draws.open`, `draws.get` and `giveaways.open` take `cluster` and send it, as the calls
+  beside them do.
+- The TypeScript declarations take the package's own examples under `strict` (`solanaApp({ rpcUrl })`, `payIx` and
+  `openBoxIx` with only what they need, `compileMessage({ version: 0, lookupTables })`). Options elsewhere that
+  default to `null` or `[]` are still typed as only that.
+- `plan()` leaves the context it is given as it was.
+
+**For contributors**
+
+- `npm test` removes the temp folders it makes, stops with one message when the tests of the real program can't run
+  (`XSOLANA_SKIP_CHAIN_TESTS=1` runs the rest on purpose), and takes a file (`npm test -- js/test/cli.test.mjs`).
+- Lint refuses `import 'fs'`, `import('node:fs')`, `globalThis.process` and `__dirname` in the browser-safe folders.
+
 ## 0.29.10: the page client and the instruction builders split by part (loot 0.29.0, unchanged)
 
 No behaviour changed: every entry point exports the same names, `solanaApp()` returns the same 59 methods in the same
