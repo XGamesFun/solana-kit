@@ -673,11 +673,13 @@
               },
               "min": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "max": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             }
           }
@@ -1720,6 +1722,7 @@
         "losersEach": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 4294967295,
           "description": "In a contest of NFTs (`stakeNft`), the most losers' NFTs one winner takes; what the winners leave goes to whoever opened it (0: every loser's NFT goes to the opener). Default: no cap, the winners share every loser's NFT (the first to enter on the winning side take one more when they don't divide evenly), each picking which."
         }
       }

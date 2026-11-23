@@ -756,3 +756,20 @@ test('a simulation that cannot run is said, once, and is asked for once a check'
   assert.equal(out.ok, false);
   assert.ok(!out.warnings.some(w => w.code === 'W-SIMULATION'));
 });
+
+test('two parts of a kind with one key, or one program number, are refused at the second', () => {
+  const forge = example('blind-forge');
+  const twice = edit(forge, s => s.boxes.push({ ...s.boxes[0], name: 'Another box' }));
+  assert.ok(twice.refused.includes(`E-KEY-DUP economy.boxes[${forge.boxes.length}].key`), twice.refused.join());
+  assert.equal(twice.ok, false);
+  const message = check(twice.spec, { now: NOW }).refusals.find(r => r.code === 'E-KEY-DUP').message;
+  assert.match(message, new RegExp(`Two boxes are called “${forge.boxes[0].key}”`));
+  // A key a list of another kind uses too is fine; a program number a part of the same kind has is not.
+  const shared = edit(forge, s => s.items.push({ key: s.boxes[0].key, name: 'Same key, other kind' }));
+  assert.ok(!shared.refused.some(x => x.startsWith('E-KEY-DUP')), shared.refused.join());
+  const numbered = edit(forge, s => {
+    s.lotteries.push({ ...s.lotteries[0], key: 'second-draw', name: 'Second draw' });
+    for (const l of s.lotteries) l.id = 3;
+  });
+  assert.ok(numbered.refused.includes('E-KEY-DUP economy.lotteries[1].id'), numbered.refused.join());
+});

@@ -1,7 +1,7 @@
 // The checks of auctions (auction.rs), and that the setup hands each NFT it names over once: to a stash, a lottery
 // or an auction's lot.
 import { MAX_BID_NFTS } from '../../client/ix.js';
-import { prizeLine, stashNfts, sharesOf, toTime } from '../model.mjs';
+import { prizeLine, stashNfts, sharesOf } from '../model.mjs';
 import { label } from '../format.mjs';
 import { FAR_SECONDS } from './dates.mjs';
 
@@ -14,7 +14,9 @@ export function checkAuctions(c) {
     warn,
     m,
     units,
-    seconds,
+    fourByteSeconds,
+    fromNowSeconds,
+    timeAt,
     farTime,
     percent,
     token,
@@ -58,14 +60,10 @@ export function checkAuctions(c) {
       );
     }
     percent(a.minRaise, `${where}.minRaise`);
-    const runs = seconds(a.runs, `${where}.runs`);
-    const extend = seconds(a.extendBy ?? '10m', `${where}.extendBy`);
-    let start = now;
-    try {
-      start = toTime(a.start, now);
-    } catch (err) {
-      refuse(err.code, `${where}.start`, err.message, err.fix);
-    }
+    // Its start and its end are times the program keeps in 8 bytes, the push of its end by a late bid in 4.
+    const start = timeAt(a.start, `${where}.start`);
+    const runs = fromNowSeconds(a.runs, `${where}.runs`, start);
+    const extend = fourByteSeconds(a.extendBy ?? '10m', `${where}.extendBy`);
     if (runs === 0)
       refuse(
         'E-AUCTION',
@@ -178,7 +176,8 @@ export function checkAuctions(c) {
 
   // ---- one NFT is handed over once: the setup moves each NFT it names from the owner's wallet into the place that
   // holds it (a stash, a lottery's own stash, an auction's lot), so a second move of the same NFT fails, the owner no
-  // longer holding it (and a lottery's own list refuses one twice, OutOfOrder). Two stashes are said above.
+  // longer holding it (and a lottery's own list refuses one twice, OutOfOrder). Two stashes are said where the
+  // stashes are checked (check/pools.mjs).
   {
     const handed = new Map();
     const hand = (nft, where, by) => {

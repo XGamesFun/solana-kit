@@ -158,6 +158,25 @@ test('an open grant that pays something anyone can sell is high; gated, medium',
   assert.deepEqual(ids(g, 'high'), []);
 });
 
+test('a free item anyone takes is high when what it earns in a farm is minted; medium when it earns nothing', () => {
+  const free = {
+    version: 2,
+    network: 'devnet',
+    name: 'Free pets',
+    currency: 'gold',
+    tokens: [{ key: 'gold', source: 'project', name: 'Gold', symbol: 'GOLD', decimals: 0 }],
+    collection: { name: 'Pets' },
+    items: [{ key: 'pet', name: 'Pet', kind: 'collectible', free: true }],
+    farms: [{ key: 'kennel', name: 'Kennel', stakes: 'collectibles', item: 'pet', rate: { perDay: 1, minted: true } }],
+  };
+  const severities = s =>
+    review(s, { now: NOW })
+      .findings.filter(f => f.id === 'R-FREE')
+      .map(f => `${f.severity} ${f.route}`);
+  assert.deepEqual(severities(free), ['high item:pet']);
+  assert.deepEqual(severities(edit(free, s => delete s.farms)), ['medium item:pet']);
+});
+
 test('the authority and every voucher key are named plainly', () => {
   const r = review(spec('review-bounds'), { now: NOW });
   const authority = r.findings.find(f => f.id === 'R-AUTHORITY');

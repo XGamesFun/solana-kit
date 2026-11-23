@@ -18,16 +18,21 @@ import {
   toSeconds,
   toTime,
 } from './model.mjs';
-import { DEFAULT_PER_DAY } from './simulate.mjs';
+import { dateWords } from './check/dates.mjs';
 
 /** A draw the oracle hasn't answered this long after its ask is cancelled at the next ask (LOTTERY_TIMEOUT_SECONDS). */
 const ORACLE_TIMEOUT_DAYS = 7;
 export const num = x => Number(x ?? 0);
-export const at = seconds =>
-  new Date(seconds * 1000)
-    .toISOString()
-    .replace('T', ' ')
-    .replace(/:\d\d\.\d+Z$/, ' UTC');
+/** A Unix time as a date and time ("2026-11-01 18:00 UTC"); past what a date holds, the year alone (`dateWords`). */
+export const at = seconds => {
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime())
+    ? dateWords(seconds)
+    : date
+        .toISOString()
+        .replace('T', ' ')
+        .replace(/:\d\d\.\d+Z$/, ' UTC');
+};
 export const named = part => `“${part?.name ?? part?.key}”`;
 export const words = list => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
 export const span = seconds =>
@@ -802,5 +807,3 @@ function inWords(r, m, sym) {
     ) || 'nothing'
   );
 }
-
-export { DEFAULT_PER_DAY };

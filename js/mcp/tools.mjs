@@ -32,7 +32,14 @@ import { explain, simulate } from '../economy/simulate.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
 import { endStates, tellLines } from '../economy/walk.mjs';
-import { design, describeDesign, designAsks, requirementProblems, REQUIREMENTS } from '../economy/design.mjs';
+import {
+  design,
+  describeDesign,
+  designAsks,
+  noDesignWords,
+  requirementProblems,
+  REQUIREMENTS,
+} from '../economy/design.mjs';
 
 // The options of a call made without any: read-only, and typed so the generated declarations take any option.
 const NO_OPTIONS = Object.freeze(/** @type {Record<string, any>} */ ({}));
@@ -638,7 +645,8 @@ export const tools = [
       if (!r.candidates.length)
         return {
           isError: true,
-          text: `No design checks: give the spec its draw (a lottery whose key is the route), the tokens each requirement names and the prize, then try again.${footer()}`,
+          // (what the check refuses the spec for, when that is why; else what a design needs to start from)
+          text: `${noDesignWords(r) ?? 'No design checks: give the spec its draw (a lottery whose key is the route), the tokens each requirement names and the prize, then try again.'}${footer()}`,
         };
       return {
         ok: true,

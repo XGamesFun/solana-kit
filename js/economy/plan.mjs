@@ -1,5 +1,6 @@
 // The setup plan: every instruction that puts an economy live on loot, in order, built with the client and
-// packed into transactions that fit. Nothing here signs or talks to the chain. Pure.
+// packed into transactions that fit. Nothing here signs or talks to the chain. A plan checks its spec first
+// (check.mjs), so it works on the process's cluster as the check does, and reads the clock when no `now` is given.
 //
 // A step is { id, part, says, signers, creates: [{ what, bytes, fee? }], build(ctx) → instructions } (`fee`: lamports
 // the program that makes the account keeps in it, on top of its rent: Token Metadata's). `ctx` names the
@@ -216,7 +217,7 @@ export function boxArgs(b, m) {
       distinct: Boolean(s.distinct),
       share: Math.round((s.share ?? 0) * 100),
     })),
-    // An entry gives its prizes (a bundle of any number), and may burn the payment in place of the split.
+    // An entry gives its prizes (a bundle of any number), at its weight.
     entries: (b.outcomes ?? []).map((o, i) => ({
       prizes: outcomeParts(o).map(part => partPrize(part, m)),
       weight: w[i],
@@ -335,8 +336,8 @@ export function scheduleArgs(s, m) {
 }
 
 /**
- * The program's `Prize` for a prize line (`model.prizeLine`): tokens minted or from a pool (a fixed amount, or a share
- * of the pool), an item (a compressed NFT of it into the project's tree, "@tree"), one NFT of a stash, or a roll of a box.
+ * The program's `Prize` for a prize line (`model.prizeLine`): tokens minted or from a pool (a fixed amount), an item
+ * (a compressed NFT of it into the project's tree, "@tree"), one NFT of a stash, or a roll of a box.
  */
 export function prizeArgs(p, m) {
   const line = prizeLine(p);
@@ -762,8 +763,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   const project = ctx => ctx.project;
   // The project's own first steps (its collection, the project, the accounts it pays into, its lookup table) belong to
   // a new setup, and to one cut short before the file was recorded as live (`partial`, with nothing `published`): gone
-  // on with, whichever of them has not landed is still made. Before, a setup cut short after the project's step never
-  // made the rest.
+  // on with, whichever of them has not landed is still made.
   const fresh = !live?.project || Boolean(given?.partial && !given?.published);
 
   // Tokens the project mints: a classic mint with the owner as its authority, handed to the project right after.
@@ -1120,15 +1120,13 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
           ? `an NFT of “${m.stash.get(o.stash)?.name ?? o.stash}”`
           : o.gives === 'pay'
             ? `${o.amount} ${m.poolToken(o.pool)?.symbol ?? ''}`.trim()
-            : o.gives === 'share'
-              ? `${o.percent}% of “${o.pool}”`
-              : o.gives === 'mint'
-                ? `${o.amount} ${m.tokens.get(o.currency ?? m.currencyKey)?.symbol ?? ''}`.trim()
-                : o.gives === 'nft'
-                  ? `the NFT ${String(o.nft).slice(0, 4)}…`
-                  : o.gives === 'roll'
-                    ? `a roll of “${m.box.get(o.box)?.name ?? o.box}”`
-                    : '';
+            : o.gives === 'mint'
+              ? `${o.amount} ${m.tokens.get(o.currency ?? m.currencyKey)?.symbol ?? ''}`.trim()
+              : o.gives === 'nft'
+                ? `the NFT ${String(o.nft).slice(0, 4)}…`
+                : o.gives === 'roll'
+                  ? `a roll of “${m.box.get(o.box)?.name ?? o.box}”`
+                  : '';
     const what = o => outcomeParts(o).map(part).join(' + ') || 'nothing';
     return (b.outcomes ?? []).map((o, i) => `${what(o)} ${Math.round((ws[i] / total) * 10_000) / 100}%`).join(', ');
   };
@@ -1199,15 +1197,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
         if (from === 'wallet') {
           const tokenProgram = programsOf(ctx)[mint] ?? TOKEN_PROGRAM;
           // SOL is wrapped first, as a seed is: the owner's wallet holds it as plain SOL, the vault takes wrapped SOL.
-          const wrap = t.wsol
-            ? [
-                createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT),
-                transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), value),
-                syncNative(loot.ata(ctx.owner, NATIVE_MINT)),
-              ]
-            : [];
           return [
-            ...wrap,
+            ...wrapSol(ctx, t, value),
             transferCheckedIx({
               from: loot.ata(ctx.owner, mint, tokenProgram),
               mint,
@@ -1285,7 +1276,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
       'Grant',
       `the grant “${g.name}”`,
     );
-  /** The boxes a farm's tiers roll, tier by tier (its roll, then a prize that is a roll). */
+  // A farm is opened once and never written again: one live already is left as it is.
   for (const f of m.farms) {
     if (live?.farms?.includes(f.key)) continue;
     const rewards = m.tokens.get(f.rewardsToken);
@@ -1407,6 +1398,8 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
   for (const a of m.auctions) {
     const t = m.priceToken(a);
     const args = auctionArgs(a, m);
+    // (its gate and its bids' rule may name the project's collection or a farm: stand-ins size them)
+    const sized = placeholders(args);
     const asset = Boolean(a.lot?.asset);
     const signer = asset || m.authority === 'owner' ? owner : 'authority';
     const terms = `bids in ${t?.symbol} from ${a.reserve ?? 'any amount'}, for ${a.runs}`;
@@ -1429,7 +1422,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
               id: 0,
               seller: NO_ADDRESS,
               mint: NO_ADDRESS,
-              lot: args.lot,
+              lot: sized.lot,
               ours: false,
               pin: 0,
               reserve: 0n,
@@ -1437,9 +1430,9 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
               starts_at: 0n,
               ends_at: 0n,
               extend: 0,
-              shares: args.shares,
-              gate: args.gate,
-              nft_bids: placeholders(args).nft_bids,
+              shares: sized.shares,
+              gate: sized.gate,
+              nft_bids: sized.nft_bids,
               high_bidder: NO_ADDRESS,
               high: 0n,
               last_bid_at: 0n,
@@ -1493,25 +1486,10 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
         id: `seed:${p.key}`,
         part: `seed:${p.key}`,
         says: `Put ${p.seed} ${t.symbol} into “${p.key}”`,
-        build: ctx => [
-          ...(t.wsol
-            ? [
-                createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT),
-                transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), units),
-                syncNative(loot.ata(ctx.owner, NATIVE_MINT)),
-              ]
-            : []),
-          loot.payIx({
-            player: ctx.owner,
-            project: project(ctx),
-            mint: ctx.mints[t.key],
-            treasury: ctx.treasury,
-            amount: units,
-            shares: [{ to: { Pool: [p.index] }, bps: 10_000 }],
-            reference: `seed ${p.key}`,
-            programs: { [ctx.mints[t.key]]: tokenProgramOf(t) },
+        build: ctx =>
+          seedFromWallet(ctx, t, units, { Pool: [p.index] }, `seed ${p.key}`, {
+            [ctx.mints[t.key]]: tokenProgramOf(t),
           }),
-        ],
       });
     }
   }
@@ -1559,25 +1537,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
       says: `Put ${f.seed} ${t.symbol} into the rewards of “${f.name}”`,
       build: ctx => {
         const vault = loot.pda.rewards(loot.pda.farm(project(ctx), f.id));
-        return [
-          ...(t.wsol
-            ? [
-                createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT),
-                transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), units),
-                syncNative(loot.ata(ctx.owner, NATIVE_MINT)),
-              ]
-            : []),
-          loot.payIx({
-            player: ctx.owner,
-            project: project(ctx),
-            mint: ctx.mints[t.key],
-            treasury: ctx.treasury,
-            amount: units,
-            shares: [{ to: { Account: [vault] }, bps: 10_000 }],
-            reference: `seed ${f.key}`,
-            programs: programsOf(ctx),
-          }),
-        ];
+        return seedFromWallet(ctx, t, units, { Account: [vault] }, `seed ${f.key}`, programsOf(ctx));
       },
     });
   }
@@ -1603,25 +1563,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
       says: `Put ${l.seed} ${t.symbol} into the pot of “${l.name}”`,
       build: ctx => {
         const pot = loot.pda.lotteryPot(loot.pda.lottery(project(ctx), l.id), l.pot);
-        return [
-          ...(t.wsol
-            ? [
-                createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT),
-                transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), units),
-                syncNative(loot.ata(ctx.owner, NATIVE_MINT)),
-              ]
-            : []),
-          loot.payIx({
-            player: ctx.owner,
-            project: project(ctx),
-            mint: ctx.mints[t.key],
-            treasury: ctx.treasury,
-            amount: units,
-            shares: [{ to: { Account: [pot] }, bps: 10_000 }],
-            reference: `seed ${l.key}`,
-            programs: programsOf(ctx),
-          }),
-        ];
+        return seedFromWallet(ctx, t, units, { Account: [pot] }, `seed ${l.key}`, programsOf(ctx));
       },
     });
   }
@@ -1660,6 +1602,38 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
     model: m,
   };
 }
+
+/**
+ * What turns SOL the owner's wallet puts in as a token into wrapped SOL first, `units` lamports of it into the owner's
+ * own wrapped-SOL account (opened when it is not there): the wallet holds plain SOL, and a vault takes wrapped SOL.
+ * Nothing for any other token.
+ */
+const wrapSol = (ctx, t, units) =>
+  t.wsol
+    ? [
+        createAssociatedTokenAccountIdempotent(ctx.owner, ctx.owner, NATIVE_MINT),
+        transferLamports(ctx.owner, loot.ata(ctx.owner, NATIVE_MINT), units),
+        syncNative(loot.ata(ctx.owner, NATIVE_MINT)),
+      ]
+    : [];
+
+/**
+ * A seed from the owner's wallet: `units` of token `t`, all of it paid to `to` (a pool, a farm's rewards vault, a
+ * lottery's pot) under `reference`, SOL wrapped first. `programs`: the token program of each Token-2022 mint.
+ */
+const seedFromWallet = (ctx, t, units, to, reference, programs) => [
+  ...wrapSol(ctx, t, units),
+  loot.payIx({
+    player: ctx.owner,
+    project: ctx.project,
+    mint: ctx.mints[t.key],
+    treasury: ctx.treasury,
+    amount: units,
+    shares: [{ to, bps: 10_000 }],
+    reference,
+    programs,
+  }),
+];
 
 /** The token accounts going live opens (`setupSteps`): [{ who ('the treasury', 'the project' or a wallet), token }], each
  * once, for the coins the economy takes in. */
@@ -1958,8 +1932,8 @@ export const withSetupBudget = instructions =>
  * Packs steps into transactions under the size budget, one signer set at a time; each step whole. Every transaction
  * leads with its compute budget (`withSetupBudget`): `BUDGET` keeps 64 bytes of a transaction free, and the two
  * instructions take 52 of them (12 where a box's write, `compute`, had its limit counted with the steps already). So
- * the steps pack as they did before the plan set a price, and `bytes`, the size of the transaction as it is sent, is
- * held to what one transaction carries.
+ * leading with the budget moves no step to another transaction, and `bytes`, the size of the transaction as it is
+ * sent, is held to what one transaction carries.
  */
 export function pack(steps, ctx) {
   const transactions = [];
@@ -2010,7 +1984,8 @@ export function pack(steps, ctx) {
 
 /**
  * The plan for a spec: refusals, or every step packed into transactions. With `ctx` the transactions carry the
- * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing).
+ * real instructions; without it they are built on stand-in addresses (for sizing, cost and showing). `ctx` is read
+ * and left as it was given.
  */
 export function plan(
   economy,
@@ -2020,13 +1995,20 @@ export function plan(
   const checked = check(economy, { now, ...(ctx?.project ? { project: ctx.project } : {}) });
   if (!checked.ok) return { ok: false, refusals: checked.refusals, warnings: checked.warnings };
   const { steps, model: m } = setupSteps(economy, { now, only, live, renames });
-  if (ctx)
-    ctx.tokenPrograms ??= Object.fromEntries(
-      [...m.tokens.values()]
-        .filter(t => t.program === 'token-2022' && ctx.mints[t.key])
-        .map(t => [ctx.mints[t.key], TOKEN_2022_PROGRAM]),
-    );
-  const context = ctx ?? placeholderContext(m);
+  // What the steps are built with: the caller's context, with the token program of each Token-2022 mint it names
+  // (`programsOf`) unless it gives them itself; with none, stand-ins.
+  const context = ctx
+    ? {
+        ...ctx,
+        tokenPrograms:
+          ctx.tokenPrograms ??
+          Object.fromEntries(
+            [...m.tokens.values()]
+              .filter(t => t.program === 'token-2022' && ctx.mints[t.key])
+              .map(t => [ctx.mints[t.key], TOKEN_2022_PROGRAM]),
+          ),
+      }
+    : placeholderContext(m);
   const transactions = pack(steps, context);
   return {
     ok: true,

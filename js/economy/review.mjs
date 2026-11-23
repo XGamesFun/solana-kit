@@ -2,7 +2,8 @@
 // that pays or gives something of value it says who can trigger it, what the program enforces, what it trusts off the
 // chain, the declared trust level of a signed result, the most one cheater gets, and what the prize goes on to earn.
 // Then findings, each with a stable id, a severity, its route, what it means and the fix, and the trade-off between a
-// server that decides, replays or bounds a result, in words an agent can show the person. Pure.
+// server that decides, replays or bounds a result, in words an agent can show the person. It checks the spec first
+// (check.mjs), so it works on the process's cluster as the check does, and reads the clock when no `now` is given.
 //
 // The program enforces its own rules: a voucher names its wallet, grant and incarnation; a round pays a wallet once;
 // limits, gates, seats and custody are the program's. What is left to get wrong is what a voucher signer decides

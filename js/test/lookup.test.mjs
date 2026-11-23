@@ -553,7 +553,7 @@ test('a throwaway key’s transaction too big for a legacy one is refused in wor
 });
 
 describe('xsolana_check sizes every box’s settle', async () => {
-  const { check, settleSize, settleUnits } = await import('../economy/check.mjs');
+  const { check, settleComputeUnits, settleSize } = await import('../economy/check.mjs');
   const { model } = await import('../economy/model.mjs');
   const { requestHeapFrame } = await import('../chain/programs.js');
   const { TOKEN_PROGRAM } = await import('../chain/pda.js');
@@ -693,7 +693,7 @@ describe('xsolana_check sizes every box’s settle', async () => {
   test('the largest settle a spec allows (three pNFTs, the NFT rolled on, four holders, a hooked coin: 61 accounts) is not refused, and its compute is under 1.4M', () => {
     assert.deepEqual(verdict({ pnft: 3, holders: 4, subject: true, hooked: true }).refused, []);
     const m = model(shape({ pnft: 3, holders: 4, subject: true, hooked: true }));
-    const units = settleUnits(m.boxes[0], m.boxes[0].outcomes[0], m);
+    const units = settleComputeUnits(m.boxes[0], m.boxes[0].outcomes[0], m);
     assert.ok(units > 985_942 && units < 1_400_000, `${units}: above the measured 985,942, under the limit`);
   });
 

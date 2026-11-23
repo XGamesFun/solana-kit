@@ -1,13 +1,31 @@
 // A small JSON Schema validator for the keywords schema.json uses, so the kit needs no schema library: type, const,
 // enum, pattern, minimum, maximum, exclusiveMinimum, minLength, maxLength, minItems, maxItems, uniqueItems, items,
-// required, properties, additionalProperties, propertyNames, anyOf, oneOf, not and local $ref. Pure.
+// required, properties, additionalProperties, propertyNames, anyOf, oneOf, not and local $ref. It reads schema.json
+// from beside it when it is loaded, and changes nothing.
 import { readFileSync } from 'node:fs';
+import { findSecrets } from './secrets.mjs';
 
 export const SCHEMA = JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8'));
 
 const typeOf = v => (v === null ? 'null' : Array.isArray(v) ? 'array' : Number.isInteger(v) ? 'integer' : typeof v);
 const isType = (v, t) => t === typeOf(v) || (t === 'number' && typeof v === 'number' && Number.isFinite(v));
-const show = v => JSON.stringify(v)?.slice(0, 60);
+/** The longest string a message reads back whole: an address, 44 characters. A longer one is read back by its first
+ * `HEAD` characters, too few to be worth anything were it a key the patterns of secrets.mjs do not know. */
+const WHOLE = 44;
+const HEAD = 8;
+/** The most characters a value read back takes in a message. */
+const SHOWN = 60;
+/**
+ * A value as a message reads it back, so its author finds it at the path given. One that may be a secret (a key, a
+ * seed phrase, a keypair file's bytes, a keyed link: `findSecrets`) is never read back, alone or inside what holds it:
+ * a spec is public, and so is a message about it. A long string is read back by its first characters, and a value
+ * cut short ends with "…".
+ */
+const show = v => {
+  if (findSecrets(v).length) return 'the value (not read back: it may be a secret)';
+  const text = JSON.stringify(v, (_, x) => (typeof x === 'string' && x.length > WHOLE ? `${x.slice(0, HEAD)}…` : x));
+  return text === undefined || text.length <= SHOWN ? text : `${text.slice(0, SHOWN)}…`;
+};
 /** "a" or "an", as the word after it takes: "an object", "an array", "a string". */
 const article = word => (/^[aeiou]/.test(word) ? `an ${word}` : `a ${word}`);
 /** A value as text with its objects' keys in order, so two equal values read the same (for uniqueItems). */

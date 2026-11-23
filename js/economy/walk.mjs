@@ -328,18 +328,11 @@ export function journeyOf(r, fl) {
 const either = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} or ${list.at(-1)}` : (list[0] ?? ''));
 
 /**
- * What the person must hear, in short final sentences the agent passes on as written: for each route, what a player
- * gets for their money (a fixed price or a chance), how a farm pays over time, a whole loop's approvals, what a cancel
- * refunds, every cap in one unit (an amount per identity per window), and who names a result.
- */
-export function tells(m, opts) {
-  return tellLines(m, opts).map(t => t.line);
-}
-
-/**
- * The same lines, each with whether it goes to the person as written (`asWritten`: a trust fact, such as what a
- * script or a leaked key can take, where other words could claim more or less than is true) or in the agent's own
- * words, every number kept.
+ * What the person must hear, in short final sentences: for each route, what a player gets for their money (a fixed
+ * price or a chance), how a farm pays over time, a whole loop's approvals, what a cancel refunds, every cap in one unit
+ * (an amount per identity per window), and who names a result. Each line with whether it goes to the person as written
+ * (`asWritten`: a trust fact, such as what a script or a leaked key can take, where other words could claim more or
+ * less than is true) or in the agent's own words, every number kept.
  */
 export function tellLines(m, { now, fl = flows(m, { now }) }) {
   const sym = key => fl.assets.get(key)?.symbol ?? key;

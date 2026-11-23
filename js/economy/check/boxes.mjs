@@ -30,7 +30,7 @@ import {
   openBoxSize,
   settleAccounts,
   settleSize,
-  settleUnits,
+  settleComputeUnits,
   TABLE_LOCKS,
 } from '../sizes.mjs';
 
@@ -47,6 +47,7 @@ export function checkBoxes(c) {
     fourByteSeconds,
     tooMany,
     quietUnits,
+    built,
     token,
     pool,
     item,
@@ -59,6 +60,7 @@ export function checkBoxes(c) {
     split,
     feeNote,
     perWalletWindow,
+    opensAndCloses,
     prices,
     takers,
     rolls,
@@ -226,13 +228,7 @@ export function checkBoxes(c) {
     // A fresh outcome's tables come with the answer while they fit what the box's own accounts leave, in outcome order
     // (`tableBudget`). One past that is out of stock on every roll, so its odds would be false.
     {
-      const box = (() => {
-        try {
-          return boxArgs(b, m);
-        } catch {
-          return null;
-        }
-      })();
+      const box = built(() => boxArgs(b, m), where, label(b));
       if (box && boxRolls(b, m)) {
         let left = Math.max(0, tableBudget(box.entries));
         const cut = [];
@@ -316,13 +312,7 @@ export function checkBoxes(c) {
     // the compute finding each pool's and stash's address its prizes name (exact with the project, else assumed).
     // A box of one draw is held to the same count: past it the program refuses the box when it is written.
     if (outs.length && (cards > 1 || !answerRefused)) {
-      const args = (() => {
-        try {
-          return boxArgs(b, m);
-        } catch {
-          return null;
-        }
-      })();
+      const args = built(() => boxArgs(b, m), where, label(b));
       const entries = args?.entries;
       if (entries) {
         const byBuy = boxRolls(b, m) || Boolean(b.rollsOn) || buyFits(args, Math.max(1, cards));
@@ -349,8 +339,14 @@ export function checkBoxes(c) {
             'Fewer cards an open, fewer prizes in its outcome, or fewer shares in its split.',
           );
         else if (cards > 1 && !drawsFit(entries, drawn, 1, extras)) {
-          let most = cards - 1;
-          while (most > 1 && !drawsFit(entries, most, 1, extras)) most -= 1;
+          // The most cards that fit, found by halving (each card more costs more, so what fits is every count up to
+          // one number): a count written in the billions is answered as fast as one of ten.
+          let most = 1;
+          for (let over = cards; over - most > 1;) {
+            const half = most + Math.floor((over - most) / 2);
+            if (drawsFit(entries, half, 1, extras)) most = half;
+            else over = half;
+          }
           refuse(
             'E-ODDS',
             `${where}.slots`,
@@ -374,13 +370,7 @@ export function checkBoxes(c) {
         'Leave "slots" out, or drop "rollsOn".',
       );
     // An open's order holds every prize it can set aside: at most 10,240 bytes (about 243 one-prize draws).
-    const orderSize = (() => {
-      try {
-        return boxOrderBytes(b, m);
-      } catch {
-        return 0;
-      }
-    })();
+    const orderSize = built(() => boxOrderBytes(b, m), where, `${label(b)}’s order`) ?? 0;
     if (orderSize > MAX_ORDER_BYTES)
       refuse(
         'E-ODDS',
@@ -436,6 +426,7 @@ export function checkBoxes(c) {
     const price = units(b.price, tok, `${where}.price`, `${label(b)}’s price`);
     prices(b, tok, where);
     perWalletWindow(b, where);
+    opensAndCloses(b, where);
     split(b.split, tok, `${where}.split`, { what: label(b), chosen: true });
     feeNote(price, tok, `${where}.price`, `opening of ${label(b)}`);
     rule(b.gate, `${where}.gate`, label(b));
@@ -518,7 +509,7 @@ export function checkBoxes(c) {
         i,
         ...settleAccounts(b, o, m),
         least: settleAccounts(b, o, m, { proof: 0 }).count,
-        units: settleUnits(b, o, m),
+        units: settleComputeUnits(b, o, m),
         ...settleSize(b, o, m),
       }));
       const at = x => `${where}.outcomes${outcomes.length ? `[${x.i}]` : ''}`;

@@ -1,6 +1,7 @@
 // The economy in plain words, from the checker, the simulation, the cost and the play-time steps: what players do
 // and what it costs them, how the pools fill and drain, what runs by itself, what the authority must sign, what
-// going live costs, and what the owner must know. Deterministic. Pure.
+// going live costs, and what the owner must know. The same spec at the same `now` reads the same. It checks the spec
+// first (check.mjs), so it works on the process's cluster as the check does, and reads the clock when no `now` is given.
 import { LEGAL } from './legal.mjs';
 import { walkThrough } from './walk.mjs';
 import { check, describe } from './check.mjs';
@@ -41,7 +42,7 @@ const num = x => (Number.isFinite(x) ? String(round(x, 6)) : String(x));
  * or `rest` ("into the pot" for a lottery's ticket money). `payer`: who names a "chosen" share, and what each one is
  * ("buyer", "sale"; "payer", "payment").
  */
-function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, payer = ['buyer', 'sale']) {
+export function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, payer = ['buyer', 'sale']) {
   const shares = sharesOf(split);
   if (!shares.length) return `all of it ${rest}`;
   const left = 100 - shares.reduce((n, s) => n + Number(s.percent), 0);
@@ -50,7 +51,7 @@ function splitWords(split, treasury = 'your treasury', rest = `to ${treasury}`, 
 }
 
 /** Where one destination (model `destination`) sends money, in words. */
-const toWords = (s, treasury = 'your treasury', payer = ['buyer', 'sale']) =>
+export const toWords = (s, treasury = 'your treasury', payer = ['buyer', 'sale']) =>
   s.kind === 'burn'
     ? 'burned'
     : s.kind === 'treasury'
@@ -158,6 +159,12 @@ const effectWords = e =>
     ? `+${e.perPointPercent}% per point${e.upTo ? ` (up to ${e.upTo})` : ''}`
     : `+${e?.addPercent ?? 0}%`;
 
+/** "your treasury", or the other wallet the spec names as the treasury. */
+export const treasuryWordsOf = m =>
+  m.treasuryWallet
+    ? `the treasury (the wallet ${m.treasuryWallet.slice(0, 4)}…${m.treasuryWallet.slice(-4)})`
+    : 'your treasury';
+
 export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
   const verdict = check(economy, { now });
   if (!verdict.ok)
@@ -168,10 +175,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
       text: describe({ refusals: verdict.refusals, warnings: [] }),
     };
   const m = model(economy, { now });
-  /** "your treasury", or the other wallet the spec names as the treasury. */
-  const treasuryWords = m.treasuryWallet
-    ? `the treasury (the wallet ${m.treasuryWallet.slice(0, 4)}…${m.treasuryWallet.slice(-4)})`
-    : 'your treasury';
+  const treasuryWords = treasuryWordsOf(m);
   const splitOf = (split, payer) => splitWords(split, treasuryWords, undefined, payer);
   const sim = simulate(economy, { now });
   const c = cost(economy, { now });
@@ -259,9 +263,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
                 ? `a roll of “${m.box.get(o.box)?.name ?? o.box}”`
                 : o.gives === 'item'
                   ? `${o.item}`
-                  : o.gives === 'burn'
-                    ? 'burned'
-                    : 'nothing';
+                  : 'nothing';
     const outs = b.outcomes
       .map(o => `${num(o.chance)}% ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`)
       .join(', ');
