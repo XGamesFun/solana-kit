@@ -16,21 +16,11 @@ import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../cha
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { solanaApp } from '../play/index.js';
 import * as loot from '../client/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
 const SHELTER = '9F8NQski3wBvLykJTJEj896jDHXtHMUde8KGGN2sdqQa';
-
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
 
 async function goLive(w, owner, spec) {
   const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-v010-')), 'xsolana.json');

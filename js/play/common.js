@@ -23,12 +23,30 @@ export async function freshKey() {
   };
 }
 
+// The most decimals a token has: a mint keeps them in one byte.
+const MAX_DECIMALS = 255;
+
+/** A value as an error names it: text in quotes, so "6" is told from 6. */
+const said = value => (typeof value === 'string' ? JSON.stringify(value) : String(value));
+
 /**
- * An amount in whole units of a token ("12", "0.5", or a number) in its base units. Only a plain decimal is taken, with
- * at most the token's decimals: "0x10", "1.2.3", "", "1e3", "-1" and an extra decimal place are refused, never read as
- * some other amount.
+ * Refuses decimals that are not a token's: a whole number from 0 to 255. With them left out, or anything else, an
+ * amount could only be read as some other amount ("1.5" with no decimals as 15).
+ */
+const places = decimals => {
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > MAX_DECIMALS)
+    throw new Error(
+      `An amount needs its token’s decimals, a whole number from 0 to ${MAX_DECIMALS} (6, or 9 for SOL): got ${said(decimals)}.`,
+    );
+};
+
+/**
+ * An amount in whole units of a token ("12", "0.5", or a number) in its base units, given the token's `decimals`. Only
+ * a plain decimal is taken, with at most the token's decimals: "0x10", "1.2.3", "", "1e3", "-1" and an extra decimal
+ * place are refused, never read as some other amount. So are decimals left out, or not a whole number.
  */
 export const units = (amount, decimals) => {
+  places(decimals);
   const text =
     typeof amount === 'number' && Number.isFinite(amount) && amount >= 0
       ? plainNumber(amount)
@@ -36,10 +54,7 @@ export const units = (amount, decimals) => {
         ? amount.trim()
         : null;
   const m = text === null ? null : /^(\d+)(?:\.(\d+))?$/.exec(text);
-  if (!m)
-    throw new Error(
-      `${typeof amount === 'string' ? JSON.stringify(amount) : String(amount)} is not an amount: write a plain number like 12 or 0.5.`,
-    );
+  if (!m) throw new Error(`${said(amount)} is not an amount: write a plain number like 12 or 0.5.`);
   const fraction = m[2] ?? '';
   if (fraction.length > decimals && /[1-9]/.test(fraction.slice(decimals)))
     throw new Error(`${text} has more decimals than the token's ${decimals}.`);
@@ -47,7 +62,9 @@ export const units = (amount, decimals) => {
 };
 /** A number as plain decimal text (1e-7 → "0.0000001"). */
 const plainNumber = n => (/e/i.test(String(n)) ? n.toFixed(20).replace(/\.?0+$/, '') : String(n));
+/** Base units as an amount in whole units of a token with `decimals` (1500000, 6 → "1.5"): what `units` reads back. */
 export const show = (u, decimals) => {
+  places(decimals);
   const s = BigInt(u)
     .toString()
     .padStart(decimals + 1, '0');

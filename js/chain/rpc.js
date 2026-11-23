@@ -48,9 +48,22 @@ export const GENESIS = Object.freeze({
   testnet: '4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY',
 });
 
-const ON_DEVNET =
-  'This works on devnet (an economy that names no network is on devnet). Unset XSOLANA_RPC_URL, or point it at a devnet RPC.';
-const ON_MAINNET = 'This works on mainnet. Point XSOLANA_RPC_URL at a mainnet RPC.';
+// Where the RPC is named, for a page and for the command line: both read these refusals.
+const WHERE = 'rpcUrl in a page, XSOLANA_RPC_URL for the xsolana tools';
+const ON_DEVNET = `This works on devnet (an economy that names no network is on devnet). Give it a devnet RPC, or none for devnet’s public one: ${WHERE}.`;
+const ON_MAINNET = `This works on mainnet. Give it a mainnet RPC: ${WHERE}.`;
+
+/**
+ * An RPC as a refusal names it: its host alone. A paid RPC's URL carries its key, in the path or the query, and a
+ * page may show a player the message. "This RPC" for one with no URL, or one that is not a URL.
+ */
+function hostOf(url) {
+  try {
+    return new URL(String(url)).host || 'This RPC';
+  } catch {
+    return 'This RPC';
+  }
+}
 
 /**
  * Refuses an RPC URL that names another cluster than the one the caller works on (`devnet` or `mainnet`). Returns the
@@ -59,8 +72,8 @@ const ON_MAINNET = 'This works on mainnet. Point XSOLANA_RPC_URL at a mainnet RP
 export function rightCluster(url, cluster = 'devnet') {
   const text = String(url);
   if (cluster === 'mainnet') {
-    if (/devnet|testnet/i.test(text)) throw new RpcError(`${url} is not a mainnet RPC. ${ON_MAINNET}`);
-  } else if (/mainnet/i.test(text)) throw new RpcError(`${url} is a mainnet RPC. ${ON_DEVNET}`);
+    if (/devnet|testnet/i.test(text)) throw new RpcError(`${hostOf(url)} is not a mainnet RPC. ${ON_MAINNET}`);
+  } else if (/mainnet/i.test(text)) throw new RpcError(`${hostOf(url)} is a mainnet RPC. ${ON_DEVNET}`);
   return url;
 }
 
@@ -74,7 +87,7 @@ export const notMainnet = url => rightCluster(url, 'devnet');
  */
 export async function checkCluster(rpc, cluster = 'devnet') {
   const genesis = await rpc.call('getGenesisHash');
-  const here = rpc.url ?? 'This RPC';
+  const here = hostOf(rpc.url);
   if (cluster === 'mainnet') {
     if (genesis !== GENESIS.mainnet) throw new RpcError(`${here} is not on mainnet. ${ON_MAINNET}`);
     return genesis;

@@ -109,7 +109,7 @@
     "DISCLAIMER.md"
   ],
   "scripts": {
-    "test": "node --test \"js/test/**/*.test.mjs\"",
+    "test": "node js/test/run.mjs",
     "test:mainnet": "node scripts/test-mainnet.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

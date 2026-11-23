@@ -41,12 +41,12 @@ export function holdMethods(ctx) {
      * NFT left in this project: a hold or a listing that stayed open when whoever controls the NFT's collection took it
      * out of the project's hands. Left open, such a record could take the NFT once the project holds it again. The
      * player holds the NFT now, so the program closes each on that proof (a hold by `release`, a listing by
-     * `take_listing`, nothing sent or paid), in front of the deposit in the same transaction, or in a transaction of
-     * their own before it when the two do not fit one. The closes cost the player their transaction fee only: each
-     * record's rent goes to whoever that record names (a hold's payer, a listing's maker), never to the player. Only
-     * what can't be closed still refuses the deposit, in words (a listing whose rental still runs: the program keeps
-     * it until the rental has run); `acceptLeftover: true` goes ahead all the same. NFTs of the project's own
-     * collections are not read.
+     * `take_listing`, no NFT moved and nothing paid), in front of the deposit in the same transaction, or in a
+     * transaction of their own before it when the two do not fit one. The closes cost the player their transaction fee
+     * only: each record's rent goes to whoever that record names (a hold's payer, a listing's maker), never to the
+     * player. Only what can't be closed still refuses the deposit, in words (a listing whose rental still runs: the
+     * program keeps it until the rental has run); `acceptLeftover: true` goes ahead all the same. NFTs of the project's
+     * own collections are not read.
      */
     async hold(asset, seconds, { acceptLeftover, ...others } = NO_OPTIONS) {
       only(others, ['acceptLeftover'], 'hold');

@@ -15,7 +15,7 @@ import { createCollectionInstruction } from '../../chain/core.js';
 import { ASSOCIATED_TOKEN_PROGRAM, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../../chain/pda.js';
 import { computeUnitLimit, createAssociatedTokenAccountIdempotent } from '../../chain/programs.js';
 import { createAccountIx, initializeMint2Ix, MINT_BYTES, mintToIx } from '../../chain/token.js';
-import { readTransaction } from '../../chain/tx.js';
+import { readTransaction, wireTransaction } from '../../chain/tx.js';
 import * as loot from '../../client/index.js';
 import { loadLiteSVM, newAddress, seeded, simChain } from '../../sim/chain.mjs';
 
@@ -98,7 +98,7 @@ export function cannotRun() {
     'token_metadata.so',
     'vrf.so',
     'mainnet/queue.json',
-    ...(localBuild ? [] : ['loot.so']),
+    ...(localBuild ? [] : [onMainnet ? 'loot_mainnet.so' : 'loot.so']),
   ];
   for (const f of needed)
     if (!existsSync(path.join(fixtures, f))) return `${path.join(fixtures, f)} is missing: ${FETCH}`;
@@ -160,6 +160,22 @@ export function cannotRunCompressed() {
     if (!existsSync(path.join(fixtures, f))) return `js/test/fixtures/${f} is missing: ${FETCH}`;
   return cannotRun();
 }
+
+/** A wire transaction with `kp`'s signature at its place among the signers (`kp`: a test's keypair, `freshKeypair`). */
+export function signWire(kp, wire) {
+  const t = readTransaction(wire);
+  const sigs = [...t.signatures];
+  sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
+  return wireTransaction(t.message, sigs);
+}
+
+/** A keypair as the page client's wallet (`solanaApp`'s `wallet`): it signs each transaction it is handed. */
+export const asWallet = kp => ({
+  address: kp.address,
+  async signTransaction(wire) {
+    return signWire(kp, wire);
+  },
+});
 
 /**
  * The chain `xsolana approve` sends to (`createApproval`'s `chain`), answered by the world's local chain: it reads accounts

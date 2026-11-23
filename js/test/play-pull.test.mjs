@@ -2,20 +2,16 @@
 // open funded signs the settle and hands the rest back); whatever a player is owed shows in `claims()` and they take
 // it themselves; an empty lottery round is moved on by the next ticket buyer.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { test } from 'node:test';
 import { LOOKUP_TABLE_PROGRAM, readTable } from '../chain/lookup.js';
 import { freshKeypair } from '../approve/ed25519.mjs';
-import { createApproval } from '../approve/server.mjs';
-import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { NATIVE_MINT } from '../chain/pda.js';
 import { createAssociatedTokenAccountIdempotent, withSolWrap } from '../chain/programs.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { goLive } from './helpers/live.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
@@ -32,24 +28,6 @@ const asWallet = kp => ({
     return wireTransaction(t.message, sigs);
   },
 });
-
-async function goLive(w, owner, spec) {
-  const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-pull-')), 'xsolana.json');
-  writeFileSync(file, JSON.stringify(spec));
-  const chain = approvalChain(w);
-  const session = await createApproval({ file, chain, now: () => NOW });
-  for (let i = 0; i < 6 && !session.state().done; i++) {
-    const batch = await session.prepare(owner.address);
-    const signed = batch.transactions.map(b64 => {
-      const t = readTransaction(fromBase64(b64));
-      const s = [...t.signatures];
-      s[t.signers.indexOf(owner.address)] = owner.sign(t.message);
-      return toBase64(wireTransaction(t.message, s));
-    });
-    await session.complete(owner.address, batch.id, signed);
-  }
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
 
 test(
   'one prompt a box; a player finds and takes what they are owed; the next buyer moves an empty round on',

@@ -13,6 +13,7 @@ import {
   draws,
   fetchVouchers,
   giveawayHostText,
+  giveaways,
   hostCertText,
   keyFromSecret,
   RESULTS_SERVER,
@@ -271,4 +272,55 @@ test('a request to a results server names its cluster: nothing on devnet, as bef
   assert.ok(mg[0].endsWith('?cluster=mainnet'), mg[0]);
   // The result a host signs carries the same cluster as the request that reports it.
   assert.notDeepEqual(dr[2].signatures, mr[2].signatures);
+});
+
+test('every call to a results server sends the cluster it was given, whatever cluster the process works on', async () => {
+  const [game, key] = [await newKey(), await newKey()];
+  const to = { server: 'https://r.example/x', game: game.address };
+  const id = 'ab'.repeat(16);
+  const signMessage = async () => new Uint8Array(64);
+  // one call of each kind, with what it needs; `rest` carries the cluster and the fetch
+  const calls = {
+    report: rest => report({ ...to, cert: null, signer: key, round: id, endedAt: 1, winners: [], ...rest }),
+    fetchVouchers: rest => fetchVouchers({ ...to, round: id, wallet: key.address, ...rest }),
+    'draws.open': rest =>
+      draws.open({ ...to, draw: id, engine: 'raffle', winners: 1, signMessage, by: key.address, ...rest }),
+    'draws.enter': rest => draws.enter({ ...to, draw: id, wallet: key.address, signMessage, ...rest }),
+    'draws.lock': rest => draws.lock({ ...to, draw: id, beacon: 7, signMessage, by: key.address, ...rest }),
+    'draws.get': rest => draws.get({ ...to, draw: id, ...rest }),
+    'giveaways.open': rest =>
+      giveaways.open({ ...to, cert: {}, token: 't', giveaway: id, winners: 1, endsBy: 2, session: key, ...rest }),
+    'giveaways.report': rest =>
+      giveaways.report({ ...to, giveaway: id, session: key, endedAt: 1, winners: [], grant: 1, ...rest }),
+  };
+  assert.deepEqual(
+    Object.keys(calls).sort(),
+    [
+      'report',
+      'fetchVouchers',
+      ...Object.keys(draws).map(k => `draws.${k}`),
+      ...Object.keys(giveaways).map(k => `giveaways.${k}`),
+    ].sort(),
+    'a call of every kind is checked here',
+  );
+  for (const [works, named] of [
+    ['devnet', 'mainnet'],
+    ['mainnet', 'devnet'],
+  ]) {
+    for (const [name, call] of Object.entries(calls)) {
+      const seen = [];
+      const fetchImpl = async (url, init) => {
+        seen.push([new URL(url), init?.body ? JSON.parse(init.body) : null]);
+        return new Response(JSON.stringify({ vouchers: [], result: {}, draw: { entries: [] } }), { status: 200 });
+      };
+      await withCluster(works, () => call({ cluster: named, fetchImpl }));
+      assert.ok(seen.length > 0, name);
+      for (const [url, body] of seen) {
+        const what = `${name}, given ${named} in a process on ${works}: ${url}`;
+        assert.equal(url.searchParams.get('cluster'), named === 'devnet' ? null : named, what);
+        // a text signed for the request names the same cluster
+        if (body?.text) assert.match(body.text, new RegExp(`^cluster: ${named}$`, 'm'), what);
+      }
+    }
+  }
 });

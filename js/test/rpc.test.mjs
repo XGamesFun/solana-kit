@@ -1,7 +1,7 @@
 // The RPC client waits out a public RPC's rate limit (429) instead of failing a player's transaction.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rpcClient } from '../chain/rpc.js';
+import { checkCluster, GENESIS, rightCluster, RpcError, rpcClient } from '../chain/rpc.js';
 
 const answer = (status, body, headers = {}) => ({
   status,
@@ -203,4 +203,46 @@ test('a refusal says whether an earlier try of the same send went unanswered, an
     assert.equal(alreadyProcessed(e), false);
     return true;
   });
+});
+
+test('an RPC on the wrong cluster is named by its host alone: a key in its URL is never said', async () => {
+  const key = 'k3y-0f-a-pa1d-rpc';
+  const names = host => error => {
+    assert.ok(error instanceof RpcError);
+    assert.ok(!error.message.includes(key), error.message);
+    assert.ok(error.message.startsWith(`${host} is `), error.message);
+    return true;
+  };
+  // the key in the query, in the path, and as the URL's password
+  for (const [url, host] of [
+    [`https://mainnet.helius-rpc.com/?api-key=${key}`, 'mainnet.helius-rpc.com'],
+    [`https://rpc.example.com/${key}/mainnet`, 'rpc.example.com'],
+    [`https://user:${key}@mainnet.example.com:8899/x`, 'mainnet.example.com:8899'],
+  ]) {
+    assert.throws(() => rightCluster(url, 'devnet'), names(host));
+    await assert.rejects(checkCluster({ url, call: async () => GENESIS.mainnet }, 'devnet'), names(host));
+  }
+  const devnet = `https://devnet.helius-rpc.com/?api-key=${key}`;
+  assert.throws(() => rightCluster(devnet, 'mainnet'), names('devnet.helius-rpc.com'));
+  await assert.rejects(
+    checkCluster({ url: devnet, call: async () => GENESIS.devnet }, 'mainnet'),
+    names('devnet.helius-rpc.com'),
+  );
+  // an RPC with no URL, or one that is no URL, is "This RPC"
+  await assert.rejects(checkCluster({ call: async () => GENESIS.mainnet }), names('This RPC'));
+  assert.throws(() => rightCluster(`mainnet ${key}`), names('This RPC'));
+  // a URL of the right cluster comes back as it was given
+  assert.equal(rightCluster(devnet, 'devnet'), devnet);
+});
+
+test('the refusal of a wrong cluster tells a page and the command line alike what to change', () => {
+  for (const [url, cluster] of [
+    ['https://api.mainnet-beta.solana.com', 'devnet'],
+    ['https://api.devnet.solana.com', 'mainnet'],
+  ]) {
+    assert.throws(
+      () => rightCluster(url, cluster),
+      error => /rpcUrl/.test(error.message) && /XSOLANA_RPC_URL/.test(error.message) && !/Unset/.test(error.message),
+    );
+  }
 });

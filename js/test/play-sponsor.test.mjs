@@ -4,12 +4,8 @@
 // transaction that would make it pay more: a smaller give-back, the sponsor named elsewhere, nothing of the project's, a
 // priority fee, a budget spent.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
-import { createApproval } from '../approve/server.mjs';
 import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { decodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
@@ -25,38 +21,11 @@ import {
   sponsorSigner,
   sponsorTopUp,
 } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { goLive } from './helpers/live.mjs';
+import { asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
-
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
-
-async function goLive(w, owner, spec) {
-  const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-sponsor-')), 'xsolana.json');
-  writeFileSync(file, JSON.stringify(spec));
-  const chain = approvalChain(w);
-  const session = await createApproval({ file, chain, now: () => NOW });
-  for (let i = 0; i < 6 && !session.state().done; i++) {
-    const batch = await session.prepare(owner.address);
-    const signed = batch.transactions.map(b64 => {
-      const t = readTransaction(fromBase64(b64));
-      const s = [...t.signatures];
-      s[t.signers.indexOf(owner.address)] = owner.sign(t.message);
-      return toBase64(wireTransaction(t.message, s));
-    });
-    await session.complete(owner.address, batch.id, signed);
-  }
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
 
 const SPEC = {
   version: 2,

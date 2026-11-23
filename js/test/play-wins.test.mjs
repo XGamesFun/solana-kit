@@ -12,21 +12,11 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
 const hex = bytes => Buffer.from(bytes).toString('hex');
-
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
 
 test(
   'claimWins reads every page, claims a list win with its round, and keeps going past a failed claim',

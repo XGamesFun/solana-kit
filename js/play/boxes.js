@@ -379,7 +379,10 @@ export function boxMethods(ctx) {
   }
 
   return {
-    /** The shop: every item with a price (or free), its price now and what is left. */
+    /**
+     * The shop: every item with a price (or free), its price now and what is left.
+     * @returns {Promise<any[]>}
+     */
     async shop() {
       const items = (spec.items ?? []).filter(it => Number.isInteger(it.shopBox));
       const accounts = await client.accounts(
@@ -401,8 +404,11 @@ export function boxMethods(ctx) {
       });
     },
 
-    /** The boxes: price now, each outcome's chance as written, and what the box does once an outcome runs out
-     * (`whenOut`: 'stopSales', it isn't sold until restocked; 'drawLeft', it draws among what is left). */
+    /**
+     * The boxes: price now, each outcome's chance as written, and what the box does once an outcome runs out
+     * (`whenOut`: 'stopSales', it isn't sold until restocked; 'drawLeft', it draws among what is left).
+     * @returns {Promise<any[]>}
+     */
     async boxes() {
       const list = spec.boxes ?? [];
       const accounts = await client.accounts(list.map(b => loot.pda.box(project, b.id)));

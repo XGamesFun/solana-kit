@@ -53,7 +53,13 @@ function compileInstructions(instructions, index) {
  * A message. `version` is 'legacy' (default) or 0. For v0, `lookupTables` is [{ address, addresses: [base58] }]:
  * read-only and writable accounts that are neither signers nor invoked programs load from a table when it holds them.
  */
-export function compileMessage({ payer, blockhash, instructions, version = 'legacy', lookupTables = [] }) {
+export function compileMessage({
+  payer,
+  blockhash,
+  instructions,
+  version = /** @type {'legacy' | 0} */ ('legacy'),
+  lookupTables = /** @type {{ address: string, addresses: string[] }[]} */ ([]),
+}) {
   if (!instructions?.length) throw new Error('A transaction needs at least one instruction');
   let accounts = mergedAccounts(payer, instructions);
   const lookups = [];
