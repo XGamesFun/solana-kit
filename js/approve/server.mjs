@@ -28,6 +28,7 @@ import { LEGAL, legalFlags } from '../economy/legal.mjs';
 import { changedParts, prepare, recordLanded } from '../economy/live.mjs';
 import { ACCOUNT_OVERHEAD, compressedTree, model, MOST_RENT_PER_BYTE } from '../economy/model.mjs';
 import { madeSoFar, plan, PER_APPROVAL } from '../economy/plan.mjs';
+import { economyOf, parseFile, withEconomy } from '../economy/spec-file.mjs';
 import { compareDetails, liveStepDetails, namesOf, outsideAddresses, stepDetails } from './details.mjs';
 import { freshKeypair, verifySignature } from './ed25519.mjs';
 import {
@@ -162,8 +163,9 @@ export async function createApproval({
   write = writeWhole,
   mintKeys = {},
 }) {
-  let spec = JSON.parse(await readFile(file, 'utf8'));
-  if (spec.economy) spec = spec.economy;
+  // The file's whole JSON: the spec is written back where it was found in it, so a game file keeps its other keys.
+  const fileJson = parseFile(await readFile(file, 'utf8'));
+  let spec = economyOf(fileJson);
   const verdict = check(spec, { now: now() });
   if (!verdict.ok)
     throw new ApproveError(400, `${file} does not check:\n${describe({ refusals: verdict.refusals, warnings: [] })}`);
@@ -246,7 +248,7 @@ export async function createApproval({
   let chainCorrections = [];
   /** Writes the session's spec to the file: what it corrected from the chain is said there from now on. */
   const writeSpec = async () => {
-    await write(file, `${JSON.stringify(spec, null, 2)}\n`);
+    await write(file, `${JSON.stringify(withEconomy(fileJson, spec), null, 2)}\n`);
     chainCorrections = [];
   };
   /** Where the chain's treasury is not the one the spec names (`checkLive`), in words. */
@@ -1289,6 +1291,15 @@ export function ownRequest(headers, port) {
   return hosts.some(h => String(headers.origin).toLowerCase() === `http://${h}`);
 }
 
+/** A request's target as a URL: refused (400) when it is not one (`//[`). */
+function requestUrl(target) {
+  try {
+    return new URL(target, 'http://127.0.0.1');
+  } catch {
+    throw new ApproveError(400, 'The request’s address is not a URL.');
+  }
+}
+
 /** A request's body, as text: refused (413) past `limit` bytes, and the rest of it read and let go. */
 function readBody(req, limit = BODY_LIMIT) {
   return new Promise((resolve, reject) => {
@@ -1380,7 +1391,6 @@ export async function approve({
     'x-frame-options': 'DENY',
   };
   const server = createServer(async (req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1');
     const send = (status, body, type = 'application/json') => {
       res.writeHead(status, { ...headers, 'content-type': type });
       res.end(type === 'application/json' ? JSON.stringify(body) : body);
@@ -1389,6 +1399,7 @@ export async function approve({
       // Only a request to this server by its own name (DNS rebinding: a site whose name now points at 127.0.0.1).
       if (!ownRequest(req.headers, server.address().port))
         return send(403, 'Open the link `xsolana approve` printed.', 'text/plain');
+      const url = requestUrl(req.url);
       if (req.method === 'GET' && url.pathname === '/') {
         const once = url.searchParams.get('c');
         if (once !== null) {

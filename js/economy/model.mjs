@@ -138,7 +138,12 @@ function decimalText(amount) {
     throw new SpecError('E-AMOUNT', `${amount} is not an amount.`, 'Write a number like 0.1, or text like "0.1".');
   const text = String(amount);
   if (!/e/i.test(text)) return text;
-  return amount.toFixed(20).replace(/\.?0+$/, '');
+  // Written with an exponent: 1e21 or more is past anything the program holds, and one below 0.000001 is spelled out
+  // digit for digit ("1.5e-7" is 0.00000015), so it is refused for its decimals and never read as 0.
+  const [digits, exponent] = text.split('e');
+  if (Number(exponent) > 0)
+    throw new SpecError('E-AMOUNT', `${text} is too large for the program.`, 'Use a smaller amount.');
+  return `0.${'0'.repeat(-Number(exponent) - 1)}${digits.replace('.', '')}`;
 }
 
 /** "0.1" of a currency with 9 decimals → 100000000n. Refuses more decimals than the currency has. */

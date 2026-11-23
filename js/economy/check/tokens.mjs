@@ -417,7 +417,7 @@ export function checkTokens(c) {
           `Leave "currency" out: a pool’s prize is in what it holds.`,
         );
       // A prize of 0 tokens is given with nothing moved, on every route.
-      if (t && units(line.amount, t, `${at}.amount`, `What ${what} gives`) === 0n)
+      if (t && units(line.amount, t, `${at}.amount`, `What ${what[0].toLowerCase()}${what.slice(1)} gives`) === 0n)
         warn(
           'W-ZERO',
           `${at}.amount`,

@@ -2,6 +2,7 @@
 // the server stopping once the economy is live.
 import assert from 'node:assert/strict';
 import { lstatSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -59,6 +60,33 @@ test('the approval server answers a wallet that is no Solana address with 400, i
       assert.equal(r.status, 400);
       assert.match(r.body.error, /not a Solana address/);
     }
+  } finally {
+    server.close();
+  }
+});
+
+test('a request whose target is no URL is answered 400, and the approval server goes on serving', async () => {
+  const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-guard-')), 'xsolana.json');
+  writeFileSync(file, readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url)));
+  const { server, api } = await served(file, {});
+  try {
+    // (sent as written: `fetch` would refuse to build the request)
+    const answer = await new Promise((resolve, reject) => {
+      const req = request({ host: '127.0.0.1', port: server.address().port, path: '//[', timeout: 5_000 }, res => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => (body += chunk));
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      });
+      req.on('timeout', () => req.destroy(new Error('the server did not answer')));
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(answer.status, 400);
+    assert.match(JSON.parse(answer.body).error, /not a URL/);
+    const after = await api('/api/state');
+    assert.equal(after.status, 200);
+    assert.equal(after.body.done, false);
   } finally {
     server.close();
   }

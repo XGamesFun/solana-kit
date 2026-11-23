@@ -259,3 +259,18 @@ test('xsolana_review answers the review; the command exits 1 on a high finding',
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(JSON.parse(ok.stdout).ok, true);
 });
+
+test('the table of how far a signed result can be trusted is shown only when a server signs one', async () => {
+  // coin-flip-arena: a box and a lottery on the oracle's roll, a farm; no grant paid on a voucher.
+  const unsigned = await runTool('xsolana_review', { example: 'coin-flip-arena' }, { now: NOW });
+  assert.ok(!unsigned.isError, unsigned.text);
+  assert.doesNotMatch(unsigned.text, /How far a result the server signs can be trusted|\| Level \|/);
+  assert.doesNotMatch(unsigned.text, /which level each signed route uses|Tell players which level/);
+  assert.match(unsigned.text, /\*\*In this economy\*\*/);
+  assert.match(unsigned.text, /No high finding\. Tell the person what a cheater gets on each route/);
+  // A grant paid on vouchers: the levels, and what the next one up costs.
+  const signed = review(spec('review-bounds'), { now: NOW });
+  assert.match(signed.tradeoffs, /^\*\*How far a result the server signs can be trusted\*\*/);
+  assert.match(signed.tradeoffs, /\*\*What the next level up costs\*\*/);
+  assert.match(signed.tradeoffs, /Tell players which level each reward uses\./);
+});

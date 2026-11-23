@@ -94,6 +94,9 @@ are in [docs/harnesses.md](docs/harnesses.md).
 # find a worked example close to your idea
 npx -y @xgamesfun/solana@0.29.10 examples shop with loot boxes
 
+# start your xsolana.json from one of them, by its name, then change it to your own economy
+npx -y @xgamesfun/solana@0.29.10 examples blind-forge --save xsolana.json
+
 # using a coin you already launched? read it from the chain into its "tokens" entry
 npx -y @xgamesfun/solana@0.29.10 token <its mint address>
 
