@@ -15,7 +15,7 @@ skill and the `xsolana_*` tools. Everything below is for changing the tools.
 | Path                      | What                                                                                                                               |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `js/chain/`               | browser-safe Solana primitives, no SDK: base58, Borsh from the IDL, transactions, PDAs, tokens, Core                               |
-| `js/client/`              | the client: every PDA, one builder per instruction, account and receipt decoders, grant vouchers                                   |
+| `js/client/`              | the client: every PDA, one builder per instruction (by part in `ix/`), account and receipt decoders, grant vouchers                |
 | `js/economy/`             | the economy spec (version 2, `schema.json`), checker (by part in `check/`), quick simulation, setup plan, cost, explainer, guide   |
 | `js/play/`, `js/results/` | what a player does with a live economy from an app; results a server vouched for                                                   |
 | `js/approve/`             | `xsolana keygen` and `xsolana approve`: going live signed by a key file, or (`--browser`) on a local page in a browser wallet      |

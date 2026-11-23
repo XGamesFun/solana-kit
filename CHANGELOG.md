@@ -4,6 +4,18 @@ The version of `@xgamesfun/solana` is the version of the loot program it is buil
 program's exact build, its IDL and this client. Changes to the program itself are summarised here only where the
 tools see them.
 
+## 0.29.10: the page client and the instruction builders split by part (loot 0.29.0, unchanged)
+
+No behaviour changed: every entry point exports the same names, `solanaApp()` returns the same 59 methods in the same
+order with the same types, and the tests are the same.
+
+- `js/play`: `solanaApp()` was one function of 5,650 lines. It now builds its shared setup and puts together one module
+  a part (`boxes.js`, `lotteries.js`, `farms.js`, `claims.js`…); each app keeps its own state, so two apps on one page
+  stay apart.
+- `js/client/ix.js` is now an index of `js/client/ix/`, one module of instruction builders a part.
+- A game's copy of the page client (`gf/loot/`) has more, smaller files (65, was 29, about the same size); a first load
+  finds them in one more round of requests.
+
 ## 0.29.9: check split by part (loot 0.29.0, unchanged)
 
 No behaviour changed: `check()` gives the same refusals and warnings, in the same order, and every export of
