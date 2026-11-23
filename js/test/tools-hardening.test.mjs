@@ -26,7 +26,7 @@ import { plan, setupContext } from '../economy/plan.mjs';
 import { runTool } from '../mcp/server.mjs';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { approvalChain, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, boxArgs, cannotRun, collectible, itemDrop, PRICE, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;
@@ -37,15 +37,6 @@ const STAND_IN_OWNER = encodeBase58(createHash('sha256').update('loot-plan:owner
 const example = JSON.parse(readFileSync(new URL('../../examples/coin-flip-arena.json', import.meta.url), 'utf8'));
 
 /** A wallet: signs its own slot of whatever it is handed. */
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
 const signAll = (kp, wires) => wires.map(b64 => toBase64(asWalletSync(kp, fromBase64(b64))));
 const asWalletSync = (kp, wire) => {
   const t = readTransaction(wire);

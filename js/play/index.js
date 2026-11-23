@@ -8,8 +8,8 @@
 //   import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 //   const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: walletStandardSigner(wallet, account) });
 //   const items = await app.shop();               // [{ key, name, price, priceUnits, currency, left }]
-//   const { asset } = await app.buy('sword', { listing: items[0] });  // the price shown is the most it pays
-//   const { won } = await app.openBox('chest', { listing });           // waits for the roll, settles it: one prompt
+//   const bought = await app.buy('sword', { listing: items[0] });  // { asset }: the price shown is the most it pays
+//   const opened = await app.openBox('chest', { listing });  // { won }: waits for the roll, settles it: one prompt
 //   for (const c of await app.claims()) await app.claim(c);   // what this player can finish: wins, payouts, refunds
 //   await app.claimWins({ server, token });         // prizes a results server vouched for
 //
@@ -140,13 +140,13 @@ function onCluster(client) {
  */
 export function solanaApp({
   spec,
-  rpcUrl = null,
-  rpc = null,
+  rpcUrl = /** @type {string | null} */ (null),
+  rpc = /** @type {any} */ (null),
   wallet,
   programs = {},
   now = () => Math.floor(Date.now() / 1000),
   keyStore = browserStore(),
-  sponsor = null,
+  sponsor = /** @type {any} */ (null),
 }) {
   const live = spec?.live;
   if (!live?.project) throw new Error('This economy is not live yet: its xsolana.json has no "live" section.');

@@ -1,4 +1,4 @@
-// A local Solana for tests and the full simulation: LiteSVM (an optional dependency) with the real loot program,
+// A local Solana for tests and the full simulation: LiteSVM (a dev dependency) with the real loot program,
 // Metaplex Core and MagicBlock's VRF, a clock the caller moves, and an `rpc` object answering what the client and the
 // player calls read. Node only.
 //
@@ -40,16 +40,20 @@ const TX_ERRORS = [
   'SanitizeFailure',
 ];
 
-/** LiteSVM's classes, or a plain sentence when it is not installed. */
+/**
+ * LiteSVM's classes, or a plain sentence when it does not load: why, in the loader's own first line, and the command
+ * that installs the version package.json pins.
+ */
 export function loadLiteSVM(from = import.meta.url) {
   if (process.platform === 'win32')
     throw new Error('LiteSVM has no Windows build (its npm package ships Linux and macOS binaries only).');
   try {
     const m = createRequire(from)('litesvm');
     return { LiteSVM: m.LiteSVM, Rent: m.Rent, FeatureSet: m.FeatureSet };
-  } catch {
+  } catch (error) {
     throw new Error(
-      'LiteSVM is not installed: `npm install litesvm@1.5.0` (an optional dependency, used by the tests and the full simulation).',
+      `LiteSVM did not load (${String(error?.message).split('\n')[0]}): run \`npm ci\`. It is a dev dependency of this repository: the tests run the real program in it.`,
+      { cause: error },
     );
   }
 }

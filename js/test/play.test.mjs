@@ -12,22 +12,12 @@ import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { associatedTokenAddress, NATIVE_MINT } from '../chain/pda.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { solanaApp } from '../play/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
 
 /** A wallet: the signer signs its own slot of whatever it is handed. */
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
-
 test('a player uses a live economy through js/play', { skip: skip ?? false }, async () => {
   const w = world({ project: false, seed: 'play' });
   w.chain.warp(NOW);

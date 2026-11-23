@@ -1,40 +1,18 @@
 // A community token with a fixed supply (a game token with "supply"): going live makes it, mints all of it to the
 // owner, seeds pools from that, and turns minting off for good. In the live evals agents wrote their own mint pages.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
-import { createApproval } from '../approve/server.mjs';
-import { fromBase64, toBase64 } from '../chain/bytes.js';
 import { associatedTokenAddress } from '../chain/pda.js';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { check } from '../economy/check.mjs';
 import { solanaApp } from '../play/index.js';
 import * as loot from '../client/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { goLive } from './helpers/live.mjs';
+import { cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun();
-
-async function goLive(w, owner, spec) {
-  const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-supply-')), 'xsolana.json');
-  writeFileSync(file, JSON.stringify(spec));
-  const chain = approvalChain(w);
-  const session = await createApproval({ file, chain, now: () => NOW });
-  for (let i = 0; i < 6 && !session.state().done; i++) {
-    const batch = await session.prepare(owner.address);
-    const signed = batch.transactions.map(b64 => {
-      const t = readTransaction(fromBase64(b64));
-      const s = [...t.signatures];
-      s[t.signers.indexOf(owner.address)] = owner.sign(t.message);
-      return toBase64(wireTransaction(t.message, s));
-    });
-    await session.complete(owner.address, batch.id, signed);
-  }
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
 
 test(
   'a fixed supply goes to the owner, seeds a pool, and can never be minted again',

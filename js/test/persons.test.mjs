@@ -16,20 +16,10 @@ import { check } from '../economy/check.mjs';
 import { sha256 } from '../chain/sha256.js';
 import { solanaApp } from '../play/index.js';
 import { newKey, newRound, signLink, signVoucher } from '../results/index.js';
-import { approvalChain, cannotRun, world } from './helpers/world.mjs';
+import { approvalChain, asWallet, cannotRun, world } from './helpers/world.mjs';
 
 const NOW = 1_790_000_000;
 const skip = cannotRun() ?? false;
-
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
 
 async function goLive(w, owner, spec) {
   const file = path.join(mkdtempSync(path.join(tmpdir(), 'xsolana-029-')), 'xsolana.json');

@@ -39,8 +39,10 @@ test("a lottery share that burns is burned at the round's close, the rest in the
       .data.subarray(36, 44)
       .reduce((n, b, i) => n | (BigInt(b) << BigInt(8 * i)), 0n);
   const before = supply();
+  const held = () => w.chain.tokens(loot.ata(w.player, w.mint));
+  const had = held();
   w.finishRound(id);
-  assert.equal(w.chain.tokens(loot.ata(w.player, w.mint)) > 0n, true);
+  assert.equal(held() - had, 900n, 'the round’s one ticket wins what the burn left of its price');
   assert.equal(before - supply(), 100n, 'the burn share burned at the close');
   assert.equal(w.round(id), null, 'the round closed');
 });

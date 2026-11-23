@@ -306,7 +306,7 @@ export function addAuctions(ctx) {
     const signature = await send([...instructions, fund]);
     const releases = [];
     for (const [asset, to] of outs) {
-      // Taken back or burned since the end made it a hold: its release closes the hold on that proof, and sends nothing.
+      // Taken back or burned since the end made it a hold: its release closes the hold on that proof, and moves no NFT.
       let lost = false;
       const release = async signer => {
         const hold = await read('Hold', loot.pda.hold(asset, 0));

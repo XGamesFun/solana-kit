@@ -2,12 +2,16 @@
 // both checks; `npm run check` and CI run it on every push.
 //
 // Where each file runs decides its globals. js/chain, js/client, js/play and js/results run in a browser page as they
-// are (AGENTS.md): no Node globals or `node:` imports there, so a Buffer or a process.env that would break a page fails
+// are (AGENTS.md): no Node globals or Node imports there, so a Buffer or a process.env that would break a page fails
 // here first.
+import { builtinModules } from 'node:module';
 import js from '@eslint/js';
 import globals from 'globals';
 
 const BROWSER_SAFE = ['js/chain/**', 'js/client/**', 'js/play/**', 'js/results/**'];
+// What Node has and a page has not (Buffer, process, require, __dirname…): not defined for a browser-safe module.
+const NODE_ONLY = Object.keys(globals.node).filter(name => !(name in globals.browser));
+const IN_A_PAGE = 'This module runs in a browser page';
 
 export default [
   { ignores: ['node_modules/', 'js/client/idl/', 'evals/results/', 'types/'] },
@@ -25,21 +29,35 @@ export default [
   // runs in a browser page as it is: browser globals only, and nothing of Node's
   {
     files: BROWSER_SAFE,
-    languageOptions: { globals: { ...globals.browser } },
+    languageOptions: {
+      globals: { ...Object.fromEntries(NODE_ONLY.map(name => [name, 'off'])), ...globals.browser },
+    },
     rules: {
+      // a Node module by either of its names (`node:fs`, `fs`)
       'no-restricted-imports': [
         'error',
         {
-          patterns: [
-            { group: ['node:*'], message: 'This module runs in a browser page: no Node imports (AGENTS.md).' },
-          ],
+          paths: builtinModules.map(name => ({ name, message: `${IN_A_PAGE}: no Node imports (AGENTS.md).` })),
+          patterns: [{ group: ['node:*'], message: `${IN_A_PAGE}: no Node imports (AGENTS.md).` }],
         },
       ],
       'no-restricted-globals': [
         'error',
-        { name: 'Buffer', message: 'This module runs in a browser page: use Uint8Array (js/chain/bytes.js).' },
-        { name: 'process', message: 'This module runs in a browser page: no process.' },
-        { name: 'require', message: 'This module runs in a browser page: ES modules only.' },
+        { name: 'Buffer', message: `${IN_A_PAGE}: use Uint8Array (js/chain/bytes.js).` },
+        { name: 'process', message: `${IN_A_PAGE}: no process.` },
+        { name: 'require', message: `${IN_A_PAGE}: ES modules only.` },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression:not([source.value=/^\\.{1,2}\\//])',
+          message: `${IN_A_PAGE}: import() only a module beside this one, by its relative path.`,
+        },
+        // `globalThis.process?.env` is undefined in a page and read in Node; `globalThis.process.env` throws in a page
+        {
+          selector: `:not(MemberExpression[optional=true]) > MemberExpression[object.name='globalThis'][property.name=/^(${NODE_ONLY.join('|')})$/]`,
+          message: `${IN_A_PAGE}: read a Node global only as \`globalThis.name?.…\`, which a page answers with undefined.`,
+        },
       ],
     },
   },

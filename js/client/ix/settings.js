@@ -50,11 +50,13 @@ export const createProjectIx = ({ owner, id = 0, authority, treasury, collection
   );
 
 /**
- * `update`: { authority?, treasury?, paused?, collections? }. `collections` replaces the project's list; every one in
- * it is passed after the instruction's own accounts (the program reads the new ones). The owner pays for the project
- * growing with its collections, and gets back what it shrinks by. A new owner (who signs too) is optional. A new
- * authority or treasury comes with the account at its key (`new_authority`, `new_treasury`), which the program checks
- * as `createProjectIx`'s.
+ * Changes project `project`'s settings, signed by its `owner`. Each setting is an option of its own, beside `owner`
+ * and `project`: `authority`, `treasury`, `paused`, `collections`, `issuer`. One left out stays as it is. `collections`
+ * replaces the project's list; every one in it is passed after the instruction's own accounts (the program reads the
+ * new ones). The owner pays for the project growing with its collections, and gets back what it shrinks by. `issuer`:
+ * the key that vouches for which person a wallet belongs to (`NO_ADDRESS` for nobody). `newOwner`: a new owner, who
+ * signs too. A new authority or treasury comes with the account at its key (`new_authority`, `new_treasury`), which
+ * the program checks as `createProjectIx`'s.
  */
 export const updateProjectIx = ({
   owner,

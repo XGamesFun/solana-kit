@@ -5,22 +5,11 @@ import { test } from 'node:test';
 import { freshKeypair } from '../approve/ed25519.mjs';
 import { addressBytes, decodeBase58, encodeBase58 } from '../chain/base58.js';
 import { parseCoreAsset } from '../chain/core.js';
-import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
-import { cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
+import { asWallet, cannotRun, collectible, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
-
 test('a lender sees their overdue loan in claims() and takes its NFT', { skip }, async () => {
   const w = world({ seed: 'claims-lender' });
   w.upsert({ Item: { id: 1, args: collectible('Fighter') } });

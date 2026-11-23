@@ -9,6 +9,7 @@ import { explainEconomy } from '../economy/explain.mjs';
 import { model, rollsOf } from '../economy/model.mjs';
 import * as loot from '../client/index.js';
 import IDL from '../client/idl/loot.js';
+import { quick } from './helpers/quick.mjs';
 import { cannotRun, collectible, world } from './helpers/world.mjs';
 import { salePrices, simulate, walkBudget } from '../economy/simulate.mjs';
 import { runTool } from '../mcp/server.mjs';
@@ -322,13 +323,6 @@ const walkSpec = (nb, ni, rise = { step: 0.000000001 }, extra = {}) => {
     scenario: { days: 10, perDay },
   };
 };
-// A pathological input loops for seconds; a slow CI runner is given more room than a laptop.
-const quick = async (what, run, ms = process.env.CI ? 5000 : 1000) => {
-  const t = Date.now();
-  const out = await run();
-  assert.ok(Date.now() - t < ms, `${what} answered in ${Date.now() - t} ms`);
-  return out;
-};
 
 test('32 boxes and 63 items rising a lamport a sale answer fast, every tool', async () => {
   const spec = walkSpec(32, 63);
@@ -339,7 +333,7 @@ test('32 boxes and 63 items rising a lamport a sale answer fast, every tool', as
   const b0 = sim.boxes.find(b => b.key === 'b0');
   assert.ok(Math.abs(b0.averagePrice - (0.01 + (1e-9 * (9_999_990 - 1)) / 2)) < 1e-9, String(b0.averagePrice));
   for (const tool of ['xsolana_check', 'xsolana_simulate', 'xsolana_explain', 'xsolana_cost']) {
-    const r = await quick(tool, () => runTool(tool, { spec }, { now: NOW }), process.env.CI ? 10_000 : 2000);
+    const r = await quick(tool, () => runTool(tool, { spec }, { now: NOW }), 2);
     assert.notEqual(r.isError, true, `${tool}: ${r.text}`);
   }
 });
@@ -391,11 +385,7 @@ test('the walk of moving prices is one budget a simulation, shared by its boxes 
   // and every tool stays quick on the most a spec holds of them
   const most = walkSpec(32, 63, { step: 0.000000001 }, { fall });
   await quick('check of 95 walked parts', () => check(most, { now: NOW }));
-  await quick(
-    'xsolana_explain of 95 walked parts',
-    () => runTool('xsolana_explain', { spec: most }, { now: NOW }),
-    process.env.CI ? 10_000 : 2000,
-  );
+  await quick('xsolana_explain of 95 walked parts', () => runTool('xsolana_explain', { spec: most }, { now: NOW }), 2);
 });
 
 // Nothing but a higher bid hands a high bid back before an auction's end, so an end far off, or a push of it by a bid,

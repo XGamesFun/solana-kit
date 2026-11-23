@@ -289,6 +289,17 @@ test('the player module takes only a plain decimal amount, with at most the toke
   assert.equal(units('0.000001', 6), 1n);
 });
 
+test('an amount is read only with its token’s decimals: left out, or not a whole number a mint can hold, they are refused', () => {
+  for (const bad of [undefined, null, NaN, 1.5, -1, 256, Infinity, '6', 6n]) {
+    for (const amount of ['1.5', '12', 3])
+      assert.throws(() => units(amount, bad), /needs its token’s decimals/, `${amount} with ${String(bad)}`);
+  }
+  assert.throws(() => units('1.5'), /got undefined/);
+  assert.equal(units('12', 0), 12n);
+  assert.equal(units('0.000000000000000001', 18), 1n);
+  assert.equal(units('1', 255), 10n ** 255n);
+});
+
 test('the SOL total of going live counts a lottery’s seed and a sealed schedule’s funds', () => {
   const spec = {
     version: 2,

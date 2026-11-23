@@ -130,8 +130,8 @@ export function addLeftovers(ctx) {
   /**
    * The instructions that close `records` of `asset` (`recordsOf`) on the proof that the project no longer holds it
    * (`proof`, from `goneProof`), as `signer` sends them: a hold by `release`, a listing by `take_listing`. Anyone may
-   * send either, at any time; nothing is sent or paid, and no project fee is taken. A listing whose rental still runs
-   * can't be closed (`Rented`): the program keeps a running rental, and the listing closes once it has run.
+   * send either, at any time; no NFT moves, nothing is paid, and no project fee is taken. A listing whose rental still
+   * runs can't be closed (`Rented`): the program keeps a running rental, and the listing closes once it has run.
    * Returns { closes, closed: [{ kind, address }], waits: the records left }.
    */
   async function closesOf(asset, records, proof, signer = wallet.address) {

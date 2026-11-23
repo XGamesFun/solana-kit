@@ -9,11 +9,10 @@ import { concat, uintLE, utf8 } from '../chain/bytes.js';
 import { MPL_CORE_PROGRAM, parseCoreAsset } from '../chain/core.js';
 import { SYSTEM_PROGRAM } from '../chain/pda.js';
 import { meta } from '../chain/programs.js';
-import { readTransaction, wireTransaction } from '../chain/tx.js';
 import * as loot from '../client/index.js';
 import { solanaApp } from '../play/index.js';
 import { newAddress } from '../sim/chain.mjs';
-import { boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './helpers/world.mjs';
+import { asWallet, boxArgs, cannotRun, collectible, drop, fromPool, PRICE, world } from './helpers/world.mjs';
 
 const skip = cannotRun() ?? false;
 const { pda } = loot;
@@ -21,16 +20,6 @@ const NOBODY = '11111111111111111111111111111111';
 const ownerOf = (w, asset) => parseCoreAsset(w.chain.get(asset).data).owner;
 
 /** A wallet: the signer signs its own slot of whatever it is handed. */
-const asWallet = kp => ({
-  address: kp.address,
-  async signTransaction(wire) {
-    const t = readTransaction(wire);
-    const sigs = [...t.signatures];
-    sigs[t.signers.indexOf(kp.address)] = kp.sign(t.message);
-    return wireTransaction(t.message, sigs);
-  },
-});
-
 /** A Core collection another maker controls, and a way to mint its NFTs. */
 function partner(w) {
   const maker = w.who();
