@@ -47,6 +47,11 @@ stability").
 - "Did you mean …?" for a command or a flag a typo away (`xsolana chek`, `check --jsn`).
 - `check`'s default view lists high warnings first, then medium, then the law's flags, and folds the low and unrated
   ones into one line naming their codes (`--verbose` shows them all).
+- Warnings about players' money or whom they trust now carry a severity, so they are never folded away: medium for
+  `W-ON-TOP`, `W-MINT-POWERS`, `W-AUTHORITY`, `W-VOUCHERS`, `W-HOLD`, the open and uncapped grants, an outside
+  collection's NFTs, a pool or farm nothing fills, and others; high for `W-FARM-AUTHORITY` (a farm that pays nothing
+  until its mint is handed to the project); low for costs and details such as `W-FEE`. In `--json`, these warnings now
+  have a `severity` where they had none. Nothing new is refused, and exit codes are unchanged.
 - `approve` and `status` read the platform account and say when the program charges other fees than the tools
   quote (they quote the values at this release), or when a fee change waits, with its date.
 - The collection's resale royalty (5% to your wallet unless `"collection": { "royaltyPercent": n }` says otherwise, 0

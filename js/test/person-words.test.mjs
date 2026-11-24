@@ -173,3 +173,19 @@ test('check never says a plain "Ready" over a high warning, puts it first, and f
   );
   assert.match(calm, /^Ready: no refusals, 3 warnings \(1 low, 2 unrated\)\./);
 });
+
+test('warnings about players’ money and who they trust are rated, and shown in the default view, not folded', async () => {
+  const { SEVERITY } = await import('../economy/check.mjs');
+  for (const code of ['W-ON-TOP', 'W-MINT-POWERS', 'W-AUTHORITY', 'W-VOUCHERS', 'W-STASH-TRANSFER', 'W-GRANT-OPEN'])
+    assert.equal(SEVERITY[code], 'medium', code);
+  for (const [example, code] of [
+    ['partner-vault', 'W-ON-TOP'],
+    ['blind-forge', 'W-MINT-POWERS'],
+    ['level-ladder', 'W-AUTHORITY'],
+  ]) {
+    const agent = await runTool('xsolana_check', { example }, { now: NOW });
+    assert.equal(agent.warnings.find(w => w.code === code)?.severity, 'medium', `${example}: ${code} in --json`);
+    const shown = (await runTool('xsolana_check', { example }, { ...person, verbose: false })).text;
+    assert.match(shown, new RegExp(`^! ${code} \\(medium\\)`, 'm'), `${example}: ${code} shown`);
+  }
+});

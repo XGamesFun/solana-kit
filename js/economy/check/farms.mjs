@@ -371,6 +371,8 @@ export function checkFarms(c) {
           'W-FARM',
           `${where}.rate.minted`,
           `${label(f)} mints ${rewardsToken.symbol}: if the project ever moves the mint’s authority away, stakers cannot harvest what they are owed and can only leave by giving it up.`,
+          undefined,
+          { severity: 'medium' },
         );
       if (!f.rate.minted)
         warn(
