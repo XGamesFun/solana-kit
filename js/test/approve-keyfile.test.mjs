@@ -1400,7 +1400,7 @@ describe('the command line', () => {
 
   test('approve with no way to sign opens nothing: it says the two ways', () => {
     const r = xsolana(['approve'], { timeout: 20_000 });
-    assert.equal(r.status, 1);
+    assert.equal(r.status, 2, 'a usage error');
     assert.match(r.stderr, /say how going live is signed/);
     assert.match(r.stderr, /--keypair <keyfile>/);
     assert.match(

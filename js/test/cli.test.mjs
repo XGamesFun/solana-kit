@@ -38,26 +38,26 @@ function fakeAgents() {
 }
 
 describe('xsolana (the command line)', () => {
-  test('a failure is one line on stderr and exit 1, never a stack', async () => {
+  test('a failure is one line on stderr, never a stack: exit 1 when it fails, 2 when it was given wrongly', async () => {
     const cases = [
-      [['tool', 'xsolana_check', 'notjson'], /not JSON/],
-      [['approve', 'missing.json', '--browser', '--no-open'], /missing\.json does not exist/],
-      [['approve', 'xsolana.json', '--browser', '--port', 'abc'], /--port must be a whole number/],
-      [['approve', 'xsolana.json', '--browser', '--port=99999'], /--port must be a whole number/],
-      [['connect', '--agent'], /--agent needs a value/],
+      [['tool', 'xsolana_check', 'notjson'], /not JSON/, 2],
+      [['approve', 'missing.json', '--browser', '--no-open'], /missing\.json does not exist/, 1],
+      [['approve', 'xsolana.json', '--browser', '--port', 'abc'], /--port must be a whole number/, 2],
+      [['approve', 'xsolana.json', '--browser', '--port=99999'], /--port must be a whole number/, 2],
+      [['connect', '--agent'], /--agent needs a value/, 2],
     ];
-    for (const [args, said] of cases) {
+    for (const [args, said, code] of cases) {
       const r = await xsolana(args);
-      assert.equal(r.code, 1, args.join(' '));
+      assert.equal(r.code, code, args.join(' '));
       assert.match(r.err, said, args.join(' '));
       assert.doesNotMatch(r.err, /\n\s+at /, `${args.join(' ')}: no stack`);
       assert.equal(r.err.trim().split('\n').length, 1, `${args.join(' ')}: one line`);
     }
   });
 
-  test('an unknown command prints the usage and exits 1; help exits 0', async () => {
+  test('an unknown command prints the usage and exits 2; help exits 0', async () => {
     const bad = await xsolana(['bogus']);
-    assert.equal(bad.code, 1);
+    assert.equal(bad.code, 2);
     assert.match(bad.err, /no command “bogus”/);
     assert.match(bad.err, /xsolana check \[file\]/);
     const help = await xsolana(['help']);

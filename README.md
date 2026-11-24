@@ -131,6 +131,9 @@ and `xsolana help <command>` shows one command's arguments, options and examples
 read. `--json` prints the whole answer as JSON, in the words an AI agent gets, and `check --verbose` adds what players
 should know and how each route ends.
 
+Exit codes: `0` success; `1` failure, including `check` refusing the spec, `review` finding something high and
+`approve` not landing; `2` a usage error (an unknown command or flag, a missing or extra argument).
+
 When the setup makes a token, its mint gets a new address. To put the mint at an address you chose, give both
 `approve` commands the key file of that address: `--mint-key <the token's key in the spec>=<key file>`. The file signs
 only the transaction that makes the mint, and it is never printed. Once the mint exists, the file can do nothing more

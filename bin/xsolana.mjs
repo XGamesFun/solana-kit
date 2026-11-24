@@ -22,8 +22,9 @@
 //   xsolana help [command], xsolana <command> --help (or -h)   the commands, or one command's words, flags and all
 //
 // A flag with a value is written either way: --agent claude or --agent=claude; a flag the command doesn't take is
-// refused, and so is a word more than it takes. A command that fails says why on stderr and exits 1: a usage error in
-// one line (XSOLANA_DEBUG=1 prints the whole stack), a tool's refusal with the tool's own answer. `--json` prints a
+// refused, and so is a word more than it takes. A command given wrongly says why in one line on stderr and exits 2
+// (XSOLANA_DEBUG=1 prints the whole stack); one that fails says why and exits 1, a tool's refusal with the tool's own
+// answer. `--json` prints a
 // tool's whole answer on stdout, whatever it is, and the exit code still says whether it failed.
 //
 // Who reads it: a named command (check, review…) is read by the developer, so its text is worded for them
@@ -32,8 +33,13 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-/** A failure the person caused (a bad flag, a missing file): said in one line, without a stack. */
+/** A command given wrongly (a bad flag, a word too many, no such command): said in one line, without a stack. */
 class UsageError extends Error {}
+/**
+ * The exit codes: 0 it went well; 1 it failed or found what it exits on (a refusal, a high finding, an approval that
+ * did not land, a missing file); 2 the command was given wrongly (UsageError), as in xcore and most command lines.
+ */
+const USAGE_EXIT = 2;
 
 /** The flags that take a value: `--name value` or `--name=value`. */
 const VALUED = new Set([
@@ -377,7 +383,7 @@ const USAGE = [
     ['-h, --help', 'show a command’s help'],
   ]),
   '',
-  'A command exits 1 when it fails, when check refuses the spec, and when review finds something high.',
+  'Exit codes: 0 success; 1 failure (including check refusing the spec and review finding something high); 2 usage error.',
   'Examples: xsolana examples shop with loot boxes · xsolana check · xsolana help approve',
 ].join('\n');
 
@@ -719,7 +725,7 @@ async function main(argv) {
       if (flags.has('--yes')) throw new UsageError('--yes goes with --keypair.');
       if (!page) {
         console.error(HOW_TO_SIGN);
-        process.exitCode = 1;
+        process.exitCode = USAGE_EXIT;
         break;
       }
       const port = portOf(values.get('--port'));
@@ -785,7 +791,7 @@ async function main(argv) {
       break;
     default:
       console.error(`xsolana: there is no command “${command}”.\n\n${USAGE}`);
-      process.exitCode = 1;
+      process.exitCode = USAGE_EXIT;
   }
 }
 
@@ -804,5 +810,5 @@ try {
   const line = oneLine(e);
   if (process.env.XSOLANA_DEBUG) console.error(e);
   else console.error(/^xsolana[ :]/.test(line) ? line : `xsolana: ${line}`);
-  process.exitCode = 1;
+  process.exitCode = e instanceof UsageError ? USAGE_EXIT : 1;
 }
