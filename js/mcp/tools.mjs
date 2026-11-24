@@ -462,7 +462,7 @@ export const tools = [
           ideas: r.ideas,
           hows: r.hows,
           limits: r.limits,
-          text: personExamples(r, { say: personSay(ctx), query, verbose: ctx.verbose, rated: ratedWords() }) + footer(),
+          text: personExamples(r, { say: personSay(ctx), query, verbose: ctx.verbose }) + footer(),
         };
       const text = [
         r.examples.length

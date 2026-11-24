@@ -482,7 +482,7 @@ export const personCheck = (verdict, findings, options = {}) =>
  * but is not, what loot can't do with its nearest versions, and (only with --verbose) the rated kinds of economy, whose
  * hand ratings are dated. `found`: search's answer, or { examples } for the whole list.
  */
-function examplesView(found, { query = null, verbose = false, rated = '', ideaCount = 0 } = {}) {
+function examplesView(found, { query = null, verbose = false, ideaCount = 0 } = {}) {
   const ex = found.examples ?? [];
   const exTable = ex.length
     ? table(
@@ -510,15 +510,18 @@ function examplesView(found, { query = null, verbose = false, rated = '', ideaCo
         .map(l => [bullet(`${l.what}: ${l.why}.`), ...l.nearest.map((n, i) => bullet(n, `  ${i + 1}. `))].join('\n'))
         .join('\n'),
     ),
+    // (the kinds of economy without their hand ratings, which were made against an older loot: --json keeps them)
     verbose && ideas.length
       ? section(
-          `Rated kinds of economy (${rated}; a rating is a hint, the parts in xsolana_guide decide)`,
-          ideas.map(i => bullet(`#${i.n} ${i.name} (${i.fit}): ${i.how}`)).join('\n'),
+          'Similar kinds of economy, with what loot covers and what it leaves out for each',
+          ideas.map(i => bullet(`${i.name}: ${i.how}`)).join('\n'),
         )
       : '',
     !verbose && (ideas.length || (!query && ideaCount))
       ? wrap(
-          `${query ? `${ideas.length} rated ${ideas.length === 1 ? 'kind of economy also matches' : 'kinds of economy also match'}` : `${ideaCount} rated kinds of economy can be searched`}: add --verbose to see ${query && ideas.length === 1 ? 'it' : 'them'} (rated by hand against an earlier loot, so some are out of date).`,
+          query
+            ? `${ideas.length} similar ${ideas.length === 1 ? 'kind of economy also matches' : 'kinds of economy also match'}: add --verbose to see how loot builds ${ideas.length === 1 ? 'it' : 'them'}.`
+            : `${ideaCount} more kinds of economy can be searched: add words, as in xsolana examples nft staking.`,
           WIDTH,
         ).join('\n')
       : '',
