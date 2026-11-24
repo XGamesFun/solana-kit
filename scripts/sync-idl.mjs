@@ -2,6 +2,20 @@
 // Copies the IDL `anchor build` wrote in the program's checkout (XSOLANA_PROGRAM_DIR:
 // target/idl/loot.json) into the JS client, as JSON and as an ES module (so a browser page without a bundler can
 // import it). `--check` exits 1 when the committed copy differs from the build.
+//
+// Why two copies of one IDL ship (loot.json, about 459 KB pretty-printed, and loot.js, about 241 KB minified):
+//   loot.json  is the build's file, byte for byte. release.json pins its SHA-256 (`idlSha256`, which keepers pin and
+//              `npm run check` verifies), the package exports it as `@xgamesfun/solana/idl.json`, and other tools read
+//              it from the installed package by that path (xcore reads its `address`).
+//   loot.js    is what every module of the client imports. It is a plain ES module so the client stays browser-safe
+//              with no bundler and no JSON import attributes, and so a game's page can copy the client's files as they
+//              are (xcore copies js/play and every file it imports, following `import … from` only).
+// Deriving one from the other at run time would need JSON import attributes in every browser and copier, or a fetch;
+// minifying loot.json would change the pinned hash. So both stay, and this script writes both from the one build.
+//
+// The IDL's `metadata.repository` comes from the program's own manifest (its Cargo.toml), not from here: it still
+// names github.com/gamesfun/loot, which no longer resolves. Fix it there, at the next program build: editing the copy
+// here would change the hash release.json pins and part the copy from the build.
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

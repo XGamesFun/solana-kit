@@ -40,7 +40,7 @@ server and the skill with Claude Code and Codex (`--remove` takes them out again
 | Path                                    | What                                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `js/chain/`                             | browser-safe Solana primitives, no SDK                                                                 |
-| `js/client/`                            | the client; `idl/` is the program's IDL                                                                |
+| `js/client/`                            | the client; `idl/` is the program's IDL, as JSON and as an ES module (`scripts/sync-idl.mjs` says why) |
 | `js/economy/`                           | the economy spec (version 2, `schema.json`), checker, simulation, setup plan, cost, explainer, guide   |
 | `js/play/`, `js/results/`               | a player's side of a live economy (and a sponsor's checks); results a server vouches for               |
 | `js/approve/`, `js/mcp/`, `js/connect/` | going live (a key file, or the page), the MCP server (stdio and HTTP) and its tools, `xsolana connect` |
