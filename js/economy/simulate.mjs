@@ -1785,6 +1785,22 @@ export function inAll(c) {
 }
 
 /** The simulation in plain words. */
+/** One part of a box's outcome in words, as the simulation names it (`sym`: a token's key to its symbol). */
+export const outcomePartWords = (o, sym) =>
+  o.gives === 'pay'
+    ? `${asWritten(o.amount)} ${sym(o.token)} from ${o.pool}`
+    : o.gives === 'mint'
+      ? `${asWritten(o.amount)} ${sym(o.token)}, minted`
+      : o.gives === 'stash'
+        ? `an NFT of the stash “${o.stash}”, at random`
+        : o.gives === 'nft'
+          ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”`
+          : o.gives === 'roll'
+            ? `a roll of “${o.box}”`
+            : o.gives === 'item'
+              ? `${o.item}${o.worth !== null ? ` (worth ${asWritten(o.worth)})` : ' (no value given)'}`
+              : o.gives;
+
 export function explain(sim, economy) {
   const m = model(economy);
   const sym = key => m.tokens.get(key)?.symbol ?? key;
@@ -1810,20 +1826,7 @@ export function explain(sim, economy) {
     lines.push(
       `Box “${b.name}”: costs ${asWritten(b.price)} ${sym(b.token)} (${all.slice(2)}), gives back ${back}${edge}.`,
     );
-    const part = o =>
-      o.gives === 'pay'
-        ? `${asWritten(o.amount)} ${sym(o.token)} from ${o.pool}`
-        : o.gives === 'mint'
-          ? `${asWritten(o.amount)} ${sym(o.token)}, minted`
-          : o.gives === 'stash'
-            ? `an NFT of the stash “${o.stash}”, at random`
-            : o.gives === 'nft'
-              ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”`
-              : o.gives === 'roll'
-                ? `a roll of “${o.box}”`
-                : o.gives === 'item'
-                  ? `${o.item}${o.worth !== null ? ` (worth ${asWritten(o.worth)})` : ' (no value given)'}`
-                  : o.gives;
+    const part = o => outcomePartWords(o, sym);
     for (const o of b.outcomes)
       lines.push(`  ${percentage(o.chance, 6)}%: ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`);
     if (b.unpriced.length) lines.push(`  Give ${b.unpriced.join(', ')} a "value" to count them in the return.`);

@@ -60,12 +60,12 @@ const TOOL_FLAGS = ['--json'];
 const FLAGS = {
   mcp: ['--http', '--port', '--host'],
   guide: TOOL_FLAGS,
-  examples: ['--save', ...TOOL_FLAGS],
+  examples: ['--save', ...TOOL_FLAGS, '--verbose'],
   check: [...TOOL_FLAGS, '--verbose'],
-  simulate: TOOL_FLAGS,
-  cost: TOOL_FLAGS,
+  simulate: [...TOOL_FLAGS, '--verbose'],
+  cost: [...TOOL_FLAGS, '--verbose'],
   explain: TOOL_FLAGS,
-  review: TOOL_FLAGS,
+  review: [...TOOL_FLAGS, '--verbose'],
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
   client: TOOL_FLAGS,
@@ -82,7 +82,11 @@ const JSON_OPT = [
   '--json',
   'print the whole answer as JSON on stdout, as an AI agent gets it; the exit code still says whether it failed',
 ];
-const VERBOSE_OPT = ['--verbose', 'also print what players should know and how each route ends'];
+const VERBOSE_OPT = [
+  '--verbose',
+  'also print each warning in full with its fix, what players should know and how each route ends',
+];
+const verbose = what => ['--verbose', `also print ${what}`];
 const HELP_OPT = ['-h, --help', 'show this help'];
 
 /** A command that runs one tool on a spec file. */
@@ -136,6 +140,10 @@ const COMMANDS = {
         '--save <file>',
         'with a name: write that example’s spec into <file> (for example xsolana.json), to change and then check; an existing file is never overwritten',
       ],
+      [
+        '--verbose',
+        'also print each example’s prompt, and the rated kinds of economy that match (hand ratings, dated)',
+      ],
       JSON_OPT,
       HELP_OPT,
     ],
@@ -151,14 +159,16 @@ const COMMANDS = {
   simulate: onFile(
     'simulate',
     'Simulate where the money goes, day by day',
-    'Computes expected values from the spec and its scenario: what each box, ticket and craft returns against its price, each pool’s money in and out, and what players, the treasury and the platform get each day.',
-    ['xsolana simulate'],
+    'Computes expected values from the spec and its scenario. Prints a summary of each day, a table of what a player pays (on devnet, with mainnet’s figures), the odds, and each lottery, pool, farm and stash.',
+    ['xsolana simulate', 'xsolana simulate --verbose'],
+    [verbose('every part in words: what it gives, how its stock runs out, and each pool’s fate')],
   ),
   cost: onFile(
     'cost',
     'Price going live and each player or owner action',
-    'Prices going live (rent, fees, seeds and the number of transactions) and what each action costs whoever signs it. Fees are those of the economy’s own network; on devnet it also gives mainnet’s player fee. Nothing is sent.',
-    ['xsolana cost'],
+    'Prices going live (rent, fees, seeds and the number of transactions) and what each action costs whoever signs it: for a player, what goes on top of the price, on devnet and on mainnet. Nothing is sent.',
+    ['xsolana cost', 'xsolana cost --verbose'],
+    [verbose('each account’s rent, what a wallet must hold when it signs, and what comes back')],
   ),
   explain: onFile(
     'explain',
@@ -169,8 +179,13 @@ const COMMANDS = {
   review: onFile(
     'review',
     'Review the spec as a cheater would, before going live',
-    'For every route that pays or gives value: who can trigger it, what the program enforces, what it trusts off chain, and the most one cheater gets. Prints the report on stdout and exits 1 when a finding is high.',
-    ['xsolana review'],
+    'For every route that pays or gives value: who can trigger it and the most one cheater gets, then the findings by severity. Prints the report on stdout and exits 1 when a finding is high.',
+    ['xsolana review', 'xsolana review --verbose'],
+    [
+      verbose(
+        'what the program enforces and trusts on each route, every finding’s fix, the trade-offs, and a checklist',
+      ),
+    ],
   ),
   publish: onFile(
     'publish',
@@ -379,7 +394,7 @@ const USAGE = [
       '--json',
       'print the whole answer as JSON, as an AI agent gets it (guide, examples, check … status, token, client, tool)',
     ],
-    ['--verbose', 'check only: also print what players should know and how each route ends'],
+    ['--verbose', 'check, simulate, cost, review, examples: also print the details left out by default'],
     ['-h, --help', 'show a command’s help'],
   ]),
   '',

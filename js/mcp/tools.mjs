@@ -16,7 +16,16 @@ import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
 import { accountKind, decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
-import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
+import {
+  checkOnCluster,
+  cluster,
+  CLUSTERS,
+  clusterRpcUrl,
+  lootProgram,
+  networkOf,
+  pda,
+  realMoney,
+} from '../client/pda.js';
 import { check, describe, withoutRepeats } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
@@ -30,6 +39,9 @@ import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../e
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
+import { personCheck, personCost, personExamples, personReview, personSimulate } from './views.mjs';
+import { withCluster } from './with-cluster.mjs';
+import { personWords, terminalWords } from './person.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
@@ -106,6 +118,13 @@ export const PROGRAM_INFO = Object.freeze({
   idl: '@xgamesfun/solana/idl.json',
   package: `@xgamesfun/solana@${PACKAGE_VERSION}`,
 });
+/** Whether an economy is on devnet, and the same economy on mainnet: its fees, for what a player pays there. */
+const onDevnet = economy => networkOf(economyOf(economy)) !== 'mainnet';
+const asMainnet = economy => ({ ...economyOf(economy), network: 'mainnet' });
+/** `fn` of the same economy on mainnet, run on mainnet's cluster (its addresses, its fees). */
+const onMainnet = (economy, fn) => withCluster('mainnet', () => fn(asMainnet(economy)));
+/** How a terminal says the tools' words to the developer (`ctx.terminal`: the CLI's commands), for the views. */
+const personSay = ctx => text => personWords(terminalWords(text, ctx.terminal ?? {}));
 const footer = () => `\n\nloot ${VERSION} · program ${lootProgram()} · ${cluster()}`;
 const nowOf = ctx => ctx?.now ?? Math.floor(Date.now() / 1000);
 const cwdOf = ctx => ctx?.cwd ?? process.cwd();
@@ -415,6 +434,16 @@ export const tools = [
           prompt: spec.prompt,
           parts: partsUsed(spec),
         }));
+        if (ctx?.reader === 'person')
+          return {
+            examples: all,
+            ideas: { count: ideas().length },
+            text:
+              personExamples(
+                { examples: all },
+                { say: personSay(ctx), verbose: ctx.verbose, ideaCount: ideas().length },
+              ) + footer(),
+          };
         return {
           examples: all,
           ideas: { count: ideas().length },
@@ -427,6 +456,14 @@ export const tools = [
         };
       }
       const r = search(query, { limit, fit });
+      if (ctx?.reader === 'person')
+        return {
+          examples: r.examples,
+          ideas: r.ideas,
+          hows: r.hows,
+          limits: r.limits,
+          text: personExamples(r, { say: personSay(ctx), query, verbose: ctx.verbose, rated: ratedWords() }) + footer(),
+        };
       const text = [
         r.examples.length
           ? `Examples closest to “${query}” (xsolana_examples {"name": …} gives the whole spec):`
@@ -525,36 +562,20 @@ export const tools = [
         text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
       if (ctx?.reader !== 'person') return answer;
-      // In a terminal, for the developer: the findings and the questions, then (--verbose) what players should hear
-      // and how each route ends. The same facts, addressed to the reader, with nothing that steers an agent.
-      const details = [
-        legal.length
-          ? `Legal notes (read them again before mainnet):\n${legal.map(f => `- ${f.says}`).join('\n')}`
-          : '',
-        ctx.verbose && told.length
-          ? `What players should know (the program does this; say it on your page):\n${told.map(t => `- ${t.line}`).join('\n')}`
-          : '',
-        ctx.verbose && ends.length
-          ? `When a route goes wrong or a player changes their mind:\n${ends.map(l => `- ${l}`).join('\n')}`
-          : '',
-        ctx.verbose && draws.length
-          ? `To compare every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what you want, run xsolana_design with your wants as requirements (add --help to see the kinds it takes).`
-          : '',
-      ].filter(Boolean);
-      const more =
-        !ctx.verbose && told.length + ends.length + draws.length
-          ? ' Add --verbose for what players should know and how each route ends.'
-          : '';
+      // In a terminal, for the developer: the verdict first, a line a warning, the questions, then (--verbose) each
+      // warning whole, what players should hear and how each route ends. The same facts, with nothing that steers an
+      // agent (js/mcp/views.mjs).
       answer.text =
-        [
-          verdict.refusals.length || verdict.warnings.length
-            ? describe(verdict, { reader: 'person' })
-            : 'No problems found.',
-          ...details,
-          verdict.ok
-            ? `Ready: no refusals, ${plural(verdict.warnings.length, 'warning')}. Next: xsolana_simulate and xsolana_explain; before going live, xsolana_review.${more}`
-            : `${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`,
-        ].join('\n\n') + footer();
+        personCheck(verdict, answer, {
+          say: personSay(ctx),
+          verbose: ctx.verbose,
+          legal,
+          told,
+          ends,
+          designHint: draws.length
+            ? `To compare every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what you want, run xsolana_design with your wants as requirements (add --help to see the kinds it takes).`
+            : '',
+        }) + footer();
       return answer;
     },
   },
@@ -591,13 +612,24 @@ export const tools = [
         farms: sim.farms.map(f => ({ key: f.key, rewardsPerDay: f.rewardsPerDay, yearlyPercent: f.yearlyPercent })),
         platformSolPerDay: sim.perDay.platform.totalSol,
       };
-      return {
+      const answer = {
         ok: true,
         from,
         summary,
         ...(input.json ? { simulation: sim } : {}),
         text: explain(sim, economy) + footer(),
       };
+      if (ctx?.reader !== 'person') return answer;
+      // (for the developer: a summary and tables, the words with --verbose; on devnet, mainnet's fees beside)
+      const mainnet = onDevnet(economy) ? onMainnet(economy, e => simulate(e, { now: nowOf(ctx) })) : null;
+      answer.text =
+        personSimulate(sim, economy, {
+          say: personSay(ctx),
+          mainnet,
+          verbose: ctx.verbose,
+          words: explain(sim, economy),
+        }) + footer();
+      return answer;
     },
   },
   {
@@ -621,7 +653,7 @@ export const tools = [
         : '';
       // (a name's price is a transaction's, if it is sent at all: only approving reads the token's record)
       const names = change.scope.renames?.length ? `\n${renamesNote(change.scope.renames)}` : '';
-      return {
+      const answer = {
         ok: true,
         from,
         setup: c.setup,
@@ -629,6 +661,24 @@ export const tools = [
         fees: c.fees,
         text: head + explainCost(c) + names + footer(),
       };
+      if (ctx?.reader !== 'person') return answer;
+      // (for the developer: what going live costs, then what each action costs a player, on mainnet too)
+      const sim = simulate(economy, { now: nowOf(ctx) });
+      const onDev = onDevnet(economy);
+      const simMainnet = onDev ? onMainnet(economy, e => simulate(e, { now: nowOf(ctx) })) : null;
+      const mainnet = onDev ? onMainnet(economy, e => cost(e, { now: nowOf(ctx), ...change.scope })) : null;
+      answer.text =
+        head +
+        personCost(c, economy, {
+          say: personSay(ctx),
+          sim,
+          simMainnet,
+          mainnet: mainnet?.ok ? mainnet : null,
+          verbose: ctx.verbose,
+          words: explainCost(c) + names,
+        }) +
+        footer();
+      return answer;
     },
   },
   {
@@ -692,7 +742,14 @@ export const tools = [
         from,
         routes: r.routes,
         findings: r.findings,
-        text: `${describeReview(r, economy.name)}${person ? personTail : tail}\n\n${person ? personReady : ready}${footer()}`,
+        text: person
+          ? personReview(r, economy.name, {
+              say: personSay(ctx),
+              verbose: ctx.verbose,
+              words: `${describeReview(r, economy.name)}${personTail}`,
+              checklist: personReady,
+            }) + footer()
+          : `${describeReview(r, economy.name)}${tail}\n\n${ready}${footer()}`,
       };
     },
   },

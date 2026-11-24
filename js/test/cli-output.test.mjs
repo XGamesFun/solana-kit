@@ -58,7 +58,7 @@ describe('xsolana (what the command line says)', () => {
 
   test('a flag the command doesn’t take is refused in one line, never read as words', async () => {
     for (const [args, said] of [
-      [['examples', '--limit', '2', 'coin'], /“examples” takes no --limit flag \(only --save, --json\)/],
+      [['examples', '--limit', '2', 'coin'], /“examples” takes no --limit flag \(only --save, --json, --verbose\)/],
       [['version', '--json'], /“version” takes no --json flag \(it takes none\)/],
       [['approve', '--dry-run'], /“approve” takes no --dry-run flag/],
     ]) {

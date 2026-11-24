@@ -10,7 +10,7 @@ import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { fieldsAt, schemaAt, validate } from '../economy/validate.mjs';
 import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
 import { load, PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
-import { personWords } from './person.mjs';
+import { personWords, terminalWords } from './person.mjs';
 import { withCluster } from './with-cluster.mjs';
 
 /** Where loot runs, for every agent that connects. */
@@ -91,26 +91,7 @@ function inputProblems(schema, input) {
   });
 }
 
-/**
- * A tool's words as a terminal reads them: each tool they name becomes the command that runs it there, since nobody
- * at a terminal calls a tool with a JSON object. `commands`: each command that runs the tool xsolana_<command>, with
- * the tool's arguments its words stand for ({ guide: ['part'], check: ['file'], … }). So xsolana_check is
- * "xsolana check" and xsolana_guide {"part": "boxes"} is "xsolana guide boxes"; a tool with no command of its own is
- * "xsolana tool <its name>", with any arguments as the JSON they are.
- */
-export function terminalWords(text, commands) {
-  return (
-    String(text)
-      // (a hint written for a terminal says what the words around it now say)
-      .replace(/ \(terminal: [^)]*\)/g, '')
-      .replace(/\bxsolana_([a-z]+)\b(?: (\{"([a-z]+)": ?("[^"]*"|…)\}))?/g, (all, tool, json, arg, value) => {
-        const words = Object.hasOwn(commands, tool) ? commands[tool] : null;
-        if (!json) return words ? `xsolana ${tool}` : `xsolana tool xsolana_${tool}`;
-        if (!words?.includes(arg)) return `xsolana tool xsolana_${tool} '${json}'`;
-        return `xsolana ${tool} ${value === '…' ? `<${arg}>` : value.slice(1, -1)}`;
-      })
-  );
-}
+export { terminalWords };
 
 /**
  * Runs one tool by name: the same checks and answer on the server and in the terminal. `ctx.terminal` (the command

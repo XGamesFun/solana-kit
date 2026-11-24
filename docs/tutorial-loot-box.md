@@ -77,21 +77,24 @@ npx -y @xgamesfun/solana@0.29.11 simulate xsolana.json
 ```
 
 ```
-Box “Mystery crate”: costs 0.1 SOL (about 0.10405 SOL in all …), gives back 0.062 SOL on average (62%);
-the game keeps 38% of each price.
-  1%: sword (worth 2)
-  9%: shield (worth 0.3)
-  30%: helmet (worth 0.05)
-  60%: nothing
-Each day players pay 10 SOL and get back 6.2 SOL on average (items at the value you gave them), plus 0.2 SOL in
-player fees, 0.08 SOL to MagicBlock’s oracle and 0.001 SOL in network fees.
+Simulation over 30 days. Counts a day: none named (anything not named: 100).
+Each day, players pay 10 SOL and get back 6.2 SOL on average.
+The treasury gets 10 SOL. Platform fees: 0.2 SOL. Oracle fees: 0.08 SOL.
+
+What a player pays
+  Purchase             Price    On top, devnet  On top, mainnet  Mainnet extra  Returns
+  Box “Mystery crate”  0.1 SOL     0.00405 SOL      0.00255 SOL           2.6%      62%
+
+Odds
+- Mystery crate: 1% sword (worth 2) · 9% shield (worth 0.3) · 30% helmet (worth 0.05) · 60% nothing
 ```
 
-The player fees here are devnet's: 0.002 SOL an opening. On mainnet the player fee is 0.0005 SOL, so the same 100
-openings a day pay 0.05 SOL in player fees.
-
-“In all” is what leaves a player's wallet for good. It is the price, the player fee, the oracle's fee, the network fee
-and the rent of the collectible they win.
+The table shows one opening. "On top" is what it costs beyond the 0.1 SOL price: the player fee, the oracle's fee,
+the network fee and the rent of the collectible a player wins, which never comes back (counted on average: 40% of
+openings give one). On devnet that is 0.00405 SOL;
+on mainnet, where the player fee is 0.0005 SOL instead of 0.002, it is 0.00255 SOL, 2.6% of the price. "Returns" is
+what a player gets back on average (62%). The platform fees of 0.2 SOL a day are devnet's: at mainnet's fee the same
+100 openings a day pay 0.05 SOL. `--verbose` adds the simulation in words.
 
 ## 5. Price it
 
