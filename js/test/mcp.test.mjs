@@ -110,6 +110,9 @@ describe('the xsolana MCP server', () => {
     const files = [
       'README.md',
       'docs/harnesses.md',
+      'docs/cheatsheet.md',
+      'docs/before-you-use.md',
+      'docs/tutorial-loot-box.md',
       'skills/xsolana-economy/SKILL.md',
       'js/mcp/tools.mjs',
       'js/mcp/server.mjs',

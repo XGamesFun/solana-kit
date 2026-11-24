@@ -72,7 +72,8 @@ safer choice:** the wallet that goes live owns the project, and a browser wallet
 (a Ledger, for example) instead of in a plain file. These tools have not been tested with a hardware wallet. See
 [the owner's key](docs/before-you-use.md#the-owners-key).
 
-New here? The [loot box tutorial](docs/tutorial-loot-box.md) walks through all three steps with real output.
+New here? [A spec in 10 fields](docs/cheatsheet.md) is the one-page start, and the
+[loot box tutorial](docs/tutorial-loot-box.md) walks through all three steps with real output.
 
 ## Get started
 
@@ -179,6 +180,20 @@ module covers buying, opening boxes, staking, crafting, tickets, bids and claims
 | `@xgamesfun/solana/release.json` | the exact program build this release is for                                           |
 
 Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction into Kit's shape.
+
+**Start with these.** The client exports 343 names (every builder, address, account layout and receipt). Most apps
+need only a few:
+
+| Need                           | Use                                                                                             |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| A player's page                | `solanaApp` and `walletStandardSigner` from `@xgamesfun/solana/play`                            |
+| Your server pays players' fees | `sponsorHandler` from `@xgamesfun/solana/sponsor`                                               |
+| Your server vouches for wins   | `signVoucher` from `@xgamesfun/solana/results`                                                  |
+| An owner's own step, scripted  | `readKeyFile` from `@xgamesfun/solana/keyfile`, and one builder from `@xgamesfun/solana/client` |
+| Reading what happened          | `receipts(tx)`, `decode(name, data)`, `pda` and `lootError` from `@xgamesfun/solana/client`     |
+| Checking a spec in code        | `check`, `simulate`, `cost`, `review` and `explainEconomy` from `@xgamesfun/solana`             |
+
+Everything else is for when one of these doesn't cover a case; the types (`types/`) document each export.
 
 ## Fees and costs
 
