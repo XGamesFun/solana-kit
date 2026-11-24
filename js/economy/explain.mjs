@@ -33,7 +33,7 @@ import {
 } from './model.mjs';
 import { farmEnds, playSteps } from './plan.mjs';
 import { TRUST_WORDS } from './trust.mjs';
-import { inAll, poolFate, priceBasis, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
+import { backWords, inAll, poolFate, priceBasis, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 import { realMoney } from '../client/cluster.js';
 
 /**
@@ -249,7 +249,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
           : '';
     const back =
       b.returnPercent !== null
-        ? `gives back ${numeral(b.expectedBack)} ${sym(b.token)} on average (${percentage(b.returnPercent)}% of ${b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : 'its price'}${edge})`
+        ? `gives back ${backWords(b, sym(b.token), b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : 'its price')}${edge ? `${edge}${b.itemValueBack ? ', by those values' : ''}` : ''}`
         : 'gives back what its items are worth to the player';
     const part = o =>
       o.gives === 'pay'

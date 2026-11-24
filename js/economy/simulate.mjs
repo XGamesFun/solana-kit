@@ -739,6 +739,8 @@ export function simulate(economy, { now = 0 } = {}) {
       opensPerDay: opens,
       outcomes,
       expectedBack: round(value),
+      // (of it, items at the "value" the spec gives them: a value, not money paid out)
+      ...(itemValue[token] ? { itemValueBack: round(itemValue[token]) } : {}),
       returnPercent: price && (value > 0 || !Object.keys(other).length) ? round((value / price) * 100, 4) : null,
       houseEdgePercent: known && price ? round((1 - value / price) * 100, 4) : null,
       alsoPays: other,
@@ -1797,6 +1799,21 @@ export function inAll(c) {
 }
 
 /** The simulation in plain words. */
+/**
+ * What a box gives back on average, in words, with items said as the value the spec gives them and never as money
+ * paid out: "0.05 SOL on average (50% of its price), all of it items valued by you" or "…: 0.02 SOL paid out and
+ * items worth 0.03 SOL by the value you gave them". `basis`: what the percent is of.
+ */
+export function backWords(b, symbol, basis = null) {
+  const items = b.itemValueBack ?? 0;
+  const paid = round(b.expectedBack - items);
+  const of = `${numeral(b.expectedBack)} ${symbol} on average (${percentage(b.returnPercent)}%${basis ? ` of ${basis}` : ''})`;
+  if (!items) return of;
+  return paid > 1e-9
+    ? `${of}: ${numeral(paid)} ${symbol} paid out, and items worth ${numeral(items)} ${symbol} by the "value" you gave them (a value, not money paid out)`
+    : `${of}, all of it items worth that by the "value" you gave them (a value, not money paid out)`;
+}
+
 /** One part of a box's outcome in words, as the simulation names it (`sym`: a token's key to its symbol). */
 export const outcomePartWords = (o, sym) =>
   o.gives === 'pay'
@@ -1827,12 +1844,12 @@ export function explain(sim, economy) {
   for (const b of sim.boxes) {
     const edge =
       b.houseEdgePercent !== null
-        ? `; the game keeps ${percentage(b.houseEdgePercent)}% of ${b.averagePrice !== undefined ? 'what an open pays, on average' : 'each price'}`
+        ? `; the game keeps ${percentage(b.houseEdgePercent)}% of ${b.averagePrice !== undefined ? 'what an open pays, on average' : 'each price'}${b.itemValueBack ? ', by those values' : ''}`
         : '';
     const also = Object.entries(b.alsoPays).map(([t, v]) => `${numeral(v)} ${sym(t)}`);
     const back =
       b.returnPercent !== null
-        ? `${numeral(b.expectedBack)} ${sym(b.token)} on average (${percentage(b.returnPercent)}%${b.averagePrice !== undefined ? ` of ${priceBasis(b, sym(b.token))}` : ''})${also.length ? ` and ${also.join(', ')}` : ''}`
+        ? `${backWords(b, sym(b.token), b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : null)}${also.length ? ` and ${also.join(', ')}` : ''}`
         : `${also.join(', ') || 'nothing'} on average`;
     const all = `; ${inAll(b.realCost)}`;
     lines.push(
@@ -1916,7 +1933,7 @@ export function explain(sim, economy) {
       .map(([k, v]) => `${numeral(v)} ${sym(k)}`)
       .join(', ') || 'nothing';
   lines.push(
-    `Each day players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average (items at the value you gave them), plus ${numeral(d.players.playerFeesSol)} SOL in player fees, ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle and ${numeral(d.players.networkFeesSol)} SOL in network fees.`,
+    `Each day players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average${Object.keys(d.players.itemValue ?? {}).length ? ` (of it, items worth ${list(d.players.itemValue)} at the "value" you gave them: a value, not money paid out)` : ''}, plus ${numeral(d.players.playerFeesSol)} SOL in player fees, ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle and ${numeral(d.players.networkFeesSol)} SOL in network fees.`,
   );
   if (d.creator.oracleFeesSol) {
     // Every roll the simulation counts as the project's: a draw, a roll a lottery's place or a grant gives, the authority's.

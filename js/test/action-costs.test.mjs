@@ -62,3 +62,24 @@ test('what players get back separates money paid out from items at the value the
     /items worth 5 SOL at the "value" you gave them: a value, not money paid out/,
   );
 });
+
+test('no text says items given are money a player gets back: every route’s line says value, not money paid out', async () => {
+  for (const { name, spec } of examples()) {
+    const sim = simulate(spec, { now: NOW });
+    for (const b of sim.boxes.filter(x => x.itemValueBack)) {
+      const said = [
+        flat(explainEconomy(spec, { now: NOW }).text),
+        flat((await runTool('xsolana_simulate', { example: name }, { now: NOW })).text),
+        flat((await runTool('xsolana_explain', { example: name }, { ...PERSON, verbose: true })).text),
+      ];
+      for (const text of said) {
+        const at = text.indexOf(`“${b.name}”`);
+        assert.ok(at >= 0, `${name}: ${b.name}`);
+        // each "gives back <n> <token> on average" of a box that gives items says, in the same sentence, they are a value
+        for (const m of text.matchAll(/gives back [\d.,]+ \S+ on average[^.]*?(?=\. |$)/g))
+          if (m[0].includes('%') && text.slice(Math.max(0, m.index - 300), m.index).includes(`“${b.name}”`))
+            assert.match(m[0], /"value" you gave them \(a value, not money paid out\)/, `${name}: ${m[0]}`);
+      }
+    }
+  }
+});
