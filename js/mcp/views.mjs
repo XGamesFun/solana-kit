@@ -188,7 +188,7 @@ function purchaseTable(rows, onDevnet) {
 }
 
 const ON_TOP_NOTE =
-  '"On top" is what one action costs beyond its price: the player fee, the oracle, the network fee, and rent that never comes back (a minted NFT’s). "Extra" is that as a share of a price in SOL. "Returns" is what a player gets back on average, as a share of the price.';
+  '"On top" is what one action costs beyond its price, on average across its outcomes: the player fee, the oracle, the network fee, and rent that never comes back (a minted NFT’s, counted by how often one is minted); explain gives the same figure. "Extra" is that as a share of a price in SOL. "Returns" is what a player gets back on average, as a share of the price.';
 
 /** `xsolana simulate` for the developer. `mainnet`: the simulation at mainnet's fees, for an economy on devnet. */
 function simulateView(sim, economy, { mainnet = null, verbose = false, words = '' } = {}) {
