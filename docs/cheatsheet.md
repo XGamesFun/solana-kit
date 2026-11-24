@@ -1,7 +1,43 @@
 # A spec in 10 fields
 
-An economy is one JSON file, `xsolana.json`. Most economies start from these ten top-level fields. Every part has a
-`key` that other parts name (`"pool:pond"`, `"item": "golden-fish"`).
+An economy is one JSON file, `xsolana.json`. Every part has a `key` that other parts name (`"pool:pond"`,
+`"item": "golden-fish"`).
+
+## The smallest spec
+
+The `hello-shop` example is a potion for sale and a mystery box with a 10% chance at a sword, on devnet:
+
+```json
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Hello Shop",
+  "currency": "sol",
+  "tokens": [{ "key": "sol", "source": "sol" }],
+  "items": [
+    { "key": "potion", "name": "Potion", "price": 0.1 },
+    { "key": "sword", "name": "Rare Sword", "value": 0.5 }
+  ],
+  "boxes": [
+    {
+      "key": "mystery",
+      "name": "Mystery box",
+      "price": 0.1,
+      "outcomes": [
+        { "gives": "item", "item": "sword", "chance": 10 },
+        { "gives": "nothing", "chance": 90 }
+      ]
+    }
+  ]
+}
+```
+
+`npx -y @xgamesfun/solana@0.29.11 examples hello-shop --save xsolana.json` writes it into a new file. It checks with no
+refusals and one warning: paid random items that can be resold are treated as gambling in some places.
+
+## Ten fields
+
+Most economies grow from these ten top-level fields:
 
 ```json
 {

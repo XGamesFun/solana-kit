@@ -317,9 +317,12 @@ export function search(query, { limit = 6, fit } = NO_OPTIONS) {
   // prompt is not a match)
   const exampleScores = ex.map(e => ({ e, s: exampleScore(e, query) })).filter(x => x.s >= 1.5);
   const bestExample = Math.max(0, ...exampleScores.map(x => x.s));
+  // (close scores go to the simpler example: each part or feature it uses costs it a little, so a beginner's request
+  // finds the plain shop before the one with a price curve and a transfer fee)
+  const simpler = x => x.s - 0.05 * x.e.parts.length;
   const exampleHits = exampleScores
     .filter(x => x.s * 2 >= bestExample)
-    .sort((a, b) => b.s - a.s)
+    .sort((a, b) => simpler(b) - simpler(a))
     .slice(0, limit)
     .map(x => x.e);
   const ideaScores = IDEAS.map((i, at) => ({ i, s: ideaScore(IDEA_WORDS[at], query) })).filter(

@@ -108,8 +108,8 @@ zip for desktop apps and the server over HTTP.
 # find a worked example close to your idea
 npx -y @xgamesfun/solana@0.29.11 examples shop with loot boxes
 
-# start your xsolana.json from one of them, by its name, then change it to your own economy
-npx -y @xgamesfun/solana@0.29.11 examples blind-forge --save xsolana.json
+# start your xsolana.json from the smallest one (a potion and a mystery box), then change it to your own economy
+npx -y @xgamesfun/solana@0.29.11 examples hello-shop --save xsolana.json
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
 npx -y @xgamesfun/solana@0.29.11 token <its mint address>

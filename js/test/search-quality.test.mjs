@@ -8,7 +8,10 @@ const names = r => r.examples.map(e => e.name);
 const ideas = r => r.ideas.map(i => i.name);
 
 test('a request finds the examples that fit it, the best first', () => {
-  assert.deepEqual(names(search('shop with loot boxes')).slice(0, 2), ['trade-in-shop', 'blind-forge']);
+  assert.deepEqual(names(search('shop with loot boxes')).slice(0, 3), ['hello-shop', 'trade-in-shop', 'blind-forge']);
+  // (a beginner's words find the plain shop first)
+  for (const q of ['simple shop', 'loot box', 'mystery box', 'sell a potion'])
+    assert.equal(names(search(q))[0], 'hello-shop', q);
   assert.equal(names(search('coin flip'))[0], 'coin-flip-arena');
   assert.equal(names(search('auction for my art'))[0], 'artwork-auction');
   assert.equal(names(search('team token vesting'))[0], 'team-vesting');

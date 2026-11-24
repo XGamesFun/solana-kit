@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "network": "devnet",
+  "name": "Hello Shop",
+  "prompt": "A simple shop: a potion for 0.1 SOL, and a mystery box for 0.1 SOL with a 10% chance at a rare sword.",
+  "currency": "sol",
+  "tokens": [{ "key": "sol", "source": "sol" }],
+  "items": [
+    { "key": "potion", "name": "Potion", "price": 0.1 },
+    { "key": "sword", "name": "Rare Sword", "value": 0.5 }
+  ],
+  "boxes": [
+    {
+      "key": "mystery",
+      "name": "Mystery box",
+      "price": 0.1,
+      "outcomes": [
+        { "gives": "item", "item": "sword", "chance": 10 },
+        { "gives": "nothing", "chance": 90 }
+      ]
+    }
+  ]
+}
