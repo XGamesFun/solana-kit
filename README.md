@@ -136,6 +136,9 @@ and `xsolana help <command>` shows one command's arguments, options and examples
 read: `check`, `simulate`, `cost`, `explain`, `review` and `examples` start with a short summary and tables, and `--verbose` adds
 the details in words. `--json` prints the whole answer as JSON, in the words an AI agent gets.
 
+The spec file must be in the folder you run a command in, or in a folder below it: the tools (and an agent that calls
+them) read and write nothing elsewhere on your machine. To check a spec in another folder, run the command there.
+
 Exit codes: `0` success; `1` failure, including `check` refusing the spec, `review` finding something high and
 `approve` not landing; `2` a usage error (an unknown command or flag, a missing or extra argument).
 

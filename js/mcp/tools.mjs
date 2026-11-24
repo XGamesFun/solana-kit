@@ -171,7 +171,9 @@ function projectFile(rel, ctx) {
   };
   if (file === root) throw new Error(`${rel} is the project folder itself (${root}): name a spec file in it.`);
   if (!inside(file) || !inside(realPath(file)))
-    throw new Error(`${rel} is outside the project folder (${root}): a spec file must be inside it.`);
+    throw new Error(
+      `${rel} is outside the project folder (${root}): a spec file must be inside it, or in a folder below it, so that the tools (and an agent that calls them) read and write nothing elsewhere on this machine. Run the command in the spec's own folder (cd ${path.dirname(file)}), or copy the spec here.`,
+    );
   if (path.extname(file).toLowerCase() !== '.json') throw new Error(`${rel} is not a .json file: a spec file is JSON.`);
   return file;
 }
@@ -998,7 +1000,7 @@ export const tools = [
       ];
       // What to run, as the developer reads it in a terminal: the same steps and facts, addressed to them.
       const personRun = () => [
-        `${live ? 'To publish it' : 'To put it live'}, run these in the project folder. Nothing is sent until step 3:`,
+        `${live ? 'To publish it' : 'To put it live'}, run these commands in the project folder. Nothing is sent until command 3:`,
         ...(live
           ? [
               `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. A new key can change nothing, so never make one for a live project, and never remove the file’s live section because a key was refused. The owner’s address needs about ${c.setup.totalSol} SOL${realMoney() ? ' (this economy is on mainnet, so it is real SOL)' : ' of devnet SOL'}.`,
@@ -1016,8 +1018,9 @@ export const tools = [
       ];
       const text = [
         ...flagsToTell(economy, nowOf(ctx), ctx?.reader === 'person'),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}:`,
-        ...steps.map((s, i) => `${i + 1}. ${s}`),
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}. Together they make ${plural(steps.length, 'step')}:`,
+        // (the steps as a list of their own: the numbers below are the commands that send them)
+        ...steps.map(s => `- ${s}`),
         '',
         ...(ctx?.reader === 'person' ? personRun() : agentRun()),
         ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
