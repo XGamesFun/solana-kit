@@ -88,7 +88,7 @@ describe('the hosted xsolana MCP server', () => {
       REMOTE_INSTRUCTIONS,
       /A change to an economy that is already live is signed by the key that owns it: never make a new key for it/,
     );
-    assert.match(REMOTE_INSTRUCTIONS, /the project’s owner for good/);
+    assert.match(REMOTE_INSTRUCTIONS, /the project’s owner unless it hands the project on, which no tool here does/);
     assert.match(
       REMOTE_INSTRUCTIONS,
       /--browser in place of --keypair\), which the person runs themselves, only if they ask for one or a browser wallet owns the project/,

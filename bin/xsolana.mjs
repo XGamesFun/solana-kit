@@ -185,7 +185,7 @@ const COMMANDS = {
     words: [1, 'one path'],
     tooMany: 'xsolana keygen <file> makes one key file: give one path (in quotes when it has a space).',
     about:
-      'Makes a new key file, readable by you alone, and prints its address. The key owns the project for good: back the file up yourself, keep it outside any repository, and never paste it anywhere. An existing file is never overwritten.',
+      'Makes a new key file, readable by you alone, and prints its address. The key owns the project it sets up until it hands the project to another key: back the file up yourself, keep it outside any repository, and never paste it anywhere. An existing file is never overwritten. For real money, a browser wallet that keeps its key on a hardware device is safer (approve --browser).',
     args: [['file', 'where the key file goes, outside any repository (for example ~/.config/xsolana/my-game.json)']],
     options: [HELP_OPT],
     examples: ['xsolana keygen ~/.config/xsolana/my-game.json'],
@@ -684,7 +684,7 @@ async function main(argv) {
         [
           `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
-          'Whatever is set up with it, it owns, for good: anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
+          'Whatever is set up with it, it owns, until it hands the project to another key (the program can; these tools have no command for it yet): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
           `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
         ].join('\n'),
       );

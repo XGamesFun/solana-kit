@@ -123,7 +123,7 @@ npx -y @xgamesfun/solana@0.29.11 approve xsolana.json --keypair ~/.config/xsolan
 ```
 
 `keygen` makes a key file for the project and prints its address, never the key. Send that address the devnet SOL
-that `cost` named. The key file is the project's owner, for good. Keep it where it is, back it up yourself, and never
+that `cost` named. The key file is the project's owner until it hands the project to another key. Keep it where it is, back it up yourself, and never
 paste it anywhere.
 
 `approve` then lists every transaction with what it pays and trusts, and ends with a code. It sends nothing. Run the

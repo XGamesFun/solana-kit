@@ -60,13 +60,17 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
   assets is never connected or asked to sign.
 - It signs each transaction exactly as it was prepared and shown, and nothing opens in your browser.
 - The cost: the key is a plain file, so anything on your machine that can read it can sign as the project.
-- It owns the project for good (these tools can't hand a project to another owner). Keep it outside any repository
+- It owns the project until it hands the project to another key. The program can do that, but these tools have no
+  command for it yet ([the owner's key](docs/before-you-use.md#the-owners-key) shows the script). Keep it outside any repository
   (the tools refuse a key file inside one, unless git ignores it there), never paste it anywhere, and back it up
   yourself: nothing restores a lost key.
 - Unless your spec names a `treasury`, what the economy earns lands at the key's address. Name a wallet you hold
   (`"treasury": "wallet:<address>"`) before going live.
 
-To sign with a browser wallet instead, `approve --browser` serves a local page for it.
+To sign with a browser wallet instead, `approve --browser` serves a local page for it. **For real money, that is the
+safer choice:** the wallet that goes live owns the project, and a browser wallet can keep its key on a hardware device
+(a Ledger, for example) instead of in a plain file. These tools have not been tested with a hardware wallet. See
+[the owner's key](docs/before-you-use.md#the-owners-key).
 
 New here? The [loot box tutorial](docs/tutorial-loot-box.md) walks through all three steps with real output.
 

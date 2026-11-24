@@ -5,12 +5,12 @@ version.
 
 - **Not independently audited, and mainnet is real money.** An economy is on devnet, where nothing has value, unless
   its file says `"network": "mainnet"`. Try it on devnet first.
-- **A key file on your computer owns the project, for good.** `xsolana keygen` creates the key file.
-  `xsolana approve --keypair` signs the go-live transactions with it, after it shows everything it will send. Whoever
-  can read that file controls the project, and the file signs every later change. These tools can't hand a project to
-  another owner. Keep the file where it is, outside any repository. Never paste it anywhere. Back it up yourself,
-  because nothing restores a lost key file. Unless your spec names a `treasury`, what the economy earns for you is
-  paid to that key's address. To sign with a browser wallet instead, go live with `xsolana approve --browser`.
+- **The key that goes live owns the project.** By default that is a key file on your computer: `xsolana keygen`
+  creates it, and `xsolana approve --keypair` signs the go-live transactions with it, after it shows everything it
+  will send. Whoever can read that file controls the project, and the file signs every later change until it hands
+  the project to another key. Keep the file where it is, outside any repository. Never paste it anywhere. Back it up
+  yourself, because nothing restores a lost key file. Unless your spec names a `treasury`, what the economy earns for
+  you is paid to that key's address. For real money, a browser wallet is safer: see [The owner's key](#the-owners-key).
 - **The program can be upgraded, and an upgrade can mean starting again.** The program's upgrade authority can replace
   its code, which is power over every economy on the program. On mainnet, that key is to be a multisig. Most versions so
   far have not carried accounts over from the version before. For example, 0.29 can't read the accounts that 0.28
@@ -80,6 +80,56 @@ version.
   before you promise players something unusual.
 - **The law is yours to check.** The checker's legal flags (chance at money, resellable random items, revenue sharing)
   are reminders, not legal advice. A spec with no flag is not necessarily legal.
+
+## The owner's key
+
+The key that signs going live becomes the project's owner. The owner changes the project's settings and every
+mechanic. Unless the spec names others, it is also the authority (which mints, moves pools and decides results) and
+the treasury (where sales land).
+
+| Way to go live                                   | Where the owner key lives                  | Trade-off                                                                                                                                     |
+| ------------------------------------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xsolana approve --keypair <file>` (the default) | a plain file on your computer              | No browser, and the signed transactions are exactly what was printed. Anything on the machine that can read the file can sign as the project. |
+| `xsolana approve --browser`                      | your browser wallet (Phantom, Solflare, …) | The key stays in the wallet. A wallet that keeps its key on a hardware device (a Ledger, for example) never exposes it to the computer.       |
+
+**For mainnet, prefer the browser wallet, backed by a hardware wallet if you have one.** Use the key file for devnet
+and for trying things out. These tools have not been tested with a hardware wallet, so try the whole flow on devnet
+with the same wallet first. A project a browser wallet owns is changed again with `approve --browser`; a project a
+key file owns is changed only by that file (or the key it was handed to).
+
+Whichever you choose, you can name a separate `treasury` (a wallet you hold, such as a hardware wallet or a
+multisig) and a separate authority (`keys.authority`) in the spec before going live. A server that signs by itself
+gets an authority key of its own, never the owner's.
+
+### Handing the project to another key
+
+The program can give a project a new owner: `update_project` with a new owner, signed by both the current owner and
+the new one. The project keeps its address. The authority and the treasury stay as they are unless the same
+instruction changes them too. After the hand-over, `xsolana approve` with the new owner's key changes the project.
+
+These tools have no command for a hand-over yet. It takes a short script with `@xgamesfun/solana/client`. With two
+key files (the tests do exactly this):
+
+```js
+import { readKeyFile } from '@xgamesfun/solana/keyfile';
+import * as loot from '@xgamesfun/solana/client';
+import { rpcClient } from '@xgamesfun/solana/chain/rpc';
+import { compileMessage, wireTransaction } from '@xgamesfun/solana/chain/tx';
+
+const was = await readKeyFile('~/.config/xsolana/my-game.json'); // the current owner
+const now = await readKeyFile('~/.config/xsolana/new-owner.json'); // the new owner: it signs too
+const project = '<the project address from the live section of xsolana.json>';
+const ix = loot.updateProjectIx({ owner: was.address, project, newOwner: now.address });
+const rpc = rpcClient('https://api.devnet.solana.com');
+const { blockhash, lastValidBlockHeight } = await rpc.latestBlockhash();
+const wire = wireTransaction(compileMessage({ payer: was.address, blockhash, instructions: [ix] }));
+const signature = await rpc.send(await now.signTransaction(await was.signTransaction(wire)));
+await rpc.confirm(signature, { lastValidBlockHeight });
+```
+
+A new owner that is a browser or hardware wallet must sign the same transaction in that wallet, through a page you
+build; these tools don't build that page. A multisig can hold the treasury or the authority role. These tools have
+not been tried with a multisig as the owner.
 
 See also [SECURITY.md](../SECURITY.md) (the trust model, and how to report a vulnerability) and
 [DISCLAIMER.md](../DISCLAIMER.md).
