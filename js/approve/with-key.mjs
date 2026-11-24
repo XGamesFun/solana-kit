@@ -269,7 +269,7 @@ export async function approveWithKey({
       }
     } else if (yes === null) {
       out(
-        `Nothing was sent. This is what going on would send: show it to the person whose economy it is, and when they say yes, run the same command with --yes ${code}`,
+        `Nothing was sent. Above is everything going on would send. Once the economy's owner has read it and agreed, run the same command with --yes ${code}`,
       );
       return { ok: true, sent: 0, done: false, code };
     } else if (yes !== true && String(yes) !== code) {

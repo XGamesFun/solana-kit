@@ -10,6 +10,7 @@ import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { fieldsAt, schemaAt, validate } from '../economy/validate.mjs';
 import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
 import { load, PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
+import { personWords } from './person.mjs';
 import { withCluster } from './with-cluster.mjs';
 
 /** Where loot runs, for every agent that connects. */
@@ -113,7 +114,9 @@ export function terminalWords(text, commands) {
 
 /**
  * Runs one tool by name: the same checks and answer on the server and in the terminal. `ctx.terminal` (the command
- * line's: `terminalWords`' commands) has the answer worded for a terminal; the answer is otherwise the same.
+ * line's: `terminalWords`' commands) has the answer worded for a terminal; with `ctx.reader` 'person' as well, its text
+ * is worded for the developer who reads it there, not for an agent (`ctx.verbose`: with every detail). The answer's
+ * other fields are the same.
  */
 export async function runTool(name, input = {}, ctx = {}) {
   const tool = typeof name === 'string' ? tools.find(t => t.name === name) : null;
@@ -128,9 +131,10 @@ export async function runTool(name, input = {}, ctx = {}) {
     };
   }
   const answer = await answerOf(tool, input, ctx);
-  return ctx.terminal && typeof answer?.text === 'string'
-    ? { ...answer, text: terminalWords(answer.text, ctx.terminal) }
-    : answer;
+  if (!ctx.terminal || typeof answer?.text !== 'string') return answer;
+  const text = terminalWords(answer.text, ctx.terminal);
+  // (a person reading a terminal is told what the agent would have been told to tell them: js/mcp/person.mjs)
+  return { ...answer, text: ctx.reader === 'person' ? personWords(text) : text };
 }
 
 /** One tool's answer to `input`, or the refusal (`isError`) of an input it cannot take. */

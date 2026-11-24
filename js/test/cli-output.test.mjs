@@ -124,7 +124,7 @@ describe('xsolana (help, and words a command does not take)', () => {
       for (const [i, r] of answers.entries()) {
         assert.equal(r.code, 0, `${asked[i].join(' ')}: ${r.err}`);
         assert.equal(r.err, '', asked[i].join(' '));
-        assert.match(r.out, new RegExp(`^ {2}xsolana ${command}\\b`), asked[i].join(' '));
+        assert.match(r.out, new RegExp(`^Usage: xsolana ${command}\\b`), asked[i].join(' '));
         assert.equal(r.out, answers[0].out, `${asked[i].join(' ')} says what ${command} --help says`);
       }
     }

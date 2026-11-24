@@ -299,8 +299,14 @@ const ratedWords = () =>
     : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION}), so some are out of date`;
 
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
-function flagsToTell(economy, now) {
+function flagsToTell(economy, now, person = false) {
   const flags = legalFlags(check(economy, { now }));
+  if (person && flags.length)
+    return [
+      `Legal notes${realMoney() ? ' (this economy is on mainnet: read them now)' : ' (read them again before mainnet)'}; \`approve\` prints them too, before anything is sent:`,
+      ...flags.map(f => `- ${f.says}`),
+      '',
+    ];
   return flags.length
     ? [
         `Say each to the person as written: once if you haven't yet${realMoney() ? ', and again now, since this economy is on mainnet' : ''} (what \`approve\` prints before anything is sent shows them too; after that, only when they ask):`,
@@ -399,7 +405,7 @@ export const tools = [
           spec: ex.spec,
           checks: verdict.ok ? 'clean' : verdict.refusals.map(r => r.code),
           // (a terminal shows the words alone, so there they carry the spec, and how to start a file from it)
-          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
+          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\n${ctx?.reader === 'person' ? 'Copy the spec, change it to your own economy, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use your own.' : 'Copy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.'}${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
         };
       }
       if (!query) {
@@ -433,11 +439,15 @@ export const tools = [
           : '',
         ...r.ideas.map(i => `- #${i.n} ${i.name} (${i.fit}): ${i.how}`),
         r.limits.length
-          ? '\nWhat no part of loot does here, and the nearest versions (first check that no combination of parts does it; then offer these, best first, with their numbers from xsolana_cost; never end on “it can’t”):'
+          ? ctx?.reader === 'person'
+            ? '\nWhat no part of loot does here, and the nearest versions, best first (a combination of parts may still do it: xsolana_guide lists them):'
+            : '\nWhat no part of loot does here, and the nearest versions (first check that no combination of parts does it; then offer these, best first, with their numbers from xsolana_cost; never end on “it can’t”):'
           : '',
         ...r.limits.flatMap(l => [`- ${l.what}: ${l.why}.`, ...l.nearest.map((n, i) => `  ${i + 1}. ${n}`)]),
         r.ideas.some(i => i.fit === 'cannot')
-          ? '\nA "cannot" means a defining piece was missing when it was rated: check that piece against xsolana_guide’s parts and their combinations before telling the person, then offer the nearest version.'
+          ? ctx?.reader === 'person'
+            ? '\nA "cannot" means a defining piece was missing when it was rated: a later version, or a combination of xsolana_guide’s parts, may have it.'
+            : '\nA "cannot" means a defining piece was missing when it was rated: check that piece against xsolana_guide’s parts and their combinations before telling the person, then offer the nearest version.'
           : '',
       ]
         .filter(Boolean)
@@ -507,13 +517,45 @@ export const tools = [
       const tail = verdict.ok
         ? `\nReady (${plural(verdict.warnings.length, 'warning')}). Next: xsolana_simulate and xsolana_explain, and tell the person what it means in plain words; before going live, xsolana_review.`
         : `\n${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`;
-      return {
+      const answer = {
         ok: verdict.ok,
         from,
         refusals: withoutRepeats(verdict.refusals),
         warnings: withoutRepeats(verdict.warnings),
         text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
+      if (ctx?.reader !== 'person') return answer;
+      // In a terminal, for the developer: the findings and the questions, then (--verbose) what players should hear
+      // and how each route ends. The same facts, addressed to the reader, with nothing that steers an agent.
+      const details = [
+        legal.length
+          ? `Legal notes (read them again before mainnet):\n${legal.map(f => `- ${f.says}`).join('\n')}`
+          : '',
+        ctx.verbose && told.length
+          ? `What players should know (the program does this; say it on your page):\n${told.map(t => `- ${t.line}`).join('\n')}`
+          : '',
+        ctx.verbose && ends.length
+          ? `When a route goes wrong or a player changes their mind:\n${ends.map(l => `- ${l}`).join('\n')}`
+          : '',
+        ctx.verbose && draws.length
+          ? `To compare every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what you want, run xsolana_design with your wants as requirements (add --help to see the kinds it takes).`
+          : '',
+      ].filter(Boolean);
+      const more =
+        !ctx.verbose && told.length + ends.length + draws.length
+          ? ' Add --verbose for what players should know and how each route ends.'
+          : '';
+      answer.text =
+        [
+          verdict.refusals.length || verdict.warnings.length
+            ? describe(verdict, { reader: 'person' })
+            : 'No problems found.',
+          ...details,
+          verdict.ok
+            ? `Ready: no refusals, ${plural(verdict.warnings.length, 'warning')}. Next: xsolana_simulate and xsolana_explain; before going live, xsolana_review.${more}`
+            : `${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`,
+        ].join('\n\n') + footer();
+      return answer;
     },
   },
   {
@@ -631,12 +673,26 @@ export const tools = [
         '- When a server limit, a cap or a route changed since you last said them, say the new figures again: what it really pays, and what the chain allows if its key leaks.',
         '- “Our server runs it”: ask what the server computes itself and what it only records from the page; only what it computes is checked.',
       ].join('\n');
+      // (in a terminal the developer is the one who chooses: the same checklist, addressed to them)
+      const person = ctx?.reader === 'person';
+      const personTail = highs
+        ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'}, or accept ${highs === 1 ? 'it' : 'them'} knowingly, before going live; then review again.`
+        : signedRoutes(r.routes).length
+          ? '\nNo high finding. The trade-offs above say which level each signed route uses and what a cheater gets: the choice is yours.'
+          : '\nNo high finding. The trade-offs above say what a cheater gets on each route.';
+      const personReady = [
+        'Before you call it ready:',
+        '- Check each promise you made to players (a price, a cap, a number of approvals, odds shown on the page, a refund button) against the spec and the page.',
+        '- State each cap in one unit: an amount per identity per window (a cap a day is not a cap a week; a grant’s caps count claims, each up to its amount).',
+        '- When a server limit, a cap or a route changes, update what you tell players: what it really pays, and what the chain allows if its key leaks.',
+        '- If your server runs a route, check what it computes itself and what it only records from the page; only what it computes is checked.',
+      ].join('\n');
       return {
         ok: r.ok,
         from,
         routes: r.routes,
         findings: r.findings,
-        text: `${describeReview(r, economy.name)}${tail}\n\n${ready}${footer()}`,
+        text: `${describeReview(r, economy.name)}${person ? personTail : tail}\n\n${person ? personReady : ready}${footer()}`,
       };
     },
   },
@@ -857,11 +913,8 @@ export const tools = [
       const keygen = live ? null : keygenCommand(keyFile);
       const browserCommand = `${approveCommand(target)} --browser`;
       const command = `${approveCommand(target)} --keypair ${keyFile}`;
-      const text = [
-        ...flagsToTell(economy, nowOf(ctx)),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}:`,
-        ...steps.map((s, i) => `${i + 1}. ${s}`),
-        '',
+      // What to run, as the agent is told it (it runs the commands, and the person says yes).
+      const agentRun = () => [
         `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
         ...(live
           ? [
@@ -877,6 +930,31 @@ export const tools = [
         '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them: DISCLAIMER.md in the package) and a code. It sends nothing.',
         '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code. Go on with that code; if it shows a step or a warning they have not seen, ask again.',
         `${live ? 'For a project a browser wallet owns' : 'Only if the person asks to sign in a browser wallet instead'}: give them this to run in their own terminal: ${browserCommand} (it serves a page on their own computer where they connect a wallet set to ${cluster()} and approve, ${plural(p.approvals, 'approval')}, and keeps running until the page says it is live). Don’t run or open it otherwise.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
+      ];
+      // What to run, as the developer reads it in a terminal: the same steps and facts, addressed to them.
+      const personRun = () => [
+        `${live ? 'To publish it' : 'To put it live'}, run these in the project folder. Nothing is sent until step 3:`,
+        ...(live
+          ? [
+              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. A new key can change nothing, so never make one for a live project, and never remove the file’s live section because a key was refused. The owner’s address needs about ${c.setup.totalSol} SOL${realMoney() ? ' (this economy is on mainnet, so it is real SOL)' : ' of devnet SOL'}.`,
+            ]
+          : [
+              `1. Make a key file for this project, unless it has one: ${keygen}`,
+              '   It prints the key’s address, never the key. The key file is the project’s owner, for good: whoever can read it controls the project, every later change is signed by it, and these tools can’t hand a project to another owner. Keep it where it is: never in a chat, a spec, a repository or a page. Back it up yourself: if it is lost, nothing can change the economy or move what its address holds.',
+              `   Send that address everything the setup takes from the owner: ${realMoney() ? `the SOL (about ${c.setup.totalSol} SOL here: this economy is on mainnet, so it is real SOL)` : `the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some)`}, any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection you already have needs that address as its update authority). If you would rather not move those, sign in a browser wallet instead (below).`,
+              '   The steps above call the owner’s address “your wallet”: with a key file, that is the key’s address. Unless the spec names a treasury, what sales leave lands there, and it signs what only the authority signs. If the economy takes money in, set "treasury": "wallet:<address>" to a wallet you hold first: it can’t be changed through the spec once live.',
+            ]),
+        `2. ${command}`,
+        '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; you use it at your own risk, and making sure the economy is legal where it is offered is up to you: DISCLAIMER.md in the package) and a code. It sends nothing.',
+        '3. Read that printout. To go ahead, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code.',
+        `${live ? 'For a project a browser wallet owns' : 'To sign in a browser wallet instead'}: ${browserCommand} serves a page on this computer where you connect a wallet set to ${cluster()} and approve (${plural(p.approvals, 'approval')}); it keeps running until the page says it is live.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
+      ];
+      const text = [
+        ...flagsToTell(economy, nowOf(ctx), ctx?.reader === 'person'),
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}:`,
+        ...steps.map((s, i) => `${i + 1}. ${s}`),
+        '',
+        ...(ctx?.reader === 'person' ? personRun() : agentRun()),
         ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');
