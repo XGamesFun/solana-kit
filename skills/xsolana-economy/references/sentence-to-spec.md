@@ -204,8 +204,9 @@ in 50 hooks the Golden Carp, worth 0.5 SOL. 5% of every cast goes to a monthly p
 }
 ```
 
-- `xsolana_check` → ready, with `W-CHANCE-PRIZE` (say it) and `W-FEE` (the 0.002 SOL player fee is 10% on top of a
-  0.02 SOL cast: say so, and that a higher price makes it a smaller part).
+- `xsolana_check` → ready, with `W-CHANCE-PRIZE` (say it) and `W-FEE` (the player fee is 2.5% on top of a 0.02 SOL
+  cast at mainnet's 0.0005 SOL, and 10% at devnet's 0.002 SOL: say so, and that a higher price makes it a smaller
+  part).
 - `xsolana_simulate` → a cast costs about 0.0237 SOL in all and gives back 0.01 SOL in prizes on average (50%), plus a
   Perch 3 casts in 10; at 500 casts a day the treasury gets about 4 SOL a day. The pond takes in 5.5 SOL a day and
   pays out 5, but luck swings it about 4 SOL a week: on a 2 SOL seed a bad week stops the box selling, and the
