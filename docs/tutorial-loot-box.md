@@ -87,6 +87,9 @@ Each day players pay 10 SOL and get back 6.2 SOL on average (items at the value 
 player fees, 0.08 SOL to MagicBlock’s oracle and 0.001 SOL in network fees.
 ```
 
+The player fees here are devnet's: 0.002 SOL an opening. On mainnet the player fee is 0.0005 SOL, so the same 100
+openings a day pay 0.05 SOL in player fees.
+
 “In all” is what leaves a player's wallet for good. It is the price, the player fee, the oracle's fee, the network fee
 and the rent of the collectible they win.
 
@@ -107,7 +110,8 @@ npx -y @xgamesfun/solana@0.29.11 review xsolana.json
 
 For every route that pays or gives value, the review says four things: who can trigger it, what the program enforces,
 what it trusts off the chain, and the most one cheater gets. Here the only route is the box. Its roll comes from
-MagicBlock's VRF: “nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's
+MagicBlock's VRF: “nobody, the project included, can steer the roll (under the current program version, which its
+upgrade authority can replace).” The one finding is a reminder that the owner's
 key controls the project, so keep the key safe. On devnet, make the key file readable by you alone. With real money,
 use a hardware wallet or a multisig.
 
