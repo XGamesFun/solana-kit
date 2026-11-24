@@ -72,6 +72,7 @@ const VALUED = new Set([
   '--yes',
   '--mint-key',
   '--save',
+  '--to',
 ]);
 /** The valued flags that may be given more than once: each value is kept, in order (`lists`). */
 const REPEATED = new Set(['--mint-key']);
@@ -92,6 +93,7 @@ const FLAGS = {
   token: TOOL_FLAGS,
   keygen: [],
   approve: ['--keypair', '--yes', '--mint-key', '--browser', '--port', '--no-open'],
+  handover: ['--keypair', '--to', '--yes'],
   connect: ['--agent', '--scope', '--local', '--remove', '--dry-run'],
   tool: ['--list', '--args-file', '--json'],
   version: [],
@@ -240,6 +242,25 @@ const COMMANDS = {
     examples: [
       'xsolana approve xsolana.json --keypair ~/.config/xsolana/my-game.json',
       'xsolana approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>',
+    ],
+  },
+  handover: {
+    group: 'live',
+    summary: 'Hand a live project to a new owner key: both keys sign, as the program requires',
+    usage: ['xsolana handover [file] --keypair <owner keyfile> --to <new owner keyfile> [--yes <code>]'],
+    words: [1, 'one file'],
+    about:
+      'Hands the live project in the spec file to a new owner, with the program’s update_project, signed by the current owner’s key file and the new owner’s. Without --yes it reads the project from the chain, prints what changes, with a code, and sends nothing; run it again with --yes <code> to send exactly that. The authority, the treasury and the project’s address stay as they are. A new owner that is a browser or hardware wallet can’t sign here: see docs/before-you-use.md.',
+    args: [['file', 'the live spec file (default: xsolana.json)']],
+    options: [
+      ['--keypair <keyfile>', 'the key file of the project’s current owner'],
+      ['--to <keyfile>', 'the key file of the new owner, which signs too'],
+      ['--yes <code>', 'send what was printed, by the code the printout ended with'],
+      HELP_OPT,
+    ],
+    examples: [
+      'xsolana handover --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json',
+      'xsolana handover --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json --yes <code>',
     ],
   },
   status: onFile(
@@ -721,7 +742,7 @@ async function main(argv) {
         [
           `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
-          'Whatever is set up with it, it owns, until it hands the project to another key (the program can; these tools have no command for it yet): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
+          'Whatever is set up with it, it owns, until it hands the project to another key (xsolana handover, signed by both keys): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
           `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
         ].join('\n'),
       );
@@ -768,6 +789,24 @@ async function main(argv) {
       const port = portOf(values.get('--port'));
       const { approve } = await import('../js/approve/server.mjs');
       await approve({ file, port, open: !flags.has('--no-open') });
+      break;
+    }
+    case 'handover': {
+      const file = positional[0] ?? 'xsolana.json';
+      const { networkOfFile } = await import('../js/mcp/server.mjs');
+      await onCluster(await networkOfFile(file), file);
+      if (values.get('--keypair') === undefined || values.get('--to') === undefined)
+        throw new UsageError(
+          'xsolana handover needs both keys: --keypair <the owner’s key file> --to <the new owner’s key file>.',
+        );
+      const { handover } = await import('../js/approve/handover.mjs');
+      const r = await handover({
+        file,
+        keyFile: values.get('--keypair'),
+        toFile: values.get('--to'),
+        yes: values.get('--yes') ?? null,
+      });
+      if (!r.ok) process.exitCode = 1;
       break;
     }
     case 'connect': {

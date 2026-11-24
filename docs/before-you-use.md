@@ -107,8 +107,17 @@ The program can give a project a new owner: `update_project` with a new owner, s
 the new one. The project keeps its address. The authority and the treasury stay as they are unless the same
 instruction changes them too. After the hand-over, `xsolana approve` with the new owner's key changes the project.
 
-These tools have no command for a hand-over yet. It takes a short script with `@xgamesfun/solana/client`. With two
-key files (the tests do exactly this):
+`xsolana handover` does it with two key files: the current owner's and the new owner's. Like `approve`, it reads the
+project from the chain, prints what changes with a code, and sends nothing; run again with `--yes <code>`, it sends
+exactly that, signed by both keys, and reads the project back:
+
+```bash
+npx -y @xgamesfun/solana@0.29.11 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json
+npx -y @xgamesfun/solana@0.29.11 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json --yes <code>
+```
+
+The command does what this script does, which you can adapt (to change the authority or the treasury in the same
+transaction, say):
 
 ```js
 import { readKeyFile } from '@xgamesfun/solana/keyfile';

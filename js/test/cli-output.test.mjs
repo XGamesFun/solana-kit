@@ -105,6 +105,7 @@ const COMMANDS = [
   'token',
   'keygen',
   'approve',
+  'handover',
   'connect',
   'tool',
   'version',

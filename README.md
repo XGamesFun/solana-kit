@@ -60,8 +60,8 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
   assets is never connected or asked to sign.
 - It signs each transaction exactly as it was prepared and shown, and nothing opens in your browser.
 - The cost: the key is a plain file, so anything on your machine that can read it can sign as the project.
-- It owns the project until it hands the project to another key. The program can do that, but these tools have no
-  command for it yet ([the owner's key](docs/before-you-use.md#the-owners-key) shows the script). Keep it outside any repository
+- It owns the project until it hands the project to another key with `xsolana handover`, which both keys sign
+  ([the owner's key](docs/before-you-use.md#the-owners-key)). Keep it outside any repository
   (the tools refuse a key file inside one, unless git ignores it there), never paste it anywhere, and back it up
   yourself: nothing restores a lost key.
 - Unless your spec names a `treasury`, what the economy earns lands at the key's address. Name a wallet you hold
