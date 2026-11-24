@@ -240,8 +240,15 @@ describe('xsolana connect (its scope)', () => {
       );
       assert.match(
         plain.out,
-        /Codex: adds MCP servers only for the whole user, so at --scope project it was left as it is\. Run `xsolana connect --agent codex --scope user`/,
+        /Codex: adds MCP servers only for the whole user, so at --scope project it would be left as it is\. Run `xsolana connect --agent codex --scope user`/,
       );
+      // (a dry run says every step in "would", and ends saying nothing changed)
+      for (const line of plain.out
+        .trim()
+        .split('\n')
+        .filter(l => l && !l.startsWith('  ')))
+        assert.match(line, /would|^Nothing was changed: this was a dry run\.$/, line);
+      assert.match(plain.out.trim(), /Nothing was changed: this was a dry run\.$/);
       const user = await xsolana(['connect', '--dry-run', '--scope', 'user'], { env });
       assert.match(user.out, /claude mcp add --transport stdio --scope user xsolana/);
       assert.match(user.out, /codex mcp add xsolana/);
