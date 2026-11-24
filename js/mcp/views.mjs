@@ -2,6 +2,8 @@
 // summary first, then tables, and the tool's whole text in words only with --verbose. The tools' own answers (MCP,
 // `--json`, `xsolana tool`) are built elsewhere and are not changed by this file.
 import { model } from '../economy/model.mjs';
+import { LEGAL } from '../economy/legal.mjs';
+import { realMoney } from '../client/cluster.js';
 import { numeral, percentage, plural } from '../economy/format.mjs';
 import { outcomePartWords, poolFate } from '../economy/simulate.mjs';
 
@@ -471,20 +473,39 @@ function checkView(
   { verbose = false, legal = [], told = [], ends = [], designHint = '', royalty = null } = {},
 ) {
   const { refusals, warnings } = findings;
-  const bySeverity = ['high', 'medium', 'low']
-    .map(sev => [sev, warnings.filter(w => w.severity === sev).length])
-    .filter(([, n]) => n)
-    .map(([sev, n]) => `${n} ${sev}`);
+  // (high first, then medium, then the law's flags: each in full; the rest, low and unrated notes, in one line unless
+  // --verbose, so the ones that weigh are read)
+  const rank = w => (w.severity === 'high' ? 0 : w.severity === 'medium' ? 1 : LEGAL[w.code] ? 2 : 3);
+  const ordered = warnings
+    .map((w, i) => ({ w, i }))
+    .sort((a, b) => rank(a.w) - rank(b.w) || a.i - b.i)
+    .map(x => x.w);
+  const shown = verbose ? ordered : ordered.filter(w => rank(w) < 3);
+  const folded = verbose ? [] : ordered.filter(w => rank(w) === 3);
+  const count = sev => verdict.warnings.filter(w => w.severity === sev).length;
+  const highs = count('high');
+  const bySeverity = [
+    [count('high'), 'high'],
+    [count('medium'), 'medium'],
+    [count('low'), 'low'],
+    [verdict.warnings.filter(w => !w.severity).length, 'unrated'],
+  ]
+    .filter(([n]) => n)
+    .map(([n, sev]) => `${n} ${sev}`);
   const asks = verdict.warnings
     .filter(w => w.ask)
     .map((w, i) => ({ w, i }))
     .sort((a, b) => (ASK_ORDER[a.w.severity] ?? 3) - (ASK_ORDER[b.w.severity] ?? 3) || a.i - b.i)
     .map(({ w }) => w.ask);
-  const head = verdict.ok
-    ? `Ready: no refusals, ${plural(verdict.warnings.length, 'warning')}${bySeverity.length ? ` (${bySeverity.join(', ')})` : ''}${asks.length ? `, ${plural(asks.length, 'question')} for you` : ''}.`
-    : `Not ready: ${plural(verdict.refusals.length, 'refusal')}${verdict.warnings.length ? ` and ${plural(verdict.warnings.length, 'warning')}` : ''}. Fix each refusal as its fix says, then check again.`;
+  const counts = `${plural(verdict.warnings.length, 'warning')}${bySeverity.length ? ` (${bySeverity.join(', ')})` : ''}${asks.length ? `, ${plural(asks.length, 'question')} for you` : ''}`;
+  // (a high warning is never under a plain "Ready": it is named first, and on mainnet said to be real money)
+  const head = !verdict.ok
+    ? `Not ready: ${plural(verdict.refusals.length, 'refusal')}${verdict.warnings.length ? ` and ${plural(verdict.warnings.length, 'warning')}` : ''}. Fix each refusal as its fix says, then check again.`
+    : highs
+      ? `Ready to go live, with ${plural(highs, 'high warning')}: read ${highs === 1 ? 'it' : 'them'} first${realMoney() ? ' (this economy is on mainnet: real money)' : ''}. No refusals; ${counts}.`
+      : `Ready: no refusals, ${counts}.`;
   const refused = refusals.map(r => bullet(`${r.code} ${r.message} Fix: ${r.fix}`, '✗ '));
-  const warned = warnings.map(w =>
+  const warned = shown.map(w =>
     [
       bullet(
         `${w.code}${w.severity ? ` (${w.severity})` : ''} ${verbose ? w.message : firstSentence(w.message, 140)}`,
@@ -497,12 +518,18 @@ function checkView(
   );
   const more = [];
   if (!verbose && warnings.length) more.push('each warning in full with its fix');
+  const foldedLine = folded.length
+    ? bullet(
+        `+${plural(folded.length, 'more warning')}, low or unrated (${[...new Set(folded.map(w => w.code))].join(', ')}): --verbose shows them.`,
+        '! ',
+      )
+    : '';
   if (!verbose && told.length) more.push('what players should know');
   if (!verbose && ends.length) more.push('how each route ends');
   return join([
     [head, verdict.ok && royalty ? wrap(royalty, WIDTH).join('\n') : ''].filter(Boolean).join('\n'),
     section('Refusals', refused.join('\n')),
-    section('Warnings', warned.join('\n')),
+    section('Warnings', [...warned, foldedLine].filter(Boolean).join('\n')),
     section(
       'Questions for you (settle them before you build on this spec; most answers go in its "scenario")',
       asks.map(a => bullet(a, '? ')).join('\n'),

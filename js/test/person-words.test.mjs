@@ -139,3 +139,37 @@ test('a default view never cuts inside a sentence or a parenthesis', async () =>
       }
     }
 });
+
+test('check never says a plain "Ready" over a high warning, puts it first, and folds low and unrated ones', async () => {
+  const { personCheck } = await import('../mcp/views.mjs');
+  const { withCluster } = await import('../mcp/with-cluster.mjs');
+  const warnings = [
+    {
+      code: 'W-FEE',
+      where: 'a',
+      message: 'Every opening pays the player fee. On mainnet the player fee alone is 0.0005 SOL.',
+    },
+    { code: 'W-ASSUMPTION', where: 'b', severity: 'low', message: 'Unknown: how many claim it.' },
+    { code: 'W-CHANCE-PRIZE', where: 'c', message: 'Players pay for a chance at money.' },
+    { code: 'W-VALUE', where: 'd', severity: 'high', message: 'GEM is minted for free with no cap at all.' },
+  ];
+  const verdict = { ok: true, refusals: [], warnings };
+  const text = withCluster('mainnet', () => personCheck(verdict, { refusals: [], warnings }));
+  assert.match(
+    text,
+    /^Ready to go live, with 1 high warning: read it first \(this economy is on mainnet: real money\)\./,
+  );
+  assert.doesNotMatch(text, /^Ready: /m);
+  const lines = text.split('\n').filter(l => l.startsWith('! '));
+  assert.match(lines[0], /^! W-VALUE \(high\)/, 'the high warning first');
+  assert.match(lines[1], /^! W-CHANCE-PRIZE/, 'then the law’s flag');
+  assert.match(lines.at(-1), /^! \+2 more warnings, low or unrated \(W-FEE, W-ASSUMPTION\): --verbose shows them\./);
+  const all = withCluster('mainnet', () => personCheck(verdict, { refusals: [], warnings }, { verbose: true }));
+  for (const w of warnings) assert.ok(all.includes(w.code), w.code);
+  // no high warning: a plain Ready, with the counts
+  const calm = personCheck(
+    { ok: true, refusals: [], warnings: warnings.slice(0, 3) },
+    { refusals: [], warnings: warnings.slice(0, 3) },
+  );
+  assert.match(calm, /^Ready: no refusals, 3 warnings \(1 low, 2 unrated\)\./);
+});
