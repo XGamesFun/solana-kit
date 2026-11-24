@@ -87,23 +87,38 @@ export function setupCost(plan, economy) {
   const steps = new Set(plan.transactions.flatMap(t => t.steps).map(s => s.id));
   const seeds = {};
   let seedLamports = 0n;
+  // Each SOL the setup puts in beside rent and fees, with what it is for (`parts`, below).
+  const deposits = [];
+  const deposit = (what, lamports) => {
+    seedLamports += lamports;
+    deposits.push({ what, lamports });
+  };
   const funded = m.grants.filter(g => Number(g.fund ?? 0) > 0 && steps.has(`fund:${g.key}`));
-  for (const g of funded) seedLamports += toUnits(g.fund, 9);
+  for (const g of funded)
+    deposit(`the funds of the grant “${g.name ?? g.key}”, which pay its claims`, toUnits(g.fund, 9));
   // What the owner puts in from their own wallet: a pool's seed, a lottery's seed (into its pot), a farm's seed (into its
   // rewards vault), a sealed schedule's funds (into its vault, from the wallet).
-  const putIn = (key, amount, step) => {
+  const putIn = (key, amount, step, what) => {
     if (!(Number(amount ?? 0) > 0) || !steps.has(step)) return;
     const t = m.tokens.get(key ?? m.currencyKey);
     seeds[t.symbol] = round((seeds[t.symbol] ?? 0) + Number(amount));
-    if (t.wsol) seedLamports += toUnits(amount, 9);
+    if (t.wsol) deposit(what, toUnits(amount, 9));
   };
-  for (const p of m.pools) putIn(p.currency, p.seed, `seed:${p.key}`);
-  for (const l of m.lotteries) putIn(l.currency, l.seed, `seed:lottery:${l.key}`);
-  for (const f of m.farms) putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`);
+  for (const p of m.pools) putIn(p.currency, p.seed, `seed:${p.key}`, `the seed of the pool “${p.key}”`);
+  for (const l of m.lotteries)
+    putIn(l.currency, l.seed, `seed:lottery:${l.key}`, `the seed of the lottery “${l.name ?? l.key}”`);
+  for (const f of m.farms)
+    putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`, `the seed of the farm “${f.name ?? f.key}”`);
   // SOL a lottery holds for its rounds' rent: lent to each round, back at its close.
-  for (const l of m.lotteries) if (steps.has(`rent:lottery:${l.key}`)) seedLamports += roundRentOf(l, m);
+  for (const l of m.lotteries)
+    if (steps.has(`rent:lottery:${l.key}`))
+      deposit(
+        `the reserve the lottery “${l.name ?? l.key}” lends its rounds for rent, back when it closes`,
+        roundRentOf(l, m),
+      );
   for (const sc of m.schedules)
-    if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet') putIn(sc.currency, sc.fund, `fund:${sc.key}`);
+    if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet')
+      putIn(sc.currency, sc.fund, `fund:${sc.key}`, `the funds of the sealed schedule “${sc.name ?? sc.key}”`);
   const total = rentLamports + metadataLamports + feeLamports + networkLamports + seedLamports;
   const notes = [];
   if (accounts.some(a => a.approx))
@@ -123,7 +138,7 @@ export function setupCost(plan, economy) {
   notes.push(
     `The network fee is 5,000 lamports a signature and a priority fee of ${priorityFee(withSetupBudget([]))} lamports a transaction: each sets its own compute unit limit and price, so a wallet that adds a priority fee of its own leaves it as it is.`,
   );
-  return {
+  const setup = {
     accounts,
     rentSol: sol(rentLamports),
     metadataFeesSol: sol(metadataLamports),
@@ -135,6 +150,19 @@ export function setupCost(plan, economy) {
     approvals: plan.approvals,
     notes,
   };
+  // Every SOL part of the total, each with what it is for: they add up to `totalSol`, to the lamport. Not enumerable,
+  // so the tools' answers (JSON, MCP) stay as they were; `xsolana cost` lists them.
+  const parts = [
+    { what: `rent for ${accounts.length} account${accounts.length === 1 ? '' : 's'}`, lamports: rentLamports },
+    { what: 'Token Metadata’s fees (a token’s name on chain)', lamports: metadataLamports },
+    { what: 'program fees', lamports: feeLamports },
+    { what: 'network fees', lamports: networkLamports },
+    ...deposits,
+  ]
+    .filter(x => x.lamports > 0n)
+    .map(x => ({ what: x.what, lamports: x.lamports.toString(), sol: sol(x.lamports) }));
+  Object.defineProperty(setup, 'parts', { value: parts, enumerable: false });
+  return setup;
 }
 
 /**

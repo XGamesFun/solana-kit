@@ -277,17 +277,23 @@ function simulateView(sim, economy, { mainnet = null, verbose = false, words = '
 /** `xsolana cost` for the developer. `mainnet`: the cost at mainnet's fees, for an economy on devnet. */
 function costView(c, economy, { sim = null, simMainnet = null, mainnet = null, verbose = false, words = '' } = {}) {
   const s = c.setup;
+  // (every SOL part of the total, so they add up to it; seeds in other tokens beside it)
+  const parts = s.parts ?? [];
+  const sols = new Set([...model(economy).tokens.values()].filter(t => t.wsol).map(t => t.symbol));
+  const other = Object.entries(s.seeds).filter(([symbol]) => !sols.has(symbol));
   const head = [
-    `Going live: ${plural(s.transactions, 'transaction')}, about ${numeral(s.totalSol)} SOL.`,
-    `That is rent ${numeral(s.rentSol)} SOL for ${plural(s.accounts.length, 'account')}, program fees ${numeral(s.programFeesSol)} SOL and network fees ${numeral(s.networkFeesSol)} SOL${s.metadataFeesSol ? `, Token Metadata ${numeral(s.metadataFeesSol)} SOL` : ''}${
-      Object.keys(s.seeds).length
-        ? `, plus seeds of ${Object.entries(s.seeds)
-            .map(([k, v]) => `${numeral(v)} ${k}`)
-            .join(', ')}`
-        : ''
-    }.`,
+    `Going live: ${plural(s.transactions, 'transaction')}, about ${numeral(s.totalSol)} SOL in all:`,
+    table(
+      ['SOL', 'For'],
+      parts.map(p => [numeral(p.sol), p.what]),
+    ),
+    other.length
+      ? wrap(`Also put in, in other tokens: ${other.map(([k, v]) => `${numeral(v)} ${k}`).join(', ')}.`, WIDTH).join(
+          '\n',
+        )
+      : '',
   ]
-    .map(l => wrap(l, WIDTH).join('\n'))
+    .filter(Boolean)
     .join('\n');
   const rows = sim ? purchases(sim, economy, simMainnet) : [];
   // (the headline a player pays: what goes on top of a price, on mainnet, and the largest share of a price in SOL)
