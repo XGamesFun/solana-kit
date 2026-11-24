@@ -14,6 +14,7 @@ import { plural } from '../economy/format.mjs';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, readKeyFile } from './keyfile.mjs';
 import { clusterChain, createApproval } from './server.mjs';
+import { platformFees } from './platform-fees.mjs';
 import { realMoney } from '../client/cluster.js';
 
 /** The notice the page has its owner tick before Approve (js/approve/page.html, "Read this first"), word for word. */
@@ -248,6 +249,9 @@ export async function approveWithKey({
       : null;
     const code = approvalCode(state, session.spec);
     for (const line of approvalText(state, { keyFile: key.file, balance })) out(line);
+    // (the fees the platform charges now, beside the ones the tools quoted: said when they differ or a change waits)
+    const fees = await platformFees(address => chain.account(address)).catch(() => null);
+    if (fees?.words) out(`\nFees: ${fees.words}`);
     out('');
     if (balance === 0n) {
       out(

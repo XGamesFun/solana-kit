@@ -200,7 +200,9 @@ Everything else is for when one of these doesn't cover a case; the types (`types
 
 ## Fees and costs
 
-loot charges two flat fees, set in the platform account on each cluster. `xsolana cost` prices a spec at its own
+loot charges two flat fees, set in the platform account on each cluster. The figures here, and those the offline
+tools quote, are the values at this release; `approve` and `status` read the platform account and say when it charges
+other fees or a change waits. `xsolana cost` prices a spec at its own
 network's fees, and on devnet it also gives mainnet's.
 
 | What                        | Devnet                                                                          | Mainnet     | Paid by                                                               |

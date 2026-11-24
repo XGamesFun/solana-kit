@@ -13,9 +13,11 @@ export const DAY = 86_400;
 // Each is the loot program's own unless it says otherwise.
 
 /**
- * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`: devnet EZJiX7BY…,
- * mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
- * the tools quote these and the program charges what the account holds. The program caps each at 0.01 SOL.
+ * The two flat fees, in lamports, as each cluster's platform account held them at this release (`Platform.fees`:
+ * devnet EZJiX7BY…, mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days, a cut applies at
+ * once), and the program charges what the account holds, so these are the release's values: the offline tools (check,
+ * simulate, cost, explain) quote them, and what reads the chain anyway (approve, status) reads the account too and
+ * says when it differs or a change waits (js/approve/platform-fees.mjs). The program caps each at 0.01 SOL.
  */
 export const FEES_ON = Object.freeze({
   devnet: Object.freeze({ player: 2_000_000n, project: 10_000n }),

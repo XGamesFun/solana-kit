@@ -41,6 +41,7 @@ import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { personCheck, personCost, personExamples, personExplain, personReview, personSimulate } from './views.mjs';
 import { withCluster } from './with-cluster.mjs';
+import { platformFees } from '../approve/platform-fees.mjs';
 import { personWords, terminalWords } from './person.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { economyOf, parseFile } from '../economy/spec-file.mjs';
@@ -1123,6 +1124,10 @@ export const tools = [
         };
       });
       const missing = rows.filter(r => !r.found);
+      // (the fees the platform charges now, beside the ones these tools quote: said when they differ or a change waits)
+      const fees = rpc.account
+        ? await platformFees(address => rpc.account(address), { now: nowOf(ctx) }).catch(() => null)
+        : null;
       const text = [
         `${economy.name ?? 'The economy'} on ${cluster()}: project ${project}.`,
         ...rows.map(
@@ -1132,10 +1137,11 @@ export const tools = [
         missing.length
           ? `\n${plural(missing.length, 'part')} not on chain: publish again (xsolana_publish) to add them.`
           : '',
+        fees?.words ? `\nFees: ${fees.words}` : '',
       ]
         .filter(Boolean)
         .join('\n');
-      return { ok: true, rows, text: text + footer() };
+      return { ok: true, rows, ...(fees ? { platformFees: fees } : {}), text: text + footer() };
     },
   },
   {
