@@ -9,10 +9,11 @@ summarised here only where the tools see them.
 The commands now read as a developer's tool: a summary and tables first, the details behind `--verbose`, plain
 English in the docs, and every cost figure labelled and in agreement. New: `xsolana handover`, `W-ON-TOP`,
 `W-TREASURY` and a minimal `hello-shop` example. Same program, same `release.json`. No spec that 0.29.11 accepted
-is refused; from this release on, a patch never refuses what the patch before it accepted (README, "Versions and
+is refused; from this release on, a patch never refuses a spec the patch before it accepted. The command line's surface
+can still change in a patch, since major.minor tracks the program: those changes are below (README, "Versions and
 stability").
 
-**Breaking**
+**Changes that can affect scripts**
 
 - **Usage errors exit 2.** An unknown command or flag, a missing or extra argument, a value that is not one, or
   `approve` with no way to sign now exits 2, as xcore does. A failure (a missing file, a refused spec, a high review

@@ -181,7 +181,7 @@ module covers buying, opening boxes, staking, crafting, tickets, bids and claims
 
 Using `@solana/kit`? `loot.toKitInstruction(ix)` turns any builder's instruction into Kit's shape.
 
-**Start with these.** The client exports 343 names (every builder, address, account layout and receipt). Most apps
+**Start with these.** The client exports hundreds of names (every builder, address, account layout and receipt). Most apps
 need only a few:
 
 | Need                           | Use                                                                                             |
@@ -255,8 +255,7 @@ built yet: read the [known limits](docs/program.md#known-limits) before you prom
 
 ## Versions and stability
 
-The package is pre-1.0 and changes often: the changelog has 59 versions from 2026-10-30 to 2026-11-23, including 11
-patch releases on 2026-11-21 to 2026-11-23.
+The package is pre-1.0 and has had frequent releases; the [changelog](CHANGELOG.md) lists every version with its date.
 
 - **major.minor is the program's.** `@xgamesfun/solana` 0.29.x is built for loot 0.29.0. A release check refuses a
   package whose major.minor differs from the IDL's. `release.json` names the program build (its version, program
@@ -264,15 +263,23 @@ patch releases on 2026-11-21 to 2026-11-23.
 - **A patch is a JavaScript-only release** on the same program: the checker's rules, the tools' words, the client
   and the docs. It can change what `check` warns about or refuses, and the wording an agent sees.
 - **A new minor has so far meant a new program build**, and most did not carry accounts over (see
-  [Upgrades](docs/program.md#upgrades)). The [changelog](CHANGELOG.md) lists every version with its date and puts
-  breaking changes under **Breaking**.
+  [Upgrades](docs/program.md#upgrades)). The [changelog](CHANGELOG.md) marks what can break a spec or a script.
 - **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.12 …` in scripts and docs, and `"@xgamesfun/solana":
 "0.29.12"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
 
-**Policy: a patch never refuses a spec that the patch before it accepted.** This holds from the next release
-(0.29.12) on. A new refusal comes only in a new minor; until then, the same finding is a warning. 0.29.11 broke this
-rule: its changelog says "Two changes can refuse what 0.29.10 took". The plan, not a commitment, is fewer releases,
-with fixes batched into fewer patches.
+**Policy for specs: a patch never refuses a spec that the patch before it accepted.** This holds from 0.29.12 on.
+It covers every refusal of the checker, which `check`, `approve`, `publish`, `cost`, `simulate` and the MCP tools all
+run: a spec file with no refusals under one patch has none under the next, on the same network. A patch may add or
+change warnings. A new refusal comes only in a new minor; until then, the same finding is a warning. 0.29.11 broke this
+rule: its changelog says "Two changes can refuse what 0.29.10 took".
+
+**Command-line changes can come in a patch.** Because major.minor tracks the program, a change to the command line's
+surface (printed text, exit codes, defaults, flags) has no other number to go in while the program stays the same:
+0.29.12 changed the exit code of usage errors and the default scope of `connect` in a patch. Each such change is listed
+in the changelog under "Changes that can affect scripts". The printed text is written for people and can change in
+any patch: a script should read `--json` and pin an exact version.
+
+The plan, not a commitment, is fewer releases, with fixes batched into fewer patches.
 
 ## Questions
 
