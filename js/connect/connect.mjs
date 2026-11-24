@@ -116,7 +116,8 @@ export async function connect({
   local = false,
   remove = false,
   dryRun = false,
-  scope = 'user',
+  // (this project only, as xcore's connect: `--scope user` registers the tools for every project of this user)
+  scope = 'project',
   cwd = process.cwd(),
   log = (...a) => console.log(...a),
   run = runAgent,
@@ -143,7 +144,7 @@ export async function connect({
     found++;
     if (!a.scopes.includes(scope)) {
       log(
-        `${a.name}: adds MCP servers only for the whole user (--scope ${a.scopes.join(' or ')}), so it was left as it is. Run \`xsolana connect --agent ${id}\` for that.`,
+        `${a.name}: adds MCP servers only for the whole user, so at --scope ${scope} it was left as it is. Run \`xsolana connect --agent ${id} --scope ${a.scopes[0]}\` to add it for every project of this user.`,
       );
       if (agent) failed++;
       continue;

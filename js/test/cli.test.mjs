@@ -88,7 +88,7 @@ describe('xsolana (the command line)', () => {
         assert.equal(r.code, 0, r.err + r.out);
         const calls = agents.calls();
         assert.ok(calls.length && calls.every(c => c.startsWith('claude ')), `${form.join(' ')}: ${calls.join(' | ')}`);
-        assert.match(r.out, /claude mcp add --transport stdio --scope user xsolana/);
+        assert.match(r.out, /claude mcp add --transport stdio --scope project xsolana/);
         assert.ok(!existsSync(path.join(home, '.claude')), 'a dry run writes nothing');
       }
     },
@@ -222,4 +222,29 @@ describe('xsolana (a typo)', () => {
     const far = await xsolana(['zzz']);
     assert.doesNotMatch(far.err, /Did you mean/);
   });
+});
+
+describe('xsolana connect (its scope)', () => {
+  test(
+    'connects this project by default, as xcore does; --scope user every project, Codex only so',
+    { skip: !posix && 'stand-in agents are shell scripts' },
+    async () => {
+      const agents = fakeAgents();
+      const home = mkdtempSync(path.join(tmpdir(), 'xsolana-home-'));
+      const env = { PATH: `${agents.dir}${path.delimiter}${process.env.PATH}`, HOME: home };
+      const plain = await xsolana(['connect', '--dry-run'], { env });
+      assert.equal(plain.code, 0, plain.err + plain.out);
+      assert.match(
+        plain.out,
+        /claude mcp add --transport stdio --scope project xsolana -- npx -y --package=@xgamesfun\/solana@\d+\.\d+\.\d+ xsolana mcp/,
+      );
+      assert.match(
+        plain.out,
+        /Codex: adds MCP servers only for the whole user, so at --scope project it was left as it is\. Run `xsolana connect --agent codex --scope user`/,
+      );
+      const user = await xsolana(['connect', '--dry-run', '--scope', 'user'], { env });
+      assert.match(user.out, /claude mcp add --transport stdio --scope user xsolana/);
+      assert.match(user.out, /codex mcp add xsolana/);
+    },
+  );
 });

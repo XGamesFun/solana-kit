@@ -25,7 +25,8 @@ that fixes it: those tests skip themselves, so the run would otherwise pass with
 the others without them on purpose, set `XSOLANA_SKIP_CHAIN_TESTS=1`.
 
 To try the tools in your own agent from a clone, `node bin/xsolana.mjs connect --local` registers this checkout's MCP
-server and the skill with Claude Code and Codex (`--remove` takes them out again).
+server and the skill with Claude Code (for this folder; add `--scope user` for every project, and for Codex)
+(`--remove` takes them out again).
 
 | Variable                   | What it does                                                                                                                                                                           |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

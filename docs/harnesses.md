@@ -7,22 +7,23 @@ xsolana reaches an agent as two pieces:
 
 The `plugin/` folder carries both, in each harness's own format, from one source.
 
-|                           | Claude Code                                                                                                | Codex                                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Manifest                  | `plugin/.claude-plugin/plugin.json`                                                                        | `plugin/plugin.json` (the portable format, `agent-plugins.org` schema 1.0.0)              |
-| MCP server                | `plugin/.mcp.json`                                                                                         | `plugin/mcp.json` (`"type": "stdio"`)                                                     |
-| Skill                     | `plugin/skills/xsolana-economy/`                                                                           | the same folder                                                                           |
-| Marketplace               | `.claude-plugin/marketplace.json`                                                                          | `.agents/plugins/marketplace.json`                                                        |
-| Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                        | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun` |
-| Without the plugin        | `npx -y @xgamesfun/solana@0.29.11 connect` (runs `claude mcp add`, copies the skill to `~/.claude/skills`) | the same (`codex mcp add`, `~/.agents/skills`)                                            |
-| Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                  | `AGENTS.md`                                                                               |
+|                           | Claude Code                                                                                                                                                                                   | Codex                                                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest                  | `plugin/.claude-plugin/plugin.json`                                                                                                                                                           | `plugin/plugin.json` (the portable format, `agent-plugins.org` schema 1.0.0)                                                                       |
+| MCP server                | `plugin/.mcp.json`                                                                                                                                                                            | `plugin/mcp.json` (`"type": "stdio"`)                                                                                                              |
+| Skill                     | `plugin/skills/xsolana-economy/`                                                                                                                                                              | the same folder                                                                                                                                    |
+| Marketplace               | `.claude-plugin/marketplace.json`                                                                                                                                                             | `.agents/plugins/marketplace.json`                                                                                                                 |
+| Install                   | `/plugin marketplace add XGamesFun/solana-kit`, `/plugin install xsolana@xgamesfun`                                                                                                           | `codex plugin marketplace add XGamesFun/solana-kit`, `codex plugin add xsolana@xgamesfun`                                                          |
+| Without the plugin        | `npx -y @xgamesfun/solana@0.29.11 connect` (runs `claude mcp add --scope project`, copies the skill to `.claude/skills` in this folder; `--scope user` for every project, `~/.claude/skills`) | `npx -y @xgamesfun/solana@0.29.11 connect --scope user` (`codex mcp add`, `~/.agents/skills`): Codex registers MCP servers only for the whole user |
+| Instructions in this repo | `CLAUDE.md` → `AGENTS.md`                                                                                                                                                                     | `AGENTS.md`                                                                                                                                        |
 
 Both marketplace files name the marketplace `xgamesfun`, so the plugin is `xsolana@xgamesfun` whichever repository
 serves it. Both MCP configs start the server with `npx -y --package=@xgamesfun/solana@<version> xsolana mcp`. The
 version is pinned to the plugin's own version, so a plugin and its server never disagree.
 
 The skill follows the Agent Skills standard (front matter `name` and `description` only), which both harnesses read.
-Its text names no harness. `xsolana connect` supports Claude Code and Codex only. From a checkout,
+Its text names no harness. `xsolana connect` supports Claude Code and Codex only. It connects the project folder it
+runs in by default, as `xcore connect` does; `--scope user` connects every project of this user. From a checkout,
 `node bin/xsolana.mjs connect --local` registers that checkout's server instead of the published package.
 
 ## Other agents and chat apps

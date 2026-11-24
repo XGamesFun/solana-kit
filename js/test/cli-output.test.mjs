@@ -364,7 +364,7 @@ describe('xsolana connect (what it says)', { skip: !posix && 'stand-in agents ar
       env: fakeAgents({ getCode: 0, removeCode: 1 }),
     });
     assert.equal(r.code, 1, r.out + r.err);
-    assert.match(r.out, /Claude Code: xsolana’s server was not found at the user scope/);
+    assert.match(r.out, /Claude Code: xsolana’s server was not found at the project scope/);
     assert.doesNotMatch(r.out, /xsolana removed/);
   });
 

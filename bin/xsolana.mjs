@@ -16,7 +16,8 @@
 //   xsolana approve [file] --keypair <keyfile> [--yes <code>]   put the economy live, signed by a key file: no browser, no page
 //       [--mint-key <token>=<keyfile>]…   a token's new mint at the address of a key file the owner has
 //   xsolana approve [file] --browser [--port n] [--no-open]     the same in a browser wallet, on a local page: only when its owner asks for it
-//   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
+//   xsolana connect [--agent claude|codex] [--scope project|user] [--local] [--remove] [--dry-run]   register the MCP server and the skill
+//                                       (this project by default, as xcore's connect; --scope user for every project)
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
 //   xsolana version
 //   xsolana help [command], xsolana <command> --help (or -h)   the commands, or one command's words, flags and all
@@ -302,20 +303,24 @@ const COMMANDS = {
   connect: {
     group: 'agent',
     summary: 'Add the xsolana tools and skill to Claude Code and Codex (--local: from a checkout)',
-    usage: ['xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]'],
+    usage: ['xsolana connect [--agent claude|codex] [--scope project|user] [--local] [--remove] [--dry-run]'],
     words: [0],
     about:
-      'Registers the MCP server and the skill through each agent’s own commands. It never edits an agent’s config file.',
+      'Registers the MCP server (pinned to this exact version) and the skill through each agent’s own commands, for the project folder it runs in unless you ask for every project. It never edits an agent’s config file. Codex registers MCP servers only for the whole user, so it needs --scope user.',
     args: [],
     options: [
       ['--agent claude|codex', 'that agent only (default: both)'],
-      ['--scope user|project', 'for every project of this user (default), or for this folder only'],
+      ['--scope project|user', 'this project folder only (default), or every project of this user'],
       ['--local', 'run the server from this checkout, not from npm'],
       ['--remove', 'remove the tools and the skill'],
       ['--dry-run', 'print the commands it would run, and run nothing'],
       HELP_OPT,
     ],
-    examples: ['xsolana connect', 'xsolana connect --agent codex --dry-run'],
+    examples: [
+      'xsolana connect',
+      'xsolana connect --scope user',
+      'xsolana connect --agent codex --scope user --dry-run',
+    ],
   },
   mcp: {
     group: 'agent',
