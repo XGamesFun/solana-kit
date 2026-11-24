@@ -208,3 +208,18 @@ describe('xsolana connect', () => {
     assert.deepEqual(npx.args.slice(0, 2), ['/c', 'npx']);
   });
 });
+
+describe('xsolana (a typo)', () => {
+  test('a command or a flag a typo away is named: did you mean it?', async () => {
+    const command = await xsolana(['chek']);
+    assert.equal(command.code, 2);
+    assert.match(command.err, /there is no command “chek”\. Did you mean check\?/);
+    const flag = await xsolana(['check', '--jsn']);
+    assert.equal(flag.code, 2);
+    assert.match(flag.err, /takes no --jsn flag \(only --json, --verbose\)\. Did you mean --json\?/);
+    const help = await xsolana(['help', 'reveiw']);
+    assert.match(help.err, /Did you mean review\?/);
+    const far = await xsolana(['zzz']);
+    assert.doesNotMatch(far.err, /Did you mean/);
+  });
+});

@@ -24,26 +24,38 @@ function speaking(words, view) {
   }
 }
 
-/** The words of `text`, a `{ … }` (a tool's arguments, a JSON form) kept as one. */
-function tokens(text) {
+/**
+ * The words of `text`, a `{ … }` (a tool's arguments, a JSON form) kept as one when it fits in `width`; a longer one
+ * stays as its words, so a line is only ever cut between words.
+ */
+function tokens(text, width) {
+  const words = String(text).split(/\s+/).filter(Boolean);
   const out = [];
-  let depth = 0;
-  for (const word of String(text).split(/\s+/).filter(Boolean)) {
-    if (depth > 0) out[out.length - 1] += ` ${word}`;
-    else out.push(word);
-    depth += (word.match(/\{/g) ?? []).length - (word.match(/\}/g) ?? []).length;
-    if (depth < 0) depth = 0;
+  for (let i = 0; i < words.length; i++) {
+    let group = words[i];
+    let depth = (group.match(/\{/g) ?? []).length - (group.match(/\}/g) ?? []).length;
+    let j = i;
+    while (depth > 0 && j + 1 < words.length && group.length + 1 + words[j + 1].length <= width) {
+      group += ` ${words[++j]}`;
+      depth += (words[j].match(/\{/g) ?? []).length - (words[j].match(/\}/g) ?? []).length;
+    }
+    if (depth > 0 && j + 1 < words.length) out.push(words[i]);
+    else {
+      out.push(group);
+      i = j;
+    }
   }
   return out;
 }
 
-/** `text` (said as the view says it) in lines of at most `width` columns, cut between words. */
+/** `text` (said as the view says it) in lines of at most `width` columns, cut only between words (a word longer than
+ * a line has a line of its own). */
 export function wrap(text, width) {
   const lines = [];
-  for (const word of tokens(say(String(text)))) {
+  for (const word of tokens(say(String(text)), width)) {
     const last = lines.at(-1);
     if (last !== undefined && last.length + 1 + word.length <= width) lines[lines.length - 1] = `${last} ${word}`;
-    else for (let w = word; w.length; w = w.slice(width)) lines.push(w.slice(0, width));
+    else lines.push(word);
   }
   return lines.length ? lines : [''];
 }
@@ -58,10 +70,13 @@ const numeric = cell => cell === '—' || /^[~≈-]?\d[\d,.]*(%| [A-Z]{2,8})?$/.
 export function table(headers, rows, { indent = 2 } = {}) {
   const all = [headers, ...rows].map(r => r.map(c => String(c ?? '')));
   const widths = headers.map((_, i) => Math.max(...all.map(r => r[i].length)));
+  // (a column is never narrower than its longest word, so no word is cut)
+  const least = headers.map((_, i) => Math.max(12, ...all.flatMap(r => tokens(say(r[i]), WIDTH).map(t => t.length))));
   const total = () => indent + widths.reduce((a, b) => a + b, 0) + 2 * (widths.length - 1);
   while (total() > WIDTH) {
-    const widest = widths.indexOf(Math.max(...widths));
-    if (widths[widest] <= 12) break;
+    const room = widths.map((w, i) => (w > least[i] ? w : -1));
+    const widest = room.indexOf(Math.max(...room));
+    if (room[widest] < 0) break;
     widths[widest] -= 1;
   }
   const out = [];

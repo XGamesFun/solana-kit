@@ -10,7 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { examples } from '../economy/examples.mjs';
-import { AGENT_ONLY } from '../mcp/person.mjs';
+import { AGENT_ONLY, personWords, terminalWords } from '../mcp/person.mjs';
 import { runTool } from '../mcp/server.mjs';
 
 const NOW = 1_790_000_000;
@@ -105,4 +105,19 @@ test('a named command prints a summary and tables that fit a terminal; --verbose
   assert.match(sim.text, /^ {2}Purchase +Price +On top, devnet +On top, mainnet +Mainnet extra +Returns$/m);
   const cost = await runTool('xsolana_cost', { example: 'shelter-fair' }, { ...person, verbose: false });
   assert.match(cost.text, /^A player pays [\d.]+ to [\d.]+ SOL on top of each price on mainnet/m);
+});
+
+test('a terminal line is cut only between words: refusals, warnings and tables keep every word whole', async () => {
+  const flat = t => ` ${t.replace(/\s+/g, ' ')} `;
+  const bad = { ...examples().find(e => e.name === 'shelter-fair').spec };
+  bad.items = bad.items.map((it, i) => (i ? it : { ...it, opens: 'yesterday at noon', closes: 'when it opens' }));
+  for (const input of [{ spec: bad }, ...examples().map(e => ({ example: e.name }))]) {
+    const agent = await runTool('xsolana_check', input, { terminal: TERMINAL_ALL, now: NOW });
+    const said = flat((await runTool('xsolana_check', input, person)).text);
+    for (const f of [...(agent.refusals ?? []), ...(agent.warnings ?? [])])
+      for (const word of personWords(terminalWords(`${f.message} ${f.fix ?? ''}`, TERMINAL_ALL))
+        .split(/\s+/)
+        .filter(w => w.length > 2))
+        assert.ok(said.includes(word), `${JSON.stringify(input).slice(0, 40)}: “${word}” is cut`);
+  }
 });

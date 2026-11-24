@@ -41,6 +41,26 @@ class UsageError extends Error {}
  */
 const USAGE_EXIT = 2;
 
+/** How many single-letter edits turn `a` into `b` (Levenshtein). */
+function edits(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++)
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+/** " Did you mean …?" for a name a typo away from one of `names` (at most two edits, and fewer than half its letters). */
+function didYouMean(given, names) {
+  const near = names
+    .map(n => [n, edits(String(given).toLowerCase(), n)])
+    .filter(([n, d]) => d <= 2 && d < n.length / 2)
+    .sort((a, b) => a[1] - b[1]);
+  return near.length ? ` Did you mean ${near[0][0]}?` : '';
+}
+
 /** The flags that take a value: `--name value` or `--name=value`. */
 const VALUED = new Set([
   '--args-file',
@@ -535,7 +555,9 @@ async function main(argv) {
   const helped = command === 'help' ? positional[0] : known && flags.has('--help') ? command : null;
   if (helped !== null && helped !== undefined) {
     if (!Object.hasOwn(COMMANDS, helped))
-      throw new UsageError(`There is no command “${helped}”: xsolana help lists them all.`);
+      throw new UsageError(
+        `There is no command “${helped}”: xsolana help lists them all.${didYouMean(helped, Object.keys(COMMANDS))}`,
+      );
     if (helped === 'tool' && command === 'tool' && positional[0]) {
       const { tools } = await import('../js/mcp/tools.mjs');
       const { terminalWords } = await import('../js/mcp/server.mjs');
@@ -551,7 +573,7 @@ async function main(argv) {
   const unknown = takes && [...flags].find(f => !takes.includes(f));
   if (unknown)
     throw new UsageError(
-      `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).`,
+      `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).${didYouMean(unknown, takes)}`,
     );
   // A word more than the command takes is refused: dropped, it would look as if it had been read.
   const [most, what] = known ? COMMANDS[command].words : [Infinity];
@@ -805,7 +827,9 @@ async function main(argv) {
       console.log(USAGE);
       break;
     default:
-      console.error(`xsolana: there is no command “${command}”.\n\n${USAGE}`);
+      console.error(
+        `xsolana: there is no command “${command}”.${didYouMean(command, [...Object.keys(COMMANDS), 'help'])}\n\n${USAGE}`,
+      );
       process.exitCode = USAGE_EXIT;
   }
 }
