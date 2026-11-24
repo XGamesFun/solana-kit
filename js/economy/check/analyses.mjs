@@ -1,6 +1,7 @@
 // The analyses that challenge a spec once nothing is refused (challenge.mjs), the pools that run dry at the
 // scenario's rates, and a simulation that could not run.
 import { challenge } from '../challenge.mjs';
+import { networkOf } from '../../client/cluster.js';
 import { FEES_ON } from '../model.mjs';
 import { farmRounding } from './farms.mjs';
 
@@ -14,6 +15,17 @@ export function checkAnalyses(c) {
   const { economy, now, refusals, warn, warnings, m, simulated } = c;
   // ---- the analyses that challenge a spec: follow the value, one intent one step, check every assumption
   if (!refusals.length) challenge(m, warn, now, economy, simulated);
+
+  // ---- W-TREASURY: on mainnet, a spec that names no treasury pays what sales leave to the owner's own address, the
+  // key that goes live (with --keypair, a key file on a computer). Said before going live, while it can still change.
+  if (!refusals.length && networkOf(economy) === 'mainnet' && !economy.treasury && !economy.live)
+    warn(
+      'W-TREASURY',
+      'economy.treasury',
+      'This economy is on mainnet and names no "treasury": what sales leave (and a lottery’s cut) lands at the owner’s address, the key that goes live. With `xsolana approve --keypair`, that is a key file on a computer, so the revenue sits where anything that can read the file can take it.',
+      'Set "treasury": "wallet:<address>" to a wallet you hold apart from the key file (a hardware wallet or a multisig) before going live: once live, the spec can no longer change it.',
+      { severity: 'medium' },
+    );
 
   // ---- W-ASSUMPTION (challenge.mjs): pools that run dry at the scenario's rates (W-POOL-DRY, check/pools.mjs, names
   // a pool nothing fills): one that is filled but pays out faster drains, and then skips or fails what it owes.

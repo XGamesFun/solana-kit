@@ -67,3 +67,13 @@ test('a cheap price with much on top of it is warned of, at mainnet’s fees, wi
   assert.ok(!cheap.some(x => x.code === 'W-FEE'));
   assert.ok(!at(0.1).some(x => x.code === 'W-ON-TOP'));
 });
+
+test('on mainnet, a spec with no treasury is warned that sales land at the key that goes live', () => {
+  const mainnet = { ...ladder, network: 'mainnet' };
+  const codes = spec => withCluster('mainnet', () => check(spec, { now: NOW }).warnings.map(w => w.code));
+  assert.ok(codes(mainnet).includes('W-TREASURY'));
+  assert.ok(
+    !codes({ ...mainnet, treasury: 'wallet:5DckzByxgf3nMQ1m1SGfpsnRXozawiFncTBZDtZ9Nj7T' }).includes('W-TREASURY'),
+  );
+  assert.ok(!check(ladder, { now: NOW }).warnings.some(w => w.code === 'W-TREASURY'), 'devnet is play money');
+});
