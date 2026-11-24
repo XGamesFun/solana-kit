@@ -265,7 +265,10 @@ patch releases on 2026-11-21 to 2026-11-23.
 - **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.11 …` in scripts and docs, and `"@xgamesfun/solana":
 "0.29.11"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
 
-The plan, not a commitment: fewer releases from here on, with fixes batched into fewer patches.
+**Proposed policy, not yet confirmed by the owner:** from the next release, a patch never refuses a spec that the
+patch before it took. A new refusal comes only in a new minor; until then, the same finding is a warning. Today this
+is not so: 0.29.11's changelog says "Two changes can refuse what 0.29.10 took". The plan, also not a commitment, is
+fewer releases, with fixes batched into fewer patches.
 
 ## Questions
 
