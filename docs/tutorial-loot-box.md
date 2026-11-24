@@ -1,23 +1,24 @@
 # Make a Solana loot box without writing a smart contract
 
-This walks through a paid loot box on Solana, from one sentence to the transactions its owner approves, without
-writing, deploying or auditing an Anchor program. It runs on **loot**, a Solana program every project shares, through
-the `xsolana` tools. Everything here runs on **devnet**, where nothing is real money. (The same file goes live on mainnet with
-`"network": "mainnet"` and real SOL; the program is not independently audited.)
+This tutorial builds a paid loot box on Solana, from one sentence to the transactions its owner approves. There is no
+Anchor program to write or deploy. The box runs on **loot**, one Solana program that every project shares, instead of
+new contract code for each project. You use it through the `xsolana` tools. loot has not been independently audited.
+Everything here runs on **devnet**, where nothing is real money. The same file goes live on mainnet with
+`"network": "mainnet"` and real SOL.
 
-You need Node 22 or later. With an AI coding agent you only type the sentence; the commands below are what it runs.
+You need Node 22 or later. With an AI coding agent, you type only the sentence, and the agent runs the commands below.
 
 ## 1. Say what you want
 
-In Claude Code with the plugin installed (`/plugin marketplace add XGamesFun/solana-kit`, then
-`/plugin install xsolana@xgamesfun`), in Codex, or in any agent with the MCP server
-(`npx -y --package=@xgamesfun/solana@0.29.11 xsolana mcp`):
+Use Claude Code with the plugin installed (`/plugin marketplace add XGamesFun/solana-kit`, then
+`/plugin install xsolana@xgamesfun`), Codex, or any agent with the MCP server
+(`npx -y --package=@xgamesfun/solana@0.29.11 xsolana mcp`). Give it this sentence:
 
 > A mystery crate for 0.1 SOL: a 1% legendary sword, a 9% epic shield, a 30% rare helmet, otherwise nothing. Most of
 > the money goes to the treasury.
 
-The agent looks for the nearest worked examples (`xsolana examples loot box gacha` does the same from a terminal) and
-writes a spec.
+The agent looks up the nearest worked examples and writes a spec. From a terminal, `xsolana examples loot box gacha`
+does the same lookup.
 
 ## 2. The spec
 
@@ -54,7 +55,7 @@ An economy is one JSON file, `xsolana.json`. This one has three collectible item
 }
 ```
 
-`value` is what you think an item is worth, used only to say what a player gets back on average.
+`value` is what you think an item is worth. The tools use it only to say what a player gets back on average.
 
 ## 3. Check it
 
@@ -62,9 +63,12 @@ An economy is one JSON file, `xsolana.json`. This one has three collectible item
 npx -y @xgamesfun/solana@0.29.11 check xsolana.json
 ```
 
-The checker refuses anything the program would refuse, before anything is signed. This spec is ready, with two
-warnings: each opening also pays the platform's 0.002 SOL player fee, and paid random items that can be resold are
-treated as gambling in some places (show the odds, and take advice before real money).
+The checker refuses anything the program would refuse, before anything is signed. This spec is ready, with one
+warning: paid random items that can be resold are treated as gambling in some places. Show the odds, and take advice
+before you use real money.
+
+Each opening also pays the platform's player fee: 0.002 SOL on devnet and 0.0005 SOL on mainnet. On mainnet that is
+0.5% of the 0.1 SOL price, under the 1% at which `check` warns of the fee.
 
 ## 4. Simulate it
 
@@ -83,8 +87,8 @@ Each day players pay 10 SOL and get back 6.2 SOL on average (items at the value 
 player fees, 0.08 SOL to MagicBlock’s oracle and 0.001 SOL in network fees.
 ```
 
-“In all” is what leaves a player's wallet for good: the price, the player fee, the oracle's fee, the network fee and
-the rent of the collectible they win.
+“In all” is what leaves a player's wallet for good. It is the price, the player fee, the oracle's fee, the network fee
+and the rent of the collectible they win.
 
 ## 5. Price it
 
@@ -92,8 +96,8 @@ the rent of the collectible they win.
 npx -y @xgamesfun/solana@0.29.11 cost xsolana.json
 ```
 
-Going live takes 3 transactions and about 0.017 SOL, almost all of it rent for 10 accounts (the
-project, the collection, the three items, the box, a lookup table and the token accounts).
+Going live takes 3 transactions and about 0.017 SOL. Almost all of it is rent for 10 accounts: the project, the
+collection, the three items, the box, a lookup table and the token accounts.
 
 ## 6. Review it the way a cheater would
 
@@ -101,10 +105,11 @@ project, the collection, the three items, the box, a lookup table and the token 
 npx -y @xgamesfun/solana@0.29.11 review xsolana.json
 ```
 
-For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the
-chain and the most one cheater gets. Here the only route is the box, and its roll comes from MagicBlock's VRF:
-“nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's key controls the
-project, so keep it safe: the key file readable by you alone on devnet, a hardware wallet or a multisig with real money.
+For every route that pays or gives value, the review says four things: who can trigger it, what the program enforces,
+what it trusts off the chain, and the most one cheater gets. Here the only route is the box. Its roll comes from
+MagicBlock's VRF: “nobody, the project included, can steer the roll.” The one finding is a reminder that the owner's
+key controls the project, so keep the key safe. On devnet, make the key file readable by you alone. With real money,
+use a hardware wallet or a multisig.
 
 ## 7. Go live, signed on your own computer
 
@@ -113,25 +118,28 @@ npx -y @xgamesfun/solana@0.29.11 keygen ~/.config/xsolana/loot-box.json
 npx -y @xgamesfun/solana@0.29.11 approve xsolana.json --keypair ~/.config/xsolana/loot-box.json
 ```
 
-`keygen` makes a key file for the project and prints its address, never the key: send that address the devnet SOL
-`cost` named. The key file is the project's owner, for good: keep it where it is, back it up yourself, and never
-paste it anywhere. `approve` then lists every transaction with what it pays and trusts, ends with a code, and sends
-nothing. Run the same command again with `--yes <code>` to send exactly what was listed (an agent does that only
-after you have read the list and said yes). Nothing asks for a seed phrase or for the key of a wallet you already
-have. To sign in a browser wallet instead, run the page yourself: `approve xsolana.json --browser`.
-`xsolana status xsolana.json` then reads the live economy back.
+`keygen` makes a key file for the project and prints its address, never the key. Send that address the devnet SOL
+that `cost` named. The key file is the project's owner, for good. Keep it where it is, back it up yourself, and never
+paste it anywhere.
+
+`approve` then lists every transaction with what it pays and trusts, and ends with a code. It sends nothing. Run the
+same command again with `--yes <code>` to send exactly what was listed. An agent does that only after you have read
+the list and said yes. Nothing asks for a seed phrase or for the key of a wallet you already have. To sign with a
+browser wallet instead, run the page yourself: `approve xsolana.json --browser`.
+
+After that, `xsolana status xsolana.json` reads the live economy back.
 
 ## 8. Let players open it
 
-From a web app, `@xgamesfun/solana/play` does what a player does with a live economy (open the box, wait for the roll,
-collect the item) with no Solana SDK:
+From a web app, `@xgamesfun/solana/play` does what a player does with a live economy: open the box, wait for the
+roll, and collect the item. It needs no Solana SDK:
 
 ```bash
 npm install @xgamesfun/solana
 ```
 
-The roll is asked of the oracle when the box is opened and settled once it answers. If the oracle has not answered
-10 minutes after it was asked, the purchase can be refunded.
+The roll is asked of the oracle when the box is opened, and it is settled once the oracle answers. If the oracle has
+not answered 10 minutes after it was asked, the purchase can be refunded.
 
 ## Where to go next
 
