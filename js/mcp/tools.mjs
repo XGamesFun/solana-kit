@@ -36,7 +36,7 @@ import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
 import { describeReview, review, signedRoutes } from '../economy/review.mjs';
 import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
-import { model, rent as rentOf } from '../economy/model.mjs';
+import { model, rent as rentOf, royaltyWords } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
 import { personCheck, personCost, personExamples, personExplain, personReview, personSimulate } from './views.mjs';
@@ -568,6 +568,7 @@ export const tools = [
       answer.text =
         personCheck(verdict, answer, {
           say: personSay(ctx),
+          royalty: royaltyWords(economy),
           verbose: ctx.verbose,
           legal,
           told,
@@ -653,13 +654,16 @@ export const tools = [
         : '';
       // (a name's price is a transaction's, if it is sent at all: only approving reads the token's record)
       const names = change.scope.renames?.length ? `\n${renamesNote(change.scope.renames)}` : '';
+      // (the collection's resale royalty is no cost to the owner, but it is set at go-live: said here, never silent)
+      const royalty = change.scope.live ? null : royaltyWords(economy);
+      const royaltyNote = royalty ? `\n${royalty}` : '';
       const answer = {
         ok: true,
         from,
         setup: c.setup,
         actions: c.actions,
         fees: c.fees,
-        text: head + explainCost(c) + names + footer(),
+        text: head + explainCost(c) + names + royaltyNote + footer(),
       };
       if (ctx?.reader !== 'person') return answer;
       // (for the developer: what going live costs, then what each action costs a player, on mainnet too)
@@ -676,6 +680,7 @@ export const tools = [
           mainnet: mainnet?.ok ? mainnet : null,
           verbose: ctx.verbose,
           words: explainCost(c) + names,
+          royalty,
         }) +
         footer();
       return answer;

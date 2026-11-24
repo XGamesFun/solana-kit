@@ -8,6 +8,7 @@ import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
 import { asWritten, numeral, percentage, plural } from './format.mjs';
 import {
+  royaltyWords,
   boostReadsGrowth,
   boxBuys,
   destination,
@@ -212,6 +213,8 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   // A token the setup makes is named on chain as it is made (plan.mjs): what wallets will show, and that a picture
   // needs its link before going live. One that is live already keeps what it has until the spec changes its name,
   // which is written at the next approve (live.mjs changedParts, approve/live-check.mjs readRenames).
+  // The collection the setup makes carries a resale royalty to the owner (5% unless the spec says): said, never silent.
+  section('The collection going live makes', [royaltyWords(economy)].filter(Boolean));
   section(
     'The tokens going live makes',
     [...m.tokens.values()]

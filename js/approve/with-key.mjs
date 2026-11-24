@@ -120,6 +120,12 @@ export function approvalText(state, { keyFile, balance = null }) {
     `Signed by the key file ${keyFile}, whose address is ${state.wallet}. The lines below call that address “your wallet”.`,
   );
   if (state.project) lines.push(`Project: ${state.project}`);
+  // (the collection's resale royalty, set as the setup makes it: said on its own line, not only inside a step)
+  const royalty = state.steps.map(s => /, with ([\d.]+)% resale royalty/.exec(s.says)).find(Boolean);
+  if (royalty)
+    lines.push(
+      `Royalty: the new collection takes ${royalty[1]}% of each resale for your wallet, where marketplaces honour Metaplex Core royalties ("collection": { "royaltyPercent": n } in the file sets it, 0 for none).`,
+    );
   for (const f of state.fresh ?? [])
     lines.push(
       `New, made by this setup: ${freshName(f.name)}, at ${f.address} (a new address each time this is shown).`,

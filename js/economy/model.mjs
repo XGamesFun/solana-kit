@@ -21,6 +21,18 @@ export const FEES_ON = Object.freeze({
   devnet: Object.freeze({ player: 2_000_000n, project: 10_000n }),
   mainnet: Object.freeze({ player: 500_000n, project: 10_000n }),
 });
+/**
+ * The resale royalty of the collection the setup makes, in words, or null when it makes none (or made it already):
+ * the percent, who it pays, and whether the spec set it or it is the default.
+ */
+export function royaltyWords(economy) {
+  if (economy?.collection === false || economy?.live?.collection) return null;
+  const set = economy?.collection?.royaltyPercent;
+  const percent = set ?? 5;
+  const name = economy?.collection?.name ?? String(economy?.name ?? 'Project').slice(0, 32);
+  return `The collection “${name}” is made with a ${percent}% resale royalty to your wallet${set === undefined ? ' (the default: "collection": { "royaltyPercent": n } sets it, 0 for none)' : ' ("royaltyPercent" in the spec)'}, paid by marketplaces that honour Metaplex Core royalties.`;
+}
+
 /** Devnet's fees, the platform's defaults: what the tests' own platform sets. */
 export const FEES = FEES_ON.devnet;
 /** The fees on the cluster an economy is on: the `network` its file names, devnet when it names none. */

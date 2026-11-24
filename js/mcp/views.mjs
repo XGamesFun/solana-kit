@@ -336,7 +336,11 @@ function simulateView(sim, economy, { mainnet = null, verbose = false, words = '
 }
 
 /** `xsolana cost` for the developer. `mainnet`: the cost at mainnet's fees, for an economy on devnet. */
-function costView(c, economy, { sim = null, simMainnet = null, mainnet = null, verbose = false, words = '' } = {}) {
+function costView(
+  c,
+  economy,
+  { sim = null, simMainnet = null, mainnet = null, verbose = false, words = '', royalty = null } = {},
+) {
   const s = c.setup;
   // (every SOL part of the total, so they add up to it; seeds in other tokens beside it)
   const parts = s.parts ?? [];
@@ -390,7 +394,7 @@ function costView(c, economy, { sim = null, simMainnet = null, mainnet = null, v
     : '';
   const network = c.fees?.mainnetPlayerSol !== undefined ? 'devnet' : (c.fees?.network ?? 'its network');
   return join([
-    [head, player].filter(Boolean).join('\n'),
+    [head, player, royalty ? wrap(royalty, WIDTH).join('\n') : ''].filter(Boolean).join('\n'),
     section(
       `What a player pays for one action${simMainnet ? ' (devnet SOL is play money; mainnet is what real players pay)' : ''}`,
       purchaseTable(rows, Boolean(simMainnet)),
@@ -461,7 +465,11 @@ const ASK_ORDER = { high: 0, medium: 1, low: 2 };
  * notes, and (--verbose) what players should know and how each route ends. `findings`: the refusals and warnings as
  * the tool lists them (repeats folded).
  */
-function checkView(verdict, findings, { verbose = false, legal = [], told = [], ends = [], designHint = '' } = {}) {
+function checkView(
+  verdict,
+  findings,
+  { verbose = false, legal = [], told = [], ends = [], designHint = '', royalty = null } = {},
+) {
   const { refusals, warnings } = findings;
   const bySeverity = ['high', 'medium', 'low']
     .map(sev => [sev, warnings.filter(w => w.severity === sev).length])
@@ -492,7 +500,7 @@ function checkView(verdict, findings, { verbose = false, legal = [], told = [], 
   if (!verbose && told.length) more.push('what players should know');
   if (!verbose && ends.length) more.push('how each route ends');
   return join([
-    head,
+    [head, verdict.ok && royalty ? wrap(royalty, WIDTH).join('\n') : ''].filter(Boolean).join('\n'),
     section('Refusals', refused.join('\n')),
     section('Warnings', warned.join('\n')),
     section(

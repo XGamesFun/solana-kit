@@ -217,6 +217,10 @@ Rent, as `cost` reports it: a project with one collection (217 bytes) is 0.00175
 about 0.017 SOL to go live. Any SOL you seed into pools comes on top. [The program reference](docs/program.md#costs)
 lists the rent of every account and says which ones return it.
 
+**Royalty.** The collection the setup makes carries a resale royalty to your wallet: 5% unless the spec says
+otherwise (`"collection": { "name": …, "royaltyPercent": n }`, 0 for none, at most 25). Marketplaces that honour
+Metaplex Core royalties pay it on each resale. `check`, `cost`, `explain` and `approve` all say it.
+
 Devnet SOL is play money, and devnet's player fee is four times mainnet's. For a devnet spec, `check` warns about the
 fee as a share of a price using mainnet's fee, and gives devnet's beside it. The full fee rules are in
 [the program reference](docs/program.md#the-fee).
