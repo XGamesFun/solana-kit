@@ -14,8 +14,8 @@ nothing is real money, and on **mainnet**, where everything is: an economy is on
 The tools: `xsolana_guide`, `xsolana_examples`, `xsolana_check`, `xsolana_design`, `xsolana_simulate`, `xsolana_cost`,
 `xsolana_explain`, `xsolana_review`, `xsolana_save`, `xsolana_publish`, `xsolana_status`, `xsolana_token`,
 `xsolana_client`. From a terminal (add `--json`), always with the exact version:
-`npx -y @xgamesfun/solana@0.29.11 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.29.11 token <mint>`, or `npx -y @xgamesfun/solana@0.29.11 tool <name> '<json>'` for any
+`npx -y @xgamesfun/solana@0.29.12 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.29.12 token <mint>`, or `npx -y @xgamesfun/solana@0.29.12 tool <name> '<json>'` for any
 tool (`xsolana_design` too).
 
 The tools' outputs say how to put each result to the person at the moment you need it: read them and follow them.

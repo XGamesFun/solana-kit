@@ -95,7 +95,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.11 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.12 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -106,29 +106,29 @@ zip for desktop apps and the server over HTTP.
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.29.11 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.29.12 examples shop with loot boxes
 
 # start your xsolana.json from the smallest one (a potion and a mystery box), then change it to your own economy
-npx -y @xgamesfun/solana@0.29.11 examples hello-shop --save xsolana.json
+npx -y @xgamesfun/solana@0.29.12 examples hello-shop --save xsolana.json
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.29.11 token <its mint address>
+npx -y @xgamesfun/solana@0.29.12 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.29.11 check xsolana.json
-npx -y @xgamesfun/solana@0.29.11 simulate xsolana.json
-npx -y @xgamesfun/solana@0.29.11 cost xsolana.json
+npx -y @xgamesfun/solana@0.29.12 check xsolana.json
+npx -y @xgamesfun/solana@0.29.12 simulate xsolana.json
+npx -y @xgamesfun/solana@0.29.12 cost xsolana.json
 
 # the whole economy in plain words, and what a cheater could get
-npx -y @xgamesfun/solana@0.29.11 explain xsolana.json
-npx -y @xgamesfun/solana@0.29.11 review xsolana.json
+npx -y @xgamesfun/solana@0.29.12 explain xsolana.json
+npx -y @xgamesfun/solana@0.29.12 review xsolana.json
 
 # go live: a key file for the project (it prints the address to send SOL to, never the key)…
-npx -y @xgamesfun/solana@0.29.11 keygen ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.12 keygen ~/.config/xsolana/my-game.json
 # …then everything going live would send, and a code; nothing is sent
-npx -y @xgamesfun/solana@0.29.11 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # …and with that code, exactly what it listed is sent
-npx -y @xgamesfun/solana@0.29.11 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists every command,
@@ -227,7 +227,7 @@ fee as a share of a price using mainnet's fee, and gives devnet's beside it. The
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | **loot**                                                             | the on-chain Solana program that runs every economy                                                                                | yes: every economy runs on it            |
 | **`@xgamesfun/solana`**                                              | this npm package: the check, simulate, cost and review tools, the JS client, the MCP server and the agent skill                    | yes, to check an economy and put it live |
-| **xsolana**                                                          | the package's command line (`npx -y @xgamesfun/solana@0.29.11 help` lists its commands), and the name of its plugin and MCP server | comes with the package                   |
+| **xsolana**                                                          | the package's command line (`npx -y @xgamesfun/solana@0.29.12 help` lists its commands), and the name of its plugin and MCP server | comes with the package                   |
 | **solana-kit**                                                       | this repository, [XGamesFun/solana-kit](https://github.com/XGamesFun/solana-kit)                                                   | only to contribute or build from source  |
 | **[xgames.fun](https://xgames.fun)**                                 | the site behind these tools: their how-tos, the hosted MCP server, the optional results server, and hosted games                   | no                                       |
 | **xcore** ([`@xgamesfun/xcore`](https://github.com/XGamesFun/xcore)) | a separate command line that hosts a web game on xgames.fun and adds an economy to it                                              | no: optional, for hosting a game         |
@@ -262,13 +262,13 @@ patch releases on 2026-11-21 to 2026-11-23.
 - **A new minor has so far meant a new program build**, and most did not carry accounts over (see
   [Upgrades](docs/program.md#upgrades)). The [changelog](CHANGELOG.md) lists every version with its date and puts
   breaking changes under **Breaking**.
-- **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.11 …` in scripts and docs, and `"@xgamesfun/solana":
-"0.29.11"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
+- **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.12 …` in scripts and docs, and `"@xgamesfun/solana":
+"0.29.12"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
 
-**Proposed policy, not yet confirmed by the owner:** from the next release, a patch never refuses a spec that the
-patch before it took. A new refusal comes only in a new minor; until then, the same finding is a warning. Today this
-is not so: 0.29.11's changelog says "Two changes can refuse what 0.29.10 took". The plan, also not a commitment, is
-fewer releases, with fixes batched into fewer patches.
+**Policy: a patch never refuses a spec that the patch before it accepted.** This holds from the next release
+(0.29.12) on. A new refusal comes only in a new minor; until then, the same finding is a warning. 0.29.11 broke this
+rule: its changelog says "Two changes can refuse what 0.29.10 took". The plan, not a commitment, is fewer releases,
+with fixes batched into fewer patches.
 
 ## Questions
 

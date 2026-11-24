@@ -4,6 +4,81 @@ The major and minor version of `@xgamesfun/solana` are those of the loot program
 0.29); `release.json` pins that program's exact build, its IDL and this client. Changes to the program itself are
 summarised here only where the tools see them.
 
+## 0.29.12 — 2026-11-24 (loot 0.29.0)
+
+The commands now read as a developer's tool: a summary and tables first, the details behind `--verbose`, plain
+English in the docs, and every cost figure labelled and in agreement. New: `xsolana handover`, `W-ON-TOP`,
+`W-TREASURY` and a minimal `hello-shop` example. Same program, same `release.json`. No spec that 0.29.11 accepted
+is refused; from this release on, a patch never refuses what the patch before it accepted (README, "Versions and
+stability").
+
+**Breaking**
+
+- **Usage errors exit 2.** An unknown command or flag, a missing or extra argument, a value that is not one, or
+  `approve` with no way to sign now exits 2, as xcore does. A failure (a missing file, a refused spec, a high review
+  finding, an approval that did not land) still exits 1. Scripts that tested for 1 on a usage error need updating.
+- **`xsolana connect` connects the current project by default.** It used to register the MCP server and the skill for
+  every project of the user. `--scope user` does that now. Codex registers MCP servers only for the whole user, so
+  it needs `xsolana connect --agent codex --scope user`.
+- **The named commands print for a person.** `check`, `simulate`, `cost`, `explain`, `review`, `publish`, `examples`
+  and `guide` word their text for the developer and lead with a summary and tables. A script that parsed their text
+  should use `--json`, whose `text` (and every MCP answer) is the agent's answer as before. `xsolana tool <name>`
+  prints the agent's answer too.
+
+**Added**
+
+- `xsolana handover [file] --keypair <owner> --to <new owner> [--yes <code>]` hands a live project to a new owner
+  key, signed by both key files as the program requires. Like `approve`, it shows what changes with a code and sends
+  nothing until `--yes <code>`. The authority, the treasury and the project's address stay as they are.
+- `--verbose` on `check`, `simulate`, `cost`, `explain`, `review` and `examples` adds the details left out by default
+  (each warning in full with its fix, what players should know, how each route ends, the simulation in words, each
+  account's rent, the trade-offs).
+- `W-ON-TOP`: a box, shop item, payment or ticket priced in SOL whose fees, oracle and rent come to 20% or more of
+  its price on mainnet, with the cheaper ways to build it (a compressed or "normal" item, a shop item where nothing is
+  random, a higher price). It replaces `W-FEE` on the same price.
+- `W-TREASURY` (medium): on mainnet, a spec with no `treasury` sends what sales leave to the key that goes live.
+- `examples/hello-shop.json`: a potion and a mystery box on devnet, the smallest worked example. A beginner's request
+  ("shop with loot boxes", "loot box") finds it first; the README's quick start and the cheat sheet use it.
+- `docs/cheatsheet.md`: a spec in ten fields on one page. The README has a fee table, a "Names" section, a "Start
+  with these" list of the few client exports most apps need, "Versions and stability", and the exit codes.
+- "Did you mean …?" for a command or a flag a typo away (`xsolana chek`, `check --jsn`).
+
+**Changed**
+
+- **Devnet's fee no longer inflates warnings.** Devnet's player fee (0.002 SOL) is four times mainnet's (0.0005 SOL).
+  On a devnet spec, `W-FEE` is raised by mainnet's fee and gives both; `cost` gives mainnet's player fee beside
+  devnet's, and a player's costs on both networks. No fee changed.
+- **One figure for what a player action costs on top of its price.** `explain` gave the player fee and the oracle
+  only ("about 0.0028 SOL") where `cost` gave the whole (0.00591 SOL, with the network fee and the rent of a minted
+  NFT, on average across the outcomes). `explain` and `review` now give `cost`'s figure, in its words, labelled with
+  the network whose fees it is at.
+- **`cost` lists every part of going live**, rent, fees and each deposit (a seed, a grant's funds, a lottery's reserve
+  for its rounds' rent), and they add up to the total. The reserve was in the total but named nowhere.
+- `examples` matches by how rare each word is and shows only close matches, simpler examples first; the hand ratings
+  of the rated kinds of economy (made against loot 0.20.1) are no longer shown, only in `--json`, dated. The rated
+  kinds name the kind of project, not a real brand.
+- Help is in usage / description / arguments / options / examples form, with the commands grouped.
+- Text in a terminal is cut only between words and never inside a sentence; a long sentence is laid out a clause a
+  line.
+- `review`, `explain` and the MCP texts say that what the chain keeps (nobody steers a roll) holds for the current
+  program version, which its upgrade authority can replace, and no longer say loot removes the risk of unaudited
+  code: loot itself is not independently audited.
+- Two warnings named "xsolana_play", which is no tool; they name the `@xgamesfun/solana/play` module.
+- The MCP tools' argument descriptions are shorter (the local tool list is 2.3% smaller), with every rule kept.
+
+**Docs**
+
+- The README, `docs/` and the program reference are in plain technical English, every fact kept.
+- The program reference gives both networks' fees and a new "Upgrades" section: what the changelog shows about
+  accounts carried over, and what is unknown about funds left in an older version's accounts. A project is 185 bytes
+  plus 32 a collection (it said 153).
+- "The owner's key" (before-you-use): a key file or a browser wallet (for mainnet, a browser wallet backed by a
+  hardware wallet is safer), and how to hand a project over. Every statement that the owner key could never be
+  handed on now says how it is.
+- The oracle's tier is fixed in the program: 0.0008 SOL a random number at high priority; MagicBlock's 0.0005 SOL
+  tier can't be chosen.
+- Why the IDL ships twice, and that its dead `repository` link comes from the program's build.
+
 ## 0.29.11 — 2026-11-23 (loot 0.29.0)
 
 Fixes from a read of the whole kit: places where a tool said Ready, ok or a number it could not stand behind, text
