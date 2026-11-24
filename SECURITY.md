@@ -13,8 +13,9 @@ under code no outside auditor has reviewed.
 
 The program is upgradeable. Its upgrade authority only upgrades the program (and makes the first platform admin); the
 platform admin signs only the platform's fees and its suspend switch. On mainnet the upgrade authority is a single
-key today (`xgameskCXpkhv5Kg6iq1GTR1pdWoXA3EMdvktt2gqJr`), not yet the multisig it is to be. On devnet an upgrade has so far meant a new account layout: no account carries over from an older version,
-so an economy made on one version is made again on the next.
+key today (`xgameskCXpkhv5Kg6iq1GTR1pdWoXA3EMdvktt2gqJr`), not yet the multisig it is to be. On devnet most upgrades so far have meant a new account layout: an economy made on one of those versions is
+made again on the next ([Upgrades](docs/program.md#upgrades) lists which versions kept their layouts, and what is
+unknown about funds left in an older version's accounts).
 
 The program and these tools are provided as is, without warranty: see [DISCLAIMER.md](DISCLAIMER.md).
 
