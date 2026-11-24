@@ -132,8 +132,8 @@ npx -y @xgamesfun/solana@0.29.11 approve xsolana.json --keypair ~/.config/xsolan
 
 Each command names an exact version, so you always run the release you meant to. `xsolana help` lists every command,
 and `xsolana help <command>` shows one command's arguments, options and examples. The commands print text for you to
-read. `--json` prints the whole answer as JSON, in the words an AI agent gets, and `check --verbose` adds what players
-should know and how each route ends.
+read: `check`, `simulate`, `cost`, `review` and `examples` start with a short summary and tables, and `--verbose` adds
+the details in words. `--json` prints the whole answer as JSON, in the words an AI agent gets.
 
 Exit codes: `0` success; `1` failure, including `check` refusing the spec, `review` finding something high and
 `approve` not landing; `2` a usage error (an unknown command or flag, a missing or extra argument).
