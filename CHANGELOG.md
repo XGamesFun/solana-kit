@@ -43,6 +43,13 @@ stability").
 - `docs/cheatsheet.md`: a spec in ten fields on one page. The README has a fee table, a "Names" section, a "Start
   with these" list of the few client exports most apps need, "Versions and stability", and the exit codes.
 - "Did you mean …?" for a command or a flag a typo away (`xsolana chek`, `check --jsn`).
+- `approve` and `status` read the platform account and say when the program charges other fees than the tools
+  quote (they quote the values at this release), or when a fee change waits, with its date.
+- The collection's resale royalty (5% to your wallet unless `"collection": { "royaltyPercent": n }` says otherwise, 0
+  for none) is said by `check`, `cost`, `explain` and on a line of its own in `approve`'s printout. It used to appear
+  only inside one setup step. The default is unchanged.
+- The package ships `docs/` (the cheat sheet, the tutorial, before-you-use, NFTs, harnesses and the program
+  reference), `CHANGELOG.md` and `SECURITY.md`, so the README's links work from npm as well as GitHub.
 
 **Changed**
 
@@ -65,6 +72,14 @@ stability").
   program version, which its upgrade authority can replace, and no longer say loot removes the risk of unaudited
   code: loot itself is not independently audited.
 - Two warnings named "xsolana_play", which is no tool; they name the `@xgamesfun/solana/play` module.
+- `W-FEE` says it gives the player fee alone ("the player fee alone is 0.0005 SOL, 5.0% of its price") and points at
+  `cost` for everything on top of the price, where it said "5.0% on top" beside `cost`'s 16%.
+- What players get back keeps items apart from money: `simulate` and `explain` say what is paid out and what items are
+  worth by the "value" the spec gives them ("a value, not money paid out"), where `simulate` said "get back 5 SOL" for a
+  sword valued at 5. The simulation's `perDay.players.itemValue` holds it.
+- `publish` lists the steps going live makes as one bulleted list, and numbers only the commands to run.
+- A spec outside the folder a command runs in is refused, as before; the refusal and the README say why (the tools
+  read and write nothing elsewhere) and to run the command in the spec's folder.
 - The MCP tools' argument descriptions are shorter (the local tool list is 2.3% smaller), with every rule kept.
 
 **Docs**
