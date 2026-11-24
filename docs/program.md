@@ -2518,7 +2518,13 @@ project's vault for a mint never closes either.
   - js/play funds the throwaway key that settles with `settleRent`. It gives `SETTLE_RENT_UNIT` (0.006 SOL, a
     client's own figure) for each prize that may open an account, for each draw of each open. It also gives one unit
     per order for each source of tokens and for the NFT the order rolls on. The key gives back what it doesn't spend.
-  - Every open, and every request for a waiting roll, costs the oracle's fee.
+  - Every open, and every request for a waiting roll, costs the oracle's fee: 800,000 lamports (0.0008 SOL), paid by
+    whoever asks (the player on `open_box`, the sender of `draw_lottery`, the authority on `roll`).
+  - **The oracle's tier is fixed in the program.** loot asks MagicBlock's default queue
+    (`Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh`, the only queue it accepts) at high priority, which answers with a
+    compute limit of 400,000. MagicBlock's regular request (500,000 lamports, 0.0005 SOL, a compute limit of 300,000,
+    per loot's client notes) is not offered: neither the spec nor any instruction argument chooses the queue or the priority.
+    A cheaper tier would need a new program version.
 - **A `buy`** costs the price, the fee and what its prizes open or make. It has no order and uses no oracle.
 - **Prizes** cost what they make, and the sender pays (for a grant, the grant's funds pay). This covers the winner's
   token account if it is missing (1,488,440 lamports), a new Core asset (about 0.004 SOL), and a roll's order (sized to
