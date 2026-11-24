@@ -195,8 +195,9 @@ const COMMANDS = {
   explain: onFile(
     'explain',
     'Describe the economy in plain words',
-    'Describes what players do and what it costs and is worth, how the pools fill and drain, what runs by itself, and what the authority signs.',
-    ['xsolana explain'],
+    'Describes what players do and what it costs and is worth, how the pools fill and drain, what runs by itself, and what the authority signs, each section in short.',
+    ['xsolana explain', 'xsolana explain --verbose'],
+    [verbose('the whole text, and each route state by state as a player, the owner and a cheater see it')],
   ),
   review: onFile(
     'review',
@@ -435,7 +436,7 @@ const USAGE = [
       '--json',
       'print the whole answer as JSON, as an AI agent gets it (guide, examples, check … status, token, client, tool)',
     ],
-    ['--verbose', 'check, simulate, cost, review, examples: also print the details left out by default'],
+    ['--verbose', 'check, simulate, cost, explain, review, examples: also print the details left out by default'],
     ['-h, --help', 'show a command’s help'],
   ]),
   '',
