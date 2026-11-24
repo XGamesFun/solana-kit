@@ -338,13 +338,13 @@ Its client needs no Solana SDK.
 - [NFTs and tokens](docs/nfts.md): with and without the project's authority
 - [Trust and cheating](skills/xsolana-economy/references/trust-and-cheating.md): what your server must check
 - [The agent skill](skills/xsolana-economy/SKILL.md): what an AI agent follows to build an economy
-- [Agents and harnesses](docs/harnesses.md): every way to reach the tools; [Releasing](RELEASING.md): how a version is
+- [Agents and harnesses](docs/harnesses.md): every way to reach the tools; [Releasing](https://github.com/XGamesFun/solana-kit/blob/main/RELEASING.md): how a version is
   made
 - [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [xgames.fun/solana](https://xgames.fun/solana)
 
 ## Contributing
 
-Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup (`npm ci`, `npm run fixtures`,
+Issues and pull requests are welcome. [CONTRIBUTING.md](https://github.com/XGamesFun/solana-kit/blob/main/CONTRIBUTING.md) has the setup (`npm ci`, `npm run fixtures`,
 `npm run check`), the repository's layout and how to send a change. Report a vulnerability privately, as
 [SECURITY.md](SECURITY.md) describes.
 

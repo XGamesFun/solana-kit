@@ -68,7 +68,7 @@ Its tools are the hosted server's, so they change with xgames.fun, whatever the 
 
 ## Releasing a version
 
-[RELEASING.md](../RELEASING.md) has the steps: what to keep in step, publishing, and checking both harnesses.
+[RELEASING.md](https://github.com/XGamesFun/solana-kit/blob/main/RELEASING.md) has the steps: what to keep in step, publishing, and checking both harnesses.
 
 ## Fresh-session evals
 

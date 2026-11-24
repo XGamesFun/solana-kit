@@ -103,7 +103,10 @@
     "bin/",
     "skills/",
     "examples/*.json",
+    "docs/",
     "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "LICENSE",
     "NOTICE",
     "DISCLAIMER.md"
