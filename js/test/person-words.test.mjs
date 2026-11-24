@@ -44,7 +44,7 @@ test('check for a person keeps every warning and question, and --verbose adds wh
     const long = await runTool('xsolana_check', { example: name }, person);
     for (const w of agent.warnings) assert.ok(short.text.includes(w.code), `${name}: ${w.code}`);
     // (a question a line, wrapped: read as one)
-    const flat = short.text.replace(/\n {2}/g, ' ');
+    const flat = short.text.replace(/\n\s*(· )?/g, ' ');
     for (const ask of agent.warnings.map(w => w.ask).filter(Boolean))
       assert.ok(flat.includes(`? ${ask}`), `${name}: the question “${ask}”`);
     assert.match(short.text, /^Ready: no refusals, \d+ warnings/, name);
@@ -54,7 +54,7 @@ test('check for a person keeps every warning and question, and --verbose adds wh
     // the lines the agent is told to pass on are all in the person's verbose text
     const told = [...agent.text.matchAll(/^> (.*)$/gm)].map(m => m[1]);
     assert.ok(told.length, name);
-    const flatLong = long.text.replace(/\n {2}/g, ' ');
+    const flatLong = long.text.replace(/\n\s*(· )?/g, ' ');
     for (const line of told) assert.ok(flatLong.includes(line), `${name}: “${line}”`);
   }
 });
@@ -122,4 +122,20 @@ test('a terminal line is cut only between words: refusals, warnings and tables k
         .filter(w => w.length > 2))
         assert.ok(said.includes(word), `${JSON.stringify(input).slice(0, 40)}: “${word}” is cut`);
   }
+});
+
+test('a default view never cuts inside a sentence or a parenthesis', async () => {
+  for (const { name } of examples())
+    for (const tool of ['check', 'simulate', 'explain', 'review']) {
+      const { text } = await runTool(`xsolana_${tool}`, { example: name }, { ...person, verbose: false });
+      for (const line of text.split('\n'))
+        assert.doesNotMatch(line, /[\w,;:(]…$/, `xsolana ${tool} on ${name} cuts a sentence: ${line}`);
+      // each bullet, its lines together: as many ( as )
+      const bullets = text.split(/\n(?=[-!?✗] )/).map(b => b.replace(/\s+/g, ' '));
+      for (const b of bullets) {
+        const open = (b.match(/\(/g) ?? []).length;
+        const close = (b.match(/\)/g) ?? []).length;
+        assert.equal(open, close, `xsolana ${tool} on ${name} leaves a parenthesis open: ${b.slice(0, 200)}`);
+      }
+    }
 });

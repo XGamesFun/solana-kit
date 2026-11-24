@@ -97,38 +97,76 @@ export function table(headers, rows, { indent = 2 } = {}) {
 }
 
 /**
- * The first sentence of `text`, at most `max` characters: a longer one ends at its first colon or semicolon when that
- * comes soon enough, else it is cut between words, with "…".
+ * Where the first sentence of `s` ends: the first ".", "!" or "?" followed by a space or the end, outside any
+ * parentheses or quotes, so "(about 0.5 SOL. …)" or "“Done.”" never ends one. -1 when there is none.
+ */
+function sentenceEnd(s) {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '“') depth++;
+    else if ((c === ')' || c === '”') && depth > 0) depth--;
+    else if (depth === 0 && /[.!?]/.test(c) && (i + 1 === s.length || /\s/.test(s[i + 1]))) return i;
+  }
+  return -1;
+}
+
+/**
+ * The first sentence of `text`, whole: never cut inside a sentence or a parenthesis. A first sentence with no number,
+ * followed by one that has them, is said with it ("…pays the player fee. On mainnet that is 0.0005 SOL, 5% on top…").
+ * `max` only decides whether that second sentence fits.
  */
 export function firstSentence(text, max = 150) {
   const s = String(text).trim();
-  const end = s.search(/[.!?](\s|$)/);
+  const end = sentenceEnd(s);
   let first = end >= 0 ? s.slice(0, end + 1) : s;
-  // (a first sentence with no number, followed by one that has them, is said with it: "…pays the player fee. On
-  // mainnet that is 0.0005 SOL, 5% on top…")
   if (!/\d/.test(first) && end >= 0) {
     const rest = s.slice(end + 1).trim();
-    const stop = rest.search(/[.!?](\s|$)/);
+    const stop = sentenceEnd(rest);
     const second = stop >= 0 ? rest.slice(0, stop + 1) : rest;
     if (/\d/.test(second) && first.length + 1 + second.length <= max + 60) first = `${first} ${second}`;
   }
-  if (first.length <= max + (first.includes('. ') ? 60 : 0)) return first;
-  const stop = first.slice(0, max).search(/[:;](\s)(?![^(]*\))/);
-  if (stop > 40) {
-    // (the clause after the colon is kept when it holds a number: "…: empty in about 6 days")
-    const next = first.slice(stop + 1).match(/^\s*([^,;:]*\d[^,;:]*)/)?.[1];
-    return `${first.slice(0, stop)}${next ? `: ${next.trim()}` : ''}.`;
-  }
-  const cut = first.slice(0, max);
-  return `${cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:(]$/, '')}…`;
+  return first;
 }
 const days = n => `${numeral(n)} ${n === 1 ? 'day' : 'days'}`;
 
-/** Lines wrapped at WIDTH, each continued under its first character after `lead`. */
-const bullet = (text, lead = '- ') =>
-  wrap(text, WIDTH - lead.length)
-    .map((l, i) => (i ? ' '.repeat(lead.length) : lead) + l)
+/** The clauses of `text` split at its semicolons outside parentheses and quotes, each with its semicolon. */
+function clauses(text) {
+  const out = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(' || c === '“') depth++;
+    else if ((c === ')' || c === '”') && depth > 0) depth--;
+    else if (c === ';' && depth === 0 && /\s/.test(text[i + 1] ?? '')) {
+      out.push(text.slice(from, i + 1).trim());
+      from = i + 1;
+    }
+  }
+  out.push(text.slice(from).trim());
+  return out.filter(Boolean);
+}
+
+/** A sentence longer than this many words is laid out a clause a line. */
+const LONG_WORDS = 45;
+
+/**
+ * Lines wrapped at WIDTH, each continued under its first character after `lead`. A long sentence keeps every word:
+ * its clauses (split at its semicolons) go a line each under the first, so it reads in parts and nothing is cut.
+ */
+const bullet = (text, lead = '- ') => {
+  const said = say(String(text));
+  const parts = said.split(/\s+/).length > LONG_WORDS ? clauses(said) : [said];
+  const under = ' '.repeat(lead.length);
+  return parts
+    .flatMap((part, n) =>
+      wrap(part, WIDTH - lead.length - (n ? 2 : 0)).map(
+        (l, i) => (n === 0 ? (i ? under : lead) : `${under}${i ? '  ' : '· '}`) + l,
+      ),
+    )
     .join('\n');
+};
 
 /** A section: its title, then its body, when there is one. */
 const section = (title, body) => (body ? `${title}\n${body}` : '');
