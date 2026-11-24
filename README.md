@@ -234,6 +234,24 @@ fee as a share of a price using mainnet's fee, and gives devnet's beside it. The
 [Before you use it](docs/before-you-use.md) has the full list, with the details behind each item. Some things aren't
 built yet: read the [known limits](docs/program.md#known-limits) before you promise players something unusual.
 
+## Versions and stability
+
+The package is pre-1.0 and changes often: the changelog has 59 versions from 2026-10-30 to 2026-11-23, including 11
+patch releases on 2026-11-21 to 2026-11-23.
+
+- **major.minor is the program's.** `@xgamesfun/solana` 0.29.x is built for loot 0.29.0. A release check refuses a
+  package whose major.minor differs from the IDL's. `release.json` names the program build (its version, program
+  addresses and binary hashes) and the hashes of the IDL and the client.
+- **A patch is a JavaScript-only release** on the same program: the checker's rules, the tools' words, the client
+  and the docs. It can change what `check` warns about or refuses, and the wording an agent sees.
+- **A new minor has so far meant a new program build**, and most did not carry accounts over (see
+  [Upgrades](docs/program.md#upgrades)). The [changelog](CHANGELOG.md) lists every version with its date and puts
+  breaking changes under **Breaking**.
+- **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.11 …` in scripts and docs, and `"@xgamesfun/solana":
+"0.29.11"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
+
+The plan, not a commitment: fewer releases from here on, with fixes batched into fewer patches.
+
 ## Questions
 
 **How do I make a loot box or gacha on Solana without writing a smart contract?** Describe it as a box: its price, its
