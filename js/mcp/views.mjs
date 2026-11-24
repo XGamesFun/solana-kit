@@ -226,7 +226,22 @@ function purchaseTable(rows, onDevnet) {
 }
 
 const ON_TOP_NOTE =
-  '"On top" is what one action costs beyond its price, on average across its outcomes: the player fee, the oracle, the network fee, and rent that never comes back (a minted NFT’s, counted by how often one is minted); explain gives the same figure. "Extra" is that as a share of a price in SOL. "Returns" is what a player gets back on average, as a share of the price.';
+  '"On top" is what one action costs beyond its price, on average across its outcomes: the player fee, the oracle, the network fee, and rent that never comes back (a minted NFT’s, counted by how often one is minted); explain gives the same figure. "Extra" is that as a share of a price in SOL. "Returns" is what a player gets back on average, as a share of the price, counting items at the "value" you gave them.';
+
+/**
+ * What players get back a day, items apart: what is paid out (SOL, tokens) and what the items given are worth at the
+ * "value" the spec gives them, which no one is paid.
+ */
+export function backWords(players, list) {
+  const items = players.itemValue ?? {};
+  const paid = Object.fromEntries(
+    Object.entries(players.getBack)
+      .map(([k, v]) => [k, +(v - (items[k] ?? 0)).toFixed(9)])
+      .filter(([, v]) => v > 1e-9),
+  );
+  const worth = Object.keys(items).length ? list(items) : '';
+  return `On average they get back ${Object.keys(paid).length ? `${list(paid)} paid out` : 'nothing paid out'}${worth ? `, and items worth ${worth} by the "value" you gave them (a value, not money paid out)` : ''}.`;
+}
 
 /** `xsolana simulate` for the developer. `mainnet`: the simulation at mainnet's fees, for an economy on devnet. */
 function simulateView(sim, economy, { mainnet = null, verbose = false, words = '' } = {}) {
@@ -240,7 +255,7 @@ function simulateView(sim, economy, { mainnet = null, verbose = false, words = '
   const counts = Object.entries(sim.scenario.perDay).map(([k, v]) => `${k} ${numeral(v)}`);
   const head = [
     `Simulation over ${numeral(sim.scenario.days)} days. Counts a day: ${counts.join(', ') || 'none named'} (anything not named: ${numeral(sim.scenario.defaultPerDay)}).`,
-    `Each day, players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average.`,
+    `Each day, players pay ${list(d.players.pay)}. ${backWords(d.players, list)}`,
     `The treasury gets ${list(d.creator.treasury)}. Platform fees: ${numeral(d.platform.totalSol)} SOL. Oracle fees: ${numeral(d.oracle.totalSol)} SOL.`,
   ]
     .map(l => wrap(l, WIDTH).join('\n'))

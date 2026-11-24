@@ -27,12 +27,18 @@ test('the fees the tools quote: 0.002 SOL a player action on devnet, 0.0005 on m
 
 test('a devnet price is warned of the fee as mainnet charges it, with devnet’s beside it', async () => {
   const w = await fee('devnet', 0.01);
-  assert.match(w.message, /On mainnet that is 0\.0005 SOL, 5\.0% on top of its 0\.01 SOL price\./);
-  assert.match(w.message, /on devnet, where the fee is 0\.002 SOL \(20\.0%\) and SOL is play money/);
+  assert.match(
+    w.message,
+    /On mainnet the player fee alone is 0\.0005 SOL, 5\.0% of its 0\.01 SOL price; xsolana_cost gives everything/,
+  );
+  assert.match(w.message, /on devnet, where the player fee is 0\.002 SOL \(20\.0%\) and SOL is play money/);
   // 0.1 SOL: 2% of it on devnet, 0.5% on mainnet, under the 1% a warning starts at
   assert.equal(await fee('devnet', 0.1), undefined);
   const m = await fee('mainnet', 0.01);
-  assert.match(m.message, /player fee of 0\.0005 SOL: 5\.0% on top of its 0\.01 SOL price\.$/);
+  assert.match(
+    m.message,
+    /player fee of 0\.0005 SOL: the player fee alone is 5\.0% of its 0\.01 SOL price; xsolana_cost gives everything/,
+  );
   assert.equal(await fee('mainnet', 0.1), undefined);
 });
 

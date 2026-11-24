@@ -611,7 +611,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     `Each day, if ${named ? `${named} happen (anything else: ${unnamedWords(sim)})` : `${asWritten(sim.scenario.defaultPerDay)} of each thing happen${except.length ? ` (${except.join(', ')})` : ''}`}`,
   );
   lines.push(
-    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average, plus ${numeral(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
+    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average${Object.keys(d.players.itemValue ?? {}).length ? ` (of it, items worth ${list(d.players.itemValue)} at the "value" you gave them: a value, not money paid out)` : ''}, plus ${numeral(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
   );
   lines.push(
     `- Your treasury gets ${list(d.creator.treasury)}; burned: ${list(d.burned)}; the platform’s fees: ${numeral(d.platform.totalSol)} SOL.`,

@@ -1013,8 +1013,8 @@ export function checkTokens(c) {
       'W-FEE',
       where,
       onDevnet
-        ? `Every ${what} also pays the platform’s player fee. On mainnet that is ${fromUnits(mainnet, 9)} SOL, ${percentOf(mainnet)} on top of its ${fromUnits(price, 9)} SOL price. This economy is on devnet, where the fee is ${fromUnits(here, 9)} SOL (${percentOf(here)}) and SOL is play money.`
-        : `Every ${what} also pays the platform’s player fee of ${fromUnits(here, 9)} SOL: ${percentOf(here)} on top of its ${fromUnits(price, 9)} SOL price.`,
+        ? `Every ${what} also pays the platform’s player fee. On mainnet the player fee alone is ${fromUnits(mainnet, 9)} SOL, ${percentOf(mainnet)} of its ${fromUnits(price, 9)} SOL price; xsolana_cost gives everything a player pays on top of the price (the fee, the oracle, the network, rent). This economy is on devnet, where the player fee is ${fromUnits(here, 9)} SOL (${percentOf(here)}) and SOL is play money.`
+        : `Every ${what} also pays the platform’s player fee of ${fromUnits(here, 9)} SOL: the player fee alone is ${percentOf(here)} of its ${fromUnits(price, 9)} SOL price; xsolana_cost gives everything a player pays on top of the price (the fee, the oracle, the network, rent).`,
       'Fine for a game; a higher price makes the fee a smaller part of it.',
     );
   };

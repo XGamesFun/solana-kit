@@ -340,7 +340,8 @@ export function simulate(economy, { now = 0 } = {}) {
   const rateOut = (pool, by, perDayShare, to) =>
     perDayShare && pools.get(pool)?.rate.push({ by, perDay: perDayShare, ...(to ? { to } : {}) });
 
-  const players = { pay: {}, get: {}, fees: 0, network: 0, rent: 0, oracle: 0 };
+  // (`items`: the part of `get` that is items, at the value the spec gives them: worth, not SOL or tokens paid out)
+  const players = { pay: {}, get: {}, items: {}, fees: 0, network: 0, rent: 0, oracle: 0 };
   const creator = { treasury: {}, fees: 0, network: 0, oracle: 0 };
   const burned = {};
   const accounts = {};
@@ -368,7 +369,10 @@ export function simulate(economy, { now = 0 } = {}) {
       // A compressed one opens no account.
       each = line.compressed ? 0 : COLLECTIBLE_RENT;
       const worth = m.item.get(line.item)?.value;
-      if (worth !== undefined) add(players.get, game, times * num(worth));
+      if (worth !== undefined) {
+        add(players.get, game, times * num(worth));
+        add(players.items, game, times * num(worth));
+      }
     } else if (line.gives === 'tokens') {
       each = TOKEN_ACCOUNT_RENT;
       const token = prizePool(line) ? m.pool.get(prizePool(line))?.currency : (line.currency ?? game);
@@ -601,6 +605,8 @@ export function simulate(economy, { now = 0 } = {}) {
     const w = weights(b);
     const total = w.reduce((a, x) => a + x, 0) || 1;
     let value = 0;
+    // (of `value` and `other`, what is items at their given value)
+    const itemValue = {};
     const unpriced = [];
     const other = {};
     // How many times one open gives each outcome, on average: each slot's draws among the outcomes it names (all when it
@@ -642,6 +648,7 @@ export function simulate(economy, { now = 0 } = {}) {
         if (worth === null) unpriced.push(o.item);
         else if ((b.currency ?? game) === game) value += n * worth;
         else add(other, game, n * worth);
+        if (worth !== null) add(itemValue, game, n * worth);
       } else if (o.gives === 'stash' || o.gives === 'nft') {
         // A stash's NFT has whatever worth its collection has: the simulation counts how fast it is given away.
         Object.assign(row, { stash: o.stash, worth: null, ...(o.nft ? { nft: o.nft } : {}) });
@@ -681,6 +688,7 @@ export function simulate(economy, { now = 0 } = {}) {
     add(players.pay, token, opens * price);
     add(players.get, token, opens * value);
     for (const [t, v] of Object.entries(other)) add(players.get, t, opens * v);
+    for (const [t, v] of Object.entries(itemValue)) add(players.items, t, opens * v);
     // Two signatures: the open, then the settle that carries the outcome out (a throwaway key the open funds sends it).
     // A box that needs no roll is bought in one (`buy`), with no order; every open asks the oracle.
     const bought = boxBuys(b, m);
@@ -887,7 +895,10 @@ export function simulate(economy, { now = 0 } = {}) {
         gives.push(line.item);
         if (!line.compressed) players.rent += crafts * COLLECTIBLE_RENT;
         const worth = m.item.get(line.item)?.value;
-        if (worth !== undefined) add(players.get, game, crafts * num(worth));
+        if (worth !== undefined) {
+          add(players.get, game, crafts * num(worth));
+          add(players.items, game, crafts * num(worth));
+        }
       } else if (line.gives === 'tokens') {
         // In its pool's token, or the one it mints.
         const token = prizeToken(line, m)?.key ?? line.currency ?? game;
@@ -1690,6 +1701,7 @@ export function simulate(economy, { now = 0 } = {}) {
       players: {
         pay: totals(players.pay),
         getBack: totals(players.get),
+        itemValue: totals(players.items),
         playerFeesSol: round(players.fees),
         oracleFeesSol: round(players.oracle),
         networkFeesSol: round(players.network),
