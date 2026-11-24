@@ -205,17 +205,17 @@ tools quote, are the values at this release; `approve` and `status` read the pla
 other fees or a change waits. `xsolana cost` prices a spec at its own
 network's fees, and on devnet it also gives mainnet's.
 
-| What                        | Devnet                                                                          | Mainnet     | Paid by                                                               |
-| --------------------------- | ------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------- |
-| Player fee                  | 0.002 SOL                                                                       | 0.0005 SOL  | the player (or a sponsor), once for each action they sign             |
-| Project fee                 | 0.00001 SOL                                                                     | 0.00001 SOL | the owner or authority, for setup and each of the project's own steps |
-| Cap on each fee             | 0.01 SOL                                                                        | 0.01 SOL    | the program refuses a higher fee                                      |
-| Fee raise                   | applies 7 days after it is set; a cut applies at once                           | same        | set by the platform                                                   |
-| Randomness (MagicBlock VRF) | 0.0008 SOL per roll or draw (high priority; the program offers no cheaper tier) | same        | whoever asks: the player on a box, the sender of a draw               |
-| Metaplex Core create fee    | 0.0015 SOL per NFT minted, on top of its rent (about 0.0031 SOL in all)         | same        | whoever settles or mints it; the NFT's account keeps it               |
-| Token Metadata fee          | 0.01 SOL per token name written on chain, on top of its rent                    | same        | the owner, at setup                                                   |
-| Rent                        | (bytes + 128) × 5,080 lamports per account                                      | same        | whoever opens the account; some return it when they close             |
-| Network fee                 | 5,000 lamports a signature, plus a priority fee of 2 lamports a transaction     | same        | the signer                                                            |
+| What                        | Devnet                                                                          | Mainnet     | Paid by                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| Player fee                  | 0.002 SOL                                                                       | 0.0005 SOL  | the player (or a sponsor), once for each action they sign                                                          |
+| Project fee                 | 0.00001 SOL                                                                     | 0.00001 SOL | the owner or authority, for setup and each of the project's own steps                                              |
+| Cap on each fee             | 0.01 SOL                                                                        | 0.01 SOL    | the program refuses a higher fee                                                                                   |
+| Fee raise                   | applies 7 days after it is set; a cut applies at once                           | same        | set by the platform                                                                                                |
+| Randomness (MagicBlock VRF) | 0.0008 SOL per roll or draw (high priority; the program offers no cheaper tier) | same        | whoever asks: the player on a box, the sender of a draw                                                            |
+| Metaplex Core protocol fee  | 0.0015 SOL per NFT minted, on top of its rent (about 0.0031 SOL in all)         | same        | whoever settles or mints it; Metaplex collects it ([protocol fees](https://developers.metaplex.com/protocol-fees)) |
+| Token Metadata fee          | 0.01 SOL per token name written on chain, on top of its rent                    | same        | the owner, at setup                                                                                                |
+| Rent                        | (bytes + 128) × 5,080 lamports per account                                      | same        | whoever opens the account; some return it when they close                                                          |
+| Network fee                 | 5,000 lamports a signature, plus a priority fee of 2 lamports a transaction     | same        | the signer                                                                                                         |
 
 Rent, as `cost` reports it: a project with one collection (217 bytes) is 0.0017526 SOL, a token account (165 bytes)
 0.00148844 SOL, and a project's lookup table of 21 addresses (728 bytes) 0.00434848 SOL. The tutorial's loot box takes

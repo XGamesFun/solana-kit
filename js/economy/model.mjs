@@ -63,9 +63,10 @@ export const ACCOUNT_OVERHEAD = 128n;
 export const MOST_RENT_PER_BYTE = 6_960n;
 export const rent = bytes => (BigInt(bytes) + ACCOUNT_OVERHEAD) * RENT_PER_BYTE;
 /**
- * A collectible's Core account, paid from the SOL its order holds (or by whoever gives it): its rent (a Core asset of
- * about 190 bytes) plus Metaplex Core's creation fee of 0.0015 SOL, which the account keeps. The full simulation
- * measures 0.00309 to 0.00313 SOL across its fixtures.
+ * What minting a collectible's Core account costs, paid from the SOL its order holds (or by whoever gives it): its rent
+ * (a Core asset of about 190 bytes) plus Metaplex Core's protocol fee of 0.0015 SOL a mint, which Metaplex sweeps to
+ * its fee collector (https://developers.metaplex.com/protocol-fees): neither comes back to the player. The full
+ * simulation measures 0.00309 to 0.00313 SOL across its fixtures.
  */
 export const COLLECTIBLE_RENT = 3_100_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;

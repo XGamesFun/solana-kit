@@ -68,10 +68,11 @@ const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
  * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
 const ticketLine = l => sol(BigInt(entryWidth(...entryShape(l))) * RENT_PER_BYTE);
-/** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
+/** A collectible's Core account, paid from the SOL the order holds: its rent and Metaplex Core's protocol fee, which Metaplex collects (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
-/** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps
- * the creation fee). 189 bytes × 5,080 lamports, measured by the full simulation. */
+/** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account behind, whose
+ * rent stays; Metaplex's protocol fee was collected at the mint). 189 bytes × 5,080 lamports, measured by the full
+ * simulation. */
 const BURN_REFUND = 0.00096;
 /** What a grant's claim adds to its lists: the wallet's limit record (its first claim) and a record of the round paid
  * (none for an open grant's claim). Back to the owner when the shards close after the grant. */
