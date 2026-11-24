@@ -39,7 +39,7 @@ import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../e
 import { model, rent as rentOf } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
-import { personCheck, personCost, personExamples, personReview, personSimulate } from './views.mjs';
+import { personCheck, personCost, personExamples, personExplain, personReview, personSimulate } from './views.mjs';
 import { withCluster } from './with-cluster.mjs';
 import { personWords, terminalWords } from './person.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
@@ -693,6 +693,9 @@ export const tools = [
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
       const r = explainEconomy(economy, { now: nowOf(ctx) });
+      // (for the developer: each section in short, the walk state by state and every sentence whole with --verbose)
+      if (ctx?.reader === 'person')
+        return { ...r, from, text: personExplain(r.text, { say: personSay(ctx), verbose: ctx.verbose }) + footer() };
       return { ...r, from, text: r.text + footer() };
     },
   },

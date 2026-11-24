@@ -88,17 +88,19 @@ test('xsolana check speaks to the developer; --json and xsolana tool keep the ag
 
 test('a named command prints a summary and tables that fit a terminal; --verbose adds the words, the agent keeps them', async () => {
   for (const { name } of examples()) {
-    for (const tool of ['check', 'simulate', 'cost', 'review']) {
+    for (const tool of ['check', 'simulate', 'cost', 'review', 'explain']) {
       const short = await runTool(`xsolana_${tool}`, { example: name }, { ...person, verbose: false });
       for (const line of short.text.split('\n'))
         assert.ok(line.length <= 120, `xsolana ${tool} on ${name}: ${line.length} columns: ${line}`);
       if (tool === 'check') continue;
       const long = await runTool(`xsolana_${tool}`, { example: name }, person);
-      assert.match(long.text, /^In full$/m, `xsolana ${tool} --verbose on ${name}`);
+      if (tool !== 'explain') assert.match(long.text, /^In full$/m, `xsolana ${tool} --verbose on ${name}`);
       assert.ok(short.text.length < long.text.length, `xsolana ${tool} on ${name}`);
       // the agent's answer is the words alone, as before
       const agent = await runTool(`xsolana_${tool}`, { example: name }, { terminal: TERMINAL_ALL, now: NOW });
       assert.doesNotMatch(agent.text, /^(In full|What a player pays.*|Add --verbose.*)$/m, `${tool} on ${name}`);
+      if (tool === 'explain')
+        assert.equal(long.text, personWords(terminalWords(agent.text, TERMINAL_ALL)), `explain --verbose on ${name}`);
     }
   }
   const sim = await runTool('xsolana_simulate', { example: 'partner-vault' }, { ...person, verbose: false });

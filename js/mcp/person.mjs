@@ -82,12 +82,16 @@ export function terminalWords(text, commands) {
     String(text)
       // (a hint written for a terminal says what the words around it now say)
       .replace(/ \(terminal: [^)]*\)/g, '')
-      .replace(/\bxsolana_([a-z]+)\b(?: (\{"([a-z]+)": ?("[^"]*"|…)\}))?/g, (all, tool, json, arg, value) => {
-        const words = Object.hasOwn(commands, tool) ? commands[tool] : null;
-        if (!json) return words ? `xsolana ${tool}` : `xsolana tool xsolana_${tool}`;
-        if (!words?.includes(arg)) return `xsolana tool xsolana_${tool} '${json}'`;
-        return `xsolana ${tool} ${value === '…' ? `<${arg}>` : value.slice(1, -1)}`;
-      })
+      // (a name already said as `xsolana tool xsolana_…` stays as it is, so saying it twice changes nothing)
+      .replace(
+        /(?<!xsolana tool )\bxsolana_([a-z]+)\b(?: (\{"([a-z]+)": ?("[^"]*"|…)\}))?/g,
+        (all, tool, json, arg, value) => {
+          const words = Object.hasOwn(commands, tool) ? commands[tool] : null;
+          if (!json) return words ? `xsolana ${tool}` : `xsolana tool xsolana_${tool}`;
+          if (!words?.includes(arg)) return `xsolana tool xsolana_${tool} '${json}'`;
+          return `xsolana ${tool} ${value === '…' ? `<${arg}>` : value.slice(1, -1)}`;
+        },
+      )
   );
 }
 

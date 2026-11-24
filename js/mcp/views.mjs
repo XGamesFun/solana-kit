@@ -103,8 +103,16 @@ export function table(headers, rows, { indent = 2 } = {}) {
 export function firstSentence(text, max = 150) {
   const s = String(text).trim();
   const end = s.search(/[.!?](\s|$)/);
-  const first = end >= 0 ? s.slice(0, end + 1) : s;
-  if (first.length <= max) return first;
+  let first = end >= 0 ? s.slice(0, end + 1) : s;
+  // (a first sentence with no number, followed by one that has them, is said with it: "…pays the player fee. On
+  // mainnet that is 0.0005 SOL, 5% on top…")
+  if (!/\d/.test(first) && end >= 0) {
+    const rest = s.slice(end + 1).trim();
+    const stop = rest.search(/[.!?](\s|$)/);
+    const second = stop >= 0 ? rest.slice(0, stop + 1) : rest;
+    if (/\d/.test(second) && first.length + 1 + second.length <= max + 60) first = `${first} ${second}`;
+  }
+  if (first.length <= max + (first.includes('. ') ? 60 : 0)) return first;
   const stop = first.slice(0, max).search(/[:;](\s)(?![^(]*\))/);
   if (stop > 40) {
     // (the clause after the colon is kept when it holds a number: "…: empty in about 6 days")
@@ -518,3 +526,47 @@ function examplesView(found, { query = null, verbose = false, rated = '', ideaCo
   ]);
 }
 export const personExamples = (found, options = {}) => speaking(options.say, () => examplesView(found, options));
+
+/** The sections of `explain` kept whole by default: what the law flags, who signs, the dates, each action's prompts. */
+const WHOLE = /^(Flagged for the law|Every date|Each player action|What setting it up costs)/;
+/** The sections only --verbose shows: each route, state by state. */
+const VERBOSE_ONLY = /^Each route, state by state/;
+
+/**
+ * `xsolana explain` for the developer: each section with its bullets cut to their first sentence (the law's flags,
+ * the dates and each action's prompts whole), and the state-by-state walk only with --verbose, which prints the whole
+ * text. `text`: the tool's own words.
+ */
+function explainView(text, { verbose = false } = {}) {
+  if (verbose) return text;
+  const blocks = String(text).split(/\n\n+/);
+  const out = [];
+  let left = 0;
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const titled = !lines[0].startsWith('- ');
+    const title = titled ? lines[0] : '';
+    if (VERBOSE_ONLY.test(title)) {
+      left++;
+      continue;
+    }
+    const whole = WHOLE.test(title);
+    const body = (titled ? lines.slice(1) : lines).map(l => {
+      const sub = /^ {2}- /.test(l);
+      const item = l.replace(/^ *- /, '');
+      const said = whole ? item : firstSentence(item, 160);
+      return bullet(said, sub ? '  - ' : '- ');
+    });
+    // (a section that is one paragraph: its title is the text)
+    const head = titled ? wrap(body.length || whole ? title : firstSentence(title, 220), WIDTH).join('\n') : '';
+    out.push([head, ...body].filter(Boolean).join('\n'));
+  }
+  out.push(
+    wrap(
+      `Add --verbose for the whole text${left ? ', and each route state by state (as a player, the owner and a cheater see it)' : ''}.`,
+      WIDTH,
+    ).join('\n'),
+  );
+  return out.join('\n\n');
+}
+export const personExplain = (text, options = {}) => speaking(options.say, () => explainView(text, options));

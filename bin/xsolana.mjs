@@ -84,7 +84,7 @@ const FLAGS = {
   check: [...TOOL_FLAGS, '--verbose'],
   simulate: [...TOOL_FLAGS, '--verbose'],
   cost: [...TOOL_FLAGS, '--verbose'],
-  explain: TOOL_FLAGS,
+  explain: [...TOOL_FLAGS, '--verbose'],
   review: [...TOOL_FLAGS, '--verbose'],
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,

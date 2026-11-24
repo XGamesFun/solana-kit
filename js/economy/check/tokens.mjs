@@ -616,7 +616,7 @@ export function checkTokens(c) {
         warn(
           'W-LIST',
           `${where}.list`,
-          `${what} lets in ${r.list.length} listed wallet${r.list.length === 1 ? '' : 's'}: the program keeps only the list’s root, so the app (or xsolana_play) passes each player’s proof, and the list itself must stay where the app can read it (this spec keeps it).`,
+          `${what} lets in ${r.list.length} listed wallet${r.list.length === 1 ? '' : 's'}: the program keeps only the list’s root, so the app (or the @xgamesfun/solana/play module) passes each player’s proof, and the list itself must stay where the app can read it (this spec keeps it).`,
         );
       }
       return;
@@ -673,7 +673,7 @@ export function checkTokens(c) {
           warn(
             'W-STAKED',
             `${where}.staked`,
-            `${what} lets in a wallet with at least ${r.staked.atLeast} ${t?.symbol ?? f.stakes} staked in ${label(f)} while its lock runs, staked before the second it is used (so it can’t be staked, used and unstaked in one transaction, and one stake counts for one wallet a lock). The app (or xsolana_play) passes the wallet’s seat and the farm; staking more counts at once, and the gate shuts once the lock ends (staking again starts a new lock).`,
+            `${what} lets in a wallet with at least ${r.staked.atLeast} ${t?.symbol ?? f.stakes} staked in ${label(f)} while its lock runs, staked before the second it is used (so it can’t be staked, used and unstaked in one transaction, and one stake counts for one wallet a lock). The app (or the @xgamesfun/solana/play module) passes the wallet’s seat and the farm; staking more counts at once, and the gate shuts once the lock ends (staking again starts a new lock).`,
           );
       }
       return;
