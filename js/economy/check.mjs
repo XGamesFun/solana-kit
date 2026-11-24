@@ -402,6 +402,7 @@ export function check(
     refusals,
     refuse,
     warn,
+    warnings,
     m,
     tradeable,
     simulated,

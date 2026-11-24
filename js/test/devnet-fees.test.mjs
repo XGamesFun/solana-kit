@@ -49,3 +49,21 @@ test('the cost of a devnet economy says mainnet’s player fee too', async () =>
   assert.equal(m.fees.mainnetPlayerSol, undefined);
   assert.doesNotMatch(explainCost(m), /devnet's fees/);
 });
+
+test('a cheap price with much on top of it is warned of, at mainnet’s fees, with the cheaper ways to build it', () => {
+  const tutorial = readFileSync(new URL('../../docs/tutorial-loot-box.md', import.meta.url), 'utf8');
+  const from = tutorial.indexOf('```json') + '```json'.length;
+  const crate = JSON.parse(tutorial.slice(from, tutorial.indexOf('```', from)));
+  const at = price => check({ ...crate, boxes: [{ ...crate.boxes[0], price }] }, { now: NOW }).warnings;
+  const cheap = at(0.01);
+  const w = cheap.find(x => x.code === 'W-ON-TOP');
+  assert.ok(w, cheap.map(x => x.code).join());
+  assert.match(
+    w.message,
+    /costs a player about [\d.]+ SOL on top of its 0\.01 SOL price on mainnet, \d+% more: 0\.0005 SOL player fee, 0\.0008 SOL oracle fee/,
+  );
+  assert.match(w.fix, /"compressed": true/);
+  // (the player fee is said in it, so no W-FEE beside it)
+  assert.ok(!cheap.some(x => x.code === 'W-FEE'));
+  assert.ok(!at(0.1).some(x => x.code === 'W-ON-TOP'));
+});
