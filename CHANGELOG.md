@@ -21,6 +21,8 @@ stability").
 - **`xsolana connect` connects the current project by default.** It used to register the MCP server and the skill for
   every project of the user. `--scope user` does that now. Codex registers MCP servers only for the whole user, so
   it needs `xsolana connect --agent codex --scope user`.
+- **`check`'s printed verdict names a high warning.** With one, it reads "Ready to go live, with 1 high warning: read
+  it first" (on mainnet, "real money" too) instead of "Ready: …". The exit code is unchanged (0), and so is `--json`.
 - **The named commands print for a person.** `check`, `simulate`, `cost`, `explain`, `review`, `publish`, `examples`
   and `guide` word their text for the developer and lead with a summary and tables. A script that parsed their text
   should use `--json`, whose `text` (and every MCP answer) is the agent's answer as before. `xsolana tool <name>`
@@ -43,6 +45,8 @@ stability").
 - `docs/cheatsheet.md`: a spec in ten fields on one page. The README has a fee table, a "Names" section, a "Start
   with these" list of the few client exports most apps need, "Versions and stability", and the exit codes.
 - "Did you mean …?" for a command or a flag a typo away (`xsolana chek`, `check --jsn`).
+- `check`'s default view lists high warnings first, then medium, then the law's flags, and folds the low and unrated
+  ones into one line naming their codes (`--verbose` shows them all).
 - `approve` and `status` read the platform account and say when the program charges other fees than the tools
   quote (they quote the values at this release), or when a fee change waits, with its date.
 - The collection's resale royalty (5% to your wallet unless `"collection": { "royaltyPercent": n }` says otherwise, 0
@@ -75,8 +79,12 @@ stability").
 - `W-FEE` says it gives the player fee alone ("the player fee alone is 0.0005 SOL, 5.0% of its price") and points at
   `cost` for everything on top of the price, where it said "5.0% on top" beside `cost`'s 16%.
 - What players get back keeps items apart from money: `simulate` and `explain` say what is paid out and what items are
-  worth by the "value" the spec gives them ("a value, not money paid out"), where `simulate` said "get back 5 SOL" for a
-  sword valued at 5. The simulation's `perDay.players.itemValue` holds it.
+  worth by the "value" the spec gives them ("a value, not money paid out"), in the daily totals and in each box's line,
+  where they said "get back 5 SOL" or "gives back 0.05 SOL" for a sword's value. The simulation keeps
+  `perDay.players.itemValue` and each box's `itemValueBack`.
+- `connect --dry-run` says every step in "would" and ends "Nothing was changed: this was a dry run."
+- Metaplex Core's 0.0015 SOL a mint is its protocol fee, which Metaplex collects; the README said the NFT's account
+  kept it.
 - `publish` lists the steps going live makes as one bulleted list, and numbers only the commands to run.
 - A spec outside the folder a command runs in is refused, as before; the refusal and the README say why (the tools
   read and write nothing elsewhere) and to run the command in the spec's folder.
