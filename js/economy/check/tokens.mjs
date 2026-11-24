@@ -8,6 +8,7 @@ import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../../chain/pda.js';
 import { utf8 } from '../../chain/bytes.js';
 import { METADATA_LIMITS } from '../../chain/metadata.js';
 import {
+  FEES_ON,
   feesOf,
   LIMITS,
   RESERVED_ATTRIBUTES,
@@ -1001,14 +1002,21 @@ export function checkTokens(c) {
   const feeNote = (price, tok, where, what) => {
     if (!tok?.wsol || price === null) return;
     if (price === 0n) return;
-    const ratio = Number(feesOf(economy).player) / Number(price);
-    if (ratio >= 0.01)
-      warn(
-        'W-FEE',
-        where,
-        `Every ${what} also pays the platform’s player fee of ${fromUnits(feesOf(economy).player, 9)} SOL: ${(ratio * 100).toFixed(1)}% on top of its ${fromUnits(price, 9)} SOL price.`,
-        'Fine for a game; a higher price makes the fee a smaller part of it.',
-      );
+    const percentOf = fee => `${((Number(fee) / Number(price)) * 100).toFixed(1)}%`;
+    const here = feesOf(economy).player;
+    // Devnet's player fee is four times mainnet's (model.mjs FEES_ON), and devnet SOL is play money: a devnet spec is
+    // warned of the fee it would pay on mainnet, with devnet's beside it.
+    const mainnet = FEES_ON.mainnet.player;
+    const onDevnet = here !== mainnet;
+    if (Number(onDevnet ? mainnet : here) / Number(price) < 0.01) return;
+    warn(
+      'W-FEE',
+      where,
+      onDevnet
+        ? `Every ${what} also pays the platform’s player fee. On mainnet that is ${fromUnits(mainnet, 9)} SOL, ${percentOf(mainnet)} on top of its ${fromUnits(price, 9)} SOL price. This economy is on devnet, where the fee is ${fromUnits(here, 9)} SOL (${percentOf(here)}) and SOL is play money.`
+        : `Every ${what} also pays the platform’s player fee of ${fromUnits(here, 9)} SOL: ${percentOf(here)} on top of its ${fromUnits(price, 9)} SOL price.`,
+      'Fine for a game; a higher price makes the fee a smaller part of it.',
+    );
   };
   /** A part's limit in each window of time, by wallet ("perWalletEach") or by person ("perPersonEach"): its window (a
    * day when it names none) in 4 bytes. */

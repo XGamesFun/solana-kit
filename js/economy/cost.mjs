@@ -6,6 +6,7 @@
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { priorityFee } from '../chain/programs.js';
+import { networkOf } from '../client/cluster.js';
 import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import {
   boxOrderBytes,
@@ -32,6 +33,7 @@ import {
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
+  FEES_ON,
   feesOf,
   LAMPORTS_PER_SOL,
   ORACLE_FEE,
@@ -504,9 +506,14 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
     setup: setupCost(plan, economy),
     actions: actionCosts(economy, { now }),
     fees: {
+      network: networkOf(economy),
       playerSol: sol(feesOf(economy).player),
       projectSol: sol(feesOf(economy).project),
       oracleSol: sol(ORACLE_FEE),
+      // (devnet's player fee is not mainnet's: the price of the same action with real money)
+      ...(feesOf(economy).player !== FEES_ON.mainnet.player
+        ? { mainnetPlayerSol: sol(FEES_ON.mainnet.player), mainnetProjectSol: sol(FEES_ON.mainnet.project) }
+        : {}),
     },
   };
 }
@@ -530,7 +537,7 @@ export function explainCost(c) {
     lines.push(
       `  ${a.approx ? 'about ' : ''}${numeral(a.sol)} SOL: ${a.what} (${plural(a.bytes, 'byte')})${a.feeSol ? `, and ${numeral(a.feeSol)} SOL Token Metadata keeps for it` : ''}`,
     );
-  lines.push('While it runs (for a player, quote the “in all” number: it is what leaves their wallet for good):');
+  lines.push('While it runs (“in all” is what leaves a player’s wallet for good):');
   for (const r of c.actions) {
     const deposits = r.deposits.map(d => `${numeral(d.sol)} SOL for ${d.what} (back: ${d.back})`).join('; ');
     if (r.inAll) {
@@ -542,5 +549,12 @@ export function explainCost(c) {
     );
   }
   for (const n of s.notes) lines.push(n);
+  const f = c.fees;
+  if (f?.mainnetPlayerSol !== undefined) {
+    const less = numeral(round(f.playerSol - f.mainnetPlayerSol));
+    lines.push(
+      `These are devnet's fees, and devnet SOL is play money. The player fee is ${numeral(f.playerSol)} SOL a player action on devnet and ${numeral(f.mainnetPlayerSol)} SOL on mainnet, so each player action above costs ${less} SOL less there. The project fee is ${numeral(f.mainnetProjectSol)} SOL on both${f.mainnetProjectSol === f.projectSol ? '' : ` (here ${numeral(f.projectSol)} SOL)`}.`,
+    );
+  }
   return lines.join('\n');
 }

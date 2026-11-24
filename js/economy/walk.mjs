@@ -5,7 +5,7 @@
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
 import { realMoney } from '../client/pda.js';
-import { DAY, limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
+import { DAY, FEES_ON, limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -344,7 +344,7 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   // A first-time player, from the link to the first reward: what they need before anything works.
   if (fl.routes.length)
     out.push(
-      `A first-time player needs a wallet and a little SOL before their first action${realMoney() ? '' : ' (devnet SOL, from a faucet)'}: each action costs the player fee (${Number(m.fees.player) / 1e9} SOL) and a network fee, unless the page or server pays a claim's fees for them (anyone may pay them).`,
+      `A first-time player needs a wallet and a little SOL before their first action${realMoney() ? '' : ' (devnet SOL, from a faucet)'}: each action costs the player fee (${Number(m.fees.player) / 1e9} SOL${m.fees.player === FEES_ON.mainnet.player ? '' : `; ${Number(FEES_ON.mainnet.player) / 1e9} SOL on mainnet`}) and a network fee, unless the page or server pays a claim's fees for them (anyone may pay them).`,
     );
   const amount = list => list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`).join(' and ');
   for (const r of fl.routes) {
