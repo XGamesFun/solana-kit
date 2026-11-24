@@ -388,7 +388,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ? byPerson(b)
         ? `${limitPhrases(b).join(', ')}, as far as the issuer tells one person from another, for only the fees.`
         : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${asWritten(it.supply)}` : 'as many as they like'}, for only the fees.`
-      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
+      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll (under the current program version, which its upgrade authority can replace)' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
       key,
@@ -761,7 +761,7 @@ function tradeoffs(routes, findings) {
   const chance = routes.filter(r => r.trusts.some(t => t.startsWith('MagicBlock')));
   if (chance.length)
     lines.push(
-      `- Chance (the oracle): ${chance.map(r => `“${r.name}”`).join(', ')}. Nobody, the project included, steers a roll or a draw.`,
+      `- Chance (the oracle): ${chance.map(r => `“${r.name}”`).join(', ')}. Nobody, the project included, steers a roll or a draw under the current program version, which its upgrade authority can replace.`,
     );
   const contests = routes.filter(r => r.kind === 'contest');
   if (contests.length)

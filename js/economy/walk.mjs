@@ -566,7 +566,7 @@ function controlWords(m, fl) {
     if (said.length) caps.push(`${named(r)} ${said.join(', ')}`);
   }
   rows.push(
-    `The chain keeps, exactly as written: every price and cap (${caps.length ? caps.join('; ') : 'none set'}), every lock and term, and every draw's and roll's odds at the moment it is drawn (the oracle's answer). Nobody, you included, can break them while they stand.`,
+    `The chain keeps, exactly as written: every price and cap (${caps.length ? caps.join('; ') : 'none set'}), every lock and term, and every draw's and roll's odds at the moment it is drawn (the oracle's answer). Nobody, you included, can break them while they stand. That holds for the current program version, which its upgrade authority can replace.`,
   );
   const signed = m.grants.filter(g => (g.vouchers ?? []).length);
   const decided = m.contests;

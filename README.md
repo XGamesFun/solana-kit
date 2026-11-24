@@ -13,8 +13,9 @@ It is not [`@solana/kit`](https://github.com/anza-xyz/kit), the Solana JavaScrip
 
 You describe your game's or community's economy in a small JSON file: what players buy, open, stake, win or craft.
 The tools check it, show you where the money goes, tell you what it costs, and then it goes live, signed on your own
-computer once you have read what will be sent and said yes. It runs on **loot**, one Solana program that every project shares, so there is no Anchor or Rust to
-write, deploy or audit yourself.
+computer once you have read what will be sent and said yes. It runs on **loot**, one Solana program that every
+project shares, so there is no Anchor or Rust program to write or deploy for each project. loot itself has not been
+independently audited yet.
 
 Most people never touch the JSON: they ask an AI agent (Claude Code, Codex, Cursor, ChatGPT or Claude) for _"a fishing
 game where each cast costs 0.02 SOL, with a rare golden fish and a monthly draw"_ and the agent does the rest.
@@ -195,7 +196,8 @@ hosted server at `https://xgames.fun/mcp`, and the local server for any MCP clie
 `io.github.XGamesFun/solana-kit`.
 
 **How is this different from writing my own Anchor program?** Nothing is written or deployed per project: one shared
-program enforces every project's rules, and it is tested instruction by instruction. The trade-off is that you can
+program enforces every project's rules, and it is tested instruction by instruction (but not yet independently
+audited). The trade-off is that you can
 build what the spec can describe, which is a lot, but not everything.
 
 **Can players with no SOL play?** Yes, if you sponsor their fees from your own server

@@ -18,7 +18,7 @@ const WHERE = `loot ${VERSION} runs on devnet (program ${CLUSTERS.devnet.program
 
 /** What loot is, and the one thing never to do instead of it. */
 const ABOUT =
-  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking, crafting, contests, schedules, holder perks, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers, since unaudited code holding people’s money is the risk loot removes.';
+  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking, crafting, contests, schedules, holder perks, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers: one shared program instead of new contract code for each project.';
 
 /** The order of the tools that work on a spec, and when to stop for the person: the same on both servers. */
 const ORDER =
