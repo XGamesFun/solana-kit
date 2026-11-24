@@ -105,7 +105,7 @@ The tools' outputs say how to put each result to the person at the moment you ne
 1. **`xsolana_guide`** returns a short index: the loop, every part and topic and when to fetch it. Fetch the part you
    need (`{"part": "lotteries"}`), and `{"part": "writing"}` before your first spec.
 2. **`xsolana_examples {"query": "<the person's own words>"}`**, then `{"name": "<example>"}` for a whole spec to
-   copy. The rated economies say how each real economy fits (great, some, a-lot, cannot) and what carries it.
+   copy. The rated kinds of economy say how each fits (great, some, a-lot, cannot) and what carries it.
 3. **`xsolana_design`** when no single part does what they ask, or their wants pull against each other (a draw, a
    sale, a reward, staking or a contest): write each want as a requirement on its route. It builds and checks every
    known way and says what each keeps and gives up. When nothing keeps everything, the choice is the person's: put

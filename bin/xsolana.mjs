@@ -6,7 +6,7 @@
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
 //   xsolana mcp --http [--port n] [--host h]   serve the hosted tools over HTTP at /mcp (127.0.0.1:8787 by default)
 //   xsolana guide [part] [--json]        the guide's index; with a part or a topic (writing, cheating, asks, cannot), that one
-//   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
+//   xsolana examples [words…] [--json]   the nearest worked examples and rated kinds of economy
 //   xsolana examples <name> [--save <file>]   one worked example whole; --save writes its spec into a new file
 //   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json);
 //                                       check --verbose adds what players should know and how each route ends

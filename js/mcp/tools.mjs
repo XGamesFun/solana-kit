@@ -22,7 +22,7 @@ import { legalFlags } from '../economy/legal.mjs';
 import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
-import { example, examples, ideas, ideasRated, search, partsUsed } from '../economy/examples.mjs';
+import { example, examples, ideas, ideasRated, ideasRatedOn, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
 import { describeReview, review, signedRoutes } from '../economy/review.mjs';
@@ -296,7 +296,7 @@ export function carryIds(previous, next) {
 const ratedWords = () =>
   ideasRated() === VERSION
     ? 'rated against this version of loot'
-    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION}), so some are out of date`;
+    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION})${ideasRatedOn() ? `, by hand on ${ideasRatedOn()}` : ''}, so some are out of date`;
 
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
 function flagsToTell(economy, now, person = false) {
@@ -384,8 +384,8 @@ export const tools = [
     name: 'xsolana_examples',
     title: 'Find a worked economy to start from',
     annotations: READ,
-    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
-    description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
+    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} kinds of economy rated by hand against an earlier loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
+    description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} kinds of economy rated by hand against an earlier loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -422,7 +422,7 @@ export const tools = [
             [
               `${all.length} worked examples (xsolana_examples {"name": "<name>"} gives the whole spec):`,
               ...all.map(e => `- ${e.name}: ${e.title}. ${e.prompt ?? ''} [${e.parts.join(', ')}]`),
-              `\nAnd ${ideas().length} rated economies: pass a query to search them.`,
+              `\nAnd ${ideas().length} rated kinds of economy (${ratedWords()}): pass a query to search them.`,
             ].join('\n') + footer(),
         };
       }
@@ -435,7 +435,7 @@ export const tools = [
         r.hows.length ? '\nThese look impossible but are one field or a short combination (build them):' : '',
         ...r.hows.map(h => `- ${h.what}: ${h.how}.`),
         r.ideas.length
-          ? `\nRated economies (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
+          ? `\nRated kinds of economy (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
           : '',
         ...r.ideas.map(i => `- #${i.n} ${i.name} (${i.fit}): ${i.how}`),
         r.limits.length

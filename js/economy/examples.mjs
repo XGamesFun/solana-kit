@@ -30,6 +30,8 @@ export function example(name) {
 export const ideas = () => IDEAS;
 /** The loot version the ideas were rated against (ideas.json `rated`). */
 export const ideasRated = () => IDEAS_FILE.rated;
+/** The day they were rated (ideas.json `ratedOn`). */
+export const ideasRatedOn = () => IDEAS_FILE.ratedOn ?? null;
 
 const SYNONYMS = {
   gacha: ['box', 'boxes', 'pull'],
