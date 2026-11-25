@@ -58,12 +58,12 @@ describe('xsolana (what the command line says)', () => {
 
   test('a flag the command doesn’t take is refused in one line, never read as words', async () => {
     for (const [args, said] of [
-      [['examples', '--limit', '2', 'coin'], /“examples” takes no --limit flag \(only --save, --json\)/],
+      [['examples', '--limit', '2', 'coin'], /“examples” takes no --limit flag \(only --save, --json, --verbose\)/],
       [['version', '--json'], /“version” takes no --json flag \(it takes none\)/],
       [['approve', '--dry-run'], /“approve” takes no --dry-run flag/],
     ]) {
       const r = await xsolana(args);
-      assert.equal(r.code, 1, args.join(' '));
+      assert.equal(r.code, 2, args.join(' '));
       assert.match(r.err, said, args.join(' '));
       assert.equal(r.err.trim().split('\n').length, 1, `${args.join(' ')}: one line`);
       assert.equal(r.out, '');
@@ -105,6 +105,7 @@ const COMMANDS = [
   'token',
   'keygen',
   'approve',
+  'handover',
   'connect',
   'tool',
   'version',
@@ -124,7 +125,7 @@ describe('xsolana (help, and words a command does not take)', () => {
       for (const [i, r] of answers.entries()) {
         assert.equal(r.code, 0, `${asked[i].join(' ')}: ${r.err}`);
         assert.equal(r.err, '', asked[i].join(' '));
-        assert.match(r.out, new RegExp(`^ {2}xsolana ${command}\\b`), asked[i].join(' '));
+        assert.match(r.out, new RegExp(`^Usage: xsolana ${command}\\b`), asked[i].join(' '));
         assert.equal(r.out, answers[0].out, `${asked[i].join(' ')} says what ${command} --help says`);
       }
     }
@@ -138,7 +139,7 @@ describe('xsolana (help, and words a command does not take)', () => {
     ])
       assert.match((await xsolana([command, '--help'])).out, new RegExp(`${flag}\\b`), `${command} ${flag}`);
     const unknown = await xsolana(['help', 'bogus']);
-    assert.equal(unknown.code, 1);
+    assert.equal(unknown.code, 2);
     assert.match(unknown.err, /There is no command “bogus”: xsolana help lists them all\./);
   });
 
@@ -148,7 +149,7 @@ describe('xsolana (help, and words a command does not take)', () => {
     assert.match(r.out, /^xsolana tool xsolana_guide '<json>' {3}.* \(also: xsolana guide\)\n/);
     assert.match(r.out, /\n {2}part \(string\)/);
     const none = await xsolana(['tool', 'xsolana_nope', '--help']);
-    assert.equal(none.code, 1);
+    assert.equal(none.code, 2);
     assert.match(none.err, /There is no tool “xsolana_nope”/);
   });
 
@@ -170,7 +171,7 @@ describe('xsolana (help, and words a command does not take)', () => {
       [['check', '-v'], /^xsolana: There is no -v flag: flags are written whole \(--json\), and -h is --help\.$/],
     ]) {
       const r = await xsolana(args);
-      assert.equal(r.code, 1, args.join(' '));
+      assert.equal(r.code, 2, args.join(' '));
       assert.match(r.err.trim(), said, args.join(' '));
       assert.equal(r.err.trim().split('\n').length, 1, `${args.join(' ')}: one line`);
       assert.equal(r.out, '');
@@ -217,7 +218,7 @@ describe('xsolana (a terminal is spoken to as a terminal)', () => {
     assert.match(none.err, /There is no xsolana\.json in .* yet\. Write one \(xsolana guide says what it holds/);
     assert.doesNotMatch(none.err, /xsolana_|"spec"/);
     const part = await xsolana(['guide', 'nonsense']);
-    assert.equal(part.code, 1);
+    assert.equal(part.code, 2);
     assert.match(part.err, /^xsolana guide: there is no part or topic “nonsense”\. It takes one of: tokens, /);
     assert.doesNotMatch(part.err, /arguments\.part/);
     const index = await xsolana(['guide']);
@@ -246,11 +247,11 @@ describe('xsolana (a terminal is spoken to as a terminal)', () => {
     assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'xsolana.json'), 'utf8')), spec);
     writeFileSync(path.join(dir, 'xsolana.json'), '{"mine": true}');
     const again = await xsolana(['examples', 'blind-forge', '--save', 'xsolana.json'], { cwd: dir });
-    assert.equal(again.code, 1);
+    assert.equal(again.code, 2);
     assert.match(again.err, /xsolana\.json is there already, and --save writes only a new file/);
     assert.equal(readFileSync(path.join(dir, 'xsolana.json'), 'utf8'), '{"mine": true}');
     const nameless = await xsolana(['examples', 'loot', 'boxes', '--save', 'x.json'], { cwd: dir });
-    assert.equal(nameless.code, 1);
+    assert.equal(nameless.code, 2);
     assert.match(nameless.err, /--save goes with one example’s name/);
     assert.ok(!existsSync(path.join(dir, 'x.json')));
   });
@@ -363,7 +364,7 @@ describe('xsolana connect (what it says)', { skip: !posix && 'stand-in agents ar
       env: fakeAgents({ getCode: 0, removeCode: 1 }),
     });
     assert.equal(r.code, 1, r.out + r.err);
-    assert.match(r.out, /Claude Code: xsolana’s server was not found at the user scope/);
+    assert.match(r.out, /Claude Code: xsolana’s server was not found at the project scope/);
     assert.doesNotMatch(r.out, /xsolana removed/);
   });
 
@@ -459,7 +460,7 @@ describe('xsolana_save (what it says)', () => {
         ['tool', 'xsolana_check', '{"file":"xsolana.json"}'],
       ]) {
         const r = await xsolana(args, { cwd: dir, env: { XSOLANA_CLUSTER: 'devnet' } });
-        assert.equal(r.code, 1, args.join(' '));
+        assert.equal(r.code, 2, args.join(' '));
         assert.match(r.err, /^xsolana: xsolana\.json is on mainnet, and XSOLANA_CLUSTER says devnet/, args.join(' '));
         assert.equal(r.out, '');
       }

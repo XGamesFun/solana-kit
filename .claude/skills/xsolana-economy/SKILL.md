@@ -13,9 +13,9 @@ nothing is real money, and on **mainnet**, where everything is: an economy is on
 
 The tools: `xsolana_guide`, `xsolana_examples`, `xsolana_check`, `xsolana_design`, `xsolana_simulate`, `xsolana_cost`,
 `xsolana_explain`, `xsolana_review`, `xsolana_save`, `xsolana_publish`, `xsolana_status`, `xsolana_token`,
-`xsolana_client`. From a terminal, always with the exact version:
-`npx -y @xgamesfun/solana@0.29.11 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
-`npx -y @xgamesfun/solana@0.29.11 token <mint>`, or `npx -y @xgamesfun/solana@0.29.11 tool <name> '<json>'` for any
+`xsolana_client`. From a terminal (add `--json`), always with the exact version:
+`npx -y @xgamesfun/solana@0.29.12 <guide|examples|check|simulate|cost|explain|review|publish|status> [xsolana.json]`,
+`npx -y @xgamesfun/solana@0.29.12 token <mint>`, or `npx -y @xgamesfun/solana@0.29.12 tool <name> '<json>'` for any
 tool (`xsolana_design` too).
 
 The tools' outputs say how to put each result to the person at the moment you need it: read them and follow them.
@@ -23,8 +23,8 @@ The tools' outputs say how to put each result to the person at the moment you ne
 ## Rules (always)
 
 1. **Never write, build or deploy a program.** No Anchor, Rust, Solidity or custom program, and no deploy: not by you,
-   not by a command or page you give the person, not even "just on devnet". Unaudited code holding people's money is
-   the risk loot exists to remove. If the idea needs something loot can't do, follow rule 9.
+   not by a command or page you give the person, not even "just on devnet". New contract code holding people's money
+   is a risk; loot itself is not yet independently audited. If the idea needs something loot can't do, follow rule 9.
 2. **Going live is signed by a key file on the person's own machine, after their yes; you never ask for, read or
    print a key, and you open no signing page.** Whoever holds a key controls what it owns, so a key that passes
    through a chat, a spec or a page is lost. `xsolana keygen <file>` makes the project's key file (outside any
@@ -33,8 +33,8 @@ The tools' outputs say how to put each result to the person at the moment you ne
    with the code it printed, which you do only after the person has read that printout and said yes; and, for what
    only the authority signs later, `readKeyFile` in a script (`references/after-launch.md`). A key file is the safer
    way to set up: a new key that has held nothing, so the wallet holding what the person owns never signs; but
-   anything on the machine that can read the file can sign as the project. Never open,
-   copy or print it, and never put it in a chat, a spec, a repository or a page. Never ask for a seed phrase or the
+   anything on the machine that can read the file can sign as the project. Never open or
+   copy it, nor put it in a repository. Never ask for a seed phrase or the
    key of a wallet the person already has; if they paste one, tell them to treat it as exposed and move its funds,
    and write it nowhere. The browser-wallet page (`xsolana approve <spec> --browser`) is only for a person who asks
    for it, and they run it themselves.
@@ -105,7 +105,7 @@ The tools' outputs say how to put each result to the person at the moment you ne
 1. **`xsolana_guide`** returns a short index: the loop, every part and topic and when to fetch it. Fetch the part you
    need (`{"part": "lotteries"}`), and `{"part": "writing"}` before your first spec.
 2. **`xsolana_examples {"query": "<the person's own words>"}`**, then `{"name": "<example>"}` for a whole spec to
-   copy. The rated economies say how each real economy fits (great, some, a-lot, cannot) and what carries it.
+   copy. The rated kinds of economy say how each fits (great, some, a-lot, cannot) and what carries it.
 3. **`xsolana_design`** when no single part does what they ask, or their wants pull against each other (a draw, a
    sale, a reward, staking or a contest): write each want as a requirement on its route. It builds and checks every
    known way and says what each keeps and gives up. When nothing keeps everything, the choice is the person's: put

@@ -6,30 +6,61 @@
 //   xsolana mcp                          serve the tools over stdio (what a plugin's MCP config runs)
 //   xsolana mcp --http [--port n] [--host h]   serve the hosted tools over HTTP at /mcp (127.0.0.1:8787 by default)
 //   xsolana guide [part] [--json]        the guide's index; with a part or a topic (writing, cheating, asks, cannot), that one
-//   xsolana examples [words…] [--json]   the nearest worked examples and rated economies
+//   xsolana examples [words…] [--json]   the nearest worked examples and rated kinds of economy
 //   xsolana examples <name> [--save <file>]   one worked example whole; --save writes its spec into a new file
-//   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json)
+//   xsolana check|simulate|cost|explain|review|publish|status [file] [--json]   one tool on a spec file (default xsolana.json);
+//                                       check --verbose adds what players should know and how each route ends
 //   xsolana client [--json]               the program and its calls, for an app
 //   xsolana token <mint> [--json]         a token made elsewhere, read from the chain: its `tokens` entry, powers and all
 //   xsolana keygen <file>                 make a key file for a project's owner (outside any repository; the key is never printed)
 //   xsolana approve [file] --keypair <keyfile> [--yes <code>]   put the economy live, signed by a key file: no browser, no page
 //       [--mint-key <token>=<keyfile>]…   a token's new mint at the address of a key file the owner has
-//   xsolana approve [file] --browser [--port n] [--no-open]     the same in a browser wallet, on a local page: only when the person asks for it
-//   xsolana connect [--agent claude|codex] [--scope user|project] [--local] [--remove] [--dry-run]   register the MCP server and the skill
+//   xsolana approve [file] --browser [--port n] [--no-open]     the same in a browser wallet, on a local page: only when its owner asks for it
+//   xsolana connect [--agent claude|codex] [--scope project|user] [--local] [--remove] [--dry-run]   register the MCP server and the skill
+//                                       (this project by default, as xcore's connect; --scope user for every project)
 //   xsolana tool --list | xsolana tool <name> '<json>' [--args-file f] [--json]   any tool by name
 //   xsolana version
 //   xsolana help [command], xsolana <command> --help (or -h)   the commands, or one command's words, flags and all
 //
 // A flag with a value is written either way: --agent claude or --agent=claude; a flag the command doesn't take is
-// refused, and so is a word more than it takes. A command that fails says why on stderr and exits 1: a usage error in
-// one line (XSOLANA_DEBUG=1 prints the whole stack), a tool's refusal with the tool's own answer. `--json` prints a
+// refused, and so is a word more than it takes. A command given wrongly says why in one line on stderr and exits 2
+// (XSOLANA_DEBUG=1 prints the whole stack); one that fails says why and exits 1, a tool's refusal with the tool's own
+// answer. `--json` prints a
 // tool's whole answer on stdout, whatever it is, and the exit code still says whether it failed.
+//
+// Who reads it: a named command (check, review…) is read by the developer, so its text is worded for them
+// (js/mcp/person.mjs); `xsolana tool <name>` and `--json` give the answer an agent gets over MCP, word for word.
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-/** A failure the person caused (a bad flag, a missing file): said in one line, without a stack. */
+/** A command given wrongly (a bad flag, a word too many, no such command): said in one line, without a stack. */
 class UsageError extends Error {}
+/**
+ * The exit codes: 0 it went well; 1 it failed or found what it exits on (a refusal, a high finding, an approval that
+ * did not land, a missing file); 2 the command was given wrongly (UsageError), as in xcore and most command lines.
+ */
+const USAGE_EXIT = 2;
+
+/** How many single-letter edits turn `a` into `b` (Levenshtein). */
+function edits(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++)
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+/** " Did you mean …?" for a name a typo away from one of `names` (at most two edits, and fewer than half its letters). */
+function didYouMean(given, names) {
+  const near = names
+    .map(n => [n, edits(String(given).toLowerCase(), n)])
+    .filter(([n, d]) => d <= 2 && d < n.length / 2)
+    .sort((a, b) => a[1] - b[1]);
+  return near.length ? ` Did you mean ${near[0][0]}?` : '';
+}
 
 /** The flags that take a value: `--name value` or `--name=value`. */
 const VALUED = new Set([
@@ -42,6 +73,7 @@ const VALUED = new Set([
   '--yes',
   '--mint-key',
   '--save',
+  '--to',
 ]);
 /** The valued flags that may be given more than once: each value is kept, in order (`lists`). */
 const REPEATED = new Set(['--mint-key']);
@@ -50,202 +82,305 @@ const TOOL_FLAGS = ['--json'];
 const FLAGS = {
   mcp: ['--http', '--port', '--host'],
   guide: TOOL_FLAGS,
-  examples: ['--save', ...TOOL_FLAGS],
-  check: TOOL_FLAGS,
-  simulate: TOOL_FLAGS,
-  cost: TOOL_FLAGS,
-  explain: TOOL_FLAGS,
-  review: TOOL_FLAGS,
+  examples: ['--save', ...TOOL_FLAGS, '--verbose'],
+  check: [...TOOL_FLAGS, '--verbose'],
+  simulate: [...TOOL_FLAGS, '--verbose'],
+  cost: [...TOOL_FLAGS, '--verbose'],
+  explain: [...TOOL_FLAGS, '--verbose'],
+  review: [...TOOL_FLAGS, '--verbose'],
   publish: TOOL_FLAGS,
   status: TOOL_FLAGS,
   client: TOOL_FLAGS,
   token: TOOL_FLAGS,
   keygen: [],
   approve: ['--keypair', '--yes', '--mint-key', '--browser', '--port', '--no-open'],
+  handover: ['--keypair', '--to', '--yes'],
   connect: ['--agent', '--scope', '--local', '--remove', '--dry-run'],
-  tool: ['--list', '--args-file', ...TOOL_FLAGS],
+  tool: ['--list', '--args-file', '--json'],
   version: [],
 };
 
-const JSON_FLAG = '--json   the whole answer as JSON on stdout; the exit code still says whether it failed';
-const FILE_WORD = 'file     the spec file, in this folder or one below it (xsolana.json when left out)';
-/** A command that runs one tool on a spec file: its help, but for what the tool says. */
-const onFile = (command, does, more) => ({
-  lines: [[`xsolana ${command} [file]`, does]],
+const FILE_ARG = ['file', 'the spec file, in this folder or a folder below it (default: xsolana.json)'];
+const JSON_OPT = [
+  '--json',
+  'print the whole answer as JSON on stdout, as an AI agent gets it; the exit code still says whether it failed',
+];
+const VERBOSE_OPT = [
+  '--verbose',
+  'also print each warning in full with its fix, what players should know and how each route ends',
+];
+const verbose = what => ['--verbose', `also print ${what}`];
+const HELP_OPT = ['-h, --help', 'show this help'];
+
+/** A command that runs one tool on a spec file. */
+const onFile = (command, summary, about, examples, more = []) => ({
+  group: 'spec',
+  summary,
+  usage: [`xsolana ${command} [file] [options]`],
   words: [1, 'one file'],
   tool: ['file'],
-  more: [more, FILE_WORD, JSON_FLAG],
+  about,
+  args: [FILE_ARG],
+  options: [...more, JSON_OPT, HELP_OPT],
+  examples,
 });
 
 /**
- * Every command, in the order the help lists them. `lines`: what the help's first screen says of it, as [what is
- * typed, what it does]. `words`: the most words it takes after its name, and what they are (more are refused).
- * `tool`: for a command that runs the tool xsolana_<command>, the tool's arguments its words stand for, so a tool's
- * answer can name that tool as this command. `more`: what its own help adds, every flag it takes among it.
+ * Every command, in the order the help lists them. `summary`: its line on the first help screen. `usage`: how it is
+ * typed. `words`: the most words it takes after its name, and what they are (more are refused). `tool`: for a command
+ * that runs the tool xsolana_<command>, the tool's arguments its words stand for, so a tool's answer can name that
+ * tool as this command. `about`, `args`, `options`, `examples`: its own help (every flag it takes is in `options`).
  */
 const COMMANDS = {
   guide: {
-    lines: [['xsolana guide [part]', 'what an economy can be made of: an index, then one part or topic']],
+    group: 'spec',
+    summary: 'Show what an economy spec can contain: an index, or one part or topic',
+    usage: ['xsolana guide [part] [options]'],
     words: [1, 'one part or topic'],
     tool: ['part'],
-    more: [
-      'With no part, the index: how to go about it, and every part and topic with when to read it.',
-      'part     a part of an economy (tokens, items, boxes, lotteries, farms…) or a topic (writing, cheating, asks,\n         cannot): the index names them all',
-      JSON_FLAG,
+    about:
+      'Without a part, prints an index of every part of a spec and every topic, with when to read each. With a part, prints its fields from the schema, who acts at play time, and its nested shapes.',
+    args: [
+      [
+        'part',
+        'a part of an economy (tokens, items, boxes, lotteries, farms…) or a topic (writing, cheating, asks, cannot); the index lists them all',
+      ],
     ],
+    options: [JSON_OPT, HELP_OPT],
+    examples: ['xsolana guide', 'xsolana guide boxes'],
   },
   examples: {
-    lines: [
-      ['xsolana examples [words…]', 'where to start: the worked examples and rated economies nearest your words'],
-      ['xsolana examples <name>', 'one worked example whole; --save <file> writes its spec into a new file'],
-    ],
+    group: 'spec',
+    summary: 'Find worked examples and rated economy types close to your idea',
+    usage: ['xsolana examples [words…] [options]', 'xsolana examples <name> [--save <file>]'],
     words: [Infinity],
     tool: ['name', 'query'],
-    more: [
-      'With no words, every worked example by name. With words, the nearest examples, the nearest of the rated\neconomies, and what loot does not do in them with the nearest versions it does.',
-      'name          one word that is an example’s name: that example, with its whole spec',
-      '--save <file> with a name: write that example’s spec into <file> (xsolana.json, say), to change and then check.\n              A file that is there already is never written over',
-      JSON_FLAG,
+    about:
+      'Without words, lists every worked example. With words, prints the closest examples, the closest rated economy types, and what loot cannot do in your words, with the nearest versions it can. With one word that is an example’s name, prints that example’s whole spec.',
+    args: [['words', 'your idea in a few words, or an example’s name']],
+    options: [
+      [
+        '--save <file>',
+        'with a name: write that example’s spec into <file> (for example xsolana.json), to change and then check; an existing file is never overwritten',
+      ],
+      [
+        '--verbose',
+        'also print each example’s prompt, and the rated kinds of economy that match (hand ratings, dated)',
+      ],
+      JSON_OPT,
+      HELP_OPT,
     ],
+    examples: ['xsolana examples shop with loot boxes', 'xsolana examples blind-forge --save xsolana.json'],
   },
   check: onFile(
     'check',
-    'refusals and warnings (default xsolana.json)',
-    'Refusals keep a spec from going live, each with its fix; warnings are what its owner should hear. Exits 1 when\nit refuses.',
+    'Check a spec: refusals (it cannot go live) and warnings',
+    'Checks a spec and lists its refusals and warnings. A refusal keeps the spec from going live and comes with a fix. A warning is something the owner should know before going live; some raise a question only you can answer. Exits 1 when the spec is refused.',
+    ['xsolana check', 'xsolana check game/xsolana.json --verbose'],
+    [VERBOSE_OPT],
   ),
   simulate: onFile(
     'simulate',
-    'the quick simulation',
-    'Expected values from the spec and its scenario: what each box, ticket and craft gives back against its price,\neach pool’s money in and out, and what players, the treasury and the platform get a day.',
+    'Simulate where the money goes, day by day',
+    'Computes expected values from the spec and its scenario. Prints a summary of each day, a table of what a player pays (on devnet, with mainnet’s figures), the odds, and each lottery, pool, farm and stash.',
+    ['xsolana simulate', 'xsolana simulate --verbose'],
+    [verbose('every part in words: what it gives, how its stock runs out, and each pool’s fate')],
   ),
   cost: onFile(
     'cost',
-    'what going live and each action cost',
-    'What going live takes (rent, fees, seeds, how many transactions) and what each action costs whoever signs it.\nNothing is sent.',
+    'Price going live and each player or owner action',
+    'Prices going live (rent, fees, seeds and the number of transactions) and what each action costs whoever signs it: for a player, what goes on top of the price, on devnet and on mainnet. Nothing is sent.',
+    ['xsolana cost', 'xsolana cost --verbose'],
+    [verbose('each account’s rent, what a wallet must hold when it signs, and what comes back')],
   ),
   explain: onFile(
     'explain',
-    'the economy in plain words',
-    'What players do and what it costs and is worth, how the pools fill and drain, what runs by itself and what the\nauthority signs.',
+    'Describe the economy in plain words',
+    'Describes what players do and what it costs and is worth, how the pools fill and drain, what runs by itself, and what the authority signs, each section in short.',
+    ['xsolana explain', 'xsolana explain --verbose'],
+    [verbose('the whole text, and each route state by state as a player, the owner and a cheater see it')],
   ),
   review: onFile(
     'review',
-    'what a cheater gets on each route, and what to fix before going live',
-    'For every route that pays or gives value: who can trigger it, what the program enforces, what it trusts off the\nchain and the most one cheater gets. A report: printed on stdout whatever it finds, and it exits 1 when a\nfinding is high.',
+    'Review the spec as a cheater would, before going live',
+    'For every route that pays or gives value: who can trigger it and the most one cheater gets, then the findings by severity. Prints the report on stdout and exits 1 when a finding is high.',
+    ['xsolana review', 'xsolana review --verbose'],
+    [
+      verbose(
+        'what the program enforces and trusts on each route, every finding’s fix, the trade-offs, and a checklist',
+      ),
+    ],
   ),
   publish: onFile(
     'publish',
-    'what going live does, and how to approve it',
-    'Every step going live takes, in order, with its cost, and the commands that do it. It sends nothing: `xsolana\napprove` does.',
+    'List the steps of going live and the commands that do them',
+    'Lists every step going live takes, in order, with its cost, and the commands that do it. It sends nothing: `xsolana approve` does.',
+    ['xsolana publish'],
   ),
   keygen: {
-    lines: [
-      [
-        'xsolana keygen <file>',
-        'make a key file for the project’s owner, outside any repository (prints its address, never the key)',
-      ],
-    ],
+    group: 'live',
+    summary: 'Make a key file for the project owner (prints the address, never the key)',
+    usage: ['xsolana keygen <file>'],
     words: [1, 'one path'],
     tooMany: 'xsolana keygen <file> makes one key file: give one path (in quotes when it has a space).',
-    more: [
-      'file     where the key file goes, outside any repository: ~/.config/xsolana/my-game.json, say. It is made for\n         its user alone, and a file that is there already is never written over',
-      'The key is the project’s owner for good: back the file up yourself, and never paste it anywhere.',
-    ],
+    about:
+      'Makes a new key file, readable by you alone, and prints its address. The key owns the project it sets up until it hands the project to another key: back the file up yourself, keep it outside any repository, and never paste it anywhere. An existing file is never overwritten. For real money, a browser wallet that keeps its key on a hardware device is safer (approve --browser).',
+    args: [['file', 'where the key file goes, outside any repository (for example ~/.config/xsolana/my-game.json)']],
+    options: [HELP_OPT],
+    examples: ['xsolana keygen ~/.config/xsolana/my-game.json'],
   },
   approve: {
-    lines: [
-      [
-        'xsolana approve [file] --keypair <keyfile>',
-        'what going live sends, then (--yes <code>) send it, signed by that key file (--mint-key <token>=<keyfile>: that token’s new mint at the address of a key file you have)',
-      ],
-      [
-        'xsolana approve [file] --browser',
-        'the same on a local page, signed in a browser wallet (--port n, --no-open)',
-      ],
+    group: 'live',
+    summary: 'Put the economy live: show what it sends, then send it with --yes <code>',
+    usage: [
+      'xsolana approve [file] --keypair <keyfile> [--yes <code>] [--mint-key <token>=<keyfile>]…',
+      'xsolana approve [file] --browser [--port <n>] [--no-open]',
     ],
     words: [1, 'one file'],
-    // (`more` is HOW_TO_SIGN's, below)
+    about:
+      'Without --yes, prints every transaction going live would send, with what it pays and trusts, and ends with a code. It sends nothing. Run it again with --yes <code> to send exactly what was printed, signed by the key file. What lands is written back into the spec file.',
+    args: [['file', 'the spec file (default: xsolana.json)']],
+    // (options: WAYS_TO_SIGN, below)
+    examples: [
+      'xsolana approve xsolana.json --keypair ~/.config/xsolana/my-game.json',
+      'xsolana approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>',
+    ],
+  },
+  handover: {
+    group: 'live',
+    summary: 'Hand a live project to a new owner key: both keys sign, as the program requires',
+    usage: ['xsolana handover [file] --keypair <owner keyfile> --to <new owner keyfile> [--yes <code>]'],
+    words: [1, 'one file'],
+    about:
+      'Hands the live project in the spec file to a new owner, with the program’s update_project, signed by the current owner’s key file and the new owner’s. Without --yes it reads the project from the chain, prints what changes, with a code, and sends nothing; run it again with --yes <code> to send exactly that. The authority, the treasury and the project’s address stay as they are. A new owner that is a browser or hardware wallet can’t sign here: see docs/before-you-use.md.',
+    args: [['file', 'the live spec file (default: xsolana.json)']],
+    options: [
+      ['--keypair <keyfile>', 'the key file of the project’s current owner'],
+      ['--to <keyfile>', 'the key file of the new owner, which signs too'],
+      ['--yes <code>', 'send what was printed, by the code the printout ended with'],
+      HELP_OPT,
+    ],
+    examples: [
+      'xsolana handover --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json',
+      'xsolana handover --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json --yes <code>',
+    ],
   },
   status: onFile(
     'status',
-    'a live economy on chain',
-    'The project, each pool’s balance and every record the spec names, found or missing. It reads the economy’s own\ncluster: devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL.',
+    'Read a live economy from the chain',
+    'Reads the project, each pool’s balance and every record the spec names, found or missing. It reads the economy’s own cluster: devnet through its public RPC (or XSOLANA_RPC_URL), mainnet through XSOLANA_RPC_URL.',
+    ['xsolana status'],
   ),
   token: {
-    lines: [
-      [
-        'xsolana token <mint>',
-        'a token made elsewhere, as the chain has it: its "tokens" entry, with what its mint can do',
-      ],
-    ],
+    group: 'app',
+    summary: 'Read a token made elsewhere: its "tokens" entry and what its mint can do',
+    usage: ['xsolana token <mint> [options]'],
     words: [1, 'one mint address'],
     tool: ['mint'],
-    more: [
-      'mint     the token’s mint address. It is read on the cluster of the economy in this folder: devnet, unless\n         xsolana.json says "network": "mainnet"',
-      JSON_FLAG,
-    ],
-  },
-  client: {
-    lines: [['xsolana client', 'the program and its calls, for an app that uses a live economy']],
-    words: [0],
-    tool: [],
-    more: [
-      'The program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own\nwallet.',
-      JSON_FLAG,
-    ],
-  },
-  connect: {
-    lines: [
+    about:
+      'Reads a token’s mint from the chain and prints its ready "tokens" entry, with its name, ticker, decimals, token program and what its mint can still do (mint, freeze, a transfer fee…).',
+    args: [
       [
-        'xsolana connect',
-        'add the xsolana tools and the skill to Claude Code and Codex (--agent, --scope, --local, --remove, --dry-run)',
+        'mint',
+        'the token’s mint address, read on the cluster of the economy in this folder: devnet, unless xsolana.json says "network": "mainnet"',
       ],
     ],
+    options: [JSON_OPT, HELP_OPT],
+    examples: ['xsolana token <mint address>'],
+  },
+  client: {
+    group: 'app',
+    summary: 'Show the program and its calls, for an app that uses a live economy',
+    usage: ['xsolana client [options]'],
     words: [0],
-    more: [
-      'It runs each agent’s own commands, and never edits an agent’s config file.',
-      '--agent claude|codex   that agent alone (both when left out)',
-      '--scope user|project   for every project of this user (the default), or for the folder it runs in only',
-      '--local                run the server from this checkout, not from npm',
-      '--remove               take the tools and the skill out again',
-      '--dry-run              print what would be run, and run nothing',
+    tool: [],
+    about:
+      'Prints the program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own wallet.',
+    args: [],
+    options: [JSON_OPT, HELP_OPT],
+    examples: ['xsolana client'],
+  },
+  connect: {
+    group: 'agent',
+    summary: 'Add the xsolana tools and skill to Claude Code and Codex (--local: from a checkout)',
+    usage: ['xsolana connect [--agent claude|codex] [--scope project|user] [--local] [--remove] [--dry-run]'],
+    words: [0],
+    about:
+      'Registers the MCP server (pinned to this exact version) and the skill through each agent’s own commands, for the project folder it runs in unless you ask for every project. It never edits an agent’s config file. Codex registers MCP servers only for the whole user, so it needs --scope user.',
+    args: [],
+    options: [
+      ['--agent claude|codex', 'that agent only (default: both)'],
+      ['--scope project|user', 'this project folder only (default), or every project of this user'],
+      ['--local', 'run the server from this checkout, not from npm'],
+      ['--remove', 'remove the tools and the skill'],
+      ['--dry-run', 'print the commands it would run, and run nothing'],
+      HELP_OPT,
+    ],
+    examples: [
+      'xsolana connect',
+      'xsolana connect --scope user',
+      'xsolana connect --agent codex --scope user --dry-run',
     ],
   },
   mcp: {
-    lines: [
-      ['xsolana mcp', 'serve the tools over MCP (stdio)'],
-      ['xsolana mcp --http', 'serve the hosted tools over HTTP at http://127.0.0.1:8787/mcp (--port n, --host h)'],
-    ],
+    group: 'agent',
+    summary: 'Serve the tools over MCP (stdio, or HTTP with --http)',
+    usage: ['xsolana mcp', 'xsolana mcp --http [--port <n>] [--host <h>]'],
     words: [0],
-    more: [
-      'Over stdio it is what an agent’s MCP config runs. Over HTTP it serves the tools that read no file of yours.',
-      '--http        serve over HTTP, at /mcp',
-      '--port <n>    with --http: the port (8787)',
-      '--host <h>    with --http: the address to listen on (127.0.0.1)',
+    about:
+      'Over stdio, this is what an agent’s MCP configuration runs. Over HTTP it serves the tools that read no local file, at http://127.0.0.1:8787/mcp by default.',
+    args: [],
+    options: [
+      ['--http', 'serve over HTTP, at /mcp'],
+      ['--port <n>', 'with --http: the port (default: 8787)'],
+      ['--host <h>', 'with --http: the address to listen on (default: 127.0.0.1)'],
+      HELP_OPT,
     ],
+    examples: ['xsolana mcp', 'xsolana mcp --http --port 9000'],
   },
   tool: {
-    lines: [
-      [
-        'xsolana tool --list',
-        "every tool by name; xsolana tool <name> '<json>' runs one (--args-file f; --help for its arguments). xsolana_design (the specs that do what a person wants) and xsolana_save (save a spec given whole) have no command of their own",
-      ],
+    group: 'agent',
+    summary: 'Run any MCP tool by name (including xsolana_design and xsolana_save)',
+    usage: [
+      'xsolana tool --list',
+      "xsolana tool <name> ['<json>'] [--args-file <f>] [--json]",
+      'xsolana tool <name> --help',
     ],
     words: [2, 'a tool’s name and its arguments as one word of JSON, in quotes (\'{"file":"xsolana.json"}\')'],
-    more: [
-      'name               a tool’s name, as --list gives it. With --help: that tool’s arguments',
-      "'<json>'           its arguments, one JSON object in quotes ({} when left out)",
-      '--args-file <f>    read the arguments from a JSON file',
-      '--list             every tool, with the command that runs it when it has one',
-      JSON_FLAG,
+    about:
+      'Runs one MCP tool by name and prints its answer word for word, as an AI agent gets it. Two tools have no command of their own: xsolana_design (the specs that do what you want, when your goals pull against each other) and xsolana_save (save a spec given whole).',
+    args: [
+      ['name', 'a tool’s name, as --list prints it; with --help, that tool’s arguments'],
+      ["'<json>'", 'its arguments, as one JSON object in quotes (default: {})'],
     ],
+    options: [
+      ['--list', 'list every tool, with the command that runs it when there is one'],
+      ['--args-file <f>', 'read the arguments from a JSON file'],
+      JSON_OPT,
+      HELP_OPT,
+    ],
+    examples: ['xsolana tool --list', `xsolana tool xsolana_check '{"file":"xsolana.json"}'`],
   },
   version: {
-    lines: [['xsolana version', 'this package’s version, the loot program it is built for, and the cluster']],
+    group: 'other',
+    summary: 'Print this package’s version, the loot program it is built for, and the cluster',
+    usage: ['xsolana version'],
     words: [0],
-    more: [],
+    about: '',
+    args: [],
+    options: [],
+    examples: [],
   },
 };
+
+/** The groups of the first help screen, in order. */
+const GROUPS = [
+  ['spec', 'Design and check a spec'],
+  ['live', 'Go live'],
+  ['app', 'Build an app on a live economy'],
+  ['agent', 'Use with an AI agent'],
+  ['other', 'Other'],
+];
 
 /** `text` in lines of at most `width` columns, cut between words. */
 function wrapped(text, width) {
@@ -258,25 +393,61 @@ function wrapped(text, width) {
   return lines;
 }
 
-/** One [what is typed, what it does] of the help: the second from column 34, on the same line when the first leaves room. */
-function helpLine([typed, does]) {
-  const [first, ...rest] = wrapped(does, 84);
-  const under = ' '.repeat(34);
-  return [
-    typed.length < 32 ? `  ${typed.padEnd(32)}${first}` : `  ${typed}\n${under}${first}`,
-    ...rest.map(l => under + l),
-  ].join('\n');
+/** Rows of [left, right] as two columns: the right one from column `at`, under the left when it is too long. */
+function columns(rows, at = 34, indent = 2) {
+  const under = ' '.repeat(at);
+  return rows
+    .flatMap(([left, right]) => {
+      const [first = '', ...rest] = right ? wrapped(right, 118 - at) : [];
+      const head = `${' '.repeat(indent)}${left}`;
+      return [
+        head.length < at - 1 ? `${head.padEnd(at)}${first}`.trimEnd() : `${head}${first ? `\n${under}${first}` : ''}`,
+        ...rest.map(l => under + l),
+      ];
+    })
+    .join('\n');
 }
 
-const USAGE = `xsolana: the tools for loot, one shared Solana program for game and community economies.
-
-${Object.values(COMMANDS)
-  .flatMap(c => c.lines.map(helpLine))
-  .join('\n')}
-  xsolana help [command]          this screen, or one command’s words and flags (also: xsolana <command> --help)
-
-  A tool’s command (guide, examples, check … status, token, client, tool) takes --json for its whole answer as
-  JSON. review exits 1 when it finds something high.`;
+const USAGE = [
+  'xsolana: check, simulate and price economy specs for loot, a shared Solana program for game and community economies.',
+  '',
+  'Usage: xsolana <command> [arguments] [options]',
+  ...GROUPS.flatMap(([group, title]) => [
+    '',
+    `${title}:`,
+    columns(
+      Object.values(COMMANDS)
+        .filter(c => c.group === group)
+        .map(c => [
+          // (its first usage line up to its options: `xsolana check [file]`, `xsolana token <mint>`)
+          c.usage[0]
+            .split(' ')
+            .slice(0, 3)
+            .filter(w => !w.startsWith('--') && !w.startsWith('[--') && w !== '[options]')
+            .join(' '),
+          c.summary,
+        ])
+        .concat(
+          group === 'other'
+            ? [['xsolana help [command]', 'Show this help, or one command’s help (also: xsolana <command> --help)']]
+            : [],
+        ),
+    ),
+  ]),
+  '',
+  'Common options:',
+  columns([
+    [
+      '--json',
+      'print the whole answer as JSON, as an AI agent gets it (guide, examples, check … status, token, client, tool)',
+    ],
+    ['--verbose', 'check, simulate, cost, explain, review, examples: also print the details left out by default'],
+    ['-h, --help', 'show a command’s help'],
+  ]),
+  '',
+  'Exit codes: 0 success; 1 failure (including check refusing the spec and review finding something high); 2 usage error.',
+  'Examples: xsolana examples shop with loot boxes · xsolana check · xsolana help approve',
+].join('\n');
 
 /**
  * The arguments after the command: { flags (every --name given), values (--name → value), lists (--name → every
@@ -325,33 +496,42 @@ function parseArgs(rest) {
   return { flags, values, lists, positional };
 }
 
-/** The two ways going live is signed, each with its flags. */
-const WAYS_TO_SIGN = `  --keypair <keyfile>   a key file on this machine signs (the usual way: no browser, no page). It shows everything that
-                        would be sent, with a code, and sends nothing; run again with --yes <code>, it sends exactly
-                        that. \`xsolana keygen <file>\` makes a new project's key file; one that is live is signed
-                        only by the key it went live with.
-  --mint-key <token>=<keyfile>   with --keypair: make that token's new mint at the address of a key file you have
-                        (an address you chose), not at a new one. Given once for each such token. The file signs the
-                        transaction that makes the mint and no other. After that it can do nothing more at that
-                        address on that cluster; on another cluster it still can, so keep it safe until then.
-  --browser             a browser wallet signs, on a page this command serves on this machine until it is live. Only
-                        when the person whose economy it is asks for that; they run it themselves.`;
-/** What `xsolana approve` says when it is not told how the setup is signed. */
-const HOW_TO_SIGN = `xsolana approve: say how going live is signed.\n\n${WAYS_TO_SIGN}`;
-COMMANDS.approve.more = [
-  'file     the spec file (xsolana.json when left out). What lands is written back into it',
-  WAYS_TO_SIGN.replace(/^ {2}/gm, ''),
-  '--yes <code>          with --keypair: send what was shown, by the code that printout ended with',
-  '--port <n>            with --browser: the port the page is served on (any free one when left out)',
-  '--no-open             with --browser: print the link, and open no browser',
+/** The two ways going live is signed, each with its flags: approve's options, and what it says when given neither. */
+const WAYS_TO_SIGN = [
+  [
+    '--keypair <keyfile>',
+    'sign with a key file on this machine (the usual way: no browser, no page). It prints everything it would send, with a code, and sends nothing. Run it again with --yes <code> and it sends exactly that. `xsolana keygen <file>` makes a new project’s key file; a live project is signed only by the key it went live with.',
+  ],
+  [
+    '--mint-key <token>=<keyfile>',
+    'with --keypair: make that token’s new mint at the address of a key file you have (an address you chose), not at a new one. Give it once for each such token. The file signs only the transaction that makes the mint. After that it can do nothing more at that address on that cluster; on another cluster it still can, so keep it safe until then.',
+  ],
+  [
+    '--browser',
+    'sign in a browser wallet, on a page this command serves on this machine until the economy is live. Use it only when the economy’s owner asks for it; the owner runs it themselves.',
+  ],
 ];
+COMMANDS.approve.options = [
+  ...WAYS_TO_SIGN,
+  ['--yes <code>', 'with --keypair: send what was printed, by the code the printout ended with'],
+  ['--port <n>', 'with --browser: the port the page is served on (default: any free port)'],
+  ['--no-open', 'with --browser: print the link, and open no browser'],
+  HELP_OPT,
+];
+/** What `xsolana approve` says when it is not told how the setup is signed. */
+const HOW_TO_SIGN = `xsolana approve: say how going live is signed.\n\n${columns(WAYS_TO_SIGN, 32)}`;
 
-/** One command's own help: what is typed, what it does, and each word and flag it takes. */
+/** One command's own help: usage, what it does, its arguments and options, and examples. */
 function helpFor(command) {
   const c = COMMANDS[command];
-  return [...c.lines.map(helpLine), ...(c.more.length ? ['', ...c.more.map(m => m.replace(/^/gm, '  '))] : [])].join(
-    '\n',
-  );
+  const section = (title, body) => (body ? ['', `${title}:`, body] : []);
+  return [
+    ...c.usage.map((u, i) => `${i ? '       ' : 'Usage: '}${u}`),
+    ...(c.about ? ['', ...wrapped(c.about, 118)] : []),
+    ...section('Arguments', c.args.length ? columns(c.args, 32) : ''),
+    ...section('Options', c.options.length ? columns(c.options, 32) : ''),
+    ...section('Examples', c.examples.map(e => `  ${e}`).join('\n')),
+  ].join('\n');
 }
 
 /**
@@ -402,7 +582,9 @@ async function main(argv) {
   const helped = command === 'help' ? positional[0] : known && flags.has('--help') ? command : null;
   if (helped !== null && helped !== undefined) {
     if (!Object.hasOwn(COMMANDS, helped))
-      throw new UsageError(`There is no command “${helped}”: xsolana help lists them all.`);
+      throw new UsageError(
+        `There is no command “${helped}”: xsolana help lists them all.${didYouMean(helped, Object.keys(COMMANDS))}`,
+      );
     if (helped === 'tool' && command === 'tool' && positional[0]) {
       const { tools } = await import('../js/mcp/tools.mjs');
       const { terminalWords } = await import('../js/mcp/server.mjs');
@@ -418,7 +600,7 @@ async function main(argv) {
   const unknown = takes && [...flags].find(f => !takes.includes(f));
   if (unknown)
     throw new UsageError(
-      `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).`,
+      `“${command}” takes no ${unknown} flag (${takes.length ? `only ${takes.join(', ')}` : 'it takes none'}).${didYouMean(unknown, takes)}`,
     );
   // A word more than the command takes is refused: dropped, it would look as if it had been read.
   const [most, what] = known ? COMMANDS[command].words : [Infinity];
@@ -453,7 +635,14 @@ async function main(argv) {
    */
   async function tool(name, input, done = null) {
     const { networkOfInput, runTool } = await import('../js/mcp/server.mjs');
-    const ctx = { cwd: process.cwd(), terminal: TERMINAL };
+    // A named command is read by the developer (`ctx.reader`); `xsolana tool` and --json give the answer an agent
+    // gets, word for word.
+    const person = !flags.has('--json') && command !== 'tool';
+    const ctx = {
+      cwd: process.cwd(),
+      terminal: TERMINAL,
+      ...(person ? { reader: 'person', verbose: flags.has('--verbose') } : {}),
+    };
     // The economy's cluster is read as the tool reads it (a spec given whole, an example, a file).
     const given = input && typeof input === 'object' ? input : {};
     await onCluster(
@@ -559,7 +748,7 @@ async function main(argv) {
         [
           `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
-          'Whatever is set up with it, it owns, for good: anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
+          'Whatever is set up with it, it owns, until it hands the project to another key (xsolana handover, signed by both keys): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
           `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
         ].join('\n'),
       );
@@ -600,12 +789,30 @@ async function main(argv) {
       if (flags.has('--yes')) throw new UsageError('--yes goes with --keypair.');
       if (!page) {
         console.error(HOW_TO_SIGN);
-        process.exitCode = 1;
+        process.exitCode = USAGE_EXIT;
         break;
       }
       const port = portOf(values.get('--port'));
       const { approve } = await import('../js/approve/server.mjs');
       await approve({ file, port, open: !flags.has('--no-open') });
+      break;
+    }
+    case 'handover': {
+      const file = positional[0] ?? 'xsolana.json';
+      const { networkOfFile } = await import('../js/mcp/server.mjs');
+      await onCluster(await networkOfFile(file), file);
+      if (values.get('--keypair') === undefined || values.get('--to') === undefined)
+        throw new UsageError(
+          'xsolana handover needs both keys: --keypair <the owner’s key file> --to <the new owner’s key file>.',
+        );
+      const { handover } = await import('../js/approve/handover.mjs');
+      const r = await handover({
+        file,
+        keyFile: values.get('--keypair'),
+        toFile: values.get('--to'),
+        yes: values.get('--yes') ?? null,
+      });
+      if (!r.ok) process.exitCode = 1;
       break;
     }
     case 'connect': {
@@ -665,8 +872,10 @@ async function main(argv) {
       console.log(USAGE);
       break;
     default:
-      console.error(`xsolana: there is no command “${command}”.\n\n${USAGE}`);
-      process.exitCode = 1;
+      console.error(
+        `xsolana: there is no command “${command}”.${didYouMean(command, [...Object.keys(COMMANDS), 'help'])}\n\n${USAGE}`,
+      );
+      process.exitCode = USAGE_EXIT;
   }
 }
 
@@ -685,5 +894,5 @@ try {
   const line = oneLine(e);
   if (process.env.XSOLANA_DEBUG) console.error(e);
   else console.error(/^xsolana[ :]/.test(line) ? line : `xsolana: ${line}`);
-  process.exitCode = 1;
+  process.exitCode = e instanceof UsageError ? USAGE_EXIT : 1;
 }

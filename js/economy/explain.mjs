@@ -8,6 +8,7 @@ import { check, describe } from './check.mjs';
 import { cost } from './cost.mjs';
 import { asWritten, numeral, percentage, plural } from './format.mjs';
 import {
+  royaltyWords,
   boostReadsGrowth,
   boxBuys,
   destination,
@@ -32,7 +33,7 @@ import {
 } from './model.mjs';
 import { farmEnds, playSteps } from './plan.mjs';
 import { TRUST_WORDS } from './trust.mjs';
-import { inAll, poolFate, priceBasis, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
+import { backWords, inAll, poolFate, priceBasis, simulate, unnamedExceptions, unnamedWords } from './simulate.mjs';
 import { realMoney } from '../client/cluster.js';
 
 /**
@@ -212,6 +213,8 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
   // A token the setup makes is named on chain as it is made (plan.mjs): what wallets will show, and that a picture
   // needs its link before going live. One that is live already keeps what it has until the spec changes its name,
   // which is written at the next approve (live.mjs changedParts, approve/live-check.mjs readRenames).
+  // The collection the setup makes carries a resale royalty to the owner (5% unless the spec says): said, never silent.
+  section('The collection going live makes', [royaltyWords(economy)].filter(Boolean));
   section(
     'The tokens going live makes',
     [...m.tokens.values()]
@@ -246,7 +249,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
           : '';
     const back =
       b.returnPercent !== null
-        ? `gives back ${numeral(b.expectedBack)} ${sym(b.token)} on average (${percentage(b.returnPercent)}% of ${b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : 'its price'}${edge})`
+        ? `gives back ${backWords(b, sym(b.token), b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : 'its price')}${edge ? `${edge}${b.itemValueBack ? ', by those values' : ''}` : ''}`
         : 'gives back what its items are worth to the player';
     const part = o =>
       o.gives === 'pay'
@@ -611,7 +614,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     `Each day, if ${named ? `${named} happen (anything else: ${unnamedWords(sim)})` : `${asWritten(sim.scenario.defaultPerDay)} of each thing happen${except.length ? ` (${except.join(', ')})` : ''}`}`,
   );
   lines.push(
-    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average, plus ${numeral(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
+    `- Players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average${Object.keys(d.players.itemValue ?? {}).length ? ` (of it, items worth ${list(d.players.itemValue)} at the "value" you gave them: a value, not money paid out)` : ''}, plus ${numeral(d.players.playerFeesSol)} SOL in player fees${d.players.oracleFeesSol ? ` and ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle` : ''}.`,
   );
   lines.push(
     `- Your treasury gets ${list(d.creator.treasury)}; burned: ${list(d.burned)}; the platform’s fees: ${numeral(d.platform.totalSol)} SOL.`,
@@ -629,7 +632,7 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     '',
     `${realMoney() ? 'This economy is on mainnet: what it takes and what it pays is real money, and loot has not been independently audited.' : 'This economy is on devnet: nothing here is real money.'} Going live is signed on your own machine by the project’s key file, which is what “your wallet” means above. The command first prints everything it would send and sends nothing; it sends only when run again with the code it printed, which your agent is told to do only after your yes. No seed phrase or wallet key is ever asked for.`,
   );
-  const walk = walkThrough(m, { now });
+  const walk = walkThrough(m, { now, sim });
   if (walk.length) lines.push('', ...walk);
   return {
     ok: true,

@@ -6,6 +6,7 @@
 // Rent is (bytes + 128) × 5,080 lamports (model.mjs); the loot program's own records are sized byte for byte from
 // their Borsh layout, others (a Core collection, a farm) roughly, and marked so.
 import { priorityFee } from '../chain/programs.js';
+import { networkOf } from '../client/cluster.js';
 import { SIGNATURE_LAMPORTS } from '../chain/tx.js';
 import {
   boxOrderBytes,
@@ -32,6 +33,7 @@ import {
   holdsRent,
   outcomeParts,
   SETTLE_RENT_UNIT,
+  FEES_ON,
   feesOf,
   LAMPORTS_PER_SOL,
   ORACLE_FEE,
@@ -85,23 +87,38 @@ export function setupCost(plan, economy) {
   const steps = new Set(plan.transactions.flatMap(t => t.steps).map(s => s.id));
   const seeds = {};
   let seedLamports = 0n;
+  // Each SOL the setup puts in beside rent and fees, with what it is for (`parts`, below).
+  const deposits = [];
+  const deposit = (what, lamports) => {
+    seedLamports += lamports;
+    deposits.push({ what, lamports });
+  };
   const funded = m.grants.filter(g => Number(g.fund ?? 0) > 0 && steps.has(`fund:${g.key}`));
-  for (const g of funded) seedLamports += toUnits(g.fund, 9);
+  for (const g of funded)
+    deposit(`the funds of the grant “${g.name ?? g.key}”, which pay its claims`, toUnits(g.fund, 9));
   // What the owner puts in from their own wallet: a pool's seed, a lottery's seed (into its pot), a farm's seed (into its
   // rewards vault), a sealed schedule's funds (into its vault, from the wallet).
-  const putIn = (key, amount, step) => {
+  const putIn = (key, amount, step, what) => {
     if (!(Number(amount ?? 0) > 0) || !steps.has(step)) return;
     const t = m.tokens.get(key ?? m.currencyKey);
     seeds[t.symbol] = round((seeds[t.symbol] ?? 0) + Number(amount));
-    if (t.wsol) seedLamports += toUnits(amount, 9);
+    if (t.wsol) deposit(what, toUnits(amount, 9));
   };
-  for (const p of m.pools) putIn(p.currency, p.seed, `seed:${p.key}`);
-  for (const l of m.lotteries) putIn(l.currency, l.seed, `seed:lottery:${l.key}`);
-  for (const f of m.farms) putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`);
+  for (const p of m.pools) putIn(p.currency, p.seed, `seed:${p.key}`, `the seed of the pool “${p.key}”`);
+  for (const l of m.lotteries)
+    putIn(l.currency, l.seed, `seed:lottery:${l.key}`, `the seed of the lottery “${l.name ?? l.key}”`);
+  for (const f of m.farms)
+    putIn(f.rewardsToken, f.seed, `seed:farm:${f.key}`, `the seed of the farm “${f.name ?? f.key}”`);
   // SOL a lottery holds for its rounds' rent: lent to each round, back at its close.
-  for (const l of m.lotteries) if (steps.has(`rent:lottery:${l.key}`)) seedLamports += roundRentOf(l, m);
+  for (const l of m.lotteries)
+    if (steps.has(`rent:lottery:${l.key}`))
+      deposit(
+        `the reserve the lottery “${l.name ?? l.key}” lends its rounds for rent, back when it closes`,
+        roundRentOf(l, m),
+      );
   for (const sc of m.schedules)
-    if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet') putIn(sc.currency, sc.fund, `fund:${sc.key}`);
+    if (sc.sealed && (sc.fundFrom ?? 'wallet') === 'wallet')
+      putIn(sc.currency, sc.fund, `fund:${sc.key}`, `the funds of the sealed schedule “${sc.name ?? sc.key}”`);
   const total = rentLamports + metadataLamports + feeLamports + networkLamports + seedLamports;
   const notes = [];
   if (accounts.some(a => a.approx))
@@ -121,7 +138,7 @@ export function setupCost(plan, economy) {
   notes.push(
     `The network fee is 5,000 lamports a signature and a priority fee of ${priorityFee(withSetupBudget([]))} lamports a transaction: each sets its own compute unit limit and price, so a wallet that adds a priority fee of its own leaves it as it is.`,
   );
-  return {
+  const setup = {
     accounts,
     rentSol: sol(rentLamports),
     metadataFeesSol: sol(metadataLamports),
@@ -133,6 +150,19 @@ export function setupCost(plan, economy) {
     approvals: plan.approvals,
     notes,
   };
+  // Every SOL part of the total, each with what it is for: they add up to `totalSol`, to the lamport. Not enumerable,
+  // so the tools' answers (JSON, MCP) stay as they were; `xsolana cost` lists them.
+  const parts = [
+    { what: `rent for ${accounts.length} account${accounts.length === 1 ? '' : 's'}`, lamports: rentLamports },
+    { what: 'Token Metadata’s fees (a token’s name on chain)', lamports: metadataLamports },
+    { what: 'program fees', lamports: feeLamports },
+    { what: 'network fees', lamports: networkLamports },
+    ...deposits,
+  ]
+    .filter(x => x.lamports > 0n)
+    .map(x => ({ what: x.what, lamports: x.lamports.toString(), sol: sol(x.lamports) }));
+  Object.defineProperty(setup, 'parts', { value: parts, enumerable: false });
+  return setup;
 }
 
 /**
@@ -504,9 +534,14 @@ export function cost(economy, { now = Math.floor(Date.now() / 1000), only = null
     setup: setupCost(plan, economy),
     actions: actionCosts(economy, { now }),
     fees: {
+      network: networkOf(economy),
       playerSol: sol(feesOf(economy).player),
       projectSol: sol(feesOf(economy).project),
       oracleSol: sol(ORACLE_FEE),
+      // (devnet's player fee is not mainnet's: the price of the same action with real money)
+      ...(feesOf(economy).player !== FEES_ON.mainnet.player
+        ? { mainnetPlayerSol: sol(FEES_ON.mainnet.player), mainnetProjectSol: sol(FEES_ON.mainnet.project) }
+        : {}),
     },
   };
 }
@@ -530,7 +565,7 @@ export function explainCost(c) {
     lines.push(
       `  ${a.approx ? 'about ' : ''}${numeral(a.sol)} SOL: ${a.what} (${plural(a.bytes, 'byte')})${a.feeSol ? `, and ${numeral(a.feeSol)} SOL Token Metadata keeps for it` : ''}`,
     );
-  lines.push('While it runs (for a player, quote the “in all” number: it is what leaves their wallet for good):');
+  lines.push('While it runs (“in all” is what leaves a player’s wallet for good):');
   for (const r of c.actions) {
     const deposits = r.deposits.map(d => `${numeral(d.sol)} SOL for ${d.what} (back: ${d.back})`).join('; ');
     if (r.inAll) {
@@ -542,5 +577,12 @@ export function explainCost(c) {
     );
   }
   for (const n of s.notes) lines.push(n);
+  const f = c.fees;
+  if (f?.mainnetPlayerSol !== undefined) {
+    const less = numeral(round(f.playerSol - f.mainnetPlayerSol));
+    lines.push(
+      `These are devnet's fees, and devnet SOL is play money. The player fee is ${numeral(f.playerSol)} SOL a player action on devnet and ${numeral(f.mainnetPlayerSol)} SOL on mainnet, so each player action above costs ${less} SOL less there. The project fee is ${numeral(f.mainnetProjectSol)} SOL on both${f.mainnetProjectSol === f.projectSol ? '' : ` (here ${numeral(f.projectSol)} SOL)`}.`,
+    );
+  }
   return lines.join('\n');
 }

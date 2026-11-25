@@ -46,6 +46,8 @@ export function checkGrants(c) {
       'W-HOLD',
       where,
       `${label(h)}: while a hold runs, the project’s authority alone decides where its NFT goes, and it runs as long as the project sets. Players trust the project with the NFT until then.`,
+      undefined,
+      { severity: 'medium' },
     );
     if (h.until !== undefined && timeAt(h.until, `${where}.until`) < now)
       warn(

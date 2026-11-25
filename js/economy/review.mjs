@@ -9,6 +9,7 @@
 // limits, gates, seats and custody are the program's. What is left to get wrong is what a voucher signer decides
 // (what it checks, which person it names, the limits it is given) and the economy's own design (emission without an
 // end, prizes worth farming). The findings are about those.
+import { simulate } from './simulate.mjs';
 import { check } from './check.mjs';
 import { asWritten, label, numeral } from './format.mjs';
 import { gateWords, ruleWords } from './explain.mjs';
@@ -47,6 +48,15 @@ const PLAYER_MONEY = /^(payment|box|item|lottery|contest|recipe|auction):/;
  * The review of an economy: { ok, routes, findings, tradeoffs }. `ok` is false when there is a high finding, or when
  * the spec does not check (then `refusals` says why, and the rest is empty).
  */
+/** The simulation of `economy`, or null when it can't run (the walk then says the fees alone). */
+function simulated(economy, now) {
+  try {
+    return simulate(economy, { now });
+  } catch {
+    return null;
+  }
+}
+
 export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
   const verdict = check(economy, { now });
   if (!verdict.ok) return { ok: false, refusals: verdict.refusals, routes: [], findings: [], tradeoffs: '' };
@@ -388,7 +398,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ? byPerson(b)
         ? `${limitPhrases(b).join(', ')}, as far as the issuer tells one person from another, for only the fees.`
         : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${asWritten(it.supply)}` : 'as many as they like'}, for only the fees.`
-      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
+      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll (under the current program version, which its upgrade authority can replace)' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
       key,
@@ -712,7 +722,9 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
     ok: !findings.some(f => f.severity === 'high'),
     routes,
     findings,
-    tradeoffs: [tradeoffs(routes, findings), walkThrough(m, { now }).join('\n')].filter(Boolean).join('\n\n'),
+    tradeoffs: [tradeoffs(routes, findings), walkThrough(m, { now, sim: simulated(economy, now) }).join('\n')]
+      .filter(Boolean)
+      .join('\n\n'),
   };
 }
 
@@ -761,7 +773,7 @@ function tradeoffs(routes, findings) {
   const chance = routes.filter(r => r.trusts.some(t => t.startsWith('MagicBlock')));
   if (chance.length)
     lines.push(
-      `- Chance (the oracle): ${chance.map(r => `“${r.name}”`).join(', ')}. Nobody, the project included, steers a roll or a draw.`,
+      `- Chance (the oracle): ${chance.map(r => `“${r.name}”`).join(', ')}. Nobody, the project included, steers a roll or a draw under the current program version, which its upgrade authority can replace.`,
     );
   const contests = routes.filter(r => r.kind === 'contest');
   if (contests.length)

@@ -6,7 +6,7 @@ Keep these in step:
   server's and its npm package's; `npm test` fails when they differ), and in `claude-directory/.claude-plugin/plugin.json`
   only when that edition is submitted again ([docs/harnesses.md](docs/harnesses.md));
 - the `--package=@xgamesfun/solana@<version>` pin in `plugin/.mcp.json` and `plugin/mcp.json`, and every
-  `npx -y @xgamesfun/solana@<version>` line in `README.md`, `docs/harnesses.md` and the skill (`npm test` fails on a pin
+  `npx -y @xgamesfun/solana@<version>` line in `README.md`, `docs/` and the skill (`npm test` fails on a pin
   that isn't `package.json`'s version; in `claude-directory/README.md`, on one that isn't its manifest's);
 - `release.json`, the program build this package is for: its `version` is the program's (the IDL's), not the package's,
   so a release that changes only JavaScript leaves it as it is. `node scripts/release-manifest.mjs` writes it, after a

@@ -1,6 +1,6 @@
 {
   "name": "@xgamesfun/solana",
-  "version": "0.29.11",
+  "version": "0.29.12",
   "mcpName": "io.github.XGamesFun/solana-kit",
   "description": "A toolkit for building game economies on Solana: design, check, simulate and review shops, items, crafting, rewards, NFT staking, loot boxes and auctions as a JSON spec, with no smart contract to write. One shared program, its JS client, a CLI, and an MCP server and skill for Claude Code, Codex or any AI agent.",
   "license": "Apache-2.0",
@@ -103,7 +103,10 @@
     "bin/",
     "skills/",
     "examples/*.json",
+    "docs/",
     "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "LICENSE",
     "NOTICE",
     "DISCLAIMER.md"

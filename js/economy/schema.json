@@ -509,6 +509,7 @@
           "$ref": "#/$defs/words"
         },
         "royaltyPercent": {
+          "description": "The collection's resale royalty: the percent of each resale that marketplaces honouring Metaplex Core royalties pay the owner's wallet (the collection's creator). 5 when left out; 0 for none. Written into the collection when the setup makes it.",
           "type": "number",
           "minimum": 0,
           "maximum": 25,

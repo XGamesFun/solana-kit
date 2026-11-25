@@ -38,26 +38,26 @@ function fakeAgents() {
 }
 
 describe('xsolana (the command line)', () => {
-  test('a failure is one line on stderr and exit 1, never a stack', async () => {
+  test('a failure is one line on stderr, never a stack: exit 1 when it fails, 2 when it was given wrongly', async () => {
     const cases = [
-      [['tool', 'xsolana_check', 'notjson'], /not JSON/],
-      [['approve', 'missing.json', '--browser', '--no-open'], /missing\.json does not exist/],
-      [['approve', 'xsolana.json', '--browser', '--port', 'abc'], /--port must be a whole number/],
-      [['approve', 'xsolana.json', '--browser', '--port=99999'], /--port must be a whole number/],
-      [['connect', '--agent'], /--agent needs a value/],
+      [['tool', 'xsolana_check', 'notjson'], /not JSON/, 2],
+      [['approve', 'missing.json', '--browser', '--no-open'], /missing\.json does not exist/, 1],
+      [['approve', 'xsolana.json', '--browser', '--port', 'abc'], /--port must be a whole number/, 2],
+      [['approve', 'xsolana.json', '--browser', '--port=99999'], /--port must be a whole number/, 2],
+      [['connect', '--agent'], /--agent needs a value/, 2],
     ];
-    for (const [args, said] of cases) {
+    for (const [args, said, code] of cases) {
       const r = await xsolana(args);
-      assert.equal(r.code, 1, args.join(' '));
+      assert.equal(r.code, code, args.join(' '));
       assert.match(r.err, said, args.join(' '));
       assert.doesNotMatch(r.err, /\n\s+at /, `${args.join(' ')}: no stack`);
       assert.equal(r.err.trim().split('\n').length, 1, `${args.join(' ')}: one line`);
     }
   });
 
-  test('an unknown command prints the usage and exits 1; help exits 0', async () => {
+  test('an unknown command prints the usage and exits 2; help exits 0', async () => {
     const bad = await xsolana(['bogus']);
-    assert.equal(bad.code, 1);
+    assert.equal(bad.code, 2);
     assert.match(bad.err, /no command “bogus”/);
     assert.match(bad.err, /xsolana check \[file\]/);
     const help = await xsolana(['help']);
@@ -88,7 +88,7 @@ describe('xsolana (the command line)', () => {
         assert.equal(r.code, 0, r.err + r.out);
         const calls = agents.calls();
         assert.ok(calls.length && calls.every(c => c.startsWith('claude ')), `${form.join(' ')}: ${calls.join(' | ')}`);
-        assert.match(r.out, /claude mcp add --transport stdio --scope user xsolana/);
+        assert.match(r.out, /claude mcp add --transport stdio --scope project xsolana/);
         assert.ok(!existsSync(path.join(home, '.claude')), 'a dry run writes nothing');
       }
     },
@@ -207,4 +207,51 @@ describe('xsolana connect', () => {
     assert.equal(npx.command, 'cmd');
     assert.deepEqual(npx.args.slice(0, 2), ['/c', 'npx']);
   });
+});
+
+describe('xsolana (a typo)', () => {
+  test('a command or a flag a typo away is named: did you mean it?', async () => {
+    const command = await xsolana(['chek']);
+    assert.equal(command.code, 2);
+    assert.match(command.err, /there is no command “chek”\. Did you mean check\?/);
+    const flag = await xsolana(['check', '--jsn']);
+    assert.equal(flag.code, 2);
+    assert.match(flag.err, /takes no --jsn flag \(only --json, --verbose\)\. Did you mean --json\?/);
+    const help = await xsolana(['help', 'reveiw']);
+    assert.match(help.err, /Did you mean review\?/);
+    const far = await xsolana(['zzz']);
+    assert.doesNotMatch(far.err, /Did you mean/);
+  });
+});
+
+describe('xsolana connect (its scope)', () => {
+  test(
+    'connects this project by default, as xcore does; --scope user every project, Codex only so',
+    { skip: !posix && 'stand-in agents are shell scripts' },
+    async () => {
+      const agents = fakeAgents();
+      const home = mkdtempSync(path.join(tmpdir(), 'xsolana-home-'));
+      const env = { PATH: `${agents.dir}${path.delimiter}${process.env.PATH}`, HOME: home };
+      const plain = await xsolana(['connect', '--dry-run'], { env });
+      assert.equal(plain.code, 0, plain.err + plain.out);
+      assert.match(
+        plain.out,
+        /claude mcp add --transport stdio --scope project xsolana -- npx -y --package=@xgamesfun\/solana@\d+\.\d+\.\d+ xsolana mcp/,
+      );
+      assert.match(
+        plain.out,
+        /Codex: adds MCP servers only for the whole user, so at --scope project it would be left as it is\. Run `xsolana connect --agent codex --scope user`/,
+      );
+      // (a dry run says every step in "would", and ends saying nothing changed)
+      for (const line of plain.out
+        .trim()
+        .split('\n')
+        .filter(l => l && !l.startsWith('  ')))
+        assert.match(line, /would|^Nothing was changed: this was a dry run\.$/, line);
+      assert.match(plain.out.trim(), /Nothing was changed: this was a dry run\.$/);
+      const user = await xsolana(['connect', '--dry-run', '--scope', 'user'], { env });
+      assert.match(user.out, /claude mcp add --transport stdio --scope user xsolana/);
+      assert.match(user.out, /codex mcp add xsolana/);
+    },
+  );
 });

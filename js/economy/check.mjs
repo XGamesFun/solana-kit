@@ -84,9 +84,17 @@ export function check(
   const refusals = [];
   const warnings = [];
   const refuse = (code, where, message, fix) => refusals.push({ code, where, message, fix });
-  /** A warning; `extra` { severity, ask }: how likely its state is, and the question to put to the person. */
+  /** A warning; `extra` { severity, ask }: how likely its state is, and the question to put to the person. A warning
+   * given no severity takes its code's (SEVERITY), when its code has one. */
   const warn = (code, where, message, fix, extra) =>
-    warnings.push({ code, where, message, ...(fix ? { fix } : {}), ...(extra ?? {}) });
+    warnings.push({
+      code,
+      where,
+      message,
+      ...(fix ? { fix } : {}),
+      ...(SEVERITY[code] && !extra?.severity ? { severity: SEVERITY[code] } : {}),
+      ...(extra ?? {}),
+    });
   const result = () => ({ ok: refusals.length === 0, refusals, warnings });
 
   const secrets = findSecrets(economy);
@@ -402,6 +410,7 @@ export function check(
     refusals,
     refuse,
     warn,
+    warnings,
     m,
     tradeable,
     simulated,
@@ -442,6 +451,54 @@ export function check(
   return result();
 }
 
+/**
+ * The severity of a warning whose code says one thing, when the place that raises it gives none. `medium`: a risk to
+ * players' money or what they hold, or a trust a person deciding must see (a mint's powers, the owner's and the
+ * authority's, a voucher key's, an outside collection's, what players pay on top of a cheap price, a pool or farm that
+ * pays nothing yet). `high`: a farm that pays nothing until its mint is handed to the project. `low`: a cost or a
+ * detail worth knowing. Codes that cover several cases (W-FARM, W-LOTTERY, W-AUCTION…) are rated where they are raised,
+ * and the law's flags stay as they are: the views always show them.
+ */
+export const SEVERITY = Object.freeze({
+  'W-FARM-AUTHORITY': 'high',
+  'W-ON-TOP': 'medium',
+  'W-MINT-POWERS': 'medium',
+  'W-MINT-NOT-OURS': 'medium',
+  'W-AUTHORITY': 'medium',
+  'W-SCHEDULE-PAY': 'medium',
+  'W-SCHEDULE-PAYEE': 'medium',
+  'W-VOUCHERS': 'medium',
+  'W-GRANT-TOTAL': 'medium',
+  'W-GRANT-LIMITS': 'medium',
+  'W-GRANT-OPEN': 'medium',
+  'W-FARM-CUSTODY': 'medium',
+  'W-FARM-FIRST': 'medium',
+  'W-FARM-DRY': 'medium',
+  'W-POOL-DRY': 'medium',
+  'W-POOL-SHARED': 'medium',
+  'W-PRIZE-SEED': 'medium',
+  'W-CONTEST-PRIZE': 'medium',
+  'W-STASH-SHARED': 'medium',
+  'W-STASH-TRANSFER': 'medium',
+  'W-OUTSIDE-NFT': 'medium',
+  'W-AUCTION-OUTSIDE': 'medium',
+  'W-COLLECTION-PARTNER': 'medium',
+  'W-HOLD-UP': 'medium',
+  'W-FAR-TIME': 'medium',
+  'W-FARM-MISSION': 'medium',
+  'W-FEE': 'low',
+  'W-PAYEE': 'low',
+  'W-HOLDER-SHARE': 'low',
+  'W-ROLL-CUSTODY': 'low',
+  'W-RULE-PRINTS': 'low',
+  'W-SHARED-SOURCE': 'low',
+  'W-FARM-UPKEEP': 'low',
+  'W-FARM-FEE': 'low',
+  'W-FARM-ENDS': 'low',
+  'W-GRANT-FUNDS': 'low',
+  'W-UNBIND-PAY': 'low',
+});
+
 /** The order of the questions: by how much their finding weighs. */
 const ASK_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -477,8 +534,13 @@ export function withoutRepeats(findings) {
   return out;
 }
 
-/** A one-line summary for each refusal and warning, as a person reads them: a kind that repeats is listed in part. */
-export function describe({ refusals, warnings }) {
+/**
+ * A one-line summary for each refusal and warning: a kind that repeats is listed in part. Then the questions the
+ * warnings raise, the weightiest first. `reader`: 'agent' (the default: an agent relays them, and is told how) or
+ * 'person' (the developer reads them in a terminal, and the questions are theirs).
+ */
+export function describe({ refusals, warnings }, { reader = 'agent' } = {}) {
+  const person = reader === 'person';
   return [
     ...withoutRepeats(refusals).map(r => `✗ ${r.code} ${r.message}\n    Fix: ${r.fix}`),
     ...withoutRepeats(warnings).map(
@@ -488,7 +550,9 @@ export function describe({ refusals, warnings }) {
     ...(warnings.some(w => w.ask)
       ? [
           '',
-          'Ask the person before building on it (saving it, a draft too, is building on it), the first ones first. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation. One you answer yourself still goes to them, as one plain sentence saying what you chose, so they can overrule it; check it is true first. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
+          person
+            ? 'Questions to settle before you build on this spec, most important first. Write each answer into the spec (most go in its "scenario") and check again:'
+            : 'Ask the person before building on it (saving it, a draft too, is building on it), the first ones first. Each one is theirs to answer: put it to them as a question, with the answer you would pick as your recommendation. One you answer yourself still goes to them, as one plain sentence saying what you chose, so they can overrule it; check it is true first. The scenario holds their numbers: change it only with their answer, and when an answer clears a finding, tell them which:',
           ...warnings
             .filter(w => w.ask)
             .map((w, i) => ({ w, i }))

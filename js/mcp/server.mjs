@@ -10,6 +10,7 @@ import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { fieldsAt, schemaAt, validate } from '../economy/validate.mjs';
 import { CLUSTERS, cluster, networkOf } from '../client/cluster.js';
 import { load, PACKAGE_VERSION, REMOTE_TOOLS, tools, VERSION } from './tools.mjs';
+import { personWords, terminalWords } from './person.mjs';
 import { withCluster } from './with-cluster.mjs';
 
 /** Where loot runs, for every agent that connects. */
@@ -17,7 +18,7 @@ const WHERE = `loot ${VERSION} runs on devnet (program ${CLUSTERS.devnet.program
 
 /** What loot is, and the one thing never to do instead of it. */
 const ABOUT =
-  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking, crafting, contests, schedules, holder perks, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers, since unaudited code holding people’s money is the risk loot removes.';
+  'loot is one shared Solana program for game and community economies (shops, loot boxes, lotteries, auctions, staking, crafting, contests, schedules, holder perks, capped rewards). An economy is a JSON spec, not a new smart contract: never write Anchor or Rust for what loot covers: one shared program instead of new contract code for each project.';
 
 /** The order of the tools that work on a spec, and when to stop for the person: the same on both servers. */
 const ORDER =
@@ -46,7 +47,7 @@ export const REMOTE_INSTRUCTIONS = [
   ORDER,
   USING,
   'This hosted server reads no files: write the spec and pass it whole as "spec" to every tool.',
-  `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address SOL: devnet SOL for an economy on devnet, real SOL for one whose file says "network": "mainnet"), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner for good (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
+  `To go live, the spec goes in a file named xsolana.json on the person’s own computer and is signed there by a key file. In that folder: npx -y @xgamesfun/solana@${PACKAGE_VERSION} keygen ~/.config/xsolana/<name>.json makes the key file (it prints the address, never the key; the person sends that address SOL: devnet SOL for an economy on devnet, real SOL for one whose file says "network": "mainnet"), then npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair <that file> prints everything that would be sent and sends nothing. When the person has read that and said yes, the same command with --yes <the code it printed> sends it. Run them yourself if you have a terminal there; otherwise hand them to the person. Never ask for, read or print a key. Say once what the key file is: the project’s owner unless it hands the project on with the handover command, both keys signing (whoever can read it controls the project; they back it up themselves; nothing restores a lost one) and, unless the spec names a treasury, where what the economy earns lands. A change to an economy that is already live is signed by the key that owns it: never make a new key for it. A browser wallet’s signing page (the same approve command with --browser in place of --keypair), which the person runs themselves, only if they ask for one or a browser wallet owns the project. (xsolana_save and xsolana_publish, which tool texts may name, run only in the local server.)`,
   WHERE,
 ].join(' ');
 
@@ -90,30 +91,13 @@ function inputProblems(schema, input) {
   });
 }
 
-/**
- * A tool's words as a terminal reads them: each tool they name becomes the command that runs it there, since nobody
- * at a terminal calls a tool with a JSON object. `commands`: each command that runs the tool xsolana_<command>, with
- * the tool's arguments its words stand for ({ guide: ['part'], check: ['file'], … }). So xsolana_check is
- * "xsolana check" and xsolana_guide {"part": "boxes"} is "xsolana guide boxes"; a tool with no command of its own is
- * "xsolana tool <its name>", with any arguments as the JSON they are.
- */
-export function terminalWords(text, commands) {
-  return (
-    String(text)
-      // (a hint written for a terminal says what the words around it now say)
-      .replace(/ \(terminal: [^)]*\)/g, '')
-      .replace(/\bxsolana_([a-z]+)\b(?: (\{"([a-z]+)": ?("[^"]*"|…)\}))?/g, (all, tool, json, arg, value) => {
-        const words = Object.hasOwn(commands, tool) ? commands[tool] : null;
-        if (!json) return words ? `xsolana ${tool}` : `xsolana tool xsolana_${tool}`;
-        if (!words?.includes(arg)) return `xsolana tool xsolana_${tool} '${json}'`;
-        return `xsolana ${tool} ${value === '…' ? `<${arg}>` : value.slice(1, -1)}`;
-      })
-  );
-}
+export { terminalWords };
 
 /**
  * Runs one tool by name: the same checks and answer on the server and in the terminal. `ctx.terminal` (the command
- * line's: `terminalWords`' commands) has the answer worded for a terminal; the answer is otherwise the same.
+ * line's: `terminalWords`' commands) has the answer worded for a terminal; with `ctx.reader` 'person' as well, its text
+ * is worded for the developer who reads it there, not for an agent (`ctx.verbose`: with every detail). The answer's
+ * other fields are the same.
  */
 export async function runTool(name, input = {}, ctx = {}) {
   const tool = typeof name === 'string' ? tools.find(t => t.name === name) : null;
@@ -128,9 +112,10 @@ export async function runTool(name, input = {}, ctx = {}) {
     };
   }
   const answer = await answerOf(tool, input, ctx);
-  return ctx.terminal && typeof answer?.text === 'string'
-    ? { ...answer, text: terminalWords(answer.text, ctx.terminal) }
-    : answer;
+  if (!ctx.terminal || typeof answer?.text !== 'string') return answer;
+  const text = terminalWords(answer.text, ctx.terminal);
+  // (a person reading a terminal is told what the agent would have been told to tell them: js/mcp/person.mjs)
+  return { ...answer, text: ctx.reader === 'person' ? personWords(text) : text };
 }
 
 /** One tool's answer to `input`, or the refusal (`isError`) of an input it cannot take. */

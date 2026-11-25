@@ -5,7 +5,7 @@
 | Piece                             | Version                                                                                                                   | Where                                                                                   | Review                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | The loot program                  | 0.29.0: `xgamesVsZBpCVgJuatfYAFJRmQoccfQf5qtUFNp2Eet` on devnet, `xgames8C758PyweWB9sDw8evvwsTVwyA2fGRUeAXVPy` on mainnet | devnet since slot 524,113,825 (2026-11-19), mainnet since slot 471,855,650 (2026-11-20) | Internal reviews only. **Not independently audited** |
-| These tools (`@xgamesfun/solana`) | 0.29.11                                                                                                                   | npm                                                                                     | Internal reviews only                                |
+| These tools (`@xgamesfun/solana`) | 0.29.12                                                                                                                   | npm                                                                                     | Internal reviews only                                |
 
 `release.json` pins the exact program binary, IDL and client this package is built for. The program runs on devnet
 and on mainnet (the table above). **It has not been independently audited**: an economy on mainnet holds real money
@@ -13,8 +13,9 @@ under code no outside auditor has reviewed.
 
 The program is upgradeable. Its upgrade authority only upgrades the program (and makes the first platform admin); the
 platform admin signs only the platform's fees and its suspend switch. On mainnet the upgrade authority is a single
-key today (`xgameskCXpkhv5Kg6iq1GTR1pdWoXA3EMdvktt2gqJr`), not yet the multisig it is to be. On devnet an upgrade has so far meant a new account layout: no account carries over from an older version,
-so an economy made on one version is made again on the next.
+key today (`xgameskCXpkhv5Kg6iq1GTR1pdWoXA3EMdvktt2gqJr`), not yet the multisig it is to be. On devnet most upgrades so far have meant a new account layout: an economy made on one of those versions is
+made again on the next ([Upgrades](docs/program.md#upgrades) lists which versions kept their layouts, and what is
+unknown about funds left in an older version's accounts).
 
 The program and these tools are provided as is, without warranty: see [DISCLAIMER.md](DISCLAIMER.md).
 

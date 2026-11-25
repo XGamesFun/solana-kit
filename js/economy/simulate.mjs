@@ -68,10 +68,11 @@ const ORACLE = sol(ORACLE_FEE);
 /** A lottery purchase's entry in its round: the bytes the buyer adds (not refunded: they go to the treasury when the
  * round closes), with a wallet kept for each share the buyer's own entry names (lottery.rs `entry_width`). */
 const ticketLine = l => sol(BigInt(entryWidth(...entryShape(l))) * RENT_PER_BYTE);
-/** A collectible's Core account, paid from the SOL the order holds: its rent and Core's creation fee (model.mjs). */
+/** A collectible's Core account, paid from the SOL the order holds: its rent and Metaplex Core's protocol fee, which Metaplex collects (model.mjs). */
 const COLLECTIBLE_RENT = sol(COLLECTIBLE_RENT_LAMPORTS);
-/** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account that keeps
- * the creation fee). 189 bytes × 5,080 lamports, measured by the full simulation. */
+/** What a collectible a recipe burns gives back: its rent less one byte's (Core leaves a 1-byte account behind, whose
+ * rent stays; Metaplex's protocol fee was collected at the mint). 189 bytes × 5,080 lamports, measured by the full
+ * simulation. */
 const BURN_REFUND = 0.00096;
 /** What a grant's claim adds to its lists: the wallet's limit record (its first claim) and a record of the round paid
  * (none for an open grant's claim). Back to the owner when the shards close after the grant. */
@@ -340,7 +341,8 @@ export function simulate(economy, { now = 0 } = {}) {
   const rateOut = (pool, by, perDayShare, to) =>
     perDayShare && pools.get(pool)?.rate.push({ by, perDay: perDayShare, ...(to ? { to } : {}) });
 
-  const players = { pay: {}, get: {}, fees: 0, network: 0, rent: 0, oracle: 0 };
+  // (`items`: the part of `get` that is items, at the value the spec gives them: worth, not SOL or tokens paid out)
+  const players = { pay: {}, get: {}, items: {}, fees: 0, network: 0, rent: 0, oracle: 0 };
   const creator = { treasury: {}, fees: 0, network: 0, oracle: 0 };
   const burned = {};
   const accounts = {};
@@ -368,7 +370,10 @@ export function simulate(economy, { now = 0 } = {}) {
       // A compressed one opens no account.
       each = line.compressed ? 0 : COLLECTIBLE_RENT;
       const worth = m.item.get(line.item)?.value;
-      if (worth !== undefined) add(players.get, game, times * num(worth));
+      if (worth !== undefined) {
+        add(players.get, game, times * num(worth));
+        add(players.items, game, times * num(worth));
+      }
     } else if (line.gives === 'tokens') {
       each = TOKEN_ACCOUNT_RENT;
       const token = prizePool(line) ? m.pool.get(prizePool(line))?.currency : (line.currency ?? game);
@@ -601,6 +606,8 @@ export function simulate(economy, { now = 0 } = {}) {
     const w = weights(b);
     const total = w.reduce((a, x) => a + x, 0) || 1;
     let value = 0;
+    // (of `value` and `other`, what is items at their given value)
+    const itemValue = {};
     const unpriced = [];
     const other = {};
     // How many times one open gives each outcome, on average: each slot's draws among the outcomes it names (all when it
@@ -642,6 +649,7 @@ export function simulate(economy, { now = 0 } = {}) {
         if (worth === null) unpriced.push(o.item);
         else if ((b.currency ?? game) === game) value += n * worth;
         else add(other, game, n * worth);
+        if (worth !== null) add(itemValue, game, n * worth);
       } else if (o.gives === 'stash' || o.gives === 'nft') {
         // A stash's NFT has whatever worth its collection has: the simulation counts how fast it is given away.
         Object.assign(row, { stash: o.stash, worth: null, ...(o.nft ? { nft: o.nft } : {}) });
@@ -681,6 +689,7 @@ export function simulate(economy, { now = 0 } = {}) {
     add(players.pay, token, opens * price);
     add(players.get, token, opens * value);
     for (const [t, v] of Object.entries(other)) add(players.get, t, opens * v);
+    for (const [t, v] of Object.entries(itemValue)) add(players.items, t, opens * v);
     // Two signatures: the open, then the settle that carries the outcome out (a throwaway key the open funds sends it).
     // A box that needs no roll is bought in one (`buy`), with no order; every open asks the oracle.
     const bought = boxBuys(b, m);
@@ -731,6 +740,8 @@ export function simulate(economy, { now = 0 } = {}) {
       opensPerDay: opens,
       outcomes,
       expectedBack: round(value),
+      // (of it, items at the "value" the spec gives them: a value, not money paid out)
+      ...(itemValue[token] ? { itemValueBack: round(itemValue[token]) } : {}),
       returnPercent: price && (value > 0 || !Object.keys(other).length) ? round((value / price) * 100, 4) : null,
       houseEdgePercent: known && price ? round((1 - value / price) * 100, 4) : null,
       alsoPays: other,
@@ -887,7 +898,10 @@ export function simulate(economy, { now = 0 } = {}) {
         gives.push(line.item);
         if (!line.compressed) players.rent += crafts * COLLECTIBLE_RENT;
         const worth = m.item.get(line.item)?.value;
-        if (worth !== undefined) add(players.get, game, crafts * num(worth));
+        if (worth !== undefined) {
+          add(players.get, game, crafts * num(worth));
+          add(players.items, game, crafts * num(worth));
+        }
       } else if (line.gives === 'tokens') {
         // In its pool's token, or the one it mints.
         const token = prizeToken(line, m)?.key ?? line.currency ?? game;
@@ -1690,6 +1704,7 @@ export function simulate(economy, { now = 0 } = {}) {
       players: {
         pay: totals(players.pay),
         getBack: totals(players.get),
+        itemValue: totals(players.items),
         playerFeesSol: round(players.fees),
         oracleFeesSol: round(players.oracle),
         networkFeesSol: round(players.network),
@@ -1785,6 +1800,37 @@ export function inAll(c) {
 }
 
 /** The simulation in plain words. */
+/**
+ * What a box gives back on average, in words, with items said as the value the spec gives them and never as money
+ * paid out: "0.05 SOL on average (50% of its price), all of it items valued by you" or "…: 0.02 SOL paid out and
+ * items worth 0.03 SOL by the value you gave them". `basis`: what the percent is of.
+ */
+export function backWords(b, symbol, basis = null) {
+  const items = b.itemValueBack ?? 0;
+  const paid = round(b.expectedBack - items);
+  const of = `${numeral(b.expectedBack)} ${symbol} on average (${percentage(b.returnPercent)}%${basis ? ` of ${basis}` : ''})`;
+  if (!items) return of;
+  return paid > 1e-9
+    ? `${of}: ${numeral(paid)} ${symbol} paid out, and items worth ${numeral(items)} ${symbol} by the "value" you gave them (a value, not money paid out)`
+    : `${of}, all of it items worth that by the "value" you gave them (a value, not money paid out)`;
+}
+
+/** One part of a box's outcome in words, as the simulation names it (`sym`: a token's key to its symbol). */
+export const outcomePartWords = (o, sym) =>
+  o.gives === 'pay'
+    ? `${asWritten(o.amount)} ${sym(o.token)} from ${o.pool}`
+    : o.gives === 'mint'
+      ? `${asWritten(o.amount)} ${sym(o.token)}, minted`
+      : o.gives === 'stash'
+        ? `an NFT of the stash “${o.stash}”, at random`
+        : o.gives === 'nft'
+          ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”`
+          : o.gives === 'roll'
+            ? `a roll of “${o.box}”`
+            : o.gives === 'item'
+              ? `${o.item}${o.worth !== null ? ` (worth ${asWritten(o.worth)})` : ' (no value given)'}`
+              : o.gives;
+
 export function explain(sim, economy) {
   const m = model(economy);
   const sym = key => m.tokens.get(key)?.symbol ?? key;
@@ -1799,31 +1845,18 @@ export function explain(sim, economy) {
   for (const b of sim.boxes) {
     const edge =
       b.houseEdgePercent !== null
-        ? `; the game keeps ${percentage(b.houseEdgePercent)}% of ${b.averagePrice !== undefined ? 'what an open pays, on average' : 'each price'}`
+        ? `; the game keeps ${percentage(b.houseEdgePercent)}% of ${b.averagePrice !== undefined ? 'what an open pays, on average' : 'each price'}${b.itemValueBack ? ', by those values' : ''}`
         : '';
     const also = Object.entries(b.alsoPays).map(([t, v]) => `${numeral(v)} ${sym(t)}`);
     const back =
       b.returnPercent !== null
-        ? `${numeral(b.expectedBack)} ${sym(b.token)} on average (${percentage(b.returnPercent)}%${b.averagePrice !== undefined ? ` of ${priceBasis(b, sym(b.token))}` : ''})${also.length ? ` and ${also.join(', ')}` : ''}`
+        ? `${backWords(b, sym(b.token), b.averagePrice !== undefined ? priceBasis(b, sym(b.token)) : null)}${also.length ? ` and ${also.join(', ')}` : ''}`
         : `${also.join(', ') || 'nothing'} on average`;
     const all = `; ${inAll(b.realCost)}`;
     lines.push(
       `Box “${b.name}”: costs ${asWritten(b.price)} ${sym(b.token)} (${all.slice(2)}), gives back ${back}${edge}.`,
     );
-    const part = o =>
-      o.gives === 'pay'
-        ? `${asWritten(o.amount)} ${sym(o.token)} from ${o.pool}`
-        : o.gives === 'mint'
-          ? `${asWritten(o.amount)} ${sym(o.token)}, minted`
-          : o.gives === 'stash'
-            ? `an NFT of the stash “${o.stash}”, at random`
-            : o.gives === 'nft'
-              ? `the NFT ${String(o.nft).slice(0, 4)}… of “${o.stash}”`
-              : o.gives === 'roll'
-                ? `a roll of “${o.box}”`
-                : o.gives === 'item'
-                  ? `${o.item}${o.worth !== null ? ` (worth ${asWritten(o.worth)})` : ' (no value given)'}`
-                  : o.gives;
+    const part = o => outcomePartWords(o, sym);
     for (const o of b.outcomes)
       lines.push(`  ${percentage(o.chance, 6)}%: ${o.gives === 'bundle' ? o.prizes.map(part).join(' + ') : part(o)}`);
     if (b.unpriced.length) lines.push(`  Give ${b.unpriced.join(', ')} a "value" to count them in the return.`);
@@ -1901,7 +1934,7 @@ export function explain(sim, economy) {
       .map(([k, v]) => `${numeral(v)} ${sym(k)}`)
       .join(', ') || 'nothing';
   lines.push(
-    `Each day players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average (items at the value you gave them), plus ${numeral(d.players.playerFeesSol)} SOL in player fees, ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle and ${numeral(d.players.networkFeesSol)} SOL in network fees.`,
+    `Each day players pay ${list(d.players.pay)} and get back ${list(d.players.getBack)} on average${Object.keys(d.players.itemValue ?? {}).length ? ` (of it, items worth ${list(d.players.itemValue)} at the "value" you gave them: a value, not money paid out)` : ''}, plus ${numeral(d.players.playerFeesSol)} SOL in player fees, ${numeral(d.players.oracleFeesSol)} SOL to MagicBlock’s oracle and ${numeral(d.players.networkFeesSol)} SOL in network fees.`,
   );
   if (d.creator.oracleFeesSol) {
     // Every roll the simulation counts as the project's: a draw, a roll a lottery's place or a grant gives, the authority's.

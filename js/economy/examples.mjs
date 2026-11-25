@@ -30,6 +30,8 @@ export function example(name) {
 export const ideas = () => IDEAS;
 /** The loot version the ideas were rated against (ideas.json `rated`). */
 export const ideasRated = () => IDEAS_FILE.rated;
+/** The day they were rated (ideas.json `ratedOn`). */
+export const ideasRatedOn = () => IDEAS_FILE.ratedOn ?? null;
 
 const SYNONYMS = {
   gacha: ['box', 'boxes', 'pull'],
@@ -51,6 +53,7 @@ const SYNONYMS = {
   craft: ['recipe', 'recipes'],
   crafting: ['recipe', 'recipes'],
   merge: ['recipe', 'recipes'],
+  merging: ['recipe', 'recipes'],
   upgrade: ['recipe', 'recipes'],
   breed: ['recipe', 'recipes', 'life'],
   breeding: ['recipe', 'recipes', 'life'],
@@ -204,6 +207,81 @@ function score(text, query, parts = []) {
 
 const FIT_BONUS = { great: 0.5, some: 0.25, 'a-lot': 0, cannot: 0 };
 
+/** How rare a word is among `docs` (sets of words), 0 to 1: a word every text has says nothing about any of them. */
+function rarity(docs) {
+  const df = new Map();
+  for (const d of docs) for (const w of d) df.set(w, (df.get(w) ?? 0) + 1);
+  const n = docs.length;
+  return w => Math.log((n + 1) / ((df.get(w) ?? 0) + 1)) / Math.log(n + 1);
+}
+
+/** A word without a plural's "s" (raffles, raffle), so the two match; short words stay as they are. */
+const stem = w => (w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+const stems = text => new Set(words(text).map(stem));
+/** Whether name word `n` and query word `q` mean the same part (gacha and box, raffle and lottery), either way round. */
+const alike = (n, q) => (SYNONYMS[n] ?? []).map(stem).includes(q) || (SYNONYMS[q] ?? []).map(stem).includes(n);
+
+/**
+ * A rated idea's match to `query`. Only an idea whose name says what was asked counts: a word of its name (1.5 to 3,
+ * more for a word few names have), or a word that means the same part (1.5). Then each word its "how" shares with the query adds by how rare the word is
+ * among the ideas (each "how" names many parts, so a common word there matches nearly every idea), and its section's
+ * a little. 0 for an idea whose name matches nothing.
+ */
+const IDEA_WORDS = IDEAS.map(i => ({
+  name: stems(i.name.replace(/-/g, ' ')),
+  section: stems(i.section),
+  how: stems(i.how.replace(/-/g, ' ')),
+}));
+const ideaRarity = rarity(IDEA_WORDS.map(d => new Set([...d.name, ...d.how])));
+const nameRarity = rarity(IDEA_WORDS.map(d => d.name));
+function ideaScore({ name, section, how }, query) {
+  let s = 0;
+  let named = false;
+  for (const q of [...stems(query)].filter(x => !STOP.has(x))) {
+    if (name.has(q)) {
+      // (a word few names have says more: "prediction" over "market")
+      s += 1.5 + 1.5 * nameRarity(q);
+      named = true;
+    } else if ([...name].some(n => alike(n, q))) {
+      s += 1.5;
+      named = true;
+    }
+    if (how.has(q)) s += 2 * ideaRarity(q);
+    if (section.has(q)) s += 0.5;
+  }
+  return named ? s : 0;
+}
+/**
+ * A worked example's match to `query`, each word weighed by how rare it is among the examples: a word of its name or
+ * title (up to 3), of its prompt (up to 2), and a part the word stands for that it uses (1 to 2.5: "staking" and
+ * a farm), so that "items", which nearly every example has, says little.
+ */
+const EXAMPLE_WORDS = () =>
+  (EXAMPLE_WORDS.cached ??= examples().map(({ name, spec }) => ({
+    title: stems(`${name} ${spec.name ?? ''}`.replace(/-/g, ' ')),
+    prompt: stems(String(spec.prompt ?? '').replace(/-/g, ' ')),
+    parts: new Set(partsUsed(spec).map(stem)),
+  })));
+const exampleRarity = () =>
+  (exampleRarity.cached ??= rarity(EXAMPLE_WORDS().map(d => new Set([...d.title, ...d.prompt]))));
+const partRarity = () => (partRarity.cached ??= rarity(EXAMPLE_WORDS().map(d => d.parts)));
+function exampleScore(e, query) {
+  const at = examples().findIndex(x => x.name === e.name);
+  const { title, prompt, parts } = EXAMPLE_WORDS()[at];
+  const r = exampleRarity();
+  let s = 0;
+  for (const q of [...stems(query)].filter(x => !STOP.has(x))) {
+    if (title.has(q)) s += 1.5 + 1.5 * r(q);
+    else if (prompt.has(q)) s += 2 * r(q);
+    const part = (SYNONYMS[q] ?? []).map(stem).find(p => parts.has(p));
+    if (part) s += 1 + 1.5 * partRarity()(part);
+  }
+  return s;
+}
+
+/** The least an idea scores to be shown: one word of its name, or a rare word of its "how". */
+const IDEA_FLOOR = 2;
+
 /** Each entry of `list` scored against `query` by its words, the closest first, keeping those that match well enough. */
 function closest(list, query, limit) {
   const scored = list.map(e => ({ e, s: score(e.words.replace(/-/g, ' '), query) })).sort((a, b) => b.s - a.s);
@@ -235,16 +313,25 @@ export function search(query, { limit = 6, fit } = NO_OPTIONS) {
     prompt: spec.prompt,
     parts: partsUsed(spec),
   }));
-  const exampleHits = ex
-    .map(e => ({ e, s: score(`${e.name} ${e.title} ${e.prompt}`, query, e.parts) }))
-    .filter(x => x.s > 0)
-    .sort((a, b) => b.s - a.s)
+  // (an example is kept when it matches at least half as well as the best one: a word or two in common with a long
+  // prompt is not a match)
+  const exampleScores = ex.map(e => ({ e, s: exampleScore(e, query) })).filter(x => x.s >= 1.5);
+  const bestExample = Math.max(0, ...exampleScores.map(x => x.s));
+  // (close scores go to the simpler example: each part or feature it uses costs it a little, so a beginner's request
+  // finds the plain shop before the one with a price curve and a transfer fee)
+  const simpler = x => x.s - 0.05 * x.e.parts.length;
+  const exampleHits = exampleScores
+    .filter(x => x.s * 2 >= bestExample)
+    .sort((a, b) => simpler(b) - simpler(a))
     .slice(0, limit)
     .map(x => x.e);
-  const ideaHits = IDEAS.filter(i => !fit || i.fit === fit)
-    .map(i => ({ i, s: score(`${i.name} ${i.section} ${i.how}`, query) + FIT_BONUS[i.fit] }))
-    .filter(x => x.s > 0.5)
-    .sort((a, b) => b.s - a.s)
+  const ideaScores = IDEAS.map((i, at) => ({ i, s: ideaScore(IDEA_WORDS[at], query) })).filter(
+    x => (!fit || x.i.fit === fit) && x.s >= IDEA_FLOOR,
+  );
+  const bestIdea = Math.max(0, ...ideaScores.map(x => x.s));
+  const ideaHits = ideaScores
+    .filter(x => x.s * 2 >= bestIdea)
+    .sort((a, b) => b.s + FIT_BONUS[b.i.fit] - (a.s + FIT_BONUS[a.i.fit]))
     .slice(0, limit)
     .map(({ i }) => i);
   // A "can't" shows only when it matches at least as well as the best matching capability.

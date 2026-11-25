@@ -16,20 +16,33 @@ import { rpcClient } from '../chain/rpc.js';
 import { mintState } from '../chain/token2022.js';
 import { accountKind, decodeAny } from '../client/accounts.js';
 import { IDL } from '../client/ix.js';
-import { checkOnCluster, cluster, CLUSTERS, clusterRpcUrl, lootProgram, pda, realMoney } from '../client/pda.js';
+import {
+  checkOnCluster,
+  cluster,
+  CLUSTERS,
+  clusterRpcUrl,
+  lootProgram,
+  networkOf,
+  pda,
+  realMoney,
+} from '../client/pda.js';
 import { check, describe, withoutRepeats } from '../economy/check.mjs';
 import { legalFlags } from '../economy/legal.mjs';
 import { MINT_SAYS, POWER_SAYS, powerCounts } from '../economy/mint-words.mjs';
 import { cost, explainCost } from '../economy/cost.mjs';
 import { changedParts, renamesNote } from '../economy/live.mjs';
-import { example, examples, ideas, ideasRated, search, partsUsed } from '../economy/examples.mjs';
+import { example, examples, ideas, ideasRated, ideasRatedOn, search, partsUsed } from '../economy/examples.mjs';
 import { explainEconomy } from '../economy/explain.mjs';
 import { plural } from '../economy/format.mjs';
 import { describeReview, review, signedRoutes } from '../economy/review.mjs';
 import { CANNOT, catalog, guideIndex, guideText, HOW, PARTS, TOPICS } from '../economy/guide.mjs';
-import { model, rent as rentOf } from '../economy/model.mjs';
+import { model, rent as rentOf, royaltyWords } from '../economy/model.mjs';
 import { plan } from '../economy/plan.mjs';
 import { explain, simulate } from '../economy/simulate.mjs';
+import { personCheck, personCost, personExamples, personExplain, personReview, personSimulate } from './views.mjs';
+import { withCluster } from './with-cluster.mjs';
+import { platformFees } from '../approve/platform-fees.mjs';
+import { personWords, terminalWords } from './person.mjs';
 import { findSecrets } from '../economy/secrets.mjs';
 import { economyOf, parseFile } from '../economy/spec-file.mjs';
 import { SCHEMA } from '../economy/validate.mjs';
@@ -106,6 +119,13 @@ export const PROGRAM_INFO = Object.freeze({
   idl: '@xgamesfun/solana/idl.json',
   package: `@xgamesfun/solana@${PACKAGE_VERSION}`,
 });
+/** Whether an economy is on devnet, and the same economy on mainnet: its fees, for what a player pays there. */
+const onDevnet = economy => networkOf(economyOf(economy)) !== 'mainnet';
+const asMainnet = economy => ({ ...economyOf(economy), network: 'mainnet' });
+/** `fn` of the same economy on mainnet, run on mainnet's cluster (its addresses, its fees). */
+const onMainnet = (economy, fn) => withCluster('mainnet', () => fn(asMainnet(economy)));
+/** How a terminal says the tools' words to the developer (`ctx.terminal`: the CLI's commands), for the views. */
+const personSay = ctx => text => personWords(terminalWords(text, ctx.terminal ?? {}));
 const footer = () => `\n\nloot ${VERSION} · program ${lootProgram()} · ${cluster()}`;
 const nowOf = ctx => ctx?.now ?? Math.floor(Date.now() / 1000);
 const cwdOf = ctx => ctx?.cwd ?? process.cwd();
@@ -152,7 +172,9 @@ function projectFile(rel, ctx) {
   };
   if (file === root) throw new Error(`${rel} is the project folder itself (${root}): name a spec file in it.`);
   if (!inside(file) || !inside(realPath(file)))
-    throw new Error(`${rel} is outside the project folder (${root}): a spec file must be inside it.`);
+    throw new Error(
+      `${rel} is outside the project folder (${root}): a spec file must be inside it, or in a folder below it, so that the tools (and an agent that calls them) read and write nothing elsewhere on this machine. Run the command in the spec's own folder (cd ${path.dirname(file)}), or copy the spec here.`,
+    );
   if (path.extname(file).toLowerCase() !== '.json') throw new Error(`${rel} is not a .json file: a spec file is JSON.`);
   return file;
 }
@@ -185,15 +207,15 @@ function isSpec(value) {
 const SOURCE = {
   spec: {
     type: 'object',
-    description: 'An economy spec (version 2) given inline. Takes precedence over file and example.',
+    description: 'The spec itself (version 2). Wins over file and example.',
   },
   file: {
     type: 'string',
-    description: `A JSON file holding the spec, relative to the project folder (default: ${DEFAULT_FILE} when it exists).`,
+    description: `The spec's file, relative to the project folder (default: ${DEFAULT_FILE}, when it exists).`,
   },
   example: {
     type: 'string',
-    description: 'A worked example by name (stud-farm, nft-raffle, …).',
+    description: 'A worked example’s name (stud-farm, nft-raffle, …).',
   },
 };
 
@@ -296,11 +318,17 @@ export function carryIds(previous, next) {
 const ratedWords = () =>
   ideasRated() === VERSION
     ? 'rated against this version of loot'
-    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION}), so some are out of date`;
+    : `rated against loot ${ideasRated()}, an earlier version than this one (${VERSION})${ideasRatedOn() ? `, by hand on ${ideasRatedOn()}` : ''}, so some are out of date`;
 
 /** The legal flags to pass on before the person approves, as lines for an answer: [] when there are none. */
-function flagsToTell(economy, now) {
+function flagsToTell(economy, now, person = false) {
   const flags = legalFlags(check(economy, { now }));
+  if (person && flags.length)
+    return [
+      `Legal notes${realMoney() ? ' (this economy is on mainnet: read them now)' : ' (read them again before mainnet)'}; \`approve\` prints them too, before anything is sent:`,
+      ...flags.map(f => `- ${f.says}`),
+      '',
+    ];
   return flags.length
     ? [
         `Say each to the person as written: once if you haven't yet${realMoney() ? ', and again now, since this economy is on mainnet' : ''} (what \`approve\` prints before anything is sent shows them too; after that, only when they ask):`,
@@ -378,8 +406,8 @@ export const tools = [
     name: 'xsolana_examples',
     title: 'Find a worked economy to start from',
     annotations: READ,
-    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
-    description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} real or trending economies rated against loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
+    hosted: `Worked economies to start from. With \`query\` (a request in its own words), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} kinds of economy rated by hand against an earlier loot (great / some / a-lot / cannot, with what carries each or what is missing), and what loot can’t do exactly in the request, each with the nearest versions it can. With \`name\`, returns that example’s whole spec. With neither, lists every example.`,
+    description: `Find an economy to start from. With \`query\` (the person’s own words, as they said them), returns the closest worked examples (whole specs that check and go live in the tests), the closest of ${ideas().length} kinds of economy rated by hand against an earlier loot (great / some / a-lot / cannot, with what carries it or what is missing), and what loot can’t do exactly in the ask, each with the nearest versions it can. Call it again with the words of any part that looks impossible: the answer is a nearest version to offer, not a dead end. With \`name\`, returns that example’s whole spec to copy and change. With neither, lists every example.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -399,7 +427,7 @@ export const tools = [
           spec: ex.spec,
           checks: verdict.ok ? 'clean' : verdict.refusals.map(r => r.code),
           // (a terminal shows the words alone, so there they carry the spec, and how to start a file from it)
-          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\nCopy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
+          text: `${ex.spec.name}: ${ex.spec.prompt ?? ''}\n${ctx?.reader === 'person' ? 'Copy the spec, change it to your own economy, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use your own.' : 'Copy the spec, change it to what the person asked, then run xsolana_check on it. Existing mints in examples are devnet stand-ins: use the person’s own.'}${ctx?.terminal ? `\nTo start a file from it: xsolana examples ${ex.name} --save ${DEFAULT_FILE}\n\n${JSON.stringify(ex.spec, null, 2)}` : ''}${footer()}`,
         };
       }
       if (!query) {
@@ -409,6 +437,16 @@ export const tools = [
           prompt: spec.prompt,
           parts: partsUsed(spec),
         }));
+        if (ctx?.reader === 'person')
+          return {
+            examples: all,
+            ideas: { count: ideas().length },
+            text:
+              personExamples(
+                { examples: all },
+                { say: personSay(ctx), verbose: ctx.verbose, ideaCount: ideas().length },
+              ) + footer(),
+          };
         return {
           examples: all,
           ideas: { count: ideas().length },
@@ -416,11 +454,19 @@ export const tools = [
             [
               `${all.length} worked examples (xsolana_examples {"name": "<name>"} gives the whole spec):`,
               ...all.map(e => `- ${e.name}: ${e.title}. ${e.prompt ?? ''} [${e.parts.join(', ')}]`),
-              `\nAnd ${ideas().length} rated economies: pass a query to search them.`,
+              `\nAnd ${ideas().length} rated kinds of economy (${ratedWords()}): pass a query to search them.`,
             ].join('\n') + footer(),
         };
       }
       const r = search(query, { limit, fit });
+      if (ctx?.reader === 'person')
+        return {
+          examples: r.examples,
+          ideas: r.ideas,
+          hows: r.hows,
+          limits: r.limits,
+          text: personExamples(r, { say: personSay(ctx), query, verbose: ctx.verbose }) + footer(),
+        };
       const text = [
         r.examples.length
           ? `Examples closest to “${query}” (xsolana_examples {"name": …} gives the whole spec):`
@@ -429,15 +475,19 @@ export const tools = [
         r.hows.length ? '\nThese look impossible but are one field or a short combination (build them):' : '',
         ...r.hows.map(h => `- ${h.what}: ${h.how}.`),
         r.ideas.length
-          ? `\nRated economies (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
+          ? `\nRated kinds of economy (${ratedWords()}: a rating is a hint, the parts in xsolana_guide decide):`
           : '',
         ...r.ideas.map(i => `- #${i.n} ${i.name} (${i.fit}): ${i.how}`),
         r.limits.length
-          ? '\nWhat no part of loot does here, and the nearest versions (first check that no combination of parts does it; then offer these, best first, with their numbers from xsolana_cost; never end on “it can’t”):'
+          ? ctx?.reader === 'person'
+            ? '\nWhat no part of loot does here, and the nearest versions, best first (a combination of parts may still do it: xsolana_guide lists them):'
+            : '\nWhat no part of loot does here, and the nearest versions (first check that no combination of parts does it; then offer these, best first, with their numbers from xsolana_cost; never end on “it can’t”):'
           : '',
         ...r.limits.flatMap(l => [`- ${l.what}: ${l.why}.`, ...l.nearest.map((n, i) => `  ${i + 1}. ${n}`)]),
         r.ideas.some(i => i.fit === 'cannot')
-          ? '\nA "cannot" means a defining piece was missing when it was rated: check that piece against xsolana_guide’s parts and their combinations before telling the person, then offer the nearest version.'
+          ? ctx?.reader === 'person'
+            ? '\nA "cannot" means a defining piece was missing when it was rated: a later version, or a combination of xsolana_guide’s parts, may have it.'
+            : '\nA "cannot" means a defining piece was missing when it was rated: check that piece against xsolana_guide’s parts and their combinations before telling the person, then offer the nearest version.'
           : '',
       ]
         .filter(Boolean)
@@ -450,9 +500,9 @@ export const tools = [
     title: 'Check an economy spec',
     annotations: READ,
     hosted:
-      'Checks an economy spec. Returns its refusals, each with a code, what it means and its fix, which keep a spec from going live; and its warnings, what the person behind the economy needs to know: chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off (with its date in words), a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds. The program refuses only what it must, so much of what a project sets up is accepted with a warning. Also returns how many wallet approvals each action takes. Takes the spec inline (`spec`) or a worked example by name.',
+      'Checks an economy spec. Returns its refusals, each with a code, what it means and its fix, which keep a spec from going live; and its warnings, what the person behind the economy needs to know: chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off (with its date in words), a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds. The program refuses only what it must, so much of what a project sets up is accepted with a warning. Also returns how many wallet approvals each action takes.',
     description:
-      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so each warning goes to the person. Run it after every change, and check before you describe: before telling the person how value moves (a burn, a free token, a swap, a refund, a payment held or not), check one draft with that mechanism once and read what it says (one draft, not every variant). Quote every count of approvals from it. Give the spec inline (`spec`), a file, or an example.',
+      'Check an economy spec: refusals (each with a code, what it means and its fix) stop it from going live; warnings are what the person must hear (chance that pays money, revenue paid to stakers, an unfunded prize, a grant without limits, a mint’s powers, a time far off with its date in words, a token a player can hold a payment up in, a box longer than one answer of the oracle’s holds). The program refuses only what it must: much of what a project sets up is taken and warned of, never refused, so each warning goes to the person. Run it after every change, and check before you describe: before telling the person how value moves (a burn, a free token, a swap, a refund, a payment held or not), check one draft with that mechanism once and read what it says (one draft, not every variant). Quote every count of approvals from it.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -507,13 +557,30 @@ export const tools = [
       const tail = verdict.ok
         ? `\nReady (${plural(verdict.warnings.length, 'warning')}). Next: xsolana_simulate and xsolana_explain, and tell the person what it means in plain words; before going live, xsolana_review.`
         : `\n${plural(verdict.refusals.length, 'refusal')}: fix each as its fix says, then check again.`;
-      return {
+      const answer = {
         ok: verdict.ok,
         from,
         refusals: withoutRepeats(verdict.refusals),
         warnings: withoutRepeats(verdict.warnings),
         text: `${head}${findings}${tell}${states}${designHint}${tail}${footer()}`,
       };
+      if (ctx?.reader !== 'person') return answer;
+      // In a terminal, for the developer: the verdict first, a line a warning, the questions, then (--verbose) each
+      // warning whole, what players should hear and how each route ends. The same facts, with nothing that steers an
+      // agent (js/mcp/views.mjs).
+      answer.text =
+        personCheck(verdict, answer, {
+          say: personSay(ctx),
+          royalty: royaltyWords(economy),
+          verbose: ctx.verbose,
+          legal,
+          told,
+          ends,
+          designHint: draws.length
+            ? `To compare every way to build ${[...new Set(draws.map(w => w.where.split('.')[2]))].map(k => `“${k}”`).join(' and ')} against what you want, run xsolana_design with your wants as requirements (add --help to see the kinds it takes).`
+            : '',
+        }) + footer();
+      return answer;
     },
   },
   {
@@ -549,13 +616,24 @@ export const tools = [
         farms: sim.farms.map(f => ({ key: f.key, rewardsPerDay: f.rewardsPerDay, yearlyPercent: f.yearlyPercent })),
         platformSolPerDay: sim.perDay.platform.totalSol,
       };
-      return {
+      const answer = {
         ok: true,
         from,
         summary,
         ...(input.json ? { simulation: sim } : {}),
         text: explain(sim, economy) + footer(),
       };
+      if (ctx?.reader !== 'person') return answer;
+      // (for the developer: a summary and tables, the words with --verbose; on devnet, mainnet's fees beside)
+      const mainnet = onDevnet(economy) ? onMainnet(economy, e => simulate(e, { now: nowOf(ctx) })) : null;
+      answer.text =
+        personSimulate(sim, economy, {
+          say: personSay(ctx),
+          mainnet,
+          verbose: ctx.verbose,
+          words: explain(sim, economy),
+        }) + footer();
+      return answer;
     },
   },
   {
@@ -579,14 +657,36 @@ export const tools = [
         : '';
       // (a name's price is a transaction's, if it is sent at all: only approving reads the token's record)
       const names = change.scope.renames?.length ? `\n${renamesNote(change.scope.renames)}` : '';
-      return {
+      // (the collection's resale royalty is no cost to the owner, but it is set at go-live: said here, never silent)
+      const royalty = change.scope.live ? null : royaltyWords(economy);
+      const royaltyNote = royalty ? `\n${royalty}` : '';
+      const answer = {
         ok: true,
         from,
         setup: c.setup,
         actions: c.actions,
         fees: c.fees,
-        text: head + explainCost(c) + names + footer(),
+        text: head + explainCost(c) + names + royaltyNote + footer(),
       };
+      if (ctx?.reader !== 'person') return answer;
+      // (for the developer: what going live costs, then what each action costs a player, on mainnet too)
+      const sim = simulate(economy, { now: nowOf(ctx) });
+      const onDev = onDevnet(economy);
+      const simMainnet = onDev ? onMainnet(economy, e => simulate(e, { now: nowOf(ctx) })) : null;
+      const mainnet = onDev ? onMainnet(economy, e => cost(e, { now: nowOf(ctx), ...change.scope })) : null;
+      answer.text =
+        head +
+        personCost(c, economy, {
+          say: personSay(ctx),
+          sim,
+          simMainnet,
+          mainnet: mainnet?.ok ? mainnet : null,
+          verbose: ctx.verbose,
+          words: explainCost(c) + names,
+          royalty,
+        }) +
+        footer();
+      return answer;
     },
   },
   {
@@ -601,6 +701,9 @@ export const tools = [
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
       const r = explainEconomy(economy, { now: nowOf(ctx) });
+      // (for the developer: each section in short, the walk state by state and every sentence whole with --verbose)
+      if (ctx?.reader === 'person')
+        return { ...r, from, text: personExplain(r.text, { say: personSay(ctx), verbose: ctx.verbose }) + footer() };
       return { ...r, from, text: r.text + footer() };
     },
   },
@@ -609,9 +712,9 @@ export const tools = [
     title: 'Review an economy as a cheater would',
     annotations: READ,
     hosted:
-      'Reviews an economy the way a cheater reads it, before it goes live (a review, not a validity check). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then, for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Takes the spec inline (`spec`) or a worked example by name. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
+      'Reviews an economy the way a cheater reads it, before it goes live (a review, not a validity check). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then, for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
     description:
-      'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Give the spec inline (`spec`), a file, or an example. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
+      'Review an economy the way a cheater reads it, before it goes live (not a validity check: xsolana_check is that). For every route that pays or gives value it says who can trigger it, what the program enforces, what it trusts off the chain, and the most one cheater gets; then findings with stable ids and a severity; then the trade-off to show the person: for each grant paid on vouchers, whether its server decides, replays or only bounds the result (its "trust"), what a cheater gets at that level, and what the next level costs to build. Fix every high finding, declare "trust" honestly on every voucher grant, and tell the person in plain words which level each signed route uses and what a cheater gets, so they choose the trade-off. Answers { ok (false when a finding is high, or the spec does not check: then `refusals`), routes: [{ kind ("grant", "farm", "item", "box", "payment", "recipe", "lottery", "contest", "auction", "schedule", "hold", "decision"), key, name, trigger, enforced: [words], trusts: [words], trust ("decides" | "replays" | "bounds" | null), ceiling (words), feeds: ["farm:<key>", …: what its prize is staked in, crafted into or buys] }], findings: [{ id (R-…), severity ("high" | "medium" | "low" | "info"), route ("grant:<key>", "farm:<key>", … or "economy"), message, fix }] }; the trade-offs are in its text.',
     inputSchema: { type: 'object', properties: SOURCE, additionalProperties: false },
     async handler(input, ctx) {
       const { economy, from } = await load(input, ctx);
@@ -631,12 +734,33 @@ export const tools = [
         '- When a server limit, a cap or a route changed since you last said them, say the new figures again: what it really pays, and what the chain allows if its key leaks.',
         '- “Our server runs it”: ask what the server computes itself and what it only records from the page; only what it computes is checked.',
       ].join('\n');
+      // (in a terminal the developer is the one who chooses: the same checklist, addressed to them)
+      const person = ctx?.reader === 'person';
+      const personTail = highs
+        ? `\n${plural(highs, 'high finding')}: fix ${highs === 1 ? 'it' : 'them'}, or accept ${highs === 1 ? 'it' : 'them'} knowingly, before going live; then review again.`
+        : signedRoutes(r.routes).length
+          ? '\nNo high finding. The trade-offs above say which level each signed route uses and what a cheater gets: the choice is yours.'
+          : '\nNo high finding. The trade-offs above say what a cheater gets on each route.';
+      const personReady = [
+        'Before you call it ready:',
+        '- Check each promise you made to players (a price, a cap, a number of approvals, odds shown on the page, a refund button) against the spec and the page.',
+        '- State each cap in one unit: an amount per identity per window (a cap a day is not a cap a week; a grant’s caps count claims, each up to its amount).',
+        '- When a server limit, a cap or a route changes, update what you tell players: what it really pays, and what the chain allows if its key leaks.',
+        '- If your server runs a route, check what it computes itself and what it only records from the page; only what it computes is checked.',
+      ].join('\n');
       return {
         ok: r.ok,
         from,
         routes: r.routes,
         findings: r.findings,
-        text: `${describeReview(r, economy.name)}${tail}\n\n${ready}${footer()}`,
+        text: person
+          ? personReview(r, economy.name, {
+              say: personSay(ctx),
+              verbose: ctx.verbose,
+              words: `${describeReview(r, economy.name)}${personTail}`,
+              checklist: personReady,
+            }) + footer()
+          : `${describeReview(r, economy.name)}${tail}\n\n${ready}${footer()}`,
       };
     },
   },
@@ -857,11 +981,8 @@ export const tools = [
       const keygen = live ? null : keygenCommand(keyFile);
       const browserCommand = `${approveCommand(target)} --browser`;
       const command = `${approveCommand(target)} --keypair ${keyFile}`;
-      const text = [
-        ...flagsToTell(economy, nowOf(ctx)),
-        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}:`,
-        ...steps.map((s, i) => `${i + 1}. ${s}`),
-        '',
+      // What to run, as the agent is told it (it runs the commands, and the person says yes).
+      const agentRun = () => [
         `${live ? 'To publish it' : 'To put it live'}, in a terminal in the project folder (you run these; nothing opens, and nothing is sent before the person’s yes):`,
         ...(live
           ? [
@@ -869,7 +990,7 @@ export const tools = [
             ]
           : [
               `1. A key file for this project, unless it has one: ${keygen}`,
-              '   It prints the key’s address, never the key. The key file is the project’s owner: whoever can read it controls the project, and which key goes live is for good (every later change is signed by it; these tools can’t hand a project to another owner). It stays where it is: never in a chat, a spec, a repository or a page, and you never open, read or print it. Tell the person to back the file up themselves: if it is lost, nothing can change the economy or move what its address holds.',
+              '   It prints the key’s address, never the key. The key file is the project’s owner: whoever can read it controls the project, and which key goes live is for good unless it hands the project on (every later change is signed by it; `xsolana handover` hands a project to another key file, both keys signing). It stays where it is: never in a chat, a spec, a repository or a page, and you never open, read or print it. Tell the person to back the file up themselves: if it is lost, nothing can change the economy or move what its address holds.',
               `   Everything the setup takes from the owner must be at that address first: ${realMoney() ? `the SOL (about ${c.setup.totalSol} SOL here: this economy is on mainnet, so it is real SOL)` : `the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some)`}, any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection they already have needs that address as its update authority). If they would rather not move those, offer the browser wallet.`,
               '   The steps above call the owner’s address “your wallet”: with a key file, that is the key’s address. Unless the spec names a treasury, what sales leave lands there, and it signs what only the authority signs. If the economy takes money in, ask for the public address of a wallet the person holds and set "treasury": "wallet:<address>" first: it can’t be changed through the spec once live.',
             ]),
@@ -877,6 +998,32 @@ export const tools = [
         '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; they use it at their own risk, and making sure the economy is legal where it is offered is up to them: DISCLAIMER.md in the package) and a code. It sends nothing.',
         '3. Show the person that printout and ask. When they say yes, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code. Go on with that code; if it shows a step or a warning they have not seen, ask again.',
         `${live ? 'For a project a browser wallet owns' : 'Only if the person asks to sign in a browser wallet instead'}: give them this to run in their own terminal: ${browserCommand} (it serves a page on their own computer where they connect a wallet set to ${cluster()} and approve, ${plural(p.approvals, 'approval')}, and keeps running until the page says it is live). Don’t run or open it otherwise.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
+      ];
+      // What to run, as the developer reads it in a terminal: the same steps and facts, addressed to them.
+      const personRun = () => [
+        `${live ? 'To publish it' : 'To put it live'}, run these commands in the project folder. Nothing is sent until command 3:`,
+        ...(live
+          ? [
+              `1. Only the key that owns the project can change it: the key file it went live with (${keyFile} if it was made there; give the file’s own path if it is elsewhere), or the key its owner handed it to since. If there is no such file, a browser wallet owns it: use the --browser command below. A new key can change nothing, so never make one for a live project, and never remove the file’s live section because a key was refused. The owner’s address needs about ${c.setup.totalSol} SOL${realMoney() ? ' (this economy is on mainnet, so it is real SOL)' : ' of devnet SOL'}.`,
+            ]
+          : [
+              `1. Make a key file for this project, unless it has one: ${keygen}`,
+              '   It prints the key’s address, never the key. The key file is the project’s owner until it hands the project to another key (xsolana handover, signed by both keys): whoever can read it controls the project, and every later change is signed by it. Keep it where it is: never in a chat, a spec, a repository or a page. Back it up yourself: if it is lost, nothing can change the economy or move what its address holds.',
+              `   Send that address everything the setup takes from the owner: ${realMoney() ? `the SOL (about ${c.setup.totalSol} SOL here: this economy is on mainnet, so it is real SOL)` : `the devnet SOL (about ${c.setup.totalSol} SOL here; https://faucet.solana.com gives some)`}, any seed in a coin that already exists, and every NFT a stash, a raffle or an auction names (a collection you already have needs that address as its update authority). If you would rather not move those, sign in a browser wallet instead (below).`,
+              '   The steps above call the owner’s address “your wallet”: with a key file, that is the key’s address. Unless the spec names a treasury, what sales leave lands there, and it signs what only the authority signs. If the economy takes money in, set "treasury": "wallet:<address>" to a wallet you hold first: it can’t be changed through the spec once live.',
+            ]),
+        `2. ${command}`,
+        '   It prints every step with what it pays and trusts, the warnings, the notice (the program is not independently audited and comes as is, with no warranty; you use it at your own risk, and making sure the economy is legal where it is offered is up to you: DISCLAIMER.md in the package) and a code. It sends nothing.',
+        '3. Read that printout. To go ahead, run the same command with --yes <code>: the code stands for exactly what was printed, and anything else is refused. What lands is written back into the file. If it stops part way, run it again without --yes: it prints what is left and a new code.',
+        `${live ? 'For a project a browser wallet owns' : 'To sign in a browser wallet instead'}: ${browserCommand} serves a page on this computer where you connect a wallet set to ${cluster()} and approve (${plural(p.approvals, 'approval')}); it keeps running until the page says it is live.${live ? ' A project a key file owns can’t be signed in a browser wallet.' : ''}`,
+      ];
+      const text = [
+        ...flagsToTell(economy, nowOf(ctx), ctx?.reader === 'person'),
+        `${change.scope.live ? 'Publishing this change to the live economy' : 'Going live'}: ${renaming ? 'at most ' : ''}${plural(p.transactions.length, 'transaction')}, about ${c.setup.totalSol} SOL on ${cluster()}${realMoney() ? ' (real SOL)' : ''}. Together they make ${plural(steps.length, 'step')}:`,
+        // (the steps as a list of their own: the numbers below are the commands that send them)
+        ...steps.map(s => `- ${s}`),
+        '',
+        ...(ctx?.reader === 'person' ? personRun() : agentRun()),
         ...(file ? [] : [`(Save it first with xsolana_save: \`approve\` reads ${DEFAULT_FILE}.)`]),
         ...(change.notes ? [change.notes.trim()] : []),
       ].join('\n');
@@ -977,6 +1124,10 @@ export const tools = [
         };
       });
       const missing = rows.filter(r => !r.found);
+      // (the fees the platform charges now, beside the ones these tools quote: said when they differ or a change waits)
+      const fees = rpc.account
+        ? await platformFees(address => rpc.account(address), { now: nowOf(ctx) }).catch(() => null)
+        : null;
       const text = [
         `${economy.name ?? 'The economy'} on ${cluster()}: project ${project}.`,
         ...rows.map(
@@ -986,10 +1137,11 @@ export const tools = [
         missing.length
           ? `\n${plural(missing.length, 'part')} not on chain: publish again (xsolana_publish) to add them.`
           : '',
+        fees?.words ? `\nFees: ${fees.words}` : '',
       ]
         .filter(Boolean)
         .join('\n');
-      return { ok: true, rows, text: text + footer() };
+      return { ok: true, rows, ...(fees ? { platformFees: fees } : {}), text: text + footer() };
     },
   },
   {

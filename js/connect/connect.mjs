@@ -116,7 +116,8 @@ export async function connect({
   local = false,
   remove = false,
   dryRun = false,
-  scope = 'user',
+  // (this project only, as xcore's connect: `--scope user` registers the tools for every project of this user)
+  scope = 'project',
   cwd = process.cwd(),
   log = (...a) => console.log(...a),
   run = runAgent,
@@ -143,7 +144,7 @@ export async function connect({
     found++;
     if (!a.scopes.includes(scope)) {
       log(
-        `${a.name}: adds MCP servers only for the whole user (--scope ${a.scopes.join(' or ')}), so it was left as it is. Run \`xsolana connect --agent ${id}\` for that.`,
+        `${a.name}: adds MCP servers only for the whole user, so at --scope ${scope} it ${dryRun ? 'would be' : 'was'} left as it is. Run \`xsolana connect --agent ${id} --scope ${a.scopes[0]}\` to add it for every project of this user.`,
       );
       if (agent) failed++;
       continue;
@@ -158,7 +159,7 @@ export async function connect({
     let removed = false;
     for (const { args: s, optional, removal } of steps) {
       if (dryRun) {
-        log(`${a.bin} ${s.join(' ')}`);
+        log(`would run: ${a.bin} ${s.join(' ')}`);
         continue;
       }
       const r = await run(a.bin, s);
@@ -178,17 +179,20 @@ export async function connect({
     let skillSaid;
     if (there === 'other') {
       log(
-        `${a.name}: ${skillDir} is there already and is not xsolana's ${SKILL} skill, so it was left as it is${remove ? '' : ' and the skill was not copied'}. Move it away, then run \`xsolana connect\` again.`,
+        `${a.name}: ${skillDir} is there already and is not xsolana's ${SKILL} skill, so it ${dryRun ? 'would be' : 'was'} left as it is${remove ? '' : ` and the skill ${dryRun ? 'would not be' : 'was not'} copied`}. Move it away, then run \`xsolana connect\` again.`,
       );
       failed++;
       ok = false;
     } else if (remove) {
-      if (dryRun) log(there === 'ours' ? `remove ${skillDir}` : `(no skill at ${skillDir} to remove)`);
+      if (dryRun)
+        log(there === 'ours' ? `would remove ${skillDir}` : `would remove nothing: there is no skill at ${skillDir}`);
       else if (there === 'ours') await rm(skillDir, { recursive: true, force: true });
       skillSaid = there === 'ours' ? `; the ${SKILL} skill removed from ${skillDir}` : '';
     } else {
       if (dryRun)
-        log(`${there === 'ours' ? 'replace the xsolana skill at' : 'copy skills/xsolana-economy to'} ${skillDir}`);
+        log(
+          `${there === 'ours' ? 'would replace the xsolana skill at' : 'would copy skills/xsolana-economy to'} ${skillDir}`,
+        );
       else {
         await mkdir(skills, { recursive: true });
         if (there === 'ours') await rm(skillDir, { recursive: true, force: true });
@@ -220,5 +224,7 @@ export async function connect({
     );
     return 1;
   }
+  // (a dry run says so last, every line above it in "would")
+  if (dryRun) log('Nothing was changed: this was a dry run.');
   return failed ? 1 : 0;
 }

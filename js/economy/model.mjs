@@ -13,14 +13,28 @@ export const DAY = 86_400;
 // Each is the loot program's own unless it says otherwise.
 
 /**
- * The two flat fees, in lamports, as each cluster's platform account holds them (`Platform.fees`: devnet EZJiX7BY…,
- * mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days), so
- * the tools quote these and the program charges what the account holds. The program caps each at 0.01 SOL.
+ * The two flat fees, in lamports, as each cluster's platform account held them at this release (`Platform.fees`:
+ * devnet EZJiX7BY…, mainnet 9kDg2X8Q…). The platform's admin can change them (a raise waits 7 days, a cut applies at
+ * once), and the program charges what the account holds, so these are the release's values: the offline tools (check,
+ * simulate, cost, explain) quote them, and what reads the chain anyway (approve, status) reads the account too and
+ * says when it differs or a change waits (js/approve/platform-fees.mjs). The program caps each at 0.01 SOL.
  */
 export const FEES_ON = Object.freeze({
   devnet: Object.freeze({ player: 2_000_000n, project: 10_000n }),
   mainnet: Object.freeze({ player: 500_000n, project: 10_000n }),
 });
+/**
+ * The resale royalty of the collection the setup makes, in words, or null when it makes none (or made it already):
+ * the percent, who it pays, and whether the spec set it or it is the default.
+ */
+export function royaltyWords(economy) {
+  if (economy?.collection === false || economy?.live?.collection) return null;
+  const set = economy?.collection?.royaltyPercent;
+  const percent = set ?? 5;
+  const name = economy?.collection?.name ?? String(economy?.name ?? 'Project').slice(0, 32);
+  return `The collection “${name}” is made with a ${percent}% resale royalty to your wallet${set === undefined ? ' (the default: "collection": { "royaltyPercent": n } sets it, 0 for none)' : ' ("royaltyPercent" in the spec)'}, paid by marketplaces that honour Metaplex Core royalties.`;
+}
+
 /** Devnet's fees, the platform's defaults: what the tests' own platform sets. */
 export const FEES = FEES_ON.devnet;
 /** The fees on the cluster an economy is on: the `network` its file names, devnet when it names none. */
@@ -49,9 +63,10 @@ export const ACCOUNT_OVERHEAD = 128n;
 export const MOST_RENT_PER_BYTE = 6_960n;
 export const rent = bytes => (BigInt(bytes) + ACCOUNT_OVERHEAD) * RENT_PER_BYTE;
 /**
- * A collectible's Core account, paid from the SOL its order holds (or by whoever gives it): its rent (a Core asset of
- * about 190 bytes) plus Metaplex Core's creation fee of 0.0015 SOL, which the account keeps. The full simulation
- * measures 0.00309 to 0.00313 SOL across its fixtures.
+ * What minting a collectible's Core account costs, paid from the SOL its order holds (or by whoever gives it): its rent
+ * (a Core asset of about 190 bytes) plus Metaplex Core's protocol fee of 0.0015 SOL a mint, which Metaplex sweeps to
+ * its fee collector (https://developers.metaplex.com/protocol-fees): neither comes back to the player. The full
+ * simulation measures 0.00309 to 0.00313 SOL across its fixtures.
  */
 export const COLLECTIBLE_RENT = 3_100_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;

@@ -14,6 +14,7 @@ import { plural } from '../economy/format.mjs';
 import { readTransaction, wireTransaction } from '../chain/tx.js';
 import { KeyFileError, keyFilePath, readKeyFile } from './keyfile.mjs';
 import { clusterChain, createApproval } from './server.mjs';
+import { platformFees } from './platform-fees.mjs';
 import { realMoney } from '../client/cluster.js';
 
 /** The notice the page has its owner tick before Approve (js/approve/page.html, "Read this first"), word for word. */
@@ -120,6 +121,12 @@ export function approvalText(state, { keyFile, balance = null }) {
     `Signed by the key file ${keyFile}, whose address is ${state.wallet}. The lines below call that address “your wallet”.`,
   );
   if (state.project) lines.push(`Project: ${state.project}`);
+  // (the collection's resale royalty, set as the setup makes it: said on its own line, not only inside a step)
+  const royalty = state.steps.map(s => /, with ([\d.]+)% resale royalty/.exec(s.says)).find(Boolean);
+  if (royalty)
+    lines.push(
+      `Royalty: the new collection takes ${royalty[1]}% of each resale for your wallet, where marketplaces honour Metaplex Core royalties ("collection": { "royaltyPercent": n } in the file sets it, 0 for none).`,
+    );
   for (const f of state.fresh ?? [])
     lines.push(
       `New, made by this setup: ${freshName(f.name)}, at ${f.address} (a new address each time this is shown).`,
@@ -242,6 +249,9 @@ export async function approveWithKey({
       : null;
     const code = approvalCode(state, session.spec);
     for (const line of approvalText(state, { keyFile: key.file, balance })) out(line);
+    // (the fees the platform charges now, beside the ones the tools quoted: said when they differ or a change waits)
+    const fees = await platformFees(address => chain.account(address)).catch(() => null);
+    if (fees?.words) out(`\nFees: ${fees.words}`);
     out('');
     if (balance === 0n) {
       out(
@@ -269,7 +279,7 @@ export async function approveWithKey({
       }
     } else if (yes === null) {
       out(
-        `Nothing was sent. This is what going on would send: show it to the person whose economy it is, and when they say yes, run the same command with --yes ${code}`,
+        `Nothing was sent. Above is everything going on would send. Once the economy's owner has read it and agreed, run the same command with --yes ${code}`,
       );
       return { ok: true, sent: 0, done: false, code };
     } else if (yes !== true && String(yes) !== code) {

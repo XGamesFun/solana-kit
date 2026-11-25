@@ -49,6 +49,7 @@ const TEXTS = {
     ]),
   ),
   'docs/tutorial-loot-box.md': read('docs/tutorial-loot-box.md'),
+  'docs/cheatsheet.md': read('docs/cheatsheet.md'),
   // (each idea a paragraph of its own)
   'examples/ideas.json': ideas()
     .map(i => `#${i.n} ${i.name}: ${i.how}`)

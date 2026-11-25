@@ -8,6 +8,7 @@ import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from '../../chain/pda.js';
 import { utf8 } from '../../chain/bytes.js';
 import { METADATA_LIMITS } from '../../chain/metadata.js';
 import {
+  FEES_ON,
   feesOf,
   LIMITS,
   RESERVED_ATTRIBUTES,
@@ -615,7 +616,7 @@ export function checkTokens(c) {
         warn(
           'W-LIST',
           `${where}.list`,
-          `${what} lets in ${r.list.length} listed wallet${r.list.length === 1 ? '' : 's'}: the program keeps only the list’s root, so the app (or xsolana_play) passes each player’s proof, and the list itself must stay where the app can read it (this spec keeps it).`,
+          `${what} lets in ${r.list.length} listed wallet${r.list.length === 1 ? '' : 's'}: the program keeps only the list’s root, so the app (or the @xgamesfun/solana/play module) passes each player’s proof, and the list itself must stay where the app can read it (this spec keeps it).`,
         );
       }
       return;
@@ -672,7 +673,7 @@ export function checkTokens(c) {
           warn(
             'W-STAKED',
             `${where}.staked`,
-            `${what} lets in a wallet with at least ${r.staked.atLeast} ${t?.symbol ?? f.stakes} staked in ${label(f)} while its lock runs, staked before the second it is used (so it can’t be staked, used and unstaked in one transaction, and one stake counts for one wallet a lock). The app (or xsolana_play) passes the wallet’s seat and the farm; staking more counts at once, and the gate shuts once the lock ends (staking again starts a new lock).`,
+            `${what} lets in a wallet with at least ${r.staked.atLeast} ${t?.symbol ?? f.stakes} staked in ${label(f)} while its lock runs, staked before the second it is used (so it can’t be staked, used and unstaked in one transaction, and one stake counts for one wallet a lock). The app (or the @xgamesfun/solana/play module) passes the wallet’s seat and the farm; staking more counts at once, and the gate shuts once the lock ends (staking again starts a new lock).`,
           );
       }
       return;
@@ -1001,14 +1002,21 @@ export function checkTokens(c) {
   const feeNote = (price, tok, where, what) => {
     if (!tok?.wsol || price === null) return;
     if (price === 0n) return;
-    const ratio = Number(feesOf(economy).player) / Number(price);
-    if (ratio >= 0.01)
-      warn(
-        'W-FEE',
-        where,
-        `Every ${what} also pays the platform’s player fee of ${fromUnits(feesOf(economy).player, 9)} SOL: ${(ratio * 100).toFixed(1)}% on top of its ${fromUnits(price, 9)} SOL price.`,
-        'Fine for a game; a higher price makes the fee a smaller part of it.',
-      );
+    const percentOf = fee => `${((Number(fee) / Number(price)) * 100).toFixed(1)}%`;
+    const here = feesOf(economy).player;
+    // Devnet's player fee is four times mainnet's (model.mjs FEES_ON), and devnet SOL is play money: a devnet spec is
+    // warned of the fee it would pay on mainnet, with devnet's beside it.
+    const mainnet = FEES_ON.mainnet.player;
+    const onDevnet = here !== mainnet;
+    if (Number(onDevnet ? mainnet : here) / Number(price) < 0.01) return;
+    warn(
+      'W-FEE',
+      where,
+      onDevnet
+        ? `Every ${what} also pays the platform’s player fee. On mainnet the player fee alone is ${fromUnits(mainnet, 9)} SOL, ${percentOf(mainnet)} of its ${fromUnits(price, 9)} SOL price; xsolana_cost gives everything a player pays on top of the price (the fee, the oracle, the network, rent). This economy is on devnet, where the player fee is ${fromUnits(here, 9)} SOL (${percentOf(here)}) and SOL is play money.`
+        : `Every ${what} also pays the platform’s player fee of ${fromUnits(here, 9)} SOL: the player fee alone is ${percentOf(here)} of its ${fromUnits(price, 9)} SOL price; xsolana_cost gives everything a player pays on top of the price (the fee, the oracle, the network, rent).`,
+      'Fine for a game; a higher price makes the fee a smaller part of it.',
+    );
   };
   /** A part's limit in each window of time, by wallet ("perWalletEach") or by person ("perPersonEach"): its window (a
    * day when it names none) in 4 bytes. */

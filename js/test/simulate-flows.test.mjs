@@ -256,12 +256,12 @@ test('the “in all” cost of a price that rises is at its listed price, whatev
     .find(l => l.startsWith('Box “Forge”'));
   assert.match(
     box,
-    /^Box “Forge”: costs 0\.02 SOL .*gives back 0\.01 SOL on average \(\d+(\.\d+)?% of the 0\.0233\d* SOL an open pays on average over the scenario\); the game keeps [\d.]+% of what an open pays, on average\.$/,
+    /^Box “Forge”: costs 0\.02 SOL .*gives back 0\.01 SOL on average \(\d+(\.\d+)?% of the 0\.0233\d* SOL an open pays on average over the scenario\), all of it items worth that by the "value" you gave them \(a value, not money paid out\); the game keeps [\d.]+% of what an open pays, on average, by those values\.$/,
   );
   const steady = forge(100, null);
   assert.match(
     explain(sim(steady), steady),
-    /gives back 0\.01 SOL on average \(50%\); the game keeps 50% of each price\./,
+    /gives back 0\.01 SOL on average \(50%\), all of it items worth that by the "value" you gave them \(a value, not money paid out\); the game keeps 50% of each price, by those values\./,
   );
 
   // A shop item says the same, once: its rise and its fall, with the fall's floor.

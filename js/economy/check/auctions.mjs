@@ -121,6 +121,7 @@ export function checkAuctions(c) {
         `${where}.lot.roll`,
         `${label(a)} sells a roll of a box: the winner pays for whatever it rolls, and gets nothing more if what it gives has run out by the end (an empty stash, a sold-out item).`,
         'Keep a stash or item for this auction alone, and say on the page what the box can give, with its odds.',
+        { severity: 'medium' },
       );
       c.randomItems = true;
     } else if (a.lot?.asset) {

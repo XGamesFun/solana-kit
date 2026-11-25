@@ -5,7 +5,8 @@
 // nobody does); the others in words that follow the program's rules (PROGRAM.md).
 import { at, flows, named, num, ORACLE_SOL, words } from './flows.mjs';
 import { realMoney } from '../client/pda.js';
-import { DAY, limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
+import { inAll } from './simulate.mjs';
+import { DAY, FEES_ON, limitPhrases, prizeLine, prizeWords, serverRate, toSeconds, toTime } from './model.mjs';
 
 const STATE = {
   open: 'Before it opens',
@@ -90,7 +91,7 @@ function extraWords(r, state, fl) {
 }
 
 /** The walk-through, as lines: a title, then for each route its name and one line a state. [] for a spec with no route. */
-export function walkThrough(m, { now, fl = flows(m, { now }) }) {
+export function walkThrough(m, { now, fl = flows(m, { now }), sim = null }) {
   const sym = key => m.tokens.get(key)?.symbol ?? key;
   const on = x => x.active !== false;
   const windowWords = (x, what, none) =>
@@ -221,7 +222,7 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
     ]);
 
   if (!routes.length) return [];
-  const actions = actionWords(fl, m.fees);
+  const actions = actionWords(fl, m.fees, sim);
   const times = timeline(m, fl, now);
   const control = controlWords(m, fl);
   return [
@@ -243,8 +244,16 @@ export function walkThrough(m, { now, fl = flows(m, { now }) }) {
   ];
 }
 
-/** Each player action of the routes the model holds: its wallet prompts and the SOL it costs, its price aside. */
-function actionWords(fl, fees) {
+/** The simulation's rows of each kind of route (`sim`), by the route's kind. */
+const SIM_ROWS = { box: 'boxes', item: 'items', lottery: 'lotteries', payment: 'payments', recipe: 'recipes' };
+
+/**
+ * Each player action of the routes the model holds: its wallet prompts and the SOL it costs. With the simulation
+ * (`sim`), the SOL is the one `xsolana_cost` and `xsolana_simulate` give, in their words: the player fee, the oracle,
+ * the network and rent that never comes back (an NFT's, on average across the outcomes), at the economy's network's
+ * fees. Without it, the fees alone, said as such.
+ */
+function actionWords(fl, fees, sim = null) {
   const fee = Number(fees.player) / 1e9;
   return fl.routes
     .filter(r => r.price.length)
@@ -257,7 +266,11 @@ function actionWords(fl, fees) {
         .map(p => `${+num(p.amount).toFixed(9)} ${fl.assets.get(p.asset)?.symbol ?? p.asset}`)
         .join(' and ');
       const loop = journeyOf(r, fl);
-      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${price} plus about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), plus a network fee and any account it opens. A whole loop: ${loop.steps.join(', then ')} (${loop.folded < loop.prompts ? `${loop.folded} with the craft carried by the purchase, ${loop.prompts} without` : `${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}`}).${loop.bundles.length ? ` To fold it: ${loop.bundles.join('; ')}.` : ''}`;
+      const rc = sim?.[SIM_ROWS[r.kind]]?.find(x => x.key === r.key)?.realCost;
+      const costs = rc
+        ? `${price}; at ${realMoney() ? 'mainnet' : 'devnet'}’s fees, ${inAll(rc)}`
+        : `${price}, plus fees of about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), before the network fee and any rent for what it opens (xsolana_cost gives the whole)`;
+      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${costs}. A whole loop: ${loop.steps.join(', then ')} (${loop.folded < loop.prompts ? `${loop.folded} with the craft carried by the purchase, ${loop.prompts} without` : `${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}`}).${loop.bundles.length ? ` To fold it: ${loop.bundles.join('; ')}.` : ''}`;
     });
 }
 
@@ -344,7 +357,7 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   // A first-time player, from the link to the first reward: what they need before anything works.
   if (fl.routes.length)
     out.push(
-      `A first-time player needs a wallet and a little SOL before their first action${realMoney() ? '' : ' (devnet SOL, from a faucet)'}: each action costs the player fee (${Number(m.fees.player) / 1e9} SOL) and a network fee, unless the page or server pays a claim's fees for them (anyone may pay them).`,
+      `A first-time player needs a wallet and a little SOL before their first action${realMoney() ? '' : ' (devnet SOL, from a faucet)'}: each action costs the player fee (${Number(m.fees.player) / 1e9} SOL${m.fees.player === FEES_ON.mainnet.player ? '' : `; ${Number(FEES_ON.mainnet.player) / 1e9} SOL on mainnet`}) and a network fee, unless the page or server pays a claim's fees for them (anyone may pay them).`,
     );
   const amount = list => list.map(p => `${+num(p.amount).toFixed(9)} ${sym(p.asset)}`).join(' and ');
   for (const r of fl.routes) {
@@ -566,7 +579,7 @@ function controlWords(m, fl) {
     if (said.length) caps.push(`${named(r)} ${said.join(', ')}`);
   }
   rows.push(
-    `The chain keeps, exactly as written: every price and cap (${caps.length ? caps.join('; ') : 'none set'}), every lock and term, and every draw's and roll's odds at the moment it is drawn (the oracle's answer). Nobody, you included, can break them while they stand.`,
+    `The chain keeps, exactly as written: every price and cap (${caps.length ? caps.join('; ') : 'none set'}), every lock and term, and every draw's and roll's odds at the moment it is drawn (the oracle's answer). Nobody, you included, can break them while they stand. That holds for the current program version, which its upgrade authority can replace.`,
   );
   const signed = m.grants.filter(g => (g.vouchers ?? []).length);
   const decided = m.contests;
