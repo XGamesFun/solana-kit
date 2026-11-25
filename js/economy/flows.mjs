@@ -395,7 +395,13 @@ export function flows(m, { now }) {
       perWallet: num(source.perWallet),
       gate: Boolean(source.gate),
       roll: rolls,
-      limited: Boolean(item?.supply) || (!item && rolls),
+      // (stock that runs out: the item's supply, or a box outcome's item supply, pool or stash)
+      limited:
+        Boolean(item?.supply) ||
+        (!item &&
+          (b.outcomes ?? []).some(
+            o => o.pool !== undefined || o.stash !== undefined || (o.gives === 'item' && m.item.get(o.item)?.supply),
+          )),
       title: item ? 'an item for sale' : rolls ? 'a box, rolled by the oracle' : 'a box',
       fixed:
         item?.kind === 'collectible'

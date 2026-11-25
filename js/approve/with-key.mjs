@@ -123,9 +123,15 @@ export function approvalText(state, { keyFile, balance = null }) {
   if (state.project) lines.push(`Project: ${state.project}`);
   // (the collection's resale royalty, set as the setup makes it: said on its own line, not only inside a step)
   const royalty = state.steps.map(s => /, with ([\d.]+)% resale royalty/.exec(s.says)).find(Boolean);
+  // (a new project whose file names no treasury: what players pay lands at this key, and that is said before the plan)
+  const keyIsTreasury = state.mode === 'new' && state.steps.some(s => /your wallet is its treasury/.test(s.says));
   if (royalty)
     lines.push(
-      `Royalty: the new collection takes ${royalty[1]}% of each resale for your wallet, where marketplaces honour Metaplex Core royalties ("collection": { "royaltyPercent": n } in the file sets it, 0 for none).`,
+      `Royalty: the new collection takes ${royalty[1]}% of each resale for your wallet${keyIsTreasury || state.mode !== 'new' ? '' : ' (this key, not the treasury)'}, where marketplaces honour Metaplex Core royalties ("collection": { "royaltyPercent": n } in the file sets it, 0 for none).`,
+    );
+  if (keyIsTreasury && state.steps.some(s => (s.details ?? []).some(d => /^Pays: .*treasury/.test(d))))
+    lines.push(
+      'Treasury: the file names none, so what players pay lands at this key’s address. To have it paid to a wallet you hold instead, set "treasury": "wallet:<address>" in the file before going live: the spec can’t change it once live.',
     );
   for (const f of state.fresh ?? [])
     lines.push(
@@ -256,8 +262,8 @@ export async function approveWithKey({
     if (balance === 0n) {
       out(
         realMoney()
-          ? `Nothing was sent: the key holds no SOL. This economy is on mainnet: send SOL to ${key.address} first, then run this again.`
-          : `Nothing was sent: the key holds no SOL. Send devnet SOL to ${key.address} first (https://faucet.solana.com gives some), then run this again.`,
+          ? `Nothing was sent: the key holds no SOL. This economy is on mainnet: send SOL to ${key.address} first, then run this again. It then shows the code that sends what is above.`
+          : `Nothing was sent: the key holds no SOL. Send devnet SOL to ${key.address} first (https://faucet.solana.com gives some), then run this again. It then shows the code that sends what is above.`,
       );
       return { ok: false, sent: 0, done: false, code };
     }

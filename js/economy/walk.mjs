@@ -253,6 +253,10 @@ const SIM_ROWS = { box: 'boxes', item: 'items', lottery: 'lotteries', payment: '
  * the network and rent that never comes back (an NFT's, on average across the outcomes), at the economy's network's
  * fees. Without it, the fees alone, said as such.
  */
+/** What a wallet that signs messages is asked besides, the first time a session opens a box (js/play/keys.js). */
+const SETTLE_KEY_MESSAGE =
+  ', and the first open of a session also asks the wallet to sign one message, which moves nothing';
+
 function actionWords(fl, fees, sim = null) {
   const fee = Number(fees.player) / 1e9;
   return fl.routes
@@ -270,7 +274,9 @@ function actionWords(fl, fees, sim = null) {
       const costs = rc
         ? `${price}; at ${realMoney() ? 'mainnet' : 'devnet'}’s fees, ${inAll(rc)}`
         : `${price}, plus fees of about ${sol} SOL (the player fee each time${oracle ? ', the oracle' : ''}), before the network fee and any rent for what it opens (xsolana_cost gives the whole)`;
-      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}; ${costs}. A whole loop: ${loop.steps.join(', then ')} (${loop.folded < loop.prompts ? `${loop.folded} with the craft carried by the purchase, ${loop.prompts} without` : `${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}`}).${loop.bundles.length ? ` To fold it: ${loop.bundles.join('; ')}.` : ''}`;
+      // (a box the page's settle key finishes: that key comes from one message the wallet signs once a session)
+      const once = r.roll && r.kind === 'box' ? SETTLE_KEY_MESSAGE : '';
+      return `${named(r)}: ${prompts} wallet prompt${prompts === 1 ? '' : 's'}${prompts > 1 && r.kind === 'lottery' ? ' (1 with buyTickets’ make)' : ''}${once}; ${costs}. A whole loop: ${loop.steps.join(', then ')} (${loop.folded < loop.prompts ? `${loop.folded} with the craft carried by the purchase, ${loop.prompts} without` : `${loop.prompts} prompt${loop.prompts === 1 ? '' : 's'}`}).${loop.bundles.length ? ` To fold it: ${loop.bundles.join('; ')}.` : ''}`;
     });
 }
 
@@ -533,9 +539,11 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
     );
   // Several at once: one approval.
   const sold = fl.routes.filter(r => (r.kind === 'box' || r.kind === 'item') && r.price.length);
+  // (wins to collect: a lottery's or a contest's; a box's roll is settled by the page's key, with no approval)
+  const collects = fl.routes.some(r => r.kind === 'lottery' || r.kind === 'contest');
   if (sold.length)
     out.push(
-      `Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N), and the wins to collect afterwards go in as few approvals as the wallet allows (claimAll).`,
+      `Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N)${collects ? ', and the wins to collect afterwards go in as few approvals as the wallet allows (claimAll)' : ''}.`,
     );
   // A returning player's day, doing each thing once: every approval added up, and what folds them.
   const day = [];
@@ -550,11 +558,17 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
       n: r.kind === 'lottery' ? Math.max(1, journeyOf(r, fl).folded - 1) : 1,
     });
   for (const f of m.farms) day.push({ what: `harvest ${named(f)}`, n: 1 });
-  if (fl.routes.some(r => r.kind === 'lottery' || r.kind === 'contest' || (r.kind === 'box' && r.roll)))
-    day.push({ what: 'collect wins', n: 1 });
+  if (collects) day.push({ what: 'collect wins', n: 1 });
+  const folds = [
+    ...(collects ? ['claimAll collects every win in as few as the wallet allows'] : []),
+    ...(fl.routes.some(r => r.kind === 'lottery' && journeyOf(r, fl).bundles.length)
+      ? ['a craft rides in a ticket purchase (make)']
+      : []),
+  ];
+  const boxes = fl.routes.some(r => r.kind === 'box' && r.roll);
   if (day.length > 1)
     out.push(
-      `A returning player's day, doing each thing once: ${day.map(d => `${d.what} (${d.n})`).join(', ')}: about ${day.reduce((n, d) => n + d.n, 0)} wallet approvals. Fold what you can: claimAll collects every win in as few as the wallet allows, and a craft rides in a ticket purchase (make).`,
+      `A returning player's day, doing each thing once: ${day.map(d => `${d.what} (${d.n})`).join(', ')}: about ${day.reduce((n, d) => n + d.n, 0)} wallet approvals${boxes ? ', plus one message to sign the first time a session opens a box' : ''}.${folds.length ? ` Fold what you can: ${folds.join(', and ')}.` : ''}`,
     );
   return [...out.map(line => ({ line, asWritten: false })), ...trust.map(line => ({ line, asWritten: true }))];
 }

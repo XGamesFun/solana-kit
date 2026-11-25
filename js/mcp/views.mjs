@@ -337,6 +337,13 @@ function simulateView(sim, economy, { mainnet = null, verbose = false, words = '
   ]);
 }
 
+/** For an economy on devnet, the going-live total at mainnet's fees, beside devnet's: ' (… on mainnet)'. */
+function mainnetSetup(s, mainnet) {
+  const there = mainnet?.setup?.totalSol;
+  if (there === undefined || there === null) return '';
+  return there === s.totalSol ? ', the same on mainnet' : ` (about ${numeral(there)} SOL on mainnet)`;
+}
+
 /** `xsolana cost` for the developer. `mainnet`: the cost at mainnet's fees, for an economy on devnet. */
 function costView(
   c,
@@ -349,7 +356,7 @@ function costView(
   const sols = new Set([...model(economy).tokens.values()].filter(t => t.wsol).map(t => t.symbol));
   const other = Object.entries(s.seeds).filter(([symbol]) => !sols.has(symbol));
   const head = [
-    `Going live: ${plural(s.transactions, 'transaction')}, about ${numeral(s.totalSol)} SOL in all:`,
+    `Going live: ${plural(s.transactions, 'transaction')}, about ${numeral(s.totalSol)} SOL in all${mainnetSetup(s, mainnet)}:`,
     table(
       ['SOL', 'For'],
       parts.map(p => [numeral(p.sol), p.what]),

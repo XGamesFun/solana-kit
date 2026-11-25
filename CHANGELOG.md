@@ -4,6 +4,27 @@ The major and minor version of `@xgamesfun/solana` are those of the loot program
 0.29); `release.json` pins that program's exact build, its IDL and this client. Changes to the program itself are
 summarised here only where the tools see them.
 
+## Unreleased
+
+Fixes from a usability run of 0.29.12 (a new developer's first hour). No spec that 0.29.12 accepts is refused.
+
+- **One answer to "how many wallet prompts".** `check --verbose` no longer counts a "collect wins" approval for a box
+  (the page's settle key settles it with no prompt, as `explain` says); `explain` and the returning player's day both
+  say a box's first open in a session also asks the wallet to sign one message, which moves nothing. The claimAll and
+  craft-in-a-ticket advice shows only for an economy with a lottery or contest.
+- **W-ASSUMPTION's "one item through several routes"** fires only when it changes something: a supply the routes
+  share, or a per-wallet or per-person limit or a list on one of them. Its words no longer name an early list for a
+  spec without one.
+- **`review`** says the late-oracle refund on every paid box route ("a buyer who sees a poor answer coming more than
+  10 minutes late can take the refund instead"), and "bots can buy limited stock first" only for a box whose outcomes
+  can run out (an item with a supply, a pool, a stash).
+- **`approve`** says when the file names no treasury that what players pay lands at the key, and that the spec can't
+  change it once live; with a treasury named, the royalty line says it goes to the key, not the treasury. With an
+  unfunded key it says that the next run shows the code.
+- **`cost`** gives the going-live total at mainnet's fees too.
+- **`keygen`** names the economy file it finds (`./xsolana.json`, or the one `xsolana.json` up to two folders down)
+  in its approve hint, else `<economy file>`.
+
 ## 0.29.12 — 2026-11-24 (loot 0.29.0)
 
 The commands now read as a developer's tool: a summary and tables first, the details behind `--verbose`, plain

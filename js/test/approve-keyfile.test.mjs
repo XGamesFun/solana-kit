@@ -1442,7 +1442,11 @@ describe('the command line', () => {
 
   test('keygen prints the address and what the key is, never the key', () => {
     const file = path.join(folder(), 'game.json');
-    const r = xsolana(['keygen', file]);
+    // run where the economy is a folder down: the hint names it as it is reached from here
+    const project = folder();
+    mkdirSync(path.join(project, 'game'));
+    writeFileSync(path.join(project, 'game', 'xsolana.json'), '{}');
+    const r = xsolana(['keygen', file], { cwd: project });
     assert.equal(r.status, 0, r.stderr);
     const bytes = JSON.parse(readFileSync(file, 'utf8'));
     assert.ok(!r.stdout.includes(bytes.slice(0, 4).join(',')) && !r.stdout.includes('['));
@@ -1450,7 +1454,10 @@ describe('the command line', () => {
     assert.match(r.stdout, /anyone who can read that file controls the project/);
     assert.match(r.stdout, /nothing can change the project or move what its address holds/);
     const { version } = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    assert.ok(r.stdout.includes(`npx -y @xgamesfun/solana@${version} approve xsolana.json --keypair ${file}`));
+    assert.ok(r.stdout.includes(`npx -y @xgamesfun/solana@${version} approve game/xsolana.json --keypair ${file}`));
+    // with no economy file in reach, a placeholder, never a name that is not there
+    const nowhere = xsolana(['keygen', path.join(folder(), 'other.json')], { cwd: folder() });
+    assert.ok(nowhere.stdout.includes('approve <economy file> --keypair'));
     // A path a shell would split is in quotes; one given from the home folder is said as it was given.
     const spaced = path.join(folder(), 'my games', 'game.json');
     assert.ok(xsolana(['keygen', spaced]).stdout.includes(`--keypair "${spaced}"`));
