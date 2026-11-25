@@ -57,3 +57,48 @@ test('approve’s printout gives the royalty a line of its own', () => {
     lines.join('\n'),
   );
 });
+
+test('approve’s printout says where sales land when the file names no treasury, and whose the royalty is', () => {
+  const state = steps => ({
+    cluster: 'devnet',
+    mode: 'new',
+    name: 'Hello Shop',
+    file: 'xsolana.json',
+    program: 'p',
+    wallet: 'w',
+    fresh: [],
+    setupSol: null,
+    legal: [],
+    warnings: [],
+    landed: [],
+    remaining: 1,
+    steps,
+  });
+  const make = {
+    says: 'Make the collection “Hello Shop”, with 5% resale royalty to you; the project may mint into it',
+  };
+  const sale = {
+    says: 'Put “Potion” in the shop at 0.1 SOL',
+    details: ['Pays: all of it to the treasury (your wallet (w))'],
+  };
+  const keyIs = approvalText(
+    state([make, { says: 'Open the project; your wallet signs its decisions, and your wallet is its treasury' }, sale]),
+    { keyFile: 'k.json' },
+  );
+  assert.ok(
+    keyIs.some(l => /^Treasury: the file names none, so what players pay lands at this key’s address/.test(l)),
+    keyIs.join('\n'),
+  );
+  assert.ok(keyIs.some(l => /for your wallet, where/.test(l)));
+  const named = approvalText(
+    state([make, { says: 'Open the project; your wallet signs its decisions, and T is its treasury' }, sale]),
+    {
+      keyFile: 'k.json',
+    },
+  );
+  assert.ok(!named.some(l => /^Treasury:/.test(l)));
+  assert.ok(
+    named.some(l => /for your wallet \(this key, not the treasury\)/.test(l)),
+    named.join('\n'),
+  );
+});

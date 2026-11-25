@@ -29,6 +29,25 @@ const BY_LIKELY = { likely: 'high', unknown: 'high', unlikely: 'medium', rare: '
  * `simulation`: the caller's own run of the simulation (check.mjs: run once for the whole check, and said once when it
  * cannot run); without one it is run here, and an error in it is thrown on.
  */
+
+/** Whether a route (or anything in it) sets a per-wallet or per-person limit (`capped`), or a list of who may buy
+ *  first (`listed`). */
+function limitsOf(route) {
+  const found = { capped: false, listed: false };
+  const seen = new Set();
+  const walk = v => {
+    if (!v || typeof v !== 'object' || seen.has(v)) return;
+    seen.add(v);
+    for (const [k, x] of Object.entries(v)) {
+      if (/^per(Wallet|Person)(Each)?$/.test(k) && x != null) found.capped = true;
+      if (k === 'list' && x != null) found.listed = true;
+      walk(x);
+    }
+  };
+  walk(route);
+  return found;
+}
+
 export function challenge(m, warnTo, now, economy, simulation = null) {
   const simulated = () => (simulation ? simulation() : economy ? simulate(economy, { now }) : null);
   // (every grant cap a question is about, so the caps nobody was asked about are asked once, together, at the end)
@@ -660,21 +679,26 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
   // ---- W-ASSUMPTION: one item through several routes; a grant's cap against the stated audience; who runs each step
   // only a person or a server sends; what freezes at the first sale.
   const givers = new Map();
-  const give = (item, route) => item && givers.set(item, [...(givers.get(item) ?? []), route]);
+  const give = (item, route, from) =>
+    item && givers.set(item, [...(givers.get(item) ?? []), { route, limits: limitsOf(from) }]);
   for (const b of m.allBoxes)
-    for (const o of b.outcomes ?? []) if (o.gives === 'item') give(o.item, b.shopOf ? `the shop` : named(b));
-  for (const g of m.grants) give(prizeLine(g.prize ?? g.gives)?.item, named(g));
-  for (const l of m.lotteries) for (const p of l.places ?? []) give(prizeLine(p.prize)?.item, named(l));
-  for (const r of m.recipes) for (const o of r.out ?? []) if (o.gives === 'item') give(o.item, named(r));
-  for (const a of m.auctions) give(a.lot?.item, named(a));
+    for (const o of b.outcomes ?? []) if (o.gives === 'item') give(o.item, b.shopOf ? `the shop` : named(b), b);
+  for (const g of m.grants) give(prizeLine(g.prize ?? g.gives)?.item, named(g), g);
+  for (const l of m.lotteries) for (const p of l.places ?? []) give(prizeLine(p.prize)?.item, named(l), l);
+  for (const r of m.recipes) for (const o of r.out ?? []) if (o.gives === 'item') give(o.item, named(r), r);
+  for (const a of m.auctions) give(a.lot?.item, named(a), a);
   for (const [key, list] of givers) {
-    const by = [...new Set(list)];
+    const by = [...new Set(list.map(g => g.route))];
     if (by.length < 2) continue;
     const it = m.item.get(key);
+    // (said only where it changes something: a supply the routes share, or a limit or a list one of them sets)
+    const capped = list.some(g => g.limits.capped);
+    const listed = list.some(g => g.limits.listed);
+    if (!it?.supply && !capped && !listed) continue;
     warn(
       'W-ASSUMPTION',
       `economy.items.${key}`,
-      `${named(it)} reaches players through ${words(by)}: ${it?.supply ? `its supply of ${it.supply} is shared by all of them, first come first served, and ` : ''}each route's per-wallet limit counts on its own, so one wallet may take it through each, an early list's buyer again in public.`,
+      `${named(it)} reaches players through ${words(by)}: ${it?.supply ? `its supply of ${it.supply} is shared by all of them, first come first served${capped || listed ? ', and ' : '.'}` : ''}${capped || listed ? `each route's limits count on their own, so one wallet may take it through each${listed ? ', and a buyer on an early list may buy it again once it is public' : ''}.` : ''}`,
       'Say which route comes first and whether one wallet may take it twice; if not, give it through one route, or gate the later one on not holding it.',
       { severity: 'low' },
     );

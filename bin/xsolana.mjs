@@ -30,7 +30,7 @@
 //
 // Who reads it: a named command (check, review…) is read by the developer, so its text is worded for them
 // (js/mcp/person.mjs); `xsolana tool <name>` and `--json` give the answer an agent gets over MCP, word for word.
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -566,6 +566,29 @@ const TERMINAL = Object.fromEntries(
 );
 
 /** The port `xsolana approve --browser` listens on: a whole number from 1 to 65535, or undefined for any free one. */
+/** The economy file `approve` would be given from `dir`: its own xsolana.json, else the one xsolana.json in a folder
+ *  at most two below it (node_modules and hidden folders left out), else a placeholder. */
+function economyNearby(dir) {
+  if (existsSync(path.join(dir, 'xsolana.json'))) return 'xsolana.json';
+  const found = [];
+  const look = (at, depth) => {
+    let entries;
+    try {
+      entries = readdirSync(path.join(dir, at), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const sub = at ? `${at}/${e.name}` : e.name;
+      if (existsSync(path.join(dir, sub, 'xsolana.json'))) found.push(`${sub}/xsolana.json`);
+      if (depth < 2) look(sub, depth + 1);
+    }
+  };
+  look('', 1);
+  return found.length === 1 ? found[0] : '<economy file>';
+}
+
 function portOf(value) {
   if (value === undefined) return undefined;
   const n = Number(value);
@@ -744,12 +767,13 @@ async function main(argv) {
       // quotes when a shell would split it.
       const named = positional[0].startsWith('~') ? positional[0] : made.file;
       const word = /^[\w./~:\\-]+$/.test(named) ? named : `"${named}"`;
+      const spec = economyNearby(process.cwd());
       console.log(
         [
           `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
           'Whatever is set up with it, it owns, until it hands the project to another key (xsolana handover, signed by both keys): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
-          `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve xsolana.json --keypair ${word}`,
+          `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve ${spec} --keypair ${word}`,
         ].join('\n'),
       );
       break;
