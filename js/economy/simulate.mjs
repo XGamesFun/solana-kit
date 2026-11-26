@@ -713,7 +713,7 @@ export function simulate(economy, { now = 0 } = {}) {
       oracle,
       signatures,
       rent: collectibles * COLLECTIBLE_RENT,
-      rentIs: collectibles < 1 ? 'the collectible’s rent, when it gives one' : 'the collectible’s rent',
+      rentIs: collectibles < 1 ? 'in rent and mint fees when a collectible drops' : 'in collectible rent and mint fees',
       held: bought ? 0 : sol(SETTLE_RENT_UNIT) * settleRentUnits(b, m) + orderRent(b, m, true),
     });
     const extrasSol = realCost.extrasSol;
@@ -805,7 +805,7 @@ export function simulate(economy, { now = 0 } = {}) {
         isSol: Boolean(m.tokens.get(game)?.wsol),
         signatures: 1,
         rent: collectible ? COLLECTIBLE_RENT : 0,
-        rentIs: 'the collectible’s rent',
+        rentIs: 'in collectible rent and mint fees',
         held: 0,
       });
       return {

@@ -228,7 +228,7 @@ function purchaseTable(rows, onDevnet) {
 }
 
 const ON_TOP_NOTE =
-  '"On top" is what one action costs beyond its price, on average across its outcomes: the player fee, the oracle, the network fee, and what minting an NFT costs and never comes back (its rent and Metaplex’s 0.0015 SOL protocol fee, counted by how often one is minted); explain gives the same figure. "Extra" is that as a share of a price in SOL. "Returns" is what a player gets back on average, as a share of the price, counting items at the "value" you gave them.';
+  '"On top" includes player, oracle and network fees, plus minting costs averaged over the odds of an NFT. Each new Core NFT costs rent plus the 0.0015 SOL Metaplex fee. "Extra" shows those costs as a share of the SOL price. "Returns" shows average prize value as a share of the price, using your item values.';
 
 /**
  * What players get back a day, items apart: what is paid out (SOL, tokens) and what the items given are worth at the

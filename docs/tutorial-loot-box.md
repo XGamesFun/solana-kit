@@ -63,8 +63,7 @@ An economy is one JSON file, `xsolana.json`. This one has three collectible item
 npx -y @xgamesfun/solana@0.29.12 check xsolana.json
 ```
 
-The checker refuses anything the program would refuse, before anything is signed. This spec is ready, with one
-warning: paid random items that can be resold are treated as gambling in some places. Show the odds, and take advice
+Run the check before signing. One warning to watch for is that paid random items that can be resold are treated as gambling in some places. Show the odds, and take advice
 before you use real money.
 
 Each opening also pays the platform's player fee: 0.002 SOL on devnet and 0.0005 SOL on mainnet. On mainnet that is
@@ -111,12 +110,8 @@ collection, the three items, the box, a lookup table and the token accounts.
 npx -y @xgamesfun/solana@0.29.12 review xsolana.json
 ```
 
-For every route that pays or gives value, the review says four things: who can trigger it, what the program enforces,
-what it trusts off the chain, and the most one cheater gets. Here the only route is the box. Its roll comes from
-MagicBlock's VRF: “nobody, the project included, can steer the roll (under the current program version, which its
-upgrade authority can replace).” The one finding is a reminder that the owner's
-key controls the project, so keep the key safe. On devnet, make the key file readable by you alone. With real money,
-use a hardware wallet or a multisig.
+This box uses the oracle to choose a prize. If its answer is late, a buyer may be able to choose a refund over a
+losing result. The project owner controls the box settings. Review both risks before launch.
 
 ## 7. Go live, signed on your own computer
 
@@ -129,23 +124,25 @@ npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolan
 that `cost` named. The key file is the project's owner until it hands the project to another key. Keep it where it is, back it up yourself, and never
 paste it anywhere.
 
-`approve` then lists every transaction with what it pays and trusts, and ends with a code. It sends nothing. Run the
-same command again with `--yes <code>` to send exactly what was listed. An agent does that only after you have read
-the list and said yes. Nothing asks for a seed phrase or for the key of a wallet you already have. To sign with a
-browser wallet instead, run the page yourself: `approve xsolana.json --browser`.
+Set `treasury` in the spec before approving if sales should go to a different wallet. `approve` previews the transactions. Read them, then rerun with `--yes <code>` to send. To sign in your browser, run `approve xsolana.json --browser` yourself.
 
 After that, `xsolana status xsolana.json` reads the live economy back.
 
 ## 8. Let players open it
 
-From a web app, `@xgamesfun/solana/play` does what a player does with a live economy: open the box, wait for the
-roll, and collect the item. It needs no Solana SDK:
+In a bundled web app, install `@xgamesfun/solana`. Use the live spec and the player's connected devnet wallet.
 
-```bash
-npm install @xgamesfun/solana
+```js
+import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
+
+const app = solanaApp({ spec, wallet: walletStandardSigner(wallet, account, 'solana:devnet') });
+await app.recover();
+const crate = (await app.boxes()).find(box => box.key === 'crate');
+// Show the price and odds, then open it on the player's click.
+openButton.onclick = () => app.openBox(crate.key, { listing: crate });
 ```
 
-The roll is asked of the oracle when the box is opened, and it is settled once the oracle answers. If the oracle has
+`openBox` waits for the oracle, then delivers the prize. If the oracle has
 not answered 10 minutes after it was asked, the purchase can be refunded.
 
 ## Where to go next

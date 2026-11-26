@@ -222,7 +222,7 @@ export function challenge(m, warnTo, now, economy, simulation = null) {
     warn(
       'W-VALUE',
       cheap.e.where,
-      `Following ${label(to)}, its paths: ${byRoute.map(p => `${p.e.says} costs about ${+p.cost.toPrecision(4)} ${sym(m.currencyKey)} for one`).join('; ')}. The cheapest is ${+(dear.cost / cheap.cost).toFixed(2)}× cheaper than the dearest, so it is the path everyone takes${item?.supply ? `, and the ${item.supply} there are go that way first` : ''}.`,
+      `Expected cost per ${label(to)}: ${byRoute.map(p => `${p.e.says} ≈ ${+p.cost.toPrecision(4)} ${sym(m.currencyKey)}`).join(', ')}. The most expensive option costs ${+(dear.cost / cheap.cost).toFixed(2)}× as much as the cheapest.`,
       'Price the paths to meet, or say which one is meant to be the cheap one and why.',
       { severity: item?.supply ? 'medium' : 'low' },
     );

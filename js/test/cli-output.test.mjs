@@ -240,10 +240,7 @@ describe('xsolana (a terminal is spoken to as a terminal)', () => {
 
     const saved = await xsolana(['examples', 'coin-flip-arena', '--save', 'xsolana.json'], { cwd: dir });
     assert.equal(saved.code, 0, saved.err);
-    assert.match(
-      saved.out,
-      /^xsolana\.json now holds the worked example “coin-flip-arena”, whole\..* xsolana check\n$/,
-    );
+    assert.match(saved.out, /^xsolana\.json now contains “coin-flip-arena”\. Edit it, then run: xsolana check\n$/);
     assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'xsolana.json'), 'utf8')), spec);
     writeFileSync(path.join(dir, 'xsolana.json'), '{"mine": true}');
     const again = await xsolana(['examples', 'blind-forge', '--save', 'xsolana.json'], { cwd: dir });

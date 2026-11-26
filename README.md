@@ -1,28 +1,20 @@
-# xsolana: a toolkit for building game economies on Solana, with no smart contract to write
+# xsolana
 
-**Design, check, simulate and review a game's economy on Solana as a JSON spec: shops, items, crafting, rewards, NFT
-staking, loot boxes, raffles and auctions. No smart contract to write.**
-
-`xsolana` is the toolkit in this repository (`@xgamesfun/solana` on npm). **loot** is the Solana program it drives. It
-is not [`@solana/kit`](https://github.com/anza-xyz/kit), the Solana JavaScript SDK.
+Build a Solana shop, loot box or rewards system in one JSON file. Check the rules, simulate payouts and see what
+players pay before you go live. **xsolana** is the CLI in `@xgamesfun/solana`. **loot** is the program every project shares.
 
 [![npm](https://img.shields.io/npm/v/@xgamesfun/solana?color=b9f26c&label=npm)](https://www.npmjs.com/package/@xgamesfun/solana)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![network](https://img.shields.io/badge/network-devnet%20%7C%20mainnet-orange)](#good-to-know)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.XGamesFun%2Fsolana--kit-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.XGamesFun/solana-kit)
 
-You describe your game's or community's economy in a small JSON file: what players buy, open, stake, win or craft.
-The tools check the file, show where the money goes and say what it costs. You then put it live from your own
-computer, after reading exactly what will be sent. It runs on **loot**, one Solana program that every project shares,
-so there is no Anchor or Rust program to write or deploy for each project. loot itself has not been independently
-audited yet.
+Start on devnet with test funds. Set `"network": "mainnet"` to use real money. The program has not been
+independently audited. [Before you use it](docs/before-you-use.md) · [Disclaimer](DISCLAIMER.md)
 
-Most people never edit the JSON. They ask an AI agent (Claude Code, Codex, Cursor, ChatGPT or Claude) for _"a fishing
-game where each cast costs 0.02 SOL, with a rare golden fish and a monthly draw"_, and the agent writes and checks it.
+## Names
 
-> **On devnet and on mainnet.** An economy runs on devnet, where nothing is real money, unless its file says
-> `"network": "mainnet"`, where everything is. The program is not independently audited and the tools are provided as
-> is. Read [DISCLAIMER.md](DISCLAIMER.md) before you use them, and above all before you use real money.
+**solana-kit** is this repository. **xgames.fun** hosts games. **xcore** is its hosting CLI.
+You can use xsolana with any host. [xcore](https://github.com/XGamesFun/xcore)
 
 ## What you can build
 
@@ -42,38 +34,20 @@ Every move leaves a public receipt on chain. Random rolls come from MagicBlock's
 
 ## How it works
 
-1. **Describe it.** Tell your agent in a sentence, or write the spec file (`xsolana.json`) yourself.
-2. **Check it.**
-   - `check` refuses anything it knows the program would refuse. If it misses something, `approve` stops and says
-     what has already landed.
-   - `simulate` shows where the money goes, day by day.
-   - `cost` prices going live and each player action.
-   - `review` shows what a cheater could get.
-3. **Put it live.** `approve` lists every transaction, with what it pays and what it trusts, ends with a code, and
-   sends nothing. Run it again with that code and it sends exactly what it listed. A key file on your own computer
-   signs (`keygen` makes one for the project). Nothing here asks for a seed phrase or for the key of a wallet you
-   already have, and no page opens unless you ask to sign with a browser wallet.
+1. Describe your economy in `xsolana.json`, or ask your coding agent to write it.
+2. Run `check` for errors, `simulate` for payouts and `cost` for fees. Run `review` to see who can claim each payout.
+3. Preview setup with `approve`. It lists the transactions. When you're ready, run it again with the confirmation code.
+   If setup stops partway through, earlier confirmed transactions stay on chain. Rerun `approve` to review what's left.
 
-**Why a key file and not a browser wallet?**
+The wallet that signs setup owns the project. With a key file, anyone who reads it can act as you. Keep it outside
+your repository and back it up. For real funds, prefer a browser wallet backed by hardware. Try it on devnet first.
+[Owner keys and handover](docs/before-you-use.md#the-owners-key)
 
-- A key file made for the project is a new key that has never held anything else. The wallet that holds your own
-  assets is never connected or asked to sign.
-- It signs each transaction exactly as it was prepared and shown, and nothing opens in your browser.
-- The cost: the key is a plain file, so anything on your machine that can read it can sign as the project.
-- It owns the project until it hands the project to another key with `xsolana handover`, which both keys sign
-  ([the owner's key](docs/before-you-use.md#the-owners-key)). Keep it outside any repository
-  (the tools refuse a key file inside one, unless git ignores it there), never paste it anywhere, and back it up
-  yourself: nothing restores a lost key.
-- Unless your spec names a `treasury`, what the economy earns lands at the key's address. Name a wallet you hold
-  (`"treasury": "wallet:<address>"`) before going live.
+**Choose where sales go before you approve.** Set `"treasury": "wallet:<address>"` in your spec. Sales default to the
+signing wallet. To change the treasury later, the owner must send a separate transaction outside the spec.
+Collection resale royalties go to the original signing wallet.
 
-To sign with a browser wallet instead, `approve --browser` serves a local page for it. **For real money, that is the
-safer choice:** the wallet that goes live owns the project, and a browser wallet can keep its key on a hardware device
-(a Ledger, for example) instead of in a plain file. These tools have not been tested with a hardware wallet. See
-[the owner's key](docs/before-you-use.md#the-owners-key).
-
-New here? [A spec in 10 fields](docs/cheatsheet.md) is the one-page start, and the
-[loot box tutorial](docs/tutorial-loot-box.md) walks through all three steps with real output.
+[A spec in 10 fields](docs/cheatsheet.md) · [Loot box tutorial](docs/tutorial-loot-box.md)
 
 ## Get started
 
@@ -108,7 +82,7 @@ zip for desktop apps and the server over HTTP.
 # find a worked example close to your idea
 npx -y @xgamesfun/solana@0.29.12 examples shop with loot boxes
 
-# start your xsolana.json from the smallest one (a potion and a mystery box), then change it to your own economy
+# save a working shop with a potion and a mystery box
 npx -y @xgamesfun/solana@0.29.12 examples hello-shop --save xsolana.json
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
@@ -119,55 +93,48 @@ npx -y @xgamesfun/solana@0.29.12 check xsolana.json
 npx -y @xgamesfun/solana@0.29.12 simulate xsolana.json
 npx -y @xgamesfun/solana@0.29.12 cost xsolana.json
 
-# the whole economy in plain words, and what a cheater could get
+# review the rules and who can claim each payout
 npx -y @xgamesfun/solana@0.29.12 explain xsolana.json
 npx -y @xgamesfun/solana@0.29.12 review xsolana.json
 
-# go live: a key file for the project (it prints the address to send SOL to, never the key)…
+# make a project key and fund the printed address with devnet SOL
 npx -y @xgamesfun/solana@0.29.12 keygen ~/.config/xsolana/my-game.json
-# …then everything going live would send, and a code; nothing is sent
+# preview setup
 npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
-# …and with that code, exactly what it listed is sent
+# send the setup you reviewed
 npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
-Each command names an exact version, so you always run the release you meant to. `xsolana help` lists every command,
-and `xsolana help <command>` shows one command's arguments, options and examples. The commands print text for you to
-read: `check`, `simulate`, `cost`, `explain`, `review` and `examples` start with a short summary and tables, and `--verbose` adds
-the details in words. `--json` prints the whole answer as JSON, in the words an AI agent gets.
+Use Node 22 or newer. Run commands from the folder containing your spec or a parent folder.
+`xsolana help <command>` lists options. Add `--verbose` for detail or `--json` for scripts.
+Exit codes are 0 for success, 1 for failure and 2 for a usage error.
 
-The spec file must be in the folder you run a command in, or in a folder below it: the tools (and an agent that calls
-them) read and write nothing elsewhere on your machine. To check a spec in another folder, run the command there.
-
-Exit codes: `0` success; `1` failure, including `check` refusing the spec, `review` finding something high and
-`approve` not landing; `2` a usage error (an unknown command or flag, a missing or extra argument).
-
-When the setup makes a token, its mint gets a new address. To put the mint at an address you chose, give both
-`approve` commands the key file of that address: `--mint-key <the token's key in the spec>=<key file>`. The file signs
-only the transaction that makes the mint, and it is never printed. Once the mint exists, the file can do nothing more
-at that address on that cluster. On another cluster it can still create an account at the same address, so keep it as
-safe as any key until you have used it everywhere you mean to.
+In `hello-shop`, `price` is what a player pays. `value` is a simulation estimate.
+Items mint collectible NFTs by default. For a consumable you track in your game, set `"kind": "normal"` and have
+your backend deliver it from the purchase receipt.
 
 ### In your app
 
-```bash
-npm install @xgamesfun/solana
-```
+**Hosting with xcore?** Use `GamesFun.loot`. It handles the network and mainnet sign-in. The xgames.fun shared
+relay costs $10 per million calls within your allowance or $20 per million in overage. [xcore page client](https://github.com/XGamesFun/xcore/blob/main/docs/CLIENT.md#the-economy-gamesfunloot-and-gfloot)
+
+**Using the npm client?** Install `@xgamesfun/solana`. The import below needs a bundler or an
+[import map for plain HTML](skills/xsolana-economy/references/apps.md). Start with the live spec, a connected
+wallet and its account. Set `rpcUrl` to your network's RPC endpoint. Devnet also has a default.
 
 ```js
 import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 
-// spec: your live xsolana.json; wallet: the player's own (Phantom, Solflare, Backpack…)
-const app = solanaApp({ spec, wallet: walletStandardSigner(wallet, account) });
-
-// the player sees the price, then approves the purchase in their wallet
-const shop = await app.shop();
-await app.buy('potion', { listing: shop.find(item => item.key === 'potion') });
+const chain = spec.network === 'mainnet' ? 'solana:mainnet' : 'solana:devnet';
+const app = solanaApp({ spec, rpcUrl, wallet: walletStandardSigner(wallet, account, chain) });
+await app.recover(); // finish earlier purchases when the wallet reconnects
+const items = (await app.shop()).map(item => ({ item, buy: () => app.buy(item.key, { listing: item }) }));
+const boxes = (await app.boxes()).map(box => ({ box, open: () => app.openBox(box.key, { listing: box }) }));
 ```
 
-No Solana SDK is needed. It runs in the browser and in Node 22 or later, and includes TypeScript types. The player
-module covers buying, opening boxes, staking, crafting, tickets, bids and claims.
-[apps.md](skills/xsolana-economy/references/apps.md) shows a whole page.
+Show each listing’s price and odds. Call its `buy()` or `open()` when the player chooses it.
+A random box normally needs one transaction approval. The wallet may also ask for one message signature per session
+to recover unfinished purchases. [Page examples](skills/xsolana-economy/references/apps.md)
 
 | Import                           | What it gives you                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
@@ -208,7 +175,7 @@ network's fees, and on devnet it also gives mainnet's.
 | What                        | Devnet                                                                          | Mainnet     | Paid by                                                                                                            |
 | --------------------------- | ------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
 | Player fee                  | 0.002 SOL                                                                       | 0.0005 SOL  | the player (or a sponsor), once for each action they sign                                                          |
-| Project fee                 | 0.00001 SOL                                                                     | 0.00001 SOL | the owner or authority, for setup and each of the project's own steps                                              |
+| Project fee                 | 0.00001 SOL                                                                     | 0.00001 SOL | the owner or the key authorized to act for the project                                                             |
 | Cap on each fee             | 0.01 SOL                                                                        | 0.01 SOL    | the program refuses a higher fee                                                                                   |
 | Fee raise                   | applies 7 days after it is set; a cut applies at once                           | same        | set by the platform                                                                                                |
 | Randomness (MagicBlock VRF) | 0.0008 SOL per roll or draw (high priority; the program offers no cheaper tier) | same        | whoever asks: the player on a box, the sender of a draw                                                            |
@@ -217,30 +184,20 @@ network's fees, and on devnet it also gives mainnet's.
 | Rent                        | (bytes + 128) × 5,080 lamports per account                                      | same        | whoever opens the account; some return it when they close                                                          |
 | Network fee                 | 5,000 lamports a signature, plus a priority fee of 2 lamports a transaction     | same        | the signer                                                                                                         |
 
+A shop item mints a collectible by default. Its mint costs about 0.0031 SOL including the Metaplex fee and rent. A `normal` item is delivered by your backend. The Token Metadata fee applies when you name a token on chain.
+
 Rent, as `cost` reports it: a project with one collection (217 bytes) is 0.0017526 SOL, a token account (165 bytes)
 0.00148844 SOL, and a project's lookup table of 21 addresses (728 bytes) 0.00434848 SOL. The tutorial's loot box takes
 about 0.017 SOL to go live. Any SOL you seed into pools comes on top. [The program reference](docs/program.md#costs)
 lists the rent of every account and says which ones return it.
 
-**Royalty.** The collection the setup makes carries a resale royalty to your wallet: 5% unless the spec says
+**Royalty.** The original signing wallet receives the collection's resale royalty: 5% unless the spec says
 otherwise (`"collection": { "name": …, "royaltyPercent": n }`, 0 for none, at most 25). Marketplaces that honour
 Metaplex Core royalties pay it on each resale. `check`, `cost`, `explain` and `approve` all say it.
 
 Devnet SOL is play money, and devnet's player fee is four times mainnet's. For a devnet spec, `check` warns about the
 fee as a share of a price using mainnet's fee, and gives devnet's beside it. The full fee rules are in
 [the program reference](docs/program.md#the-fee).
-
-## Names
-
-| Name                                                                 | What it is                                                                                                                         | Needed?                                  |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **loot**                                                             | the on-chain Solana program that runs every economy                                                                                | yes: every economy runs on it            |
-| **`@xgamesfun/solana`**                                              | this npm package: the check, simulate, cost and review tools, the JS client, the MCP server and the agent skill                    | yes, to check an economy and put it live |
-| **xsolana**                                                          | the package's command line (`npx -y @xgamesfun/solana@0.29.12 help` lists its commands), and the name of its plugin and MCP server | comes with the package                   |
-| **solana-kit**                                                       | this repository, [XGamesFun/solana-kit](https://github.com/XGamesFun/solana-kit)                                                   | only to contribute or build from source  |
-| **[xgames.fun](https://xgames.fun)**                                 | the site behind these tools: their how-tos, the hosted MCP server, the optional results server, and hosted games                   | no                                       |
-| **xcore** ([`@xgamesfun/xcore`](https://github.com/XGamesFun/xcore)) | a separate command line that hosts a web game on xgames.fun and adds an economy to it                                              | no: optional, for hosting a game         |
-| **gamesfun**                                                         | an older name, still in a few identifiers (the IDL's `repository` field)                                                           | no                                       |
 
 ## Good to know
 
@@ -258,34 +215,6 @@ fee as a share of a price using mainnet's fee, and gives devnet's beside it. The
 [Before you use it](docs/before-you-use.md) has the full list, with the details behind each item. Some things aren't
 built yet: read the [known limits](docs/program.md#known-limits) before you promise players something unusual.
 
-## Versions and stability
-
-The package is pre-1.0 and has had frequent releases; the [changelog](CHANGELOG.md) lists every version with its date.
-
-- **major.minor is the program's.** `@xgamesfun/solana` 0.29.x is built for loot 0.29.0. A release check refuses a
-  package whose major.minor differs from the IDL's. `release.json` names the program build (its version, program
-  addresses and binary hashes) and the hashes of the IDL and the client.
-- **A patch is a JavaScript-only release** on the same program: the checker's rules, the tools' words, the client
-  and the docs. It can change what `check` warns about or refuses, and the wording an agent sees.
-- **A new minor has so far meant a new program build**, and most did not carry accounts over (see
-  [Upgrades](docs/program.md#upgrades)). The [changelog](CHANGELOG.md) marks what can break a spec or a script.
-- **Pin an exact version.** Use `npx -y @xgamesfun/solana@0.29.12 …` in scripts and docs, and `"@xgamesfun/solana":
-"0.29.12"` (no `^` or `~`) in `package.json`. Read the changelog before you move to a new version.
-
-**Policy for specs: a patch never refuses a spec that the patch before it accepted.** This holds from 0.29.12 on.
-It covers every refusal of the checker, which `check`, `approve`, `publish`, `cost`, `simulate` and the MCP tools all
-run: a spec file with no refusals under one patch has none under the next, on the same network. A patch may add or
-change warnings. A new refusal comes only in a new minor; until then, the same finding is a warning. 0.29.11 broke this
-rule: its changelog says "Two changes can refuse what 0.29.10 took".
-
-**Command-line changes can come in a patch.** Because major.minor tracks the program, a change to the command line's
-surface (printed text, exit codes, defaults, flags) has no other number to go in while the program stays the same:
-0.29.12 changed the exit code of usage errors and the default scope of `connect` in a patch. Each such change is listed
-in the changelog under "Changes that can affect scripts". The printed text is written for people and can change in
-any patch: a script should read `--json` and pin an exact version.
-
-The plan, not a commitment, is fewer releases, with fixes batched into fewer patches.
-
 ## Questions
 
 **How do I make a loot box or gacha on Solana without writing a smart contract?** Describe it as a box: its price, its
@@ -299,38 +228,19 @@ boosts and reward rates, and needs no authority over the NFTs. See [NFTs and tok
 **Can I run a lottery, raffle or auction without deploying a program?** Yes. Lotteries (including no-loss ones),
 raffles with allowlists, and auctions that refund the outbid at once are all part of the same spec.
 
-**Is there an MCP server or Claude Code plugin for this?** Yes: the `xsolana` plugin for Claude Code and Codex, the
-hosted server at `https://xgames.fun/mcp`, and the local server for any MCP client. It is in the MCP Registry as
-`io.github.XGamesFun/solana-kit`.
-
-**How is this different from writing my own Anchor program?** Nothing is written or deployed per project. One shared
-program enforces every project's rules, and it is tested instruction by instruction (but not yet independently
-audited). The trade-off: you can build what the spec can describe, which is a lot, but not everything.
+**How does this differ from writing my own program?** Each project uses the same program and configures its rules
+in a spec. Custom mechanics must fit what the program supports. [Known limits](docs/program.md#known-limits)
 
 **Can players with no SOL play?** Yes, if your own server sponsors their fees (`@xgamesfun/solana/sponsor`). They
 still pay any price themselves.
 
-**Does it run on Solana mainnet?** Yes. An economy runs on devnet, where nothing is real money, unless its file says
-`"network": "mainnet"`, where everything is. The program has not been independently audited, so build and try an
-economy on devnet first, and read [DISCLAIMER.md](DISCLAIMER.md) before you use real money.
+**Can I use this with a game I already host?** Yes. Use the page client with your existing host, or use
+`xcore loot add` for a game on xgames.fun. [Page integration](#in-your-app)
 
-**How do I add a Solana economy to a web game I already made?** Use [xcore](https://github.com/XGamesFun/xcore)
-(`@xgamesfun/xcore`). `xcore loot add ./my-game` says where the game's `xsolana.json` goes and copies the page client
-beside it. `xcore publish` hosts the game on xgames.fun with player sign-in, saves, leaderboards and multiplayer rooms.
-It takes plain HTML/JS, Vite, Next.js static exports, and Godot and Unity web exports.
+**Who holds the keys?** Your wallet or project key signs on your computer. Players sign their own transactions.
+[Owner keys](docs/before-you-use.md#the-owners-key)
 
-**Is this a gambling platform, an exchange or a wallet?** No. It is a building tool: it designs, checks, simulates and
-reviews the economy of a game or a community. Nothing is played, traded or held here. Parts that pay by chance (a
-loot box, a raffle) are game mechanics. Where one pays real money, `check` says what the law asks of it and tells you
-to take advice before mainnet.
-
-**Does it hold my funds or my keys?** No. Nothing an agent calls here signs or sends anything, and the hosted server
-reads only what you pass it and the public chain. An economy goes live through a command you run on your own computer,
-signed by a key file you made for the project, after you have read exactly what will be sent.
-
-**Is this `@solana/kit`?** No. `@solana/kit` is the Solana JavaScript SDK, for sending transactions and reading
-accounts. This is `xsolana` (`@xgamesfun/solana`): a spec, a checker and a client for economies on one shared program.
-Its client needs no Solana SDK.
+**Is this `@solana/kit`?** That's the Solana JavaScript SDK. For these economy tools, install `@xgamesfun/solana`.
 
 ## Learn more
 
@@ -353,6 +263,16 @@ Its client needs no Solana SDK.
 - [Agents and harnesses](docs/harnesses.md): every way to reach the tools; [Releasing](https://github.com/XGamesFun/solana-kit/blob/main/RELEASING.md): how a version is
   made
 - [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [xgames.fun/solana](https://xgames.fun/solana)
+
+## Versions and stability
+
+Pin the package version in scripts and read the changelog before upgrading. Major and minor versions track the program.
+A new minor can require a new setup. Since 0.29.12, a patch may add warnings but must accept specs its predecessor
+accepted on the same network. Patches may change CLI defaults, text or exit codes. Use `--json` in scripts.
+[Changelog](CHANGELOG.md) · [Program upgrades](docs/program.md#upgrades)
+
+To choose a new token's mint address, pass `--mint-key <token>=<keyfile>` to both approval commands.
+That file signs mint creation only. Keep it private on every network where you plan to use the address.
 
 ## Contributing
 

@@ -53,7 +53,7 @@ test('approve’s printout gives the royalty a line of its own', () => {
     { keyFile: 'k.json' },
   );
   assert.ok(
-    lines.some(l => /^Royalty: the new collection takes 5% of each resale for your wallet/.test(l)),
+    lines.some(l => /^Royalty: 5% of resales goes to the signing wallet \(w\)/.test(l)),
     lines.join('\n'),
   );
 });
@@ -89,7 +89,7 @@ test('approve’s printout says where sales land when the file names no treasury
     keyIs.some(l => /^Treasury: the file names none, so what players pay lands at this key’s address/.test(l)),
     keyIs.join('\n'),
   );
-  assert.ok(keyIs.some(l => /for your wallet, where/.test(l)));
+  assert.ok(keyIs.some(l => /signing wallet \(w\) on marketplaces/.test(l)));
   const named = approvalText(
     state([make, { says: 'Open the project; your wallet signs its decisions, and T is its treasury' }, sale]),
     {
@@ -98,7 +98,7 @@ test('approve’s printout says where sales land when the file names no treasury
   );
   assert.ok(!named.some(l => /^Treasury:/.test(l)));
   assert.ok(
-    named.some(l => /for your wallet \(this key, not the treasury\)/.test(l)),
+    named.some(l => /signing wallet \(w\).*different treasury leaves royalties with this wallet/.test(l)),
     named.join('\n'),
   );
 });

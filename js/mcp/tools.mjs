@@ -1287,7 +1287,25 @@ export const tools = [
     description:
       'How an app (a game, a site, a bot) uses a live economy: the program’s address and cluster, the npm package and IDL, and the calls a page makes with the player’s own wallet (open a box, buy, stake, craft, enter, claim). Use this instead of writing chain code from memory.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    async handler() {
+    async handler(_input, ctx) {
+      if (ctx?.reader === 'person') {
+        const text = [
+          'Use @xgamesfun/solana/play in a bundled app, or add an import map for plain HTML.',
+          'With a live spec, a matching RPC URL and a connected wallet:',
+          '  import { solanaApp, walletStandardSigner } from "@xgamesfun/solana/play";',
+          '  const chain = spec.network === "mainnet" ? "solana:mainnet" : "solana:devnet";',
+          '  const app = solanaApp({ spec, rpcUrl, wallet: walletStandardSigner(wallet, account, chain) });',
+          '  await app.recover();',
+          '  const items = await app.shop();',
+          '  const boxes = await app.boxes();',
+          'Show the price and odds. Use the listing the player chose:',
+          '  const buy = item => app.buy(item.key, { listing: item });',
+          '  const open = box => app.openBox(box.key, { listing: box });',
+          'For staking, crafting, claims and low-level calls, see skills/xsolana-economy/references/apps.md.',
+          'IDL: @xgamesfun/solana/idl.json',
+        ].join('\n');
+        return { text: text + footer(), ...PROGRAM_INFO };
+      }
       const text = [
         `loot ${VERSION} on ${cluster()}: program ${lootProgram()}. Never write another address from memory: take it from this package.`,
         'Package: npm install @xgamesfun/solana (plain ES modules, no Solana SDK needed; works in the browser).',

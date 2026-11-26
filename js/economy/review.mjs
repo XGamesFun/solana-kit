@@ -398,7 +398,7 @@ export function review(economy, { now = Math.floor(Date.now() / 1000) } = {}) {
       ? byPerson(b)
         ? `${limitPhrases(b).join(', ')}, as far as the issuer tells one person from another, for only the fees.`
         : `${limitPhrases(b).length ? `${limitPhrases(b).join(', ')}, and wallets are free: ` : ''}${it?.supply ? `all ${asWritten(it.supply)}` : 'as many as they like'}, for only the fees.`
-      : `What they pay for, at the price: ${rolls ? 'nobody, the project included, can steer the roll (under the current program version, which its upgrade authority can replace), but a buyer who sees a poor answer coming more than 10 minutes late can take the refund instead' : 'nothing free'}.${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
+      : `${rolls ? 'If the oracle is delayed, a buyer who sees a poor answer coming more than 10 minutes late can take the refund instead. Nobody, the project included, can steer the roll (under the current program version, which its upgrade authority can replace).' : 'Only the item they paid for.'}${b.whenOut === 'drawLeft' && rolls ? ' With "whenOut": "drawLeft", someone watching the stock can empty a common outcome, then open for the rare at better odds.' : ''}${b.whenOut === 'giveNothing' && rolls ? ' With "whenOut": "giveNothing", a draw on an outcome that is out gives nothing and is not refunded.' : ''}`;
     routes.push({
       kind,
       key,

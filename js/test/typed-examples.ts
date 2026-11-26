@@ -8,20 +8,20 @@ import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 import { giveaways, hostCertText, newKey, newRound, report, signVoucher } from '@xgamesfun/solana/results';
 
 // What a page or a server has at hand before it calls the package.
-declare const spec: { version: 2; live: { project: string } };
+declare const spec: { version: 2; network: 'devnet' | 'mainnet'; live: { project: string } };
 declare const wallet: { name: string; features: Record<string, any> };
 declare const account: { address: string };
 /** A wallet's address, or a mint's. */
 type Address = string;
 
 /** README.md, "Use it in your game". */
-export async function readme() {
-  // spec: your live xsolana.json; wallet: the player's own (Phantom, Solflare, Backpack…)
-  const app = solanaApp({ spec, wallet: walletStandardSigner(wallet, account) });
-
-  // the player sees the price, then approves the purchase in their wallet
-  const shop = await app.shop();
-  await app.buy('potion', { listing: shop.find(item => item.key === 'potion') });
+export async function readme(rpcUrl: string) {
+  const chain = spec.network === 'mainnet' ? 'solana:mainnet' : 'solana:devnet';
+  const app = solanaApp({ spec, rpcUrl, wallet: walletStandardSigner(wallet, account, chain) });
+  await app.recover(); // finish earlier purchases when the wallet reconnects
+  const items = (await app.shop()).map(item => ({ item, buy: () => app.buy(item.key, { listing: item }) }));
+  const boxes = (await app.boxes()).map(box => ({ box, open: () => app.openBox(box.key, { listing: box }) }));
+  return { items, boxes };
 }
 
 /** js/play/index.js. */

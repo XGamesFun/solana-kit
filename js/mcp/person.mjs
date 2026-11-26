@@ -60,7 +60,7 @@ const REWORDS = [
   [/ when the person says to put it live\./g, ' when you are ready to put it live.'],
   [
     / A choice or a question the tools leave for the person comes before anything is saved: saving a spec is building, a draft too\./g,
-    ' Settle the choices and questions the tools raise before you build on a saved spec.',
+    ' Resolve any open questions before saving.',
   ],
   // (explain)
   [/, which your agent is told to do only after your yes\./g, ', which you do once you have read it.'],

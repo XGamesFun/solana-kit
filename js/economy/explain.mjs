@@ -486,10 +486,6 @@ export function explainEconomy(economy, { now = Math.floor(Date.now() / 1000) } 
     actions.push(
       `Hand in a ${h.item} for “${h.name}”${h.until ? ` until ${h.until}` : h.for ? ` for ${h.for}` : ''}: the authority says where it goes; after the time is up anyone can send it home.`,
     );
-  if (m.payments.length || m.boxes.length)
-    actions.push(
-      'Pay with an NFT, outside the spec (`loot.payNftIx`): any NFT a player holds, burned or given to a wallet; the app admits them by the receipt, as for a payment.',
-    );
   for (const g of sim.grants) {
     const src = m.grant.get(g.key);
     const l = src.limits ?? {};

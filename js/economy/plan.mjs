@@ -915,7 +915,7 @@ export function setupSteps(economy, { now = 0, only = null, live: given = null, 
       says: `Open the project on the loot program${count ? ` with ${count === 1 ? 'its collection' : `its ${count} collections`}` : ', with no collection'}; ${m.authority === 'owner' ? 'your wallet' : m.authority} signs its decisions, and ${m.treasuryWallet ?? 'your wallet'} is its treasury`,
       creates: [
         { what: 'the project', bytes: loot.projectBytes(count) },
-        { what: 'the project’s fee box', bytes: 0 },
+        { what: 'the account that holds project fees', bytes: 0 },
       ],
       build: ctx => [
         loot.createProjectIx({

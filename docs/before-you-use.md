@@ -1,23 +1,12 @@
 # Before you use it
 
-Read this before you build on loot and before you ask players to trust what you build. The README has a short
-version.
-
-- **Not independently audited, and mainnet is real money.** An economy is on devnet, where nothing has value, unless
-  its file says `"network": "mainnet"`. Try it on devnet first.
-- **The key that goes live owns the project.** By default that is a key file on your computer: `xsolana keygen`
-  creates it, and `xsolana approve --keypair` signs the go-live transactions with it, after it shows everything it
-  will send. Whoever can read that file controls the project, and the file signs every later change until it hands
-  the project to another key. Keep the file where it is, outside any repository. Never paste it anywhere. Back it up
-  yourself, because nothing restores a lost key file. Unless your spec names a `treasury`, what the economy earns for
-  you is paid to that key's address. For real money, a browser wallet is safer: see [The owner's key](#the-owners-key).
-- **The program can be upgraded, and an upgrade can mean starting again.** The program's upgrade authority can replace
-  its code, which is power over every economy on the program. On mainnet, that key is to be a multisig. Most versions so
-  far have not carried accounts over from the version before. For example, 0.29 can't read the accounts that 0.28
-  made, so an economy made on 0.28 has to be made again for 0.29. Pin the package version (each version names the
-  program build it is for in `release.json`). Expect to set an economy up again after an upgrade. The program
-  reference's [Upgrades](program.md#upgrades) section says what is known, and what is not, about funds left in an
-  older version's accounts.
+- **Start on devnet.** Set `"network": "mainnet"` only when you're ready to use real funds. Loot has not been independently audited.
+- **The signing wallet owns the project.** Anyone who can read a project key file can sign as its owner. Keep it
+  outside your repository and back it up. Choose the sales wallet with `treasury` before setup.
+  [The owner's key](#the-owners-key)
+- **Upgrades can require a new setup.** This release lists one mainnet key that can replace the program for every
+  project. Version 0.29 cannot read 0.28 accounts. Pin your package version and check what an upgrade means for funds
+  in old accounts. [Upgrade key](../SECURITY.md) · [Upgrade history](program.md#upgrades)
 - **Players trust the project.** The project's owner and authority are trusted keys with no caps. The authority mints,
   moves the project's pool funds, decides contests and writes the project's NFTs. The program protects players from
   each other, from the platform and from mistakes. It does not protect them from the project they chose to play. Money
@@ -44,7 +33,7 @@ version.
   it can be down, and it lags behind for a while after each program upgrade. A game with its own server signs its own
   vouchers (`signVoucher`), which is the better choice once the game has a server.
 - **Nothing runs by itself.** Someone sends every step:
-  - settles: the player, the project's keys, or a key the player named;
+  - settling a roll means sending the transaction that delivers its result. The player, a key they name or the project's keys can send it.
   - lottery draws and auction ends;
   - refunds: anyone;
   - contest results: the authority or its deciders;
@@ -66,16 +55,12 @@ version.
   loan's repayment brings its NFT home.
 
 - **Chance comes from an oracle.** MagicBlock's VRF answers every random roll and draw. If it stops answering, rolls
-  wait. A purchase whose roll has not been answered 10 minutes after it was asked can be refunded. A buyer who sees a
-  late answer coming can therefore take the refund instead. A roll won another way holds no payment and is asked
+  wait. A purchase whose roll has not been answered 10 minutes after it was asked can be refunded. A late result can let a buyer choose a refund over a losing roll. A roll won another way holds no payment and is asked
   again. A roll that holds a payment or an NFT (an auction's mystery lot) can be refunded 7 days after its first ask.
-- **Fees and rent.** The platform sets two flat fees. The player fee is 0.002 SOL on devnet and 0.0005 SOL on mainnet
-  (the default is 0.002 SOL). The project fee is 0.00001 SOL on both. Each fee is capped at 0.01 SOL. A raise waits 7
-  days before it applies, and a cut applies at once. Devnet is play money, and devnet's player fee is four times
-  mainnet's. A percentage that `xsolana check` or `xsolana cost` shows on a devnet spec therefore overstates what the
-  same action costs on mainnet. Both commands also state the mainnet figure. Accounts cost rent when the economy goes
-  live and at each settle that opens or mints something. `xsolana cost` gives the totals. The platform can suspend
-  purchases. It never stops payouts, refunds or unstakes, with one exception: a recipe that charges.
+- **Fees and rent.** Players pay 0.002 SOL per action on devnet or 0.0005 SOL on mainnet. Project actions cost
+  0.00001 SOL on either network. Each fee is capped at 0.01 SOL. Increases take effect after seven days and cuts
+  apply immediately. Run `xsolana cost` for fees and account rent.
+- **Platform pauses.** A pause blocks purchases and paid recipes. Payouts, refunds and unstakes stay available.
 - **Some things aren't built,** and some limits are kept by design. Read [Known limits](program.md#known-limits)
   before you promise players something unusual.
 - **The law is yours to check.** The checker's legal flags (chance at money, resellable random items, revenue sharing)

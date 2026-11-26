@@ -1,9 +1,7 @@
 # Building the app for a live economy
 
-Once `xsolana.json` has a `live` section, players use the economy through a page (a game screen, a site, a mint page)
-with their own wallet. Use the package's player module, `@xgamesfun/solana/play`: it reads the economy, builds every
-transaction, has the player's wallet sign it, sends it and waits for the result. Don't hand-write instructions,
-account lists or program addresses.
+Use `@xgamesfun/solana/play` with a live spec and the player's wallet. A plain HTML page needs the import map below.
+For a game hosted with xcore, `GamesFun.loot` handles wallet setup and network selection.
 
 ```bash
 npm install @xgamesfun/solana
@@ -29,7 +27,9 @@ const {
   accounts: [account],
 } = await wallet.features['standard:connect'].connect();
 
-const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: walletStandardSigner(wallet, account) });
+// This example uses devnet. For mainnet, supply a mainnet RPC and use 'solana:mainnet'.
+const app = solanaApp({ spec, rpcUrl: 'https://api.devnet.solana.com', wallet: walletStandardSigner(wallet, account, 'solana:devnet') });
+await app.recover();
 
 const shop = await app.shop(); // [{ key, name, price, priceUnits, currency, active, left }]
 await app.buy('badge', { listing: shop.find(l => l.key === 'badge') }); // the price shown is the most it pays
@@ -81,17 +81,12 @@ await app.balances(); // what they hold of each of the economy's tokens
     }
   </script>
   ```
-  Tell the person the one command that starts it, and which cluster its economy is on (devnet unless its file says
-  mainnet).
-- **What a roll looks like**: a box of several outcomes is rolled by the oracle a few seconds after the open; `openBox`
-  waits for it. Show the player that it is rolling.
-- **A page that closes before the settle**: the SOL its settle key holds is not lost in the same browser (on another device, with nothing stored, it can't be found yet). Build the wallet with
-  `walletStandardSigner(wallet, account)`: with a wallet that signs messages, the page asks once a session for a
-  signature over a fixed text ("loot: the keys that settle your orders…"; it moves nothing), and every settle key comes
-  from it, so a reload makes it again. With one that signs no messages, the key is kept in the page's storage,
-  encrypted. Call `app.recover()` when the page opens (after the wallet connects): it settles what rolled, sends back
-  what a key holds for an order that is gone, and leaves one still rolling for later. Say so to the player in a line
-  ("Finishing an earlier purchase…").
+- **Opening a box.** Show the price and odds before the player approves. `openBox` waits for the oracle and
+  delivers the result. Show “Opening…” while it waits.
+- **Returning to the page.** After the wallet connects, call `app.recover()` in the same browser. It finishes ready
+  purchases, returns unspent funds and leaves pending rolls for later. With a wallet that signs messages, recovery
+  uses one message signature per session. That signature moves no funds. Other wallets use encrypted browser storage.
+  Recovery on a new device requires the original browser's records.
 - **Packs**: `app.openBox(key, { listing, count: 10 })` opens ten packs in one purchase: one wallet prompt, one oracle
   answer, `maxPrice` a pack's. It returns `won` (every card) and `assets`; a pack too big for one transaction is
   settled in parts, each its own transaction (`parts`: their signatures), sent by the throwaway key the purchase funds (`oneSignature`, the default),
@@ -249,8 +244,7 @@ assetId, tree }` after a `loot.proveLeafIx` in the same transaction. `app.stakeN
   rent. What a sponsor can still lose is rent the program later gives back to the player (an order's, at its settle)
   and fees for transactions that fail on chain, so always give it a `budget`, keep only a few days' worth of SOL in
   it, and never make it the owner or the authority. Sponsored, a box's roll takes two prompts (the open, then the
-  settle) instead of one, and a step too big for one transaction goes as the player's own. Tell the person what a
-  day of their players costs the sponsor (`xsolana_cost`: the player fee, the oracle's fee and rent per step).
+  settle) instead of one, and a step too big for one transaction goes as the player's own. Use `xsolana cost` to estimate the sponsor's daily player fees, oracle fees and rent.
 
 - **Never in a page**: a private key, a keyed RPC link, or anything the authority signs (payouts, minting, rewriting
   a collectible). Those are signed where the owner's or the authority's key is: a script with the project's key file, the authority's own browser wallet, or a server they run (`after-launch.md`).
