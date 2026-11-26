@@ -158,6 +158,9 @@ function readDetails(reads, names) {
     };
     if (read.name === 'create_project') {
       lines.push(`Treasury: ${address(read.args.treasury)}`);
+      lines.push(
+        'Sales go here. Set treasury in the spec before approval. Changing it later requires a separate owner transaction.',
+      );
       lines.push(`Authority (signs the project’s decisions): ${address(read.args.authority)}`);
       continue;
     }

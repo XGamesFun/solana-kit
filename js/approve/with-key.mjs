@@ -101,7 +101,7 @@ const freshName = name =>
         : name;
 
 /** What the page shows before Approve, as lines of text. `balance`: the key's lamports, or null when not read. */
-export function approvalText(state, { keyFile, balance = null }) {
+export function approvalText(state, { keyFile, balance = null, file = state.file }) {
   const lines = [];
   // (on mainnet, the first thing said: what is sent is real money)
   if (state.cluster === 'mainnet')
@@ -112,14 +112,10 @@ export function approvalText(state, { keyFile, balance = null }) {
     state.mode === 'change'
       ? 'a change to a live economy'
       : state.mode === 'resume'
-        ? 'a setup that was cut short goes on'
+        ? 'resuming an unfinished setup'
         : 'a new economy';
-  lines.push(
-    `“${state.name}” (${state.file}): ${kind}, on ${state.cluster}, on the shared loot program ${state.program}.`,
-  );
-  lines.push(
-    `Signed by the key file ${keyFile}, whose address is ${state.wallet}. The lines below call that address “your wallet”.`,
-  );
+  lines.push(`“${state.name}” (${file}): ${kind}, on ${state.cluster}, on the shared loot program ${state.program}.`);
+  lines.push(`Signing wallet: ${state.wallet} (key file: ${keyFile}).`);
   if (state.project) lines.push(`Project: ${state.project}`);
   // (the collection's resale royalty, set as the setup makes it: said on its own line, not only inside a step)
   const royalty = state.steps.map(s => /, with ([\d.]+)% resale royalty/.exec(s.says)).find(Boolean);
@@ -127,7 +123,7 @@ export function approvalText(state, { keyFile, balance = null }) {
   const keyIsTreasury = state.mode === 'new' && state.steps.some(s => /your wallet is its treasury/.test(s.says));
   if (royalty)
     lines.push(
-      `Royalty: the new collection takes ${royalty[1]}% of each resale for your wallet${keyIsTreasury || state.mode !== 'new' ? '' : ' (this key, not the treasury)'}, where marketplaces honour Metaplex Core royalties ("collection": { "royaltyPercent": n } in the file sets it, 0 for none).`,
+      `Royalty: ${royalty[1]}% of resales goes to the signing wallet (${state.wallet}) on marketplaces that honor it.${keyIsTreasury || state.mode !== 'new' ? '' : ' Choosing a different treasury leaves royalties with this wallet.'}`,
     );
   if (keyIsTreasury && state.steps.some(s => (s.details ?? []).some(d => /^Pays: .*treasury/.test(d))))
     lines.push(
@@ -149,10 +145,10 @@ export function approvalText(state, { keyFile, balance = null }) {
 
   if (state.warnings.length) {
     lines.push('', 'Before you approve');
-    for (const w of state.warnings) lines.push(`- ${w}`);
+    for (const w of state.warnings) lines.push(`- ${w.replace(/\bxsolana_cost\b/g, 'xsolana cost')}`);
   }
   if (state.landed.length) {
-    lines.push('', 'Landed already');
+    lines.push('', 'Already confirmed');
     for (const l of state.landed) lines.push(`- ${l.says}`);
   }
   lines.push('', `To send: ${plural(state.steps.length, 'step')} in ${plural(state.remaining, 'transaction')}`);
@@ -254,7 +250,7 @@ export async function approveWithKey({
         )
       : null;
     const code = approvalCode(state, session.spec);
-    for (const line of approvalText(state, { keyFile: key.file, balance })) out(line);
+    for (const line of approvalText(state, { keyFile: key.file, balance, file })) out(line);
     // (the fees the platform charges now, beside the ones the tools quoted: said when they differ or a change waits)
     const fees = await platformFees(address => chain.account(address)).catch(() => null);
     if (fees?.words) out(`\nFees: ${fees.words}`);

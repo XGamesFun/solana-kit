@@ -208,7 +208,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
           back(
             `the SOL the open lends the throwaway key that settles it, for what its settle may open (${settleRentUnits(b, m)} × ${numeral(sol(SETTLE_RENT_UNIT))} SOL: each collectible, NFT of a stash, coin it may pay and NFT it rolls on)`,
             SETTLE_RENT_UNIT * BigInt(settleRentUnits(b, m)),
-            `once the key has settled, less what it opened (a collectible’s rent is about ${numeral(sol(COLLECTIBLE_RENT))} SOL); all of it when the roll fails`,
+            `once the key has settled, less what it opened (a collectible costs about ${numeral(sol(COLLECTIBLE_RENT))} SOL including rent and the mint fee); all of it when the roll fails`,
           ),
         ]
       : []),
@@ -347,7 +347,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
     prizeLine(p)?.compressed
       ? ', and the compressed NFT, which has no rent'
       : ({
-          item: ', plus the collectible’s rent',
+          item: ', plus rent and the mint fee for a collectible',
           tokens: ', plus the winner’s token account for the prize when they have none',
           share: ', plus the winner’s token account for the prize when they have none',
           nft: ', and the NFT is handed over in the claim (a Token Metadata NFT opens the winner’s token account of it)',
@@ -451,7 +451,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
       who,
       0n,
       [back('the roll’s order', rent(boxOrderBytes(m.box.get(r.box), m)), 'to the winner when it is settled')],
-      `Then the winner or the project’s keys ask the oracle for the roll (its fee, below) and settle it${mints ? `, paying the collectible’s rent when it gives one (about ${numeral(sol(COLLECTIBLE_RENT))} SOL)` : ''}.`,
+      `Then the winner or the project’s keys ask the oracle for the roll (its fee, below) and settle it${mints ? `, paying about ${numeral(sol(COLLECTIBLE_RENT))} SOL in rent and mint fees per new collectible` : ''}.`,
     );
     row(
       r.by,
@@ -480,7 +480,7 @@ function actionCosts(economy, { now } = NO_OPTIONS) {
       'the player, a key they named, or the project’s keys',
       0n,
       [],
-      'The sender pays what the settle opens or mints (a collectible’s rent, a token account the player lacks); the order’s rent goes back to the player. js/play’s throwaway key sends it with what the open lent it.',
+      'The purchase funds a temporary key to deliver the prize. It pays for any new NFT or token account. The player gets the order rent back.',
     );
   if (m.schedules.length)
     row(

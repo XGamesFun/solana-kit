@@ -506,10 +506,7 @@ const WAYS_TO_SIGN = [
     '--mint-key <token>=<keyfile>',
     'with --keypair: make that token’s new mint at the address of a key file you have (an address you chose), not at a new one. Give it once for each such token. The file signs only the transaction that makes the mint. After that it can do nothing more at that address on that cluster; on another cluster it still can, so keep it safe until then.',
   ],
-  [
-    '--browser',
-    'sign in a browser wallet, on a page this command serves on this machine until the economy is live. Use it only when the economy’s owner asks for it; the owner runs it themselves.',
-  ],
+  ['--browser', 'As the owner, run this yourself to sign with your browser wallet on a local page.'],
 ];
 COMMANDS.approve.options = [
   ...WAYS_TO_SIGN,
@@ -731,7 +728,7 @@ async function main(argv) {
       await tool(
         'xsolana_save',
         { spec: named.spec, file: into },
-        `${into} now holds the worked example “${named.name}”, whole. Change it to your own economy (xsolana guide says what each part takes), then run: xsolana check${into === 'xsolana.json' ? '' : ` ${into}`}`,
+        `${into} now contains “${named.name}”. Edit it, then run: xsolana check${into === 'xsolana.json' ? '' : ` ${into}`}`,
       );
       break;
     }
@@ -772,8 +769,8 @@ async function main(argv) {
         [
           `A new key is in ${made.file}${process.platform === 'win32' ? '' : ', readable by you alone'}. Its address:`,
           `  ${made.address}`,
-          'Whatever is set up with it, it owns, until it hands the project to another key (xsolana handover, signed by both keys): anyone who can read that file controls the project, and every later change is signed by it. Keep the file where it is and never paste it into a chat, a spec, a repository or a page. Back it up yourself (a USB stick, a password manager): if it is lost, nothing can change the project or move what its address holds.',
-          `It holds nothing yet. Send it SOL (\`xsolana cost\` says what going live takes): devnet SOL for an economy on devnet (https://faucet.solana.com gives some), real SOL for one whose file says "network": "mainnet". Then: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve ${spec} --keypair ${word}`,
+          'Keep the file private: anyone who can read that file controls the project. Back it up outside your repository. If you lose it before handing over ownership, nothing can change the project or move what its address holds.',
+          `Fund this address on the network in your spec. Run \`xsolana cost\` for the amount. For devnet SOL, use https://faucet.solana.com. Preview setup: npx -y @xgamesfun/solana@${PACKAGE_VERSION} approve ${spec} --keypair ${word}`,
         ].join('\n'),
       );
       break;

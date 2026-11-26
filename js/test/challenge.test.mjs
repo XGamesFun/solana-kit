@@ -563,11 +563,13 @@ test('lessons: the cheapest of several paths, every ending told, odds that move,
     in: [{ takes: 'pay', amount: 2, currency: 'entry', to: 'burn' }],
     out: [{ gives: 'item', item: 'hat' }],
   });
-  const paths = check(s, { now: NOW }).warnings.find(w => w.code === 'W-VALUE' && w.message.includes('its paths:'));
+  const paths = check(s, { now: NOW }).warnings.find(
+    w => w.code === 'W-VALUE' && w.message.startsWith('Expected cost per'),
+  );
   assert.ok(paths, 'the paths to the Hat are compared');
   assert.match(
     paths.message,
-    /buying “Hat” costs about 40 BUBL for one; crafting “Hat from entries” costs about 200 BUBL for one/,
+    /Expected cost per “Hat”: buying “Hat” ≈ 40 BUBL, crafting “Hat from entries” ≈ 200 BUBL/,
   );
   assert.equal(paths.severity, 'medium', 'a Hat has a supply');
   const { runTool } = await import('../mcp/server.mjs');

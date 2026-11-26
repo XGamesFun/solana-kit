@@ -140,14 +140,14 @@ export function checkDecisions(c) {
     warn(
       'W-CHANCE-ITEMS',
       'economy',
-      `Players pay for a random collectible they can resell (a loot box or gacha). Some places treat paid loot boxes of tradeable items as gambling, and many require the odds to be shown. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
+      `Players pay for a random collectible they can resell (a loot box or gacha). Some places treat paid loot boxes of tradeable items as gambling, and many require the odds to be shown. ${realMoney() ? 'This economy uses real money. Get legal advice and set age and region limits before launch.' : 'Before using real money, get legal advice and set age and region limits.'}`,
       'Tell the person, as xsolana_check’s “The law” line puts it, once now and again before mainnet; show the odds on the page, and get a lawyer before real money.',
     );
   if (c.chance)
     warn(
       'W-CHANCE-PRIZE',
       'economy',
-      `Players pay for a chance at money (a box that pays a prize, a lottery). That is gambling in many places once it is real money, and paid packs with a cash buyback are drawing lawsuits. ${realMoney() ? 'This economy is on mainnet, so it is real money: counsel and an age and region gate come first.' : 'This economy is on devnet; before mainnet, counsel and an age and region gate.'}`,
+      `Players pay for a chance at money (a box that pays a prize, a lottery). That is gambling in many places once it is real money, and paid packs with a cash buyback are drawing lawsuits. ${realMoney() ? 'This economy uses real money. Get legal advice and set age and region limits before launch.' : 'Before using real money, get legal advice and set age and region limits.'}`,
       'Tell the person, as xsolana_check’s “The law” line puts it, once now and again before mainnet: before real money they need a lawyer and an age and region gate.',
     );
 

@@ -395,8 +395,8 @@ describe('xsolana approve --keypair', () => {
       const old = await run({ yes: shown.code });
       assert.equal(old.ok, false);
       assert.equal(sends(), before);
-      assert.match(old.text, /a setup that was cut short goes on/);
-      assert.match(old.text, /Landed already/);
+      assert.match(old.text, /resuming an unfinished setup/);
+      assert.match(old.text, /Already confirmed/);
       const rest = await run({ yes: old.code });
       assert.equal(rest.done, true);
       assert.ok(saved().live.project && !saved().live.partial);
@@ -1407,10 +1407,7 @@ describe('the command line', () => {
       r.stderr,
       /--keypair <keyfile> .*sends nothing\. Run it again with --yes\s+<code> and it sends exactly\s+that/s,
     );
-    assert.match(
-      r.stderr,
-      /--browser .*Use it only when the economy’s owner asks for it; the owner runs it\s+themselves/s,
-    );
+    assert.match(r.stderr, /--browser .*As the owner, run this yourself to sign with your browser wallet/s);
     assert.equal(r.stdout, '');
   });
 

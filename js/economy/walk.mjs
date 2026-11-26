@@ -542,9 +542,7 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   // (wins to collect: a lottery's or a contest's; a box's roll is settled by the page's key, with no approval)
   const collects = fl.routes.some(r => r.kind === 'lottery' || r.kind === 'contest');
   if (sold.length)
-    out.push(
-      `Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N)${collects ? ', and the wins to collect afterwards go in as few approvals as the wallet allows (claimAll)' : ''}.`,
-    );
+    out.push(`Buying or opening several of ${words(sold.map(named))} at once is one approval (count: N).`);
   // A returning player's day, doing each thing once: every approval added up, and what folds them.
   const day = [];
   for (const g of m.grants.filter(
@@ -569,6 +567,10 @@ export function tellLines(m, { now, fl = flows(m, { now }) }) {
   if (day.length > 1)
     out.push(
       `A returning player's day, doing each thing once: ${day.map(d => `${d.what} (${d.n})`).join(', ')}: about ${day.reduce((n, d) => n + d.n, 0)} wallet approvals${boxes ? ', plus one message to sign the first time a session opens a box' : ''}.${folds.length ? ` Fold what you can: ${folds.join(', and ')}.` : ''}`,
+    );
+  else if (rolled.length)
+    out.push(
+      'A random box normally needs one transaction approval with the page client. The wallet may also ask for a recovery message signature once per session.',
     );
   return [...out.map(line => ({ line, asWritten: false })), ...trust.map(line => ({ line, asWritten: true }))];
 }

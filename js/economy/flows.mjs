@@ -10,6 +10,7 @@ import {
   DAY,
   boxRolls,
   ORACLE_FEE,
+  outcomeParts,
   placeOf,
   prizeLine,
   prizePool,
@@ -399,9 +400,11 @@ export function flows(m, { now }) {
       limited:
         Boolean(item?.supply) ||
         (!item &&
-          (b.outcomes ?? []).some(
-            o => o.pool !== undefined || o.stash !== undefined || (o.gives === 'item' && m.item.get(o.item)?.supply),
-          )),
+          (b.outcomes ?? [])
+            .flatMap(outcomeParts)
+            .some(
+              o => o.pool !== undefined || o.stash !== undefined || (o.gives === 'item' && m.item.get(o.item)?.supply),
+            )),
       title: item ? 'an item for sale' : rolls ? 'a box, rolled by the oracle' : 'a box',
       fixed:
         item?.kind === 'collectible'
@@ -430,7 +433,7 @@ export function flows(m, { now }) {
             {
               by: 'keys',
               says: rolls
-                ? 'nothing to send; an edit of its entries or odds refunds every paid roll still waiting, at once; a price change reaches the next purchase'
+                ? 'Editing entries or odds makes pending purchases refundable. Other pending rolls use the new rules. A price change applies to future purchases.'
                 : 'nothing to send',
             },
           ],
