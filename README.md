@@ -69,7 +69,7 @@ codex plugin add xsolana@xgamesfun
 
 **claude.ai, ChatGPT or Claude Desktop:** add `https://xgames.fun/mcp` as a custom connector. Nothing to install.
 
-**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.12 xsolana mcp`.
+**Cursor, Cline, opencode or any MCP client:** run `npx -y --package=@xgamesfun/solana@0.29.13 xsolana mcp`.
 
 **Any agent that reads skills** (Copilot, Gemini CLI, Windsurf…): `npx skills add XGamesFun/solana-kit`.
 
@@ -80,29 +80,29 @@ zip for desktop apps and the server over HTTP.
 
 ```bash
 # find a worked example close to your idea
-npx -y @xgamesfun/solana@0.29.12 examples shop with loot boxes
+npx -y @xgamesfun/solana@0.29.13 examples shop with loot boxes
 
 # save a working shop with a potion and a mystery box
-npx -y @xgamesfun/solana@0.29.12 examples hello-shop --save xsolana.json
+npx -y @xgamesfun/solana@0.29.13 examples hello-shop --save xsolana.json
 
 # using a coin you already launched? read it from the chain into its "tokens" entry
-npx -y @xgamesfun/solana@0.29.12 token <its mint address>
+npx -y @xgamesfun/solana@0.29.13 token <its mint address>
 
 # does it work? where does the money go? what does it cost?
-npx -y @xgamesfun/solana@0.29.12 check xsolana.json
-npx -y @xgamesfun/solana@0.29.12 simulate xsolana.json
-npx -y @xgamesfun/solana@0.29.12 cost xsolana.json
+npx -y @xgamesfun/solana@0.29.13 check xsolana.json
+npx -y @xgamesfun/solana@0.29.13 simulate xsolana.json
+npx -y @xgamesfun/solana@0.29.13 cost xsolana.json
 
 # review the rules and who can claim each payout
-npx -y @xgamesfun/solana@0.29.12 explain xsolana.json
-npx -y @xgamesfun/solana@0.29.12 review xsolana.json
+npx -y @xgamesfun/solana@0.29.13 explain xsolana.json
+npx -y @xgamesfun/solana@0.29.13 review xsolana.json
 
 # make a project key and fund the printed address with devnet SOL
-npx -y @xgamesfun/solana@0.29.12 keygen ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.13 keygen ~/.config/xsolana/my-game.json
 # preview setup
-npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.13 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 # send the setup you reviewed
-npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
+npx -y @xgamesfun/solana@0.29.13 approve xsolana.json --keypair ~/.config/xsolana/my-game.json --yes <code>
 ```
 
 Use Node 22 or newer. Run commands from the folder containing your spec or a parent folder.

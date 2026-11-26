@@ -32,7 +32,7 @@ The `hello-shop` example is a potion for sale and a mystery box with a 10% chanc
 }
 ```
 
-`npx -y @xgamesfun/solana@0.29.12 examples hello-shop --save xsolana.json` writes it into a new file. It checks with no
+`npx -y @xgamesfun/solana@0.29.13 examples hello-shop --save xsolana.json` writes it into a new file. It checks with no
 refusals and one warning: paid random items that can be resold are treated as gambling in some places.
 
 ## Ten fields
@@ -107,11 +107,11 @@ How values are written:
 ## The loop
 
 ```bash
-npx -y @xgamesfun/solana@0.29.12 check xsolana.json      # refusals and warnings
-npx -y @xgamesfun/solana@0.29.12 simulate xsolana.json   # where the money goes
-npx -y @xgamesfun/solana@0.29.12 cost xsolana.json       # what going live and each action cost
-npx -y @xgamesfun/solana@0.29.12 review xsolana.json     # what a cheater could get
-npx -y @xgamesfun/solana@0.29.12 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
+npx -y @xgamesfun/solana@0.29.13 check xsolana.json      # refusals and warnings
+npx -y @xgamesfun/solana@0.29.13 simulate xsolana.json   # where the money goes
+npx -y @xgamesfun/solana@0.29.13 cost xsolana.json       # what going live and each action cost
+npx -y @xgamesfun/solana@0.29.13 review xsolana.json     # what a cheater could get
+npx -y @xgamesfun/solana@0.29.13 approve xsolana.json --keypair ~/.config/xsolana/my-game.json
 ```
 
 The [loot box tutorial](tutorial-loot-box.md) walks through it with real output, and

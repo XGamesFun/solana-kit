@@ -4,9 +4,10 @@ The major and minor version of `@xgamesfun/solana` are those of the loot program
 0.29); `release.json` pins that program's exact build, its IDL and this client. Changes to the program itself are
 summarised here only where the tools see them.
 
-## Unreleased
+## 0.29.13 — 2026-11-26 (loot 0.29.0)
 
-Fixes from a usability run of 0.29.12 (a new developer's first hour). No spec that 0.29.12 accepts is refused.
+Fixes from a usability run of 0.29.12 (a new developer's first hour), and shorter, plainer words across the docs and the
+commands. Same program, same `release.json`. No spec that 0.29.12 accepts is refused.
 
 - **One answer to "how many wallet prompts".** `check --verbose` no longer counts a "collect wins" approval for a box
   (the page's settle key settles it with no prompt, as `explain` says); `explain` and the returning player's day both
@@ -24,6 +25,12 @@ Fixes from a usability run of 0.29.12 (a new developer's first hour). No spec th
 - **`cost`** gives the going-live total at mainnet's fees too.
 - **`keygen`** names the economy file it finds (`./xsolana.json`, or the one `xsolana.json` up to two folders down)
   in its approve hint, else `<economy file>`.
+- **Plainer words.** The README, before-you-use.md, the tutorial and apps.md are shorter and say each step once. The
+  commands address the reader, not an agent: `approve --browser`'s help, keygen's and `examples --save`'s next steps,
+  approve's header (the signing wallet by address, the file as you named it, "Already confirmed"), the royalty and
+  treasury lines, and the cost of a collectible as rent plus the mint fee. `xsolana client` for a person starts with a
+  short shop-and-box snippet (`recover()`, the chain from the spec), and the README's shop and box example is compiled
+  in the tests.
 
 ## 0.29.12 — 2026-11-24 (loot 0.29.0)
 

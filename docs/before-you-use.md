@@ -97,8 +97,8 @@ project from the chain, prints what changes with a code, and sends nothing; run 
 exactly that, signed by both keys, and reads the project back:
 
 ```bash
-npx -y @xgamesfun/solana@0.29.12 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json
-npx -y @xgamesfun/solana@0.29.12 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json --yes <code>
+npx -y @xgamesfun/solana@0.29.13 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json
+npx -y @xgamesfun/solana@0.29.13 handover xsolana.json --keypair ~/.config/xsolana/my-game.json --to ~/.config/xsolana/new-owner.json --yes <code>
 ```
 
 The command does what this script does, which you can adapt (to change the authority or the treasury in the same
