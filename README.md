@@ -116,7 +116,7 @@ your backend deliver it from the purchase receipt.
 ### In your app
 
 **Hosting with xcore?** Use `GamesFun.loot`. It handles the network and mainnet sign-in. The xgames.fun shared
-relay meters calls at $10 per million. [xcore page client](https://github.com/XGamesFun/xcore/blob/main/docs/CLIENT.md#the-economy-gamesfunloot-and-gfloot)
+relay costs $10 per million calls within your allowance or $20 per million in overage. [xcore page client](https://github.com/XGamesFun/xcore/blob/main/docs/CLIENT.md#the-economy-gamesfunloot-and-gfloot)
 
 **Using the npm client?** Install `@xgamesfun/solana`. The import below needs a bundler or an
 [import map for plain HTML](skills/xsolana-economy/references/apps.md). Start with the live spec, a connected
@@ -128,13 +128,11 @@ import { solanaApp, walletStandardSigner } from '@xgamesfun/solana/play';
 const chain = spec.network === 'mainnet' ? 'solana:mainnet' : 'solana:devnet';
 const app = solanaApp({ spec, rpcUrl, wallet: walletStandardSigner(wallet, account, chain) });
 await app.recover(); // finish earlier purchases when the wallet reconnects
-const items = await app.shop();
-const boxes = await app.boxes();
-const buy = item => app.buy(item.key, { listing: item });
-const open = box => app.openBox(box.key, { listing: box });
+const items = (await app.shop()).map(item => ({ item, buy: () => app.buy(item.key, { listing: item }) }));
+const boxes = (await app.boxes()).map(box => ({ box, open: () => app.openBox(box.key, { listing: box }) }));
 ```
 
-Show the listings from `items` or `boxes`, then call `buy` or `open` with the player's choice.
+Show each listing’s price and odds. Call its `buy()` or `open()` when the player chooses it.
 A random box normally needs one transaction approval. The wallet may also ask for one message signature per session
 to recover unfinished purchases. [Page examples](skills/xsolana-economy/references/apps.md)
 
